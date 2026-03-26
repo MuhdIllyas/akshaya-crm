@@ -31,15 +31,11 @@ import { toast } from "react-toastify";
 import EmojiPicker from 'emoji-picker-react';
 import { socket } from "@/services/socket";
 
-const API_BASE_URL = (() => {
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-  }
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-  }
-  return 'http://localhost:5000/api';
-})();
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+if (!API_BASE_URL) {
+  throw new Error("VITE_API_URL is not defined");
+}
 
 // Helper to format date for task due dates
 const formatDate = (dateString) => {
