@@ -60,7 +60,7 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: process.env.FRONTEND_URL || "*",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   },
@@ -225,7 +225,10 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 ================================ */
 
 const pool = new Pool({
-  connectionString: process.env.PG_URI,
+  connectionString: process.env.DATABASE_URL || process.env.PG_URI,
+  ssl: process.env.DATABASE_URL
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 pool
@@ -316,6 +319,10 @@ const PORT = process.env.PORT || 5000;
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+});
+
+app.get("/", (req, res) => {
+  res.send("✅ Akshaya CRM Backend Running");
 });
 
 /* Export io */
