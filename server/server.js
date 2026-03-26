@@ -15,7 +15,7 @@ import centreRoutes from "./routes/centres.js";
 import staffRoute from "./routes/staff.js";
 import walletRoute from "./routes/wallet.js";
 import serviceManagementRoutes from "./routes/servicemanagement.js";
-import serviceTrackingRoute from "./routes/serviceTracking.js";
+import serviceTrackingRoute from "./routes/servicetracking.js";
 import salaryRoute from "./routes/salary.js";
 import schedulerroute from "./routes/scheduler.js";
 import expenseRoute from "./routes/expense.js";
