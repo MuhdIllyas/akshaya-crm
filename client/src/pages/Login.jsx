@@ -49,7 +49,7 @@ const Login = () => {
   const handleAdminLogin = async () => {
     setLoading(true);
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login", {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
         username: user.username,
         password: user.password,
       });
@@ -122,7 +122,7 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/send-otp", {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/send-otp`, {
         phone: customerPhone
       });
 
@@ -146,7 +146,7 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/verify-otp", {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/verify-otp`, {
         phone: customerPhone,
         otp: customerOtp
       });
