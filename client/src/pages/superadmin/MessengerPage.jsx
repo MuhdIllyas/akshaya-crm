@@ -52,7 +52,7 @@ import { FaRegSmile, FaEllipsisH } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdClose } from "react-icons/io";
 import { BsCircleFill } from "react-icons/bs";
 import { toast } from "react-toastify";
-import FilesView from "@/components/Chat/FilesView";
+import FilesView from "@/components/chat/FilesView";
 import CalendarView from "@/components/CalendarView";
 import ActivityPanel from "@/components/ActivityPanel";
 import EmojiPicker from 'emoji-picker-react';
