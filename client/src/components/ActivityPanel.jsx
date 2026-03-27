@@ -49,7 +49,7 @@ const ActivityPanel = ({ token, userRole }) => {
       return;
     }
 
-    const newSocket = io('http://localhost:5000', {
+    const newSocket = io(`import.meta.env.VITE_API_URL`, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -80,7 +80,7 @@ const ActivityPanel = ({ token, userRole }) => {
       setLoading(true);
 
       const res = await fetch(
-        `http://localhost:5000/api/activities?page=${pageNum}&limit=${limit}`,
+        `${import.meta.env.VITE_API_URL}/api/activities?page=${pageNum}&limit=${limit}`,
         {
           headers: {
             Authorization: `Bearer ${token}`
