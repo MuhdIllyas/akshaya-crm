@@ -448,7 +448,7 @@ const MessengerPage = ({ user }) => {
     if (!token) return 0;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/unread/${conversationId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/unread/${conversationId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch unread count');
@@ -757,7 +757,7 @@ const MessengerPage = ({ user }) => {
 
   const fetchConversations = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/conversations`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversations`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch conversations');
@@ -802,7 +802,7 @@ const MessengerPage = ({ user }) => {
   const fetchMessages = async (conversationId) => {
     setLoadingChat(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/messages/${conversationId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/messages/${conversationId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch messages');
@@ -948,7 +948,7 @@ const MessengerPage = ({ user }) => {
       }
 
       // ALWAYS use the chat message endpoint
-      const endpoint = `${API_BASE_URL}/chat/message`;
+      const endpoint = `${API_BASE_URL}/api/chat/message`;
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -999,7 +999,7 @@ const MessengerPage = ({ user }) => {
         throw new Error('Invalid channel');
       }
 
-      const res = await fetch(`${API_BASE_URL}/chat/conversation`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1021,7 +1021,7 @@ const MessengerPage = ({ user }) => {
       if (newConv && newConv.id) {
         setActiveConversation(newConv);
       } else {
-        const updatedConvs = await fetch(`${API_BASE_URL}/chat/conversations`, {
+        const updatedConvs = await fetch(`${API_BASE_URL}/api/chat/conversations`, {
           headers: { Authorization: `Bearer ${token}` }
         }).then(res => res.json());
 
@@ -1046,7 +1046,7 @@ const MessengerPage = ({ user }) => {
         return;
       }
 
-      const res = await fetch(`${API_BASE_URL}/chat/staff`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/staff`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -1069,7 +1069,7 @@ const MessengerPage = ({ user }) => {
 
   const handleDeleteMessage = async (messageId, conversationId) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/message/${messageId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/message/${messageId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -1114,7 +1114,7 @@ const MessengerPage = ({ user }) => {
     const serviceEntryId = activeConversation?.context_id;
     if (!serviceEntryId) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/tasks/${taskId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/tasks/${taskId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -1145,7 +1145,7 @@ const MessengerPage = ({ user }) => {
 
     setCentresLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/centres`, {
+      const res = await fetch(`${API_BASE_URL}/api/centres`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
@@ -1165,7 +1165,7 @@ const MessengerPage = ({ user }) => {
     setCalendarLoading(true);
     setCalendarError(null);
     try {
-      let url = `${API_BASE_URL}/calendar`;
+      let url = `${API_BASE_URL}/api/calendar`;
 
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
         url += `?centre_id=${currentUser.centreId}`;
@@ -1195,7 +1195,7 @@ const MessengerPage = ({ user }) => {
 
         const promises = centres.map(async (centre) => {
           try {
-            const url = new URL(`${API_BASE_URL}/salary/leaves`);
+            const url = new URL(`${API_BASE_URL}/api/salary/leaves`);
             url.searchParams.append('centre_id', centre.id);
             const res = await fetch(url, {
               headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -1219,7 +1219,7 @@ const MessengerPage = ({ user }) => {
           return;
         }
 
-        const url = new URL(`${API_BASE_URL}/salary/leaves`);
+        const url = new URL(`${API_BASE_URL}/api/salary/leaves`);
         url.searchParams.append('centre_id', currentUser.centreId);
         const res = await fetch(url, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -1250,7 +1250,7 @@ const MessengerPage = ({ user }) => {
     setLoading(true);
     setApiError(null);
     try {
-      let url = `${API_BASE_URL}/tasks/all`;
+      let url = `${API_BASE_URL}/api/tasks/all`;
 
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
         url += `?centre_id=${currentUser.centreId}`;
@@ -1281,7 +1281,7 @@ const MessengerPage = ({ user }) => {
 
   const fetchTemplates = async () => {
     try {
-      let url = `${API_BASE_URL}/tasks/templates`;
+      let url = `${API_BASE_URL}/api/tasks/templates`;
 
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
         url += `?centre_id=${currentUser.centreId}`;
@@ -1363,7 +1363,7 @@ const MessengerPage = ({ user }) => {
         priority: taskForm.priority
       };
 
-      const res = await fetch(`${API_BASE_URL}/tasks/add`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1417,11 +1417,11 @@ const MessengerPage = ({ user }) => {
         templateData.assigned_to = parseInt(templateForm.specificAssignee);
       }
 
-      let url = `${API_BASE_URL}/tasks/add`;
+      let url = `${API_BASE_URL}/api/tasks/add`;
       let method = "POST";
 
       if (editingTemplate) {
-        url = `${API_BASE_URL}/tasks/template/${editingTemplate.id}`;
+        url = `${API_BASE_URL}/api/tasks/template/${editingTemplate.id}`;
         method = "PATCH";
         templateData.is_active = templateForm.isActive;
       }
@@ -1457,7 +1457,7 @@ const MessengerPage = ({ user }) => {
 
   const toggleTemplateStatus = async (templateId, currentStatus) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/tasks/template/${templateId}/toggle`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/template/${templateId}/toggle`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -1475,7 +1475,7 @@ const MessengerPage = ({ user }) => {
   const deleteTemplate = async (templateId) => {
     if (!window.confirm("Are you sure you want to delete this template?")) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/tasks/template/${templateId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/template/${templateId}`, {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
@@ -1490,7 +1490,7 @@ const MessengerPage = ({ user }) => {
   const toggleTaskCompletion = async (taskId, currentStatus) => {
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     try {
-      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/status`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -1510,7 +1510,7 @@ const MessengerPage = ({ user }) => {
   const deleteTask = async (taskId) => {
     if (!window.confirm("Are you sure you want to delete this task?")) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
@@ -1582,10 +1582,10 @@ const MessengerPage = ({ user }) => {
         centre_id: currentUser.role === "superadmin" ? eventForm.centre_id : centreIdToUse
       };
 
-      let url = `${API_BASE_URL}/calendar`;
+      let url = `${API_BASE_URL}/api/calendar`;
       let method = "POST";
       if (editingEvent) {
-        url = `${API_BASE_URL}/calendar/${editingEvent.id}`;
+        url = `${API_BASE_URL}/api/calendar/${editingEvent.id}`;
         method = "PUT";
       }
 
@@ -1617,7 +1617,7 @@ const MessengerPage = ({ user }) => {
 
     try {
       let centreIdToUse = currentUser.role === "superadmin" ? event.centre_id : currentUser.centreId;
-      const url = new URL(`${API_BASE_URL}/calendar/${event.id}`);
+      const url = new URL(`${API_BASE_URL}/api/calendar/${event.id}`);
       url.searchParams.append('centre_id', centreIdToUse);
 
       const res = await fetch(url, {
@@ -1636,7 +1636,7 @@ const MessengerPage = ({ user }) => {
   const handleUpdateEvent = async (eventId, updatedEvent) => {
     try {
       let centreIdToUse = currentUser.role === "superadmin" ? updatedEvent.centre_id : currentUser.centreId;
-      const res = await fetch(`${API_BASE_URL}/calendar/${eventId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/calendar/${eventId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
