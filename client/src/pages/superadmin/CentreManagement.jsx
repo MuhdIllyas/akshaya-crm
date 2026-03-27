@@ -119,7 +119,7 @@ const CentreManagement = () => {
     if (window.confirm("Are you sure you want to delete this centre?")) {
       setLoading(true);
       try {
-        const response = await axios.delete(`http://localhost:5000/api/centres/${id}`, {
+        const response = await axios.delete(`${import.meta.env.VITE_API_URL}/api/centres/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         toast.success(response.data.message || "Centre deleted successfully", {
