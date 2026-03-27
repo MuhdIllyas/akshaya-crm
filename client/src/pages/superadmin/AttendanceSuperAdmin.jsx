@@ -733,7 +733,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         setLoading(true);
         // Get all centers
         const response = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/salary/centers`,
+          `${import.meta.env.VITE_API_URL}/api/salary/centers`,
           { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
         );
         
@@ -765,14 +765,14 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         
         // Load staff for this center
         const staffResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/salary/centers/${selectedCenter.id}/staff`,
+          `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/staff`,
           { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
         );
         setCenterStaff(prev => ({ ...prev, [selectedCenter.id]: staffResponse.data }));
         
         // Load attendance for this center
         const attendanceResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/salary/centers/${selectedCenter.id}/attendance`,
+          `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/attendance`,
           { 
             params: { month: selectedMonth },
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
@@ -782,7 +782,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         
         // Load leaves for this center
         const leavesResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/salary/centers/${selectedCenter.id}/leaves`,
+          `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/leaves`,
           { 
             params: { month: selectedLeaveMonth },
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
@@ -792,14 +792,14 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         
         // Load pending leaves for this center
         const pendingLeavesResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/salary/centers/${selectedCenter.id}/leaves/pending`,
+          `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/leaves/pending`,
           { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
         );
         setPendingLeaves(prev => ({ ...prev, [selectedCenter.id]: pendingLeavesResponse.data }));
         
         // Load salaries for this center
         const salariesResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/salary/centers/${selectedCenter.id}/salaries`,
+          `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/salaries`,
           { 
             params: { month: selectedSalaryMonth },
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
@@ -809,7 +809,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         
         // Load calendar for this center
         const calendarResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/salary/centers/${selectedCenter.id}/calendar`,
+          `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/calendar`,
           { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
         );
         setCenterCalendars(prev => ({ ...prev, [selectedCenter.id]: calendarResponse.data }));
@@ -1062,7 +1062,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
       const createdSalary = await createSalary(payload);
 
       await axios.post(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/wallet/debit-salary`,
+        `${import.meta.env.VITE_API_URL}/api/wallet/debit-salary`,
         {
           wallet_id: selectedWalletId,
           amount: netSalary,
