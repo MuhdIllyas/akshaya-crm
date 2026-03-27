@@ -427,7 +427,7 @@ const MessengerPage = ({ user }) => {
     if (!token) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/unread/all`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/unread/all`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch unread counts');
