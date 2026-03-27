@@ -390,10 +390,10 @@ const MessengerPage = ({ user }) => {
 
   const getApiBaseUrl = () => {
     if (typeof import.meta !== 'undefined' && import.meta.env) {
-      return import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      return import.meta.env.VITE_API_URL;
     }
     if (typeof process !== 'undefined' && process.env) {
-      return process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      return process.env.REACT_APP_API_URL;
     }
     return 'http://localhost:5000/api';
   };
