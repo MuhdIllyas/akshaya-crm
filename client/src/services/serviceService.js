@@ -2,7 +2,7 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 
 const api = axios.create({
-  baseURL: '${import.meta.env.VITE_API_URL}/api/servicemanagement',
+  baseURL: `${import.meta.env.VITE_API_URL}/api/servicemanagement`,
 });
 
 api.interceptors.request.use(config => {
@@ -46,7 +46,7 @@ api.interceptors.response.use(
 
 // Service Tracking API
 const trackingApi = axios.create({
-  baseURL: '${import.meta.env.VITE_API_URL}/api/servicetracking',
+  baseURL: `${import.meta.env.VITE_API_URL}/api/servicetracking`,
 });
 
 trackingApi.interceptors.request.use(config => {
