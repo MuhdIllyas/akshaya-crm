@@ -23,7 +23,7 @@ import Chat from '@/components/Chat';
 import { useServiceChat } from '/src/hooks/useServiceChat';
 import { socket } from '@/services/socket';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 // Helper to get current user from token
 const getCurrentUser = () => {
@@ -91,7 +91,7 @@ const ServiceWorkspace = () => {
       setLoading(true);
       try {
         // 1. Get the tracking entry to obtain the actual service_entry_id
-        const serviceRes = await fetch(`${API_BASE_URL}/servicetracking/${selectedServiceId}`, {
+        const serviceRes = await fetch(`${API_BASE_URL}/api/servicetracking/${selectedServiceId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!serviceRes.ok) throw new Error('Failed to fetch service');
@@ -102,19 +102,19 @@ const ServiceWorkspace = () => {
 
         // 2. Now fetch all collaboration data using the actual service_entry_id
         const [convRes, partsRes, tasksRes, docsRes, staffRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/servicecollaboration/${actualServiceEntryId}/conversation`, {
+          fetch(`${API_BASE_URL}/api/servicecollaboration/${actualServiceEntryId}/conversation`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          fetch(`${API_BASE_URL}/servicecollaboration/${actualServiceEntryId}/participants`, {
+          fetch(`${API_BASE_URL}/api/servicecollaboration/${actualServiceEntryId}/participants`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          fetch(`${API_BASE_URL}/servicecollaboration/${actualServiceEntryId}/tasks`, {
+          fetch(`${API_BASE_URL}/api/servicecollaboration/${actualServiceEntryId}/tasks`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          fetch(`${API_BASE_URL}/servicecollaboration/${actualServiceEntryId}/documents`, {
+          fetch(`${API_BASE_URL}/api/servicecollaboration/${actualServiceEntryId}/documents`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          fetch(`${API_BASE_URL}/chat/staff`, {
+          fetch(`${API_BASE_URL}/api/chat/staff`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
@@ -168,7 +168,7 @@ const ServiceWorkspace = () => {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/participants`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/participants`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -181,7 +181,7 @@ const ServiceWorkspace = () => {
       });
       if (!res.ok) throw new Error('Failed to add participant');
       toast.success('Participant added');
-      const partsRes = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/participants`, {
+      const partsRes = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/participants`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setParticipants(await partsRes.json());
@@ -197,7 +197,7 @@ const ServiceWorkspace = () => {
     if (!serviceEntryId) return;
     if (!window.confirm('Remove this participant from the service?')) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/participants/${staffId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/participants/${staffId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -218,7 +218,7 @@ const ServiceWorkspace = () => {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/tasks`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -247,7 +247,7 @@ const ServiceWorkspace = () => {
   const handleTaskStatusUpdate = async (taskId, newStatus) => {
     if (!serviceEntryId) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/tasks/${taskId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/tasks/${taskId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -281,7 +281,7 @@ const ServiceWorkspace = () => {
     formData.append('document_type', 'other');
     formData.append('document_name', file.name);
     try {
-      const res = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/documents`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/documents`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -302,7 +302,7 @@ const ServiceWorkspace = () => {
     if (!serviceEntryId) return;
     if (!window.confirm('Delete this document?')) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/servicecollaboration/${serviceEntryId}/documents/${docId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/documents/${docId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -329,7 +329,7 @@ const ServiceWorkspace = () => {
 
   const handleDeleteMessage = async (messageId, conversationId) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/message/${messageId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/chat/message/${messageId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -648,7 +648,7 @@ const ServiceWorkspace = () => {
                       </div>
                       <div className="flex gap-2">
                         <a
-                          href={`${API_BASE_URL}/files/version/${doc.id}/download?token=${token}`}
+                          href={`${API_BASE_URL}/api/files/version/${doc.id}/download?token=${token}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-2 text-gray-500 hover:text-purple-600 transition"
