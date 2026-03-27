@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api/servicemanagement',
+  baseURL: `${import.meta.env.VITE_API_URL}/api/servicemanagement`,
 });
 
 // Add JWT token for authentication
