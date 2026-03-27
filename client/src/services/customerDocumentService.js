@@ -2,7 +2,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 
 const customerDocumentApi = axios.create({
-  baseURL: "http://localhost:5000/api/customer/documents",
+  baseURL: `${import.meta.env.VITE_API_URL}/api/customer/documents`,
 });
 
 /* ================= REQUEST INTERCEPTOR ================= */
