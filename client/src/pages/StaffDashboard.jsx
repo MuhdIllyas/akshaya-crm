@@ -25,11 +25,12 @@ import {
   FiCheckSquare,
   FiTag
 } from 'react-icons/fi';
-import io from 'socket.io-client';
 import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
 import QuickServiceModal from '@/components/QuickServiceModal';
 import api from '@/services/serviceService';
+// Import the centralized socket and connection function
+import { socket, connectSocket } from '@/services/socket';
 
 const StaffDashboard = () => {
   const navigate = useNavigate();
@@ -49,9 +50,8 @@ const StaffDashboard = () => {
   const [onlineBookings, setOnlineBookings] = useState([]);
   const [processingBookings, setProcessingBookings] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [socket, setSocket] = useState(null);
 
-  // Initialize socket connection with token
+  // --- Socket connection using centralized socket ---
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -59,42 +59,45 @@ const StaffDashboard = () => {
       return;
     }
 
-    const newSocket = io(`${import.meta.env.VITE_API_URL}`, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      auth: {
-        token: token
-      },
-      transports: ['websocket', 'polling']
-    });
+    // Connect the socket if it's not already connected
+    if (!socket.connected) {
+      connectSocket(token);
+    }
 
-    newSocket.on('connect', () => {
+    // When socket connects, join the centre room
+    const onConnect = () => {
       console.log('Socket connected successfully');
-      // Join centre room after connection
       if (centreId) {
-        newSocket.emit('joinCentre', centreId);
+        socket.emit('joinCentre', centreId);
         console.log('Joined centre room:', centreId);
       }
-    });
+    };
 
-    newSocket.on('connect_error', (error) => {
+    // Handle connection errors
+    const onConnectError = (error) => {
       console.error('Socket connection error:', error.message);
       if (error.message === 'Socket authentication failed') {
         toast.error('Session expired. Please login again.');
         // Optionally redirect to login
         // navigate('/login');
       }
-    });
+    };
 
-    setSocket(newSocket);
+    socket.on('connect', onConnect);
+    socket.on('connect_error', onConnectError);
+
+    // If socket is already connected, join centre immediately
+    if (socket.connected && centreId) {
+      socket.emit('joinCentre', centreId);
+    }
 
     return () => {
-      newSocket.disconnect();
+      socket.off('connect', onConnect);
+      socket.off('connect_error', onConnectError);
     };
   }, [centreId, navigate]);
 
-  // Refresh tokens function
+  // --- Refresh tokens function ---
   const refreshTokens = useCallback(async () => {
     try {
       console.log('StaffDashboard: Refreshing tokens...');
@@ -200,12 +203,12 @@ const StaffDashboard = () => {
     fetchData();
   }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings]);
 
-  // Socket event listeners
+  // --- Socket event listeners (must be after function definitions) ---
   useEffect(() => {
-    if (!socket) return;
+    if (!socket.connected) return;
 
     // Listen for token updates (general)
-    socket.on('tokenUpdate', (data) => {
+    const onTokenUpdate = (data) => {
       console.log('StaffDashboard: Received tokenUpdate:', data);
       
       setTokens(prev => {
@@ -218,10 +221,10 @@ const StaffDashboard = () => {
       
       // Also refresh to ensure consistency
       refreshTokens();
-    });
+    };
 
     // Listen for centre-specific token updates
-    socket.on(`tokenUpdate:${centreId}`, (data) => {
+    const onCentreTokenUpdate = (data) => {
       console.log('StaffDashboard: Received centre-specific token update:', data);
       
       setTokens(prev => {
@@ -232,24 +235,24 @@ const StaffDashboard = () => {
       });
       
       refreshTokens();
-    });
+    };
 
     // Listen for new tokens
-    socket.on('newToken', (data) => {
+    const onNewToken = (data) => {
       console.log('StaffDashboard: Received newToken:', data);
       toast.info(data.message || 'New token created');
       refreshTokens();
-    });
+    };
 
     // Listen for token reassignments
-    socket.on('tokenReassigned', (data) => {
+    const onTokenReassigned = (data) => {
       console.log('StaffDashboard: Received tokenReassigned:', data);
       toast.info(data.message || 'Token reassigned');
       refreshTokens();
-    });
+    };
 
     // Listen for service entry creation
-    socket.on('serviceEntryCreated', async (data) => {
+    const onServiceEntryCreated = async (data) => {
       console.log('StaffDashboard: Received serviceEntryCreated:', data);
       const entryStaffId = String(data.staff_id || '').trim();
       if (!entryStaffId || entryStaffId === String(staffId).trim()) {
@@ -257,17 +260,24 @@ const StaffDashboard = () => {
         await fetchOnlineBookings();
         await refreshTokens(); // Refresh tokens to update status
       }
-    });
+    };
+
+    socket.on('tokenUpdate', onTokenUpdate);
+    socket.on(`tokenUpdate:${centreId}`, onCentreTokenUpdate);
+    socket.on('newToken', onNewToken);
+    socket.on('tokenReassigned', onTokenReassigned);
+    socket.on('serviceEntryCreated', onServiceEntryCreated);
 
     return () => {
-      socket.off('tokenUpdate');
-      socket.off(`tokenUpdate:${centreId}`);
-      socket.off('newToken');
-      socket.off('tokenReassigned');
-      socket.off('serviceEntryCreated');
+      socket.off('tokenUpdate', onTokenUpdate);
+      socket.off(`tokenUpdate:${centreId}`, onCentreTokenUpdate);
+      socket.off('newToken', onNewToken);
+      socket.off('tokenReassigned', onTokenReassigned);
+      socket.off('serviceEntryCreated', onServiceEntryCreated);
     };
   }, [socket, centreId, staffId, refreshTokens, fetchServiceEntries, fetchOnlineBookings]);
 
+  // ... rest of your component remains unchanged (getCategoryName, etc.)
   const getCategoryName = (categoryId) => {
     const category = categories.find(cat => cat.id === categoryId);
     return category ? category.name : 'N/A';
