@@ -49,7 +49,7 @@ const ActivityPanel = ({ token, userRole }) => {
       return;
     }
 
-    const newSocket = io(`import.meta.env.VITE_API_URL`, {
+    const newSocket = io(`${import.meta.env.VITE_API_URL}`, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
