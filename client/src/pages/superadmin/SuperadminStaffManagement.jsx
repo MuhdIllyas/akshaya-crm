@@ -34,12 +34,12 @@ const SuperadminStaffManagement = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const centresResponse = await axios.get("http://localhost:5000/api/centres", {
+      const centresResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       setCentres(centresResponse.data);
 
-      const staffResponse = await axios.get("http://localhost:5000/api/staff/all", {
+      const staffResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         params: filters,
       });
@@ -70,7 +70,7 @@ const SuperadminStaffManagement = () => {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this staff member?")) return;
     try {
-      await axios.delete(`http://localhost:5000/api/staff/${id}`, {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/staff/${id}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       toast.success("Staff deleted successfully", {
