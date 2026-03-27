@@ -149,7 +149,7 @@ const CustomerProtectedRoute = ({ children }) => {
 
       try {
         // You'll need to create this endpoint in your backend
-        const response = await axios.get("http://localhost:5000/api/customer/verify", {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/customer/verify`, {
           headers: { Authorization: `Bearer ${customerToken}` },
         });
         console.log("CustomerProtectedRoute: Token verification successful");
