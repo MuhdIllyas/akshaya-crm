@@ -8,7 +8,7 @@ if (!API_URL) {
 
 export const socket = io(API_URL, {
   autoConnect: false,
-  transports: ["websocket"],
+  transports: ["websocket","polling"],
   secure: true,
   reconnection: true,
   reconnectionAttempts: 5,
