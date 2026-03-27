@@ -153,7 +153,7 @@ const WalletManagementSuperAdmin = () => {
   // Fetch centres for superadmins
   const fetchCentres = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/centres", {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       setCentres(response.data);
