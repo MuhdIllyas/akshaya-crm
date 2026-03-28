@@ -174,24 +174,27 @@ router.get('/attendance', async (req, res) => {
 
 // POST /api/salary/attendance - Record punch in/out (staff only)
 router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
-  const { punch_type, time, date, breaks } = req.body;
+  const { punch_type, timestamp, breaks } = req.body;
   const client = await pool.connect();
   try {
-    if (!punch_type || !date) return res.status(400).json({ error: 'Punch type and date required' });
+    if (!punch_type || !timestamp) return res.status(400).json({ error: 'Punch type and timestamp required' });
     if (!['in', 'out'].includes(punch_type)) return res.status(400).json({ error: 'Invalid punch type' });
 
     await client.query('BEGIN');
 
-    let punchTime = time;
-    if (punch_type === 'in') {
-      if (!time) return res.status(400).json({ error: 'Time required for punch-in' });
-      const punchDateTime = new Date(`${date}T${time}:00`);
-      const now = new Date();
-      if (Math.abs(now - punchDateTime) > 15 * 60 * 1000) {
-        return res.status(400).json({ error: 'Punch-in must be within 15 mins of current time' });
-      }
-    } else {
-      punchTime = new Date().toTimeString().split(' ')[0].substring(0, 5);
+    // Parse the timestamp (should be ISO 8601, e.g., 2025-03-28T09:00:00.000Z)
+    const punchDateTime = new Date(timestamp);
+    if (isNaN(punchDateTime.getTime())) return res.status(400).json({ error: 'Invalid timestamp' });
+
+    // Extract date and time in the server's timezone
+    const date = punchDateTime.toISOString().slice(0, 10); // YYYY-MM-DD
+    const time = punchDateTime.toTimeString().slice(0, 5); // HH:MM
+
+    // Validate that the timestamp is within 15 minutes of the server's current time
+    const now = new Date();
+    const diffMs = Math.abs(now - punchDateTime);
+    if (diffMs > 15 * 60 * 1000) {
+      return res.status(400).json({ error: 'Punch time must be within 15 minutes of current server time' });
     }
 
     const existing = await client.query(
@@ -208,7 +211,7 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
         `INSERT INTO attendance (staff_id, date, punch_in, status, created_at)
          VALUES ($1, $2, $3, 'present', NOW()) 
          RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
-        [req.user.id, date, punchTime]
+        [req.user.id, date, time]
       );
       await client.query('COMMIT');
       res.status(201).json(result.rows[0]);
@@ -216,14 +219,14 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
       if (existing.rows.length === 0) return res.status(404).json({ error: 'No open punch-in' });
       const { id, punch_in } = existing.rows[0];
       const newBreaks = breaks || null;
-      const hours = calculateHours(punch_in, punchTime, newBreaks);
+      const hours = calculateHours(punch_in, time, newBreaks);
 
       const result = await client.query(
         `UPDATE attendance 
          SET punch_out = $1, breaks = $2, hours = $3, updated_at = NOW()
          WHERE id = $4 
          RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
-        [punchTime, newBreaks, hours, id]
+        [time, newBreaks, hours, id]
       );
 
       // Recalculate late/extra - ONLY RECALCULATE ON PUNCH-OUT (final exit)
