@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
@@ -51,7 +51,10 @@ const StaffDashboard = () => {
   const [processingBookings, setProcessingBookings] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  // --- Socket connection using centralized socket ---
+  // Ref to prevent duplicate joinCentre emits
+  const hasJoinedCentre = useRef(false);
+
+  // --- Socket connection setup using centralized socket ---
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -64,16 +67,17 @@ const StaffDashboard = () => {
       connectSocket(token);
     }
 
-    // When socket connects, join the centre room
+    // Handler for successful connection
     const onConnect = () => {
       console.log('Socket connected successfully');
-      if (centreId) {
+      if (centreId && !hasJoinedCentre.current) {
         socket.emit('joinCentre', centreId);
+        hasJoinedCentre.current = true;
         console.log('Joined centre room:', centreId);
       }
     };
 
-    // Handle connection errors
+    // Handler for connection errors
     const onConnectError = (error) => {
       console.error('Socket connection error:', error.message);
       if (error.message === 'Socket authentication failed') {
@@ -83,17 +87,22 @@ const StaffDashboard = () => {
       }
     };
 
+    // Add listeners
     socket.on('connect', onConnect);
     socket.on('connect_error', onConnectError);
 
-    // If socket is already connected, join centre immediately
-    if (socket.connected && centreId) {
+    // If socket is already connected, join the centre immediately
+    if (socket.connected && centreId && !hasJoinedCentre.current) {
       socket.emit('joinCentre', centreId);
+      hasJoinedCentre.current = true;
+      console.log('Joined centre room (already connected):', centreId);
     }
 
+    // Cleanup on unmount
     return () => {
       socket.off('connect', onConnect);
       socket.off('connect_error', onConnectError);
+      // Optionally leave the centre room? Not necessary on unmount
     };
   }, [centreId, navigate]);
 
@@ -172,7 +181,7 @@ const StaffDashboard = () => {
 
   // Load wallets
   useEffect(() => {
-      getWalletsForCentre()
+    getWalletsForCentre()
       .then(setWallets)
       .catch(() => toast.error('Failed to load wallets'));
   }, []);
@@ -203,10 +212,8 @@ const StaffDashboard = () => {
     fetchData();
   }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings]);
 
-  // --- Socket event listeners (must be after function definitions) ---
+  // --- Socket event listeners (token updates, etc.) ---
   useEffect(() => {
-    if (!socket.connected) return;
-
     // Listen for token updates (general)
     const onTokenUpdate = (data) => {
       console.log('StaffDashboard: Received tokenUpdate:', data);
@@ -275,9 +282,9 @@ const StaffDashboard = () => {
       socket.off('tokenReassigned', onTokenReassigned);
       socket.off('serviceEntryCreated', onServiceEntryCreated);
     };
-  }, [socket, centreId, staffId, refreshTokens, fetchServiceEntries, fetchOnlineBookings]);
+  }, [centreId, staffId, refreshTokens, fetchServiceEntries, fetchOnlineBookings]);
 
-  // ... rest of your component remains unchanged (getCategoryName, etc.)
+  // ---------- Helper Functions (unchanged) ----------
   const getCategoryName = (categoryId) => {
     const category = categories.find(cat => cat.id === categoryId);
     return category ? category.name : 'N/A';
@@ -504,6 +511,7 @@ const StaffDashboard = () => {
     }
   };
 
+  // Loading and error states
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
