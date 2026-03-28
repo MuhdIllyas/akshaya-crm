@@ -126,14 +126,11 @@ class ErrorBoundary extends React.Component {
 }
 
 const normalizeDate = (dateStr) => {
-  try {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) throw new Error('Invalid date');
-    return date.toISOString().split('T')[0];
-  } catch (error) {
-    console.error('Error normalizing date:', { dateStr, error });
-    return dateStr;
-  }
+  const d = new Date(dateStr);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const formatElapsedTime = (lastPunchTime) => {
@@ -153,8 +150,8 @@ const validatePunchInTime = (time) => {
   const punchMinutes = hours * 60 + minutes;
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   
-  // Allow a 20-minute gap instead of 15 to account for network lag
-  return Math.abs(currentMinutes - punchMinutes) <= 20;
+  // Allow a 30-minute buffer for network/device lag
+  return Math.abs(currentMinutes - punchMinutes) <= 30;
 };
 
 const getMonthName = (monthStr) => {
@@ -545,41 +542,53 @@ const StaffAttendance = () => {
   const handlePunchSubmit = async () => {
     try {
       const now = new Date();
-      // 1. Always get fresh time and date at the moment of clicking
-      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // "HH:mm"
-      const currentDate = normalizeDate(now); // "YYYY-MM-DD"
+      
+      // 1. Get current time in local format (HH:mm) - using padStart for reliability
+      const currentHH = String(now.getHours()).padStart(2, '0');
+      const currentMM = String(now.getMinutes()).padStart(2, '0');
+      const currentTime = `${currentHH}:${currentMM}`;
+      
+      // 2. Get normalized current date (YYYY-MM-DD)
+      const currentDate = normalizeDate(now);
   
-      // 2. Validate for Punch In: Ensure the selected time isn't manually set too far back
+      // 3. Determine the actual time to send
+      // For 'out', we ALWAYS force the current local time.
+      // For 'in', we use the manual form time if provided, otherwise current time.
+      const finalTime = punchForm.punch_type === 'out' 
+        ? currentTime 
+        : (punchForm.time || currentTime);
+  
+      // 4. Validate for Punch In against a 30-minute buffer (to match backend)
       if (punchForm.punch_type === 'in') {
-        const timeToValidate = punchForm.time || currentTime;
-        if (!validatePunchInTime(timeToValidate)) {
-          toast.error('Punch-in time must be within 15 minutes of current time.');
+        if (!validatePunchInTime(finalTime)) {
+          toast.error('Punch-in time must be within 30 minutes of current time.');
           return;
         }
       }
   
-      // 3. Construct the payload
-      // Note: For 'out', we send the current time. For 'in', we send the form time (or current if empty).
+      // 5. Construct the payload
       const punchData = {
         ...punchForm,
-        time: punchForm.punch_type === 'out' ? currentTime : (punchForm.time || currentTime),
+        time: finalTime,
         date: currentDate 
       };
   
       const response = await postAttendance(punchData);
   
-      // 4. Update attendance state
+      // 6. Update attendance state
       setAttendance(prev => {
         const isPunchOut = response.punch_out !== null;
         if (isPunchOut) {
+          // Update the existing record with punch-out data
           return prev.map(a => (a.id === response.id ? response : a));
         } else {
+          // Add new punch-in record if it doesn't exist
           const existingIds = new Set(prev.map(r => r.id));
           return !existingIds.has(response.id) ? [response, ...prev] : prev;
         }
       });
   
-      // 5. Update punch status directly from response
+      // 7. Update Punch Status UI directly from the response
       if (response.punch_in && !response.punch_out) {
         setPunchStatus('in');
         setLastPunchTime(`${currentDate}T${response.punch_in}`);
@@ -588,8 +597,8 @@ const StaffAttendance = () => {
         setLastPunchTime(`${currentDate}T${response.punch_out}`);
       }
   
+      // 8. Cleanup and UI feedback
       setShowPunchModal(false);
-      // Reset form
       setPunchForm({ 
         punch_type: 'in', 
         time: '', 
@@ -597,10 +606,11 @@ const StaffAttendance = () => {
         breaks: '' 
       });
       
-      toast.success(`Punch ${punchData.punch_type} recorded successfully!`);
+      toast.success(`Punch ${punchData.punch_type === 'in' ? 'In' : 'Out'} recorded!`);
+      
     } catch (error) {
       console.error('Error recording punch:', error);
-      // Logic to handle the specific "400" error message from backend
+      // This displays the exact error message sent by the backend (e.g., "Time mismatch")
       const serverError = error.response?.data?.error || 'Failed to record punch.';
       toast.error(serverError);
     }
