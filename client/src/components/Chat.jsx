@@ -283,7 +283,7 @@ const Chat = ({
         console.log("Socket not connected, cannot emit typing");
       }
 
-      fetch(`${API_BASE_URL}/chat/typing`, {
+      fetch(`${API_BASE_URL}/api/chat/typing`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
