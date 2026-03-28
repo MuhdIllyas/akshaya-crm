@@ -24,7 +24,7 @@ const StaffManagement = () => {
       try {
         const role = localStorage.getItem("role");
         const centreId = localStorage.getItem("centre_id");
-        const url = role === "superadmin" ? "http://localhost:5000/api/staff/all" : `http://localhost:5000/api/staff/all?centre_id=${centreId}`;
+        const url = role === "superadmin" ? `${import.meta.env.VITE_API_URL}/api/staff/all` : `${import.meta.env.VITE_API_URL}/api/staff/all?centre_id=${centreId}`;
         const response = await fetch(url, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
@@ -48,7 +48,7 @@ const StaffManagement = () => {
     try {
       const role = localStorage.getItem("role");
       const centreId = localStorage.getItem("centre_id");
-      const url = role === "superadmin" ? "http://localhost:5000/api/staff/all" : `http://localhost:5000/api/staff/all?centre_id=${centreId}`;
+      const url = role === "superadmin" ? `${import.meta.env.VITE_API_URL}/api/staff/all` : `${import.meta.env.VITE_API_URL}/api/staff/all?centre_id=${centreId}`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
