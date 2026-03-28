@@ -3,13 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown, FiUserPlus, FiClock, FiFilter, FiSearch, FiEdit2, FiCalendar, FiAward, FiFileText } from 'react-icons/fi';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { io } from 'socket.io-client';
+import { io } from '.io-client';
 import { getServices, createToken, getTokens, getCampaignHistory, getActiveCampaigns, getStaff, assignStaffToToken } from '/src/services/serviceService';
-
-const socket = io('http://localhost:5000', {
-  withCredentials: true,
-  transports: ['websocket', 'polling'],
-});
+import { , connect } from '@/services/socket';
 
 const AdminTokenManagement = () => {
   const [formData, setFormData] = useState({
@@ -57,7 +53,7 @@ const AdminTokenManagement = () => {
       }
     });
 
-    socket.on('tokenReassigned', (data) => {
+    .on('tokenReassigned', (data) => {
       console.log('AdminTokenManagement.jsx: Received tokenReassigned:', data);
       toast.info(data.message);
       if (tokenView === 'active') {
@@ -65,16 +61,16 @@ const AdminTokenManagement = () => {
       }
     });
 
-    socket.on('connect_error', (err) => {
-      console.error('AdminTokenManagement.jsx: Socket.IO connection error:', err.message);
+    .on('connect_error', (err) => {
+      console.error('AdminTokenManagement.jsx: .IO connection error:', err.message);
       toast.error('Failed to connect to real-time notifications.');
     });
 
     return () => {
-      socket.off('newToken');
-      socket.off('tokenReassigned');
-      socket.disconnect();
-      console.log('AdminTokenManagement.jsx: Disconnected from Socket.IO server');
+      .off('newToken');
+      .off('tokenReassigned');
+      .disconnect();
+      console.log('AdminTokenManagement.jsx: Disconnected from .IO server');
     };
   }, [centreId, tokenView]);
 
