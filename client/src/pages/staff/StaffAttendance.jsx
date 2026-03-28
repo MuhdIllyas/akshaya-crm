@@ -136,19 +136,10 @@ const normalizeDate = (dateStr) => {
   }
 };
 
-// Convert UTC stored time to local time for display
-const formatPunchTime = (dateStr, timeStr) => {
-  if (!dateStr || !timeStr) return '-';
-  const dateTime = new Date(`${dateStr}T${timeStr}:00Z`); // treat as UTC
-  return dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
 const formatElapsedTime = (lastPunchTime) => {
   if (!lastPunchTime) return 'N/A';
-  // lastPunchTime is like "2025-03-28T09:02" (UTC). Append 'Z' to treat as UTC.
-  const dt = new Date(lastPunchTime + 'Z');
   const now = new Date();
-  const diffMs = now - dt;
+  const diffMs = now - new Date(lastPunchTime);
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
   return `${diffHours}h ${diffMinutes}m`;
@@ -416,7 +407,7 @@ const StaffAttendance = () => {
 
     if (openRecord) {
       setPunchStatus('in');
-      setLastPunchTime(`${today}T${openRecord.punch_in}`); // store as UTC
+      setLastPunchTime(`${today}T${openRecord.punch_in}`);
     } else {
       setPunchStatus('out');
       const lastClosedRecord = todayRecords
@@ -549,38 +540,23 @@ const StaffAttendance = () => {
     }
   }, [attendance, allSalaryData, selectedMonth]);
 
-  // Updated punch submission: send timestamp
   const handlePunchSubmit = async () => {
     try {
-      let timestamp;
-      if (punchForm.punch_type === 'in') {
-        // Build local datetime from date and time, then convert to ISO (UTC)
-        const localDateTime = new Date(`${punchForm.date}T${punchForm.time}:00`);
-        // Validate locally (optional)
-        const now = new Date();
-        const diffMs = Math.abs(now - localDateTime);
-        if (diffMs > 15 * 60 * 1000) {
-          toast.error('Punch-in time must be within 15 minutes of the current time.');
-          return;
-        }
-        timestamp = localDateTime.toISOString();
-      } else {
-        // Punch-out uses current UTC time
-        timestamp = new Date().toISOString();
+      if (punchForm.punch_type === 'in' && !validatePunchInTime(punchForm.time)) {
+        toast.error('Punch-in time must be within 15 minutes of current time.');
+        return;
       }
-
-      const punchData = {
-        punch_type: punchForm.punch_type,
-        timestamp,
-        breaks: punchForm.breaks || null,
-      };
-
+      const now = new Date();
+      const time = punchForm.punch_type === 'out' ? now.toTimeString().split(' ')[0].substring(0, 5) : punchForm.time || now.toTimeString().split(' ')[0].substring(0, 5);
+      const punchData = { ...punchForm, time, date: normalizeDate(new Date()) };
+      
       const response = await postAttendance(punchData);
       
       // Update attendance state
       setAttendance(prev => {
         const isPunchOut = response.punch_out !== null;
         let newAttendance = prev;
+
         if (isPunchOut) {
           newAttendance = prev.map(a => (a.id === response.id ? response : a));
         } else {
@@ -662,34 +638,34 @@ const StaffAttendance = () => {
             month: 'short'
           })}
         </p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <div className="flex items-center space-x-2">
           {record.punch_in ? (
             <>
               <FiLogIn className="h-4 w-4 text-emerald-500" />
-              <span className="text-sm text-gray-900">{formatPunchTime(record.date, record.punch_in)}</span>
+              <span className="text-sm text-gray-900">{record.punch_in}</span>
             </>
           ) : (
             <span className="text-sm text-gray-400">-</span>
           )}
         </div>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <div className="flex items-center space-x-2">
           {record.punch_out ? (
             <>
               <FiLogOut className="h-4 w-4 text-rose-500" />
-              <span className="text-sm text-gray-900">{formatPunchTime(record.date, record.punch_out)}</span>
+              <span className="text-sm text-gray-900">{record.punch_out}</span>
             </>
           ) : (
             <span className="text-sm text-gray-400">-</span>
           )}
         </div>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">{record.breaks || '-'}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
           record.status === 'present' ? 'bg-emerald-50 text-emerald-700' :
@@ -711,16 +687,15 @@ const StaffAttendance = () => {
            record.status === 'paternity_leave' ? 'Paternity Leave' :
            record.status === 'emergency_leave' ? 'Emergency Leave' : 'Absent'}
         </span>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm font-medium text-gray-900">{Number(record.hours) > 0 ? `${Number(record.hours).toFixed(2)}h` : '-'}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         {!record.punch_out && (
           <button
             onClick={() => {
-              const now = new Date();
-              setPunchForm({ ...punchForm, punch_type: 'out', time: now.toTimeString().split(' ')[0].substring(0,5), date: record.date });
+              setPunchForm({ ...punchForm, punch_type: 'out', time: '', date: record.date });
               setShowPunchModal(true);
             }}
             className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
@@ -728,7 +703,7 @@ const StaffAttendance = () => {
             <FiLogOut className="h-4 w-4" />
           </button>
         )}
-       </td>
+      </td>
       <td className="py-4 px-4">
         {!record.punch_out && (
           <button
@@ -741,28 +716,28 @@ const StaffAttendance = () => {
             <FiCoffee className="h-4 w-4" />
           </button>
         )}
-       </td>
-     </tr>
+      </td>
+    </tr>
   );
 
   const LeaveApplicationRow = ({ application }) => (
     <tr key={application.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
       <td className="py-4 px-4">
         <p className="text-sm font-medium text-gray-900">{application.type}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">
           {new Date(application.from_date).toLocaleDateString('en-IN')}
         </p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">
           {new Date(application.to_date).toLocaleDateString('en-IN')}
         </p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">{application.reason}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
           application.status === 'approved' ? 'bg-emerald-50 text-emerald-700' :
@@ -771,38 +746,38 @@ const StaffAttendance = () => {
         }`}>
           {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
         </span>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-600">
           {new Date(application.applied_date).toLocaleDateString('en-IN')}
         </p>
-       </td>
-     </tr>
+      </td>
+    </tr>
   );
 
   const SalaryRow = ({ salary }) => (
     <tr key={`${salary.staff_id}-${salary.month}`} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
       <td className="py-4 px-4">
         <p className="text-sm font-medium text-gray-900">{getMonthName(salary.month)}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">₹{Number(salary.basic).toLocaleString('en-IN')}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">₹{Number(salary.hra).toLocaleString('en-IN')}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">₹{Number(salary.other_allowances).toLocaleString('en-IN')}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-rose-600">-₹{Number(salary.deductions).toLocaleString('en-IN')}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm font-bold text-emerald-600">₹{Number(salary.net_salary).toLocaleString('en-IN')}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <p className="text-sm text-gray-900">{salary.present_days}/{salary.working_days}</p>
-       </td>
+      </td>
       <td className="py-4 px-4">
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
           salary.status === 'sent' ? 'bg-emerald-100 text-emerald-700' :
@@ -811,21 +786,9 @@ const StaffAttendance = () => {
         }`}>
           {salary.status.charAt(0).toUpperCase() + salary.status.slice(1)}
         </span>
-       </td>
-     </tr>
+      </td>
+    </tr>
   );
-
-  // When opening the punch-in modal, default to current time
-  const openPunchModal = (type) => {
-    const now = new Date();
-    setPunchForm({
-      punch_type: type,
-      time: now.toTimeString().split(' ')[0].substring(0,5),
-      date: normalizeDate(now),
-      breaks: ''
-    });
-    setShowPunchModal(true);
-  };
 
   return (
     <ErrorBoundary>
@@ -851,7 +814,11 @@ const StaffAttendance = () => {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => openPunchModal('in')}
+              onClick={() => {
+                const now = new Date();
+                setPunchForm({ ...punchForm, punch_type: 'in', time: now.toTimeString().split(' ')[0].substring(0, 5), date: normalizeDate(now) });
+                setShowPunchModal(true);
+              }}
               className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
               disabled={punchStatus === 'in'}
             >
@@ -861,7 +828,11 @@ const StaffAttendance = () => {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => openPunchModal('out')}
+              onClick={() => {
+                const now = new Date();
+                setPunchForm({ ...punchForm, punch_type: 'out', time: now.toTimeString().split(' ')[0].substring(0, 5), date: normalizeDate(now) });
+                setShowPunchModal(true);
+              }}
               className="flex items-center space-x-2 px-6 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors"
               disabled={punchStatus === 'out'}
             >
@@ -961,7 +932,7 @@ const StaffAttendance = () => {
                               })}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {record.punch_in && record.punch_out ? `${formatPunchTime(record.date, record.punch_in)} - ${formatPunchTime(record.date, record.punch_out)}` : 'Not punched'}
+                              {record.punch_in && record.punch_out ? `${record.punch_in} - ${record.punch_out}` : 'Not punched'}
                             </p>
                             {record.breaks && (
                               <p className="text-xs text-gray-500">Breaks: {record.breaks}</p>
@@ -1063,14 +1034,14 @@ const StaffAttendance = () => {
                         <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
                         <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Punch Out</th>
                         <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Add Break</th>
-                       </tr>
+                      </tr>
                     </thead>
                     <tbody>
                       {attendance.map(record => (
                         <AttendanceRow key={record.id || `${record.staff_id}-${record.date}`} record={record} />
                       ))}
                     </tbody>
-                   </table>
+                  </table>
                   {attendance.length === 0 && (
                     <div className="text-center py-8">
                       <FiFileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -1116,7 +1087,7 @@ const StaffAttendance = () => {
                           <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Net Salary</th>
                           <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
                           <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                         </tr>
+                        </tr>
                       </thead>
                       <tbody>
                         {(selectedMonth 
@@ -1128,7 +1099,7 @@ const StaffAttendance = () => {
                           ))
                         }
                       </tbody>
-                     </table>
+                    </table>
                     {allSalaryData.length === 0 && (
                       <div className="text-center py-8">
                         <FiFileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -1176,14 +1147,14 @@ const StaffAttendance = () => {
                         <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
                         <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied On</th>
-                       </tr>
+                      </tr>
                     </thead>
                     <tbody>
                       {leaveApplications.map(application => (
                         <LeaveApplicationRow key={application.id} application={application} />
                       ))}
                     </tbody>
-                   </table>
+                  </table>
                   {leaveApplications.length === 0 && (
                     <div className="text-center py-8">
                       <FiFileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
