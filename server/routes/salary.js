@@ -186,7 +186,7 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
     const punchDateTime = new Date(timestamp);
     if (isNaN(punchDateTime.getTime())) return res.status(400).json({ error: 'Invalid timestamp' });
 
-    // Extract date and time in the server's timezone
+    // Extract date and time in UTC (since timestamp is UTC)
     const date = punchDateTime.toISOString().slice(0, 10); // YYYY-MM-DD
     const time = punchDateTime.toTimeString().slice(0, 5); // HH:MM
 
