@@ -319,7 +319,7 @@ const fetchPendingPayments = async () => {
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments',
+      `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments`,
       {
         headers: {
           Authorization: `Bearer ${token}`
