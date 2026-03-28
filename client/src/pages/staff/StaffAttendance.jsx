@@ -542,21 +542,35 @@ const StaffAttendance = () => {
 
   const handlePunchSubmit = async () => {
     try {
-      if (punchForm.punch_type === 'in' && !validatePunchInTime(punchForm.time)) {
-        toast.error('Punch-in time must be within 15 minutes of current time.');
-        return;
+      let timestamp;
+      if (punchForm.punch_type === 'in') {
+        // Combine date and time into a local Date object
+        const localDateTime = new Date(`${punchForm.date}T${punchForm.time}:00`);
+        // Validate within 15 minutes locally (optional, but good UX)
+        const now = new Date();
+        const diffMs = Math.abs(now - localDateTime);
+        if (diffMs > 15 * 60 * 1000) {
+          toast.error('Punch-in time must be within 15 minutes of the current time.');
+          return;
+        }
+        timestamp = localDateTime.toISOString();
+      } else {
+        // Punch-out uses current time
+        timestamp = new Date().toISOString();
       }
-      const now = new Date();
-      const time = punchForm.punch_type === 'out' ? now.toTimeString().split(' ')[0].substring(0, 5) : punchForm.time || now.toTimeString().split(' ')[0].substring(0, 5);
-      const punchData = { ...punchForm, time, date: normalizeDate(new Date()) };
-      
+  
+      const punchData = {
+        punch_type: punchForm.punch_type,
+        timestamp,
+        breaks: punchForm.breaks || null,
+      };
+  
       const response = await postAttendance(punchData);
       
       // Update attendance state
       setAttendance(prev => {
         const isPunchOut = response.punch_out !== null;
         let newAttendance = prev;
-
         if (isPunchOut) {
           newAttendance = prev.map(a => (a.id === response.id ? response : a));
         } else {
@@ -586,7 +600,6 @@ const StaffAttendance = () => {
       toast.error(error.response?.data?.error || 'Failed to record punch.');
     }
   };
-
   const handleBreakSubmit = async () => {
     try {
       if (!/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(breakForm.break_time)) {
