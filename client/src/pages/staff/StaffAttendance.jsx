@@ -149,10 +149,12 @@ const validatePunchInTime = (time) => {
   if (!time) return false;
   const now = new Date();
   const [hours, minutes] = time.split(':').map(Number);
-  const punchDateTime = new Date(now);
-  punchDateTime.setHours(hours, minutes, 0, 0);
-  const timeDiffMs = Math.abs(now - punchDateTime);
-  return timeDiffMs <= 15 * 60 * 1000;
+  
+  const punchMinutes = hours * 60 + minutes;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  
+  // Allow a 20-minute gap instead of 15 to account for network lag
+  return Math.abs(currentMinutes - punchMinutes) <= 20;
 };
 
 const getMonthName = (monthStr) => {
@@ -542,48 +544,65 @@ const StaffAttendance = () => {
 
   const handlePunchSubmit = async () => {
     try {
-      if (punchForm.punch_type === 'in' && !validatePunchInTime(punchForm.time)) {
-        toast.error('Punch-in time must be within 15 minutes of current time.');
-        return;
-      }
       const now = new Date();
-      const time = punchForm.punch_type === 'out' ? now.toTimeString().split(' ')[0].substring(0, 5) : punchForm.time || now.toTimeString().split(' ')[0].substring(0, 5);
-      const punchData = { ...punchForm, time, date: normalizeDate(new Date()) };
-      
+      // 1. Always get fresh time and date at the moment of clicking
+      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // "HH:mm"
+      const currentDate = normalizeDate(now); // "YYYY-MM-DD"
+  
+      // 2. Validate for Punch In: Ensure the selected time isn't manually set too far back
+      if (punchForm.punch_type === 'in') {
+        const timeToValidate = punchForm.time || currentTime;
+        if (!validatePunchInTime(timeToValidate)) {
+          toast.error('Punch-in time must be within 15 minutes of current time.');
+          return;
+        }
+      }
+  
+      // 3. Construct the payload
+      // Note: For 'out', we send the current time. For 'in', we send the form time (or current if empty).
+      const punchData = {
+        ...punchForm,
+        time: punchForm.punch_type === 'out' ? currentTime : (punchForm.time || currentTime),
+        date: currentDate 
+      };
+  
       const response = await postAttendance(punchData);
-      
-      // Update attendance state
+  
+      // 4. Update attendance state
       setAttendance(prev => {
         const isPunchOut = response.punch_out !== null;
-        let newAttendance = prev;
-
         if (isPunchOut) {
-          newAttendance = prev.map(a => (a.id === response.id ? response : a));
+          return prev.map(a => (a.id === response.id ? response : a));
         } else {
           const existingIds = new Set(prev.map(r => r.id));
-          if (!existingIds.has(response.id)) {
-            newAttendance = [response, ...prev];
-          }
+          return !existingIds.has(response.id) ? [response, ...prev] : prev;
         }
-        return newAttendance;
       });
-      
-      // Update punch status directly from response
-      const today = normalizeDate(new Date());
+  
+      // 5. Update punch status directly from response
       if (response.punch_in && !response.punch_out) {
         setPunchStatus('in');
-        setLastPunchTime(`${today}T${response.punch_in}`);
+        setLastPunchTime(`${currentDate}T${response.punch_in}`);
       } else if (response.punch_out) {
         setPunchStatus('out');
-        setLastPunchTime(`${today}T${response.punch_out}`);
+        setLastPunchTime(`${currentDate}T${response.punch_out}`);
       }
-      
+  
       setShowPunchModal(false);
-      setPunchForm({ punch_type: 'in', time: '', date: normalizeDate(new Date()), breaks: '' });
+      // Reset form
+      setPunchForm({ 
+        punch_type: 'in', 
+        time: '', 
+        date: currentDate, 
+        breaks: '' 
+      });
+      
       toast.success(`Punch ${punchData.punch_type} recorded successfully!`);
     } catch (error) {
-      console.error('Error recording punch:', error, { response: error.response?.data });
-      toast.error(error.response?.data?.error || 'Failed to record punch.');
+      console.error('Error recording punch:', error);
+      // Logic to handle the specific "400" error message from backend
+      const serverError = error.response?.data?.error || 'Failed to record punch.';
+      toast.error(serverError);
     }
   };
 
@@ -814,11 +833,17 @@ const StaffAttendance = () => {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                const now = new Date();
-                setPunchForm({ ...punchForm, punch_type: 'in', time: now.toTimeString().split(' ')[0].substring(0, 5), date: normalizeDate(now) });
-                setShowPunchModal(true);
-              }}
+                onClick={() => {
+                  const now = new Date();
+                  const timeStr = now.toTimeString().split(' ')[0].substring(0, 5);
+                  setPunchForm({ 
+                    ...punchForm, 
+                    punch_type: 'in', 
+                    time: timeStr, 
+                    date: normalizeDate(now) 
+                  });
+                  setShowPunchModal(true);
+                }}
               className="flex items-center space-x-2 px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
               disabled={punchStatus === 'in'}
             >
@@ -828,11 +853,17 @@ const StaffAttendance = () => {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                const now = new Date();
-                setPunchForm({ ...punchForm, punch_type: 'out', time: now.toTimeString().split(' ')[0].substring(0, 5), date: normalizeDate(now) });
-                setShowPunchModal(true);
-              }}
+                onClick={() => {
+                  const now = new Date();
+                  const timeStr = now.toTimeString().split(' ')[0].substring(0, 5);
+                  setPunchForm({ 
+                    ...punchForm, 
+                    punch_type: 'out', 
+                    time: timeStr, 
+                    date: normalizeDate(now) 
+                  });
+                  setShowPunchModal(true);
+                }}
               className="flex items-center space-x-2 px-6 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors"
               disabled={punchStatus === 'out'}
             >
