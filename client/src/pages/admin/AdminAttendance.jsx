@@ -305,12 +305,12 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
               Schedule: {fmt(group.schedule.start_time)} - {fmt(group.schedule.end_time)}
             </p>
           )}
-        </td>
+         </td>
         <td className="py-4 px-4">
           <p className="text-sm text-gray-900">
             {new Date(group.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
           </p>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <div className="flex items-center space-x-2">
             {group.punch_in ? (
@@ -326,7 +326,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
               </>
             ) : <span className="text-sm text-gray-400">-</span>}
           </div>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <div className="flex items-center space-x-2">
             {group.punch_out ? (
@@ -342,7 +342,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
               </>
             ) : <span className="text-sm text-gray-400">-</span>}
           </div>
-        </td>
+         </td>
         <td className="py-4 px-4"><p className="text-sm text-gray-900">{group.breaks || '-'}</p></td>
         <td className="py-4 px-4">
           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
@@ -355,12 +355,12 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
               : group.status.includes('leave') ? 'Leave'
               : group.status === 'absent' ? 'Absent' : 'Weekend'}
           </span>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <p className="text-sm font-medium text-gray-900">
             {Number(group.hours) > 0 ? `${Number(group.hours).toFixed(2)}h` : '-'}
           </p>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <div className="flex flex-col space-y-1">
             {group.lateHours > 0 && (
@@ -372,7 +372,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
                     title={`Extra ${group.extraHours}h`}>Extra: {group.extraHours}h</span>
             )}
           </div>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <button
             onClick={(e) => { e.stopPropagation(); onEdit(group); }}
@@ -380,12 +380,12 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
           >
             <FiEdit className="h-4 w-4" />
           </button>
-        </td>
-      </tr>
+         </td>
+       </tr>
 
       {/* ---- EXPANDED ROW – RAW PUNCHES ---- */}
       {open && (
-        <tr>
+         <tr>
           <td colSpan={9} className="p-0">
             <motion.div
               initial={{ height: 0 }}
@@ -395,12 +395,12 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
             >
               <table className="w-full">
                 <thead className="bg-gray-100">
-                  <tr>
+                   <tr>
                     <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Punch In</th>
                     <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Punch Out</th>
                     <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Late</th>
                     <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Extra</th>
-                  </tr>
+                   </tr>
                 </thead>
                 <tbody>
                   {group.raw.map((r, i) => {
@@ -411,14 +411,14 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
                         <td className="py-2 px-4 text-sm">{r.punch_out || '-'}</td>
                         <td className="py-2 px-4 text-sm">-</td>
                         <td className="py-2 px-4 text-sm">-</td>
-                      </tr>
+                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </motion.div>
-          </td>
-        </tr>
+           </td>
+         </tr>
       )}
     </>
   );
@@ -633,24 +633,24 @@ const AttendanceRow = ({ record, staffList, onEdit }) => {
         <p className="text-sm font-medium text-gray-900">{record.staff_name}</p>
         <p className="text-xs text-gray-500">{record.staff_id}</p>
         {dev.schedule && <p className="text-xs text-gray-400 cursor-help" title={`Effective from: ${new Date(dev.schedule.effective_from).toLocaleDateString()}`}>Schedule: {fmt(dev.schedule.start_time)} - {fmt(dev.schedule.end_time)}</p>}
-      </td>
+       </td>
       <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(record.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</p></td>
       <td className="py-4 px-4">
         <div className="flex items-center space-x-2">
           {record.punch_in ? (<><FiLogIn className="h-4 w-4 text-emerald-500" /><span className="text-sm text-gray-900">{record.punch_in}</span>{dev.lateMinutes > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-xs" title={`Late by ${dev.lateTime}`}>+{dev.lateTime}</span>}</>) : <span className="text-sm text-gray-400">-</span>}
         </div>
-      </td>
+       </td>
       <td className="py-4 px-4">
         <div className="flex items-center space-x-2">
           {record.punch_out ? (<><FiLogOut className="h-4 w-4 text-red-500" /><span className="text-sm text-gray-900">{record.punch_out}</span>{dev.extraMinutes > 0 && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs" title={`Extra ${dev.extraTime}`}>+{dev.extraTime}</span>}</>) : <span className="text-sm text-gray-400">-</span>}
         </div>
-      </td>
+       </td>
       <td className="py-4 px-4"><p className="text-sm text-gray-900">{record.breaks || '-'}</p></td>
       <td className="py-4 px-4">
         <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${record.status === 'present' ? 'bg-emerald-50 text-emerald-700' : record.status === 'sick_leave' ? 'bg-amber-50 text-amber-700' : record.status === 'absent' ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-700'}`}>
           {record.status === 'present' ? 'Present' : record.status === 'sick_leave' ? 'Sick Leave' : record.status === 'absent' ? 'Absent' : 'Weekend'}
         </span>
-      </td>
+       </td>
       <td className="py-4 px-4"><p className="text-sm font-medium text-gray-900">{Number(record.hours) > 0 ? `${Number(record.hours).toFixed(2)}h` : '-'}</p></td>
       <td className="py-4 px-4">
         <div className="flex flex-col space-y-1">
@@ -658,9 +658,9 @@ const AttendanceRow = ({ record, staffList, onEdit }) => {
           {dev.extraHours > 0 && <span className="text-xs text-purple-600 font-medium" title={`Extra ${dev.extraHours}h`}>Extra: {dev.extraHours}h</span>}
           {!dev.hasSchedule && <span className="text-xs text-gray-400">No schedule</span>}
         </div>
-      </td>
+       </td>
       <td className="py-4 px-4"><button onClick={() => onEdit(record)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><FiEdit className="h-4 w-4" /></button></td>
-    </tr>
+     </tr>
   );
 };
 
@@ -680,7 +680,7 @@ const LeaveApplicationRow = ({ application, handleLeaveAction }) => (
       }`}>
         {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
       </span>
-    </td>
+     </td>
     <td className="py-4 px-4"><p className="text-sm text-gray-600">{new Date(application.applied_date).toLocaleDateString('en-IN')}</p></td>
     <td className="py-4 px-4">
       {application.status === 'pending' ? (
@@ -691,8 +691,8 @@ const LeaveApplicationRow = ({ application, handleLeaveAction }) => (
       ) : (
         <span className="text-sm text-gray-400">-</span>
       )}
-    </td>
-  </tr>
+     </td>
+   </tr>
 );
 
 const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => (
@@ -711,14 +711,14 @@ const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${salary.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : salary.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
         {salary.status === 'sent' ? 'Sent' : salary.status === 'viewed' ? 'Viewed' : 'Pending'}
       </span>
-    </td>
+     </td>
     <td className="py-4 px-4">
       <div className="flex items-center space-x-2">
         <button onClick={() => handleEditSalary(salary)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><FiEdit className="h-4 w-4" /></button>
         <button onClick={() => onSendToStaff(salary)} disabled={salary.status === 'sent'} className={`p-2 rounded-lg ${salary.status === 'sent' ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:bg-green-50'}`}><FiSend className="h-4 w-4" /></button>
       </div>
-    </td>
-  </tr>
+     </td>
+   </tr>
 );
 
 // ---------------------------------------------------------------------
@@ -813,18 +813,19 @@ const AdminAttendance = () => {
     total_hours: 0,
   });
 
+  // FIXED: Correct URL for wallet debit
   const debitSalaryFromWallet = async (walletId, amount, staffName, month) => {
-  try {
-    await axios.post(
-      `${import.meta.env.VITE_API_URL/api/wallet/debit-salary`,
-      { wallet_id: walletId, amount, staff_name: staffName, month },
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-    );
-  } catch (err) {
-    console.error('Wallet debit failed:', err);
-    throw err; // let the caller show toast
-  }
-};
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/wallet/debit-salary`,
+        { wallet_id: walletId, amount, staff_name: staffName, month },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+    } catch (err) {
+      console.error('Wallet debit failed:', err);
+      throw err; // let the caller show toast
+    }
+  };
 
   // ------------------- STATS -------------------
   const stats = useMemo(() => {
@@ -1078,8 +1079,9 @@ const AdminAttendance = () => {
 
     // Step 2: Try to debit wallet (but don't crash if it fails)
     try {
+      // FIXED: Correct URL
       await axios.post(
-        `${import.meta.env.VITE_API_URL/api/wallet/debit-salary`,
+        `${import.meta.env.VITE_API_URL}/api/wallet/debit-salary`,
         {
           wallet_id: selectedWalletId,
           amount: netSalary,
@@ -1290,7 +1292,7 @@ const AdminAttendance = () => {
                     <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
                     <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Schedule Deviations</th>
                     <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
+                   </tr>
                 </thead>
                 <tbody>
                   {groupAttendance(allAttendance, staffList).map(g => (
@@ -1352,7 +1354,7 @@ const AdminAttendance = () => {
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Applied On</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr></thead>
+                 </tr></thead>
                 <tbody>
                   {allLeaves.map(l => ( // Changed to render allLeaves
                     <LeaveApplicationRow key={l.id} application={l} handleLeaveAction={handleLeaveAction} />
@@ -1434,7 +1436,7 @@ const AdminAttendance = () => {
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Net Salary</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr></thead>
+                 </tr></thead>
                 <tbody>
                   {salaryData
                     .filter(salary => salary.month === selectedSalaryMonth)
