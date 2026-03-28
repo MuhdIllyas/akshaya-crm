@@ -173,27 +173,55 @@ router.get('/attendance', async (req, res) => {
 });
 
 // POST /api/salary/attendance - Record punch in/out (staff only)
+// POST /api/salary/attendance - Record punch in/out (staff only)
 router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
   const { punch_type, time, date, breaks } = req.body;
   const client = await pool.connect();
+  
   try {
     if (!punch_type || !date) return res.status(400).json({ error: 'Punch type and date required' });
     if (!['in', 'out'].includes(punch_type)) return res.status(400).json({ error: 'Invalid punch type' });
 
     await client.query('BEGIN');
 
+    // 1. Get Current Time in HH:mm format for server-side validation
+    const now = new Date();
+    // Using Intl to ensure we get the time in a specific timezone (e.g., Asia/Kolkata) if needed, 
+    // or just standard local time if server/client are matched.
+    const serverHHmm = now.toTimeString().split(' ')[0].substring(0, 5); 
+    
     let punchTime = time;
+
+    // 2. Strict Validation for Punch In
     if (punch_type === 'in') {
       if (!time) return res.status(400).json({ error: 'Time required for punch-in' });
-      const punchDateTime = new Date(`${date}T${time}:00`);
-      const now = new Date();
-      if (Math.abs(now - punchDateTime) > 15 * 60 * 1000) {
-        return res.status(400).json({ error: 'Punch-in must be within 15 mins of current time' });
+
+      // Calculate difference in minutes to avoid Timezone/Date object bugs
+      const [pHT, pMT] = time.split(':').map(Number);
+      const [sHT, sMT] = serverHHmm.split(':').map(Number);
+      
+      const punchMinutes = pHT * 60 + pMT;
+      const serverMinutes = sHT * 60 + sMT;
+      const diff = Math.abs(serverMinutes - punchMinutes);
+
+      // Validation: Allow a 20-minute buffer (slightly more than 15 to be safe)
+      // Also check if the date provided is today
+      const todayStr = now.toISOString().split('T')[0];
+      if (date !== todayStr) {
+        return res.status(400).json({ error: 'Attendance must be recorded for the current date.' });
+      }
+
+      if (diff > 20) {
+        return res.status(400).json({ 
+          error: `Time mismatch. Your punch time (${time}) is too far from server time (${serverHHmm}).` 
+        });
       }
     } else {
-      punchTime = new Date().toTimeString().split(' ')[0].substring(0, 5);
+      // For punch out, always use the current server time to ensure accuracy
+      punchTime = serverHHmm;
     }
 
+    // 3. Check for existing open records
     const existing = await client.query(
       `SELECT id, punch_in, punch_out FROM attendance 
        WHERE staff_id = $1 AND date = $2 AND punch_out IS NULL`,
@@ -202,18 +230,27 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
 
     if (punch_type === 'in') {
       if (existing.rows.length > 0) {
-        return res.status(400).json({ error: 'Already punched in. Punch out first.' });
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Already punched in. Please punch out first.' });
       }
+      
       const result = await client.query(
         `INSERT INTO attendance (staff_id, date, punch_in, status, created_at)
          VALUES ($1, $2, $3, 'present', NOW()) 
          RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
         [req.user.id, date, punchTime]
       );
+      
       await client.query('COMMIT');
-      res.status(201).json(result.rows[0]);
+      return res.status(201).json(result.rows[0]);
+
     } else {
-      if (existing.rows.length === 0) return res.status(404).json({ error: 'No open punch-in' });
+      // PUNCH OUT Logic
+      if (existing.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'No active punch-in record found for today.' });
+      }
+
       const { id, punch_in } = existing.rows[0];
       const newBreaks = breaks || null;
       const hours = calculateHours(punch_in, punchTime, newBreaks);
@@ -226,19 +263,22 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
         [punchTime, newBreaks, hours, id]
       );
 
-      // Recalculate late/extra - ONLY RECALCULATE ON PUNCH-OUT (final exit)
-      if (punch_type === 'out') {
-        await recalculateDayDeviation(client, req.user.id, date);
-      }
+      // Recalculate late/extra deviation for the day
+      await recalculateDayDeviation(client, req.user.id, date);
 
       await client.query('COMMIT');
-      const final = await client.query('SELECT * FROM attendance WHERE id = $1', [id]);
-      res.json(final.rows[0]);
+      
+      // Fetch fresh data to ensure all calculated fields are included
+      const final = await client.query(
+        `SELECT *, TO_CHAR(date, 'YYYY-MM-DD') AS date FROM attendance WHERE id = $1`, 
+        [id]
+      );
+      return res.json(final.rows[0]);
     }
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Punch error:', err);
-    res.status(500).json({ error: 'Failed to record punch' });
+    if (client) await client.query('ROLLBACK');
+    console.error('Punch error details:', err);
+    res.status(500).json({ error: 'Internal server error while recording punch.' });
   } finally {
     client.release();
   }
