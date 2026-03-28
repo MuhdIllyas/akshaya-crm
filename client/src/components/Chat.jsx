@@ -187,7 +187,7 @@ const Chat = ({
 
       // Clear typing status when leaving
       if (isTyping) {
-        fetch(`${API_BASE_URL}/chat/typing`, {
+        fetch(`${API_BASE_URL}/api/chat/typing`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
