@@ -816,7 +816,7 @@ const AdminAttendance = () => {
   const debitSalaryFromWallet = async (walletId, amount, staffName, month) => {
   try {
     await axios.post(
-      `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/wallet/debit-salary`,
+      `${import.meta.env.VITE_API_URL/api/wallet/debit-salary`,
       { wallet_id: walletId, amount, staff_name: staffName, month },
       { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
     );
@@ -1079,7 +1079,7 @@ const AdminAttendance = () => {
     // Step 2: Try to debit wallet (but don't crash if it fails)
     try {
       await axios.post(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/wallet/debit-salary`,
+        `${import.meta.env.VITE_API_URL/api/wallet/debit-salary`,
         {
           wallet_id: selectedWalletId,
           amount: netSalary,
