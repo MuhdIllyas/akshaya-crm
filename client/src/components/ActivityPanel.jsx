@@ -26,7 +26,8 @@ import {
 import { MdAccessTime, MdPerson, MdBusinessCenter, MdLocationOn } from "react-icons/md";
 import { BsCircleFill } from "react-icons/bs";
 import { IoMdCheckmarkCircle, IoMdClose } from "react-icons/io";
-import io from 'socket.io-client';
+// Import centralized socket and connection function
+import { socket, connectSocket } from '@/services/socket';
 
 const ActivityPanel = ({ token, userRole }) => {
   const [activities, setActivities] = useState([]);
@@ -38,41 +39,30 @@ const ActivityPanel = ({ token, userRole }) => {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const containerRef = useRef(null);
   const filterMenuRef = useRef(null);
-  const [socket, setSocket] = useState(null);
+  
+  // Refs to track connection state to avoid duplicate joins
+  const hasConnected = useRef(false);
 
   const limit = 20;
 
-  // Initialize socket connection with token
+  // Initialize socket connection using centralized socket
   useEffect(() => {
     if (!token) {
       console.error('No token provided for socket connection');
       return;
     }
 
-    const newSocket = io(`${import.meta.env.VITE_API_URL}`, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      auth: {
-        token: token
-      },
-      transports: ['websocket', 'polling']
-    });
+    // Connect if not already connected
+    if (!socket.connected && !hasConnected.current) {
+      connectSocket(token);
+      hasConnected.current = true;
+    }
 
-    newSocket.on('connect', () => {
-      console.log('Socket connected successfully');
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error.message);
-    });
-
-    setSocket(newSocket);
-
-    // Cleanup on unmount
-    return () => {
-      newSocket.disconnect();
-    };
+    // Optional: If already connected but we need to ensure it's using the token?
+    // The centralized socket already uses the token from connectSocket.
+    
+    // Cleanup on unmount? We don't disconnect the shared socket because other components might use it.
+    // So we just leave it connected. No cleanup needed for the socket itself.
   }, [token]);
 
   const fetchActivities = async (pageNum = 1) => {
@@ -111,18 +101,20 @@ const ActivityPanel = ({ token, userRole }) => {
     fetchActivities(1);
   }, []);
 
-  // Socket event listeners
+  // Socket event listeners - using shared socket
   useEffect(() => {
-    if (!socket) return;
-
-    socket.on("activityCreated", (activity) => {
+    // Only add listener if socket is defined (it is, imported)
+    const handleActivityCreated = (activity) => {
       setActivities(prev => [activity, ...prev]);
-    });
-
-    return () => {
-      socket.off("activityCreated");
     };
-  }, [socket]);
+
+    socket.on("activityCreated", handleActivityCreated);
+
+    // Cleanup on unmount
+    return () => {
+      socket.off("activityCreated", handleActivityCreated);
+    };
+  }, []); // No dependency on socket because it's stable
 
   // Infinite scroll
   const handleScroll = () => {
