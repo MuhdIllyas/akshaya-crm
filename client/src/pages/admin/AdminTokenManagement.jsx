@@ -5,7 +5,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { io } from '.io-client';
 import { getServices, createToken, getTokens, getCampaignHistory, getActiveCampaigns, getStaff, assignStaffToToken } from '/src/services/serviceService';
-import { socket , connect } from '@/services/socket';
+import { socket, connectSocket } from '@/services/socket';
 
 const AdminTokenManagement = () => {
   const [formData, setFormData] = useState({
