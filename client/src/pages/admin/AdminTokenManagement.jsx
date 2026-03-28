@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown, FiUserPlus, FiClock, FiFilter, FiSearch, FiEdit2, FiCalendar, FiAward, FiFileText } from 'react-icons/fi';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { io } from '.io-client';
 import { getServices, createToken, getTokens, getCampaignHistory, getActiveCampaigns, getStaff, assignStaffToToken } from '/src/services/serviceService';
+// Import centralized socket and connection function
 import { socket, connectSocket } from '@/services/socket';
 
 const AdminTokenManagement = () => {
@@ -36,53 +36,88 @@ const AdminTokenManagement = () => {
   const userId = localStorage.getItem('id');
   const centreId = localStorage.getItem('centre_id');
 
+  // --- Socket connection setup using centralized socket ---
   useEffect(() => {
-    socket.on('connect', () => {
-      console.log('AdminTokenManagement.jsx: Connected to Socket.IO server:', socket.id);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No token found for socket connection');
+      return;
+    }
+
+    // Connect if not already connected
+    if (!socket.connected) {
+      connectSocket(token);
+    }
+
+    // Handler for successful connection
+    const onConnect = () => {
+      console.log('AdminTokenManagement: Socket connected successfully');
       if (centreId) {
         socket.emit('joinCentre', centreId);
-        console.log('AdminTokenManagement.jsx: Joined centre room:', `centre_${centreId}`);
+        console.log('AdminTokenManagement: Joined centre room:', centreId);
       }
-    });
+    };
 
-    socket.on('newToken', (data) => {
-      console.log('AdminTokenManagement.jsx: Received newToken:', data);
-      toast.info(data.message);
-      if (tokenView === 'active') {
-        fetchTokens();
-      }
-    });
-
-    .on('tokenReassigned', (data) => {
-      console.log('AdminTokenManagement.jsx: Received tokenReassigned:', data);
-      toast.info(data.message);
-      if (tokenView === 'active') {
-        fetchTokens();
-      }
-    });
-
-    .on('connect_error', (err) => {
-      console.error('AdminTokenManagement.jsx: .IO connection error:', err.message);
+    // Handler for connection errors
+    const onConnectError = (error) => {
+      console.error('AdminTokenManagement: Socket connection error:', error.message);
       toast.error('Failed to connect to real-time notifications.');
-    });
+    };
+
+    // Attach listeners
+    socket.on('connect', onConnect);
+    socket.on('connect_error', onConnectError);
+
+    // If socket is already connected, join centre immediately
+    if (socket.connected && centreId) {
+      socket.emit('joinCentre', centreId);
+    }
+
+    // Cleanup on unmount – only remove these listeners, do NOT disconnect the shared socket
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('connect_error', onConnectError);
+    };
+  }, [centreId]);
+
+  // --- Socket event listeners for token updates ---
+  useEffect(() => {
+    // Listen for new tokens
+    const onNewToken = (data) => {
+      console.log('AdminTokenManagement: Received newToken:', data);
+      toast.info(data.message);
+      if (tokenView === 'active') {
+        fetchTokens();
+      }
+    };
+
+    // Listen for token reassignments
+    const onTokenReassigned = (data) => {
+      console.log('AdminTokenManagement: Received tokenReassigned:', data);
+      toast.info(data.message);
+      if (tokenView === 'active') {
+        fetchTokens();
+      }
+    };
+
+    socket.on('newToken', onNewToken);
+    socket.on('tokenReassigned', onTokenReassigned);
 
     return () => {
-      .off('newToken');
-      .off('tokenReassigned');
-      .disconnect();
-      console.log('AdminTokenManagement.jsx: Disconnected from .IO server');
+      socket.off('newToken', onNewToken);
+      socket.off('tokenReassigned', onTokenReassigned);
     };
-  }, [centreId, tokenView]);
+  }, [tokenView]); // Re-run when tokenView changes so we can conditionally refresh
 
   const fetchTokens = async () => {
     try {
       // Fetch only active tokens (normal + active campaign)
       const tokensRes = await getTokens(formData.centreId, '');
       setTokens(tokensRes.data);
-      console.log('AdminTokenManagement.jsx: Fetched active tokens:', JSON.stringify(tokensRes.data, null, 2));
+      console.log('AdminTokenManagement: Fetched active tokens:', JSON.stringify(tokensRes.data, null, 2));
       return tokensRes;
     } catch (err) {
-      console.error('AdminTokenManagement.jsx: Error fetching tokens:', err.response?.data || err.message);
+      console.error('AdminTokenManagement: Error fetching tokens:', err.response?.data || err.message);
       toast.error('Failed to fetch tokens: ' + (err.response?.data?.error || err.message));
       return null;
     }
@@ -92,9 +127,9 @@ const AdminTokenManagement = () => {
     try {
       const historyRes = await getCampaignHistory(formData.centreId);
       setCampaignHistory(historyRes.data);
-      console.log('AdminTokenManagement.jsx: Fetched campaign history:', JSON.stringify(historyRes.data, null, 2));
+      console.log('AdminTokenManagement: Fetched campaign history:', JSON.stringify(historyRes.data, null, 2));
     } catch (err) {
-      console.error('AdminTokenManagement.jsx: Error fetching campaign history:', err.response?.data || err.message);
+      console.error('AdminTokenManagement: Error fetching campaign history:', err.response?.data || err.message);
       toast.error('Failed to fetch campaign history: ' + (err.response?.data?.error || err.message));
     }
   };
@@ -130,7 +165,7 @@ const AdminTokenManagement = () => {
     });
     
     setCampaignMap(map);
-    console.log('AdminTokenManagement.jsx: Campaign map built:', map);
+    console.log('AdminTokenManagement: Campaign map built:', map);
   }, [activeCampaigns, campaignHistory]);
 
   useEffect(() => {
@@ -138,12 +173,12 @@ const AdminTokenManagement = () => {
       try {
         const categoriesRes = await getServices();
         setCategories(categoriesRes.data);
-        console.log('AdminTokenManagement.jsx: Fetched categories:', JSON.stringify(categoriesRes.data, null, 2));
+        console.log('AdminTokenManagement: Fetched categories:', JSON.stringify(categoriesRes.data, null, 2));
 
         // Fetch only active campaigns for the form
         const activeCampaignsRes = await getActiveCampaigns(formData.centreId);
         setActiveCampaigns(activeCampaignsRes.data);
-        console.log('AdminTokenManagement.jsx: Fetched active campaigns:', JSON.stringify(activeCampaignsRes.data, null, 2));
+        console.log('AdminTokenManagement: Fetched active campaigns:', JSON.stringify(activeCampaignsRes.data, null, 2));
 
         const tokensRes = await fetchTokens();
         if (!tokensRes) throw new Error('Failed to fetch tokens');
@@ -158,9 +193,9 @@ const AdminTokenManagement = () => {
           return acc;
         }, {});
         setStaffList(staffData);
-        console.log('AdminTokenManagement.jsx: Fetched staff:', JSON.stringify(staffData, null, 2));
+        console.log('AdminTokenManagement: Fetched staff:', JSON.stringify(staffData, null, 2));
       } catch (err) {
-        console.error('AdminTokenManagement.jsx: Error fetching data:', err.message);
+        console.error('AdminTokenManagement: Error fetching data:', err.message);
         setError('Failed to load data.');
         toast.error('Failed to load data: ' + err.message);
       }
@@ -172,7 +207,7 @@ const AdminTokenManagement = () => {
     if (formData.category && categories.length > 0) {
       const category = categories.find(cat => cat.id === parseInt(formData.category));
       setFilteredSubcategories(category?.subcategories || []);
-      console.log('AdminTokenManagement.jsx: Filtered subcategories:', category?.subcategories || []);
+      console.log('AdminTokenManagement: Filtered subcategories:', category?.subcategories || []);
     } else {
       setFilteredSubcategories([]);
     }
@@ -185,14 +220,14 @@ const AdminTokenManagement = () => {
       if (name === 'type' && value === 'normal') {
         newFormData.campaign = '';
       }
-      console.log('AdminTokenManagement.jsx: Input changed:', { [name]: value });
+      console.log('AdminTokenManagement: Input changed:', { [name]: value });
       return newFormData;
     });
   };
 
   const handleStaffChange = (tokenId, staffId) => {
     setSelectedStaff(prev => ({ ...prev, [tokenId]: staffId }));
-    console.log('AdminTokenManagement.jsx: Selected staff for token:', { tokenId, staffId });
+    console.log('AdminTokenManagement: Selected staff for token:', { tokenId, staffId });
   };
 
   const handleAssignStaff = async (tokenId, centreId) => {
@@ -206,14 +241,14 @@ const AdminTokenManagement = () => {
       toast.success(`Staff assigned to token ${tokenId}`);
       await fetchTokens();
     } catch (err) {
-      console.error('AdminTokenManagement.jsx: Error assigning staff:', err.response?.data || err.message);
+      console.error('AdminTokenManagement: Error assigning staff:', err.response?.data || err.message);
       toast.error(`Failed to assign staff: ${err.response?.data?.error || err.message}`);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('AdminTokenManagement.jsx: Submitting form:', JSON.stringify(formData, null, 2));
+    console.log('AdminTokenManagement: Submitting form:', JSON.stringify(formData, null, 2));
 
     const errors = [];
     if (!formData.customerName || formData.customerName.trim().length < 2) {
@@ -254,7 +289,7 @@ const AdminTokenManagement = () => {
     }
 
     if (errors.length > 0) {
-      console.warn('AdminTokenManagement.jsx: Validation errors:', errors);
+      console.warn('AdminTokenManagement: Validation errors:', errors);
       errors.forEach(error => toast.error(error));
       return;
     }
@@ -271,9 +306,9 @@ const AdminTokenManagement = () => {
         centreId: userRole === 'admin' ? undefined : parseInt(formData.centreId),
       };
 
-      console.log('AdminTokenManagement.jsx: Submitting token:', JSON.stringify(submissionData, null, 2));
+      console.log('AdminTokenManagement: Submitting token:', JSON.stringify(submissionData, null, 2));
       const response = await createToken(submissionData);
-      console.log('AdminTokenManagement.jsx: Token creation response:', JSON.stringify(response.data, null, 2));
+      console.log('AdminTokenManagement: Token creation response:', JSON.stringify(response.data, null, 2));
       toast.success('Token created successfully!');
 
       // Reset form
@@ -302,7 +337,7 @@ const AdminTokenManagement = () => {
         setStaffList(prev => ({ ...prev, [submissionData.centreId]: staffRes.data }));
       }
     } catch (err) {
-      console.error('AdminTokenManagement.jsx: Error creating token:', err.response?.data || err.message);
+      console.error('AdminTokenManagement: Error creating token:', err.response?.data || err.message);
       if (err.response?.data?.details) {
         err.response.data.details.forEach(detail => toast.error(detail));
       } else {
