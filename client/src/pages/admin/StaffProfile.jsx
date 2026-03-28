@@ -21,7 +21,7 @@ const StaffProfile = () => {
         setLoading(true);
         setError(null);
         
-        const res = await fetch(`http://localhost:5000/api/staff/${id}`);
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/${id}`);
         
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
@@ -54,7 +54,7 @@ const StaffProfile = () => {
   // Delete function
   const handleDelete = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/staff/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/${id}`, {
         method: "DELETE"
       });
 
