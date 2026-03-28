@@ -201,7 +201,7 @@ const fetchDailyIncome = async (date) => {
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(
-      `http://localhost:5000/api/accounting/income?date=${date}`,
+      `${import.meta.env.VITE_API_URL}/api/accounting/income?date=${date}`,
       {
         headers: {
           Authorization: `Bearer ${token}`
@@ -226,7 +226,7 @@ const fetchMonthlyIncome = async (month) => {
     const endDate = new Date(year, parseInt(monthNum), 0).toISOString().split('T')[0];
     
     const res = await fetch(
-      `http://localhost:5000/api/accounting/income?from=${startDate}&to=${endDate}`,
+      `${import.meta.env.VITE_API_URL}/api/accounting/income?from=${startDate}&to=${endDate}`,
       {
         headers: {
           Authorization: `Bearer ${token}`
@@ -247,7 +247,7 @@ const fetchDailyExpenses = async (date) => {
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(
-      `http://localhost:5000/api/expense?date=${date}`,
+      `${import.meta.env.VITE_API_URL}/api/expense?date=${date}`,
       {
         headers: {
           Authorization: `Bearer ${token}`
@@ -273,7 +273,7 @@ const fetchDailyWalletSummary = async (date) => {
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(
-      `http://localhost:5000/api/walletreport/wallets/summary?from=${date}&to=${date}`,
+      `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/summary?from=${date}&to=${date}`,
       {
         headers: {
           Authorization: `Bearer ${token}`
@@ -298,7 +298,7 @@ const fetchMonthlyWalletFlow = async (month) => {
     const endDate = new Date(year, parseInt(monthNum), 0).toISOString().split('T')[0];
     
     const res = await fetch(
-      `http://localhost:5000/api/walletreport/wallets/daily-flow?from=${startDate}&to=${endDate}`,
+      `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/daily-flow?from=${startDate}&to=${endDate}`,
       {
         headers: {
           Authorization: `Bearer ${token}`
@@ -319,7 +319,7 @@ const fetchPendingPayments = async () => {
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(
-      'http://localhost:5000/api/servicemanagement/pending-payments',
+      `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments',
       {
         headers: {
           Authorization: `Bearer ${token}`
