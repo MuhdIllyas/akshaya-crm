@@ -173,7 +173,6 @@ router.get('/attendance', async (req, res) => {
 });
 
 // POST /api/salary/attendance - Record punch in/out (staff only)
-// POST /api/salary/attendance - Record punch in/out (staff only)
 router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
   const { punch_type, time, date, breaks } = req.body;
   const client = await pool.connect();
@@ -194,31 +193,41 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
 
     // 2. Strict Validation for Punch In
     if (punch_type === 'in') {
-      if (!time) return res.status(400).json({ error: 'Time required for punch-in' });
-
-      // Calculate difference in minutes to avoid Timezone/Date object bugs
-      const [pHT, pMT] = time.split(':').map(Number);
-      const [sHT, sMT] = serverHHmm.split(':').map(Number);
-      
-      const punchMinutes = pHT * 60 + pMT;
-      const serverMinutes = sHT * 60 + sMT;
-      const diff = Math.abs(serverMinutes - punchMinutes);
-
-      // Validation: Allow a 20-minute buffer (slightly more than 15 to be safe)
-      // Also check if the date provided is today
-      const todayStr = now.toISOString().split('T')[0];
-      if (date !== todayStr) {
-        return res.status(400).json({ error: 'Attendance must be recorded for the current date.' });
-      }
-
-      if (diff > 20) {
-        return res.status(400).json({ 
-          error: `Time mismatch. Your punch time (${time}) is too far from server time (${serverHHmm}).` 
+        if (!time) return res.status(400).json({ error: 'Time required for punch-in' });
+    
+        // Use Intl to get the current time specifically in India Time (or your local zone)
+        // This ensures 'serverTime' matches the user's 'localTime' context
+        const serverNow = new Date();
+        const serverHHmm = serverNow.toLocaleTimeString('en-GB', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            hour12: false, 
+            timeZone: 'Asia/Kolkata' // Force India Time context
         });
-      }
+    
+        // Convert HH:mm to minutes from midnight
+        const [pHT, pMT] = time.split(':').map(Number);
+        const [sHT, sMT] = serverHHmm.split(':').map(Number);
+        
+        const punchMinutes = pHT * 60 + pMT;
+        const serverMinutes = sHT * 60 + sMT;
+        const diff = Math.abs(serverMinutes - punchMinutes);
+    
+        // Increase buffer to 30 minutes to be safe against slow networks
+        if (diff > 30) {
+            return res.status(400).json({ 
+                error: `Validation Error: Punch time (${time}) differs too much from Server time (${serverHHmm}).` 
+            });
+        }
     } else {
-      // For punch out, always use the current server time to ensure accuracy
-      punchTime = serverHHmm;
+        // For punch out, always force the server's current time
+        const serverNow = new Date();
+        punchTime = serverNow.toLocaleTimeString('en-GB', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            hour12: false, 
+            timeZone: 'Asia/Kolkata' 
+        });
     }
 
     // 3. Check for existing open records
