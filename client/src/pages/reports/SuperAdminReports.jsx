@@ -19,7 +19,7 @@ const SuperAdminReports = () => {
   useEffect(() => {
     const fetchCentres = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/wallet/centres", {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/wallet/centres`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         const result = await res.json();
@@ -35,7 +35,7 @@ const SuperAdminReports = () => {
   useEffect(() => {
     if (selectedCentre) {
       setDataLoading(true);
-      fetch(`http://localhost:5000/api/analytics/centre/${selectedCentre.id}`, {
+      fetch(`${import.meta.env.VITE_API_URL}/api/analytics/centre/${selectedCentre.id}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
         .then(res => res.json())
