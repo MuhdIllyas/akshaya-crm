@@ -90,7 +90,7 @@ const AdminReports = () => {
    });
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/staff/all', {
+    fetch(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`
       }
@@ -101,7 +101,7 @@ const AdminReports = () => {
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/wallet/my-centre-wallets', {
+    fetch(`${import.meta.env.VITE_API_URL}/api/wallet/my-centre-wallets`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`
       }
@@ -123,7 +123,7 @@ const AdminReports = () => {
     if (dateFilter.fromDate) params.append("from", dateFilter.fromDate);
     if (dateFilter.toDate) params.append("to", dateFilter.toDate);
 
-    fetch(`http://localhost:5000/api/transaction/transactions?${params.toString()}`, {
+    fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions?${params.toString()}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("token")}`
       }
