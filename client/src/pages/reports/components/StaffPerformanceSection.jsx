@@ -705,7 +705,7 @@ const StaffPerformanceSection = ({
     if (centreId) params.append("centreId", centreId);
 
     const res = await fetch(
-      `http://localhost:5000/api/staffreport/staff-performance?${params.toString()}`,
+      `${import.meta.env.VITE_API_URL}/api/staffreport/staff-performance?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -733,7 +733,7 @@ const StaffPerformanceSection = ({
       }
       
       const res = await fetch(
-        `http://localhost:5000/api/staffreport/review-summary?${params.toString()}`,
+        `${import.meta.env.VITE_API_URL}/api/staffreport/review-summary?${params.toString()}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -766,7 +766,7 @@ const StaffPerformanceSection = ({
       }
       
       const res = await fetch(
-        `http://localhost:5000/api/staffreport/rating-distribution?${params.toString()}`,
+        `${import.meta.env.VITE_API_URL}/api/staffreport/rating-distribution?${params.toString()}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -805,7 +805,7 @@ const StaffPerformanceSection = ({
         if (centreId) params.append("centreId", centreId);
 
         const res = await fetch(
-          `http://localhost:5000/api/staffreport/staff/${selectedStaff.id}/category-strength?${params.toString()}`,
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff/${selectedStaff.id}/category-strength?${params.toString()}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
