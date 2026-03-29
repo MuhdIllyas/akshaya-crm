@@ -31,7 +31,7 @@ const PublicReview = () => {
 
   // Initialize Axios instance
   const API = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
+    baseURL: import.meta.env.VITE_API_URL ,
   });
 
   // Validate token and fetch review details
