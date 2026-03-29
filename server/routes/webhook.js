@@ -8,30 +8,42 @@ const router = express.Router();
 
 router.post('/whatsapp', async (req, res) => {
   const client = await pool.connect();
+
   try {
-    const { from, text, timestamp, message_id } = req.body;
+    console.log("Webhook payload:", JSON.stringify(req.body, null, 2));
+
+    // 🔥 FIX: Extract from Libromi format
+    const msg = req.body.messages?.[0];
+
+    if (!msg) {
+      return res.sendStatus(200);
+    }
+
+    const from = msg.from ? `+${msg.from}` : null;
+    const text = msg.text?.body || msg.button?.text || msg.interactive?.button_reply?.title;
+    const message_id = msg.id;
+    const timestamp = msg.timestamp;
 
     if (!from || !text) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      console.log("Invalid message format", { from, text });
+      return res.sendStatus(200);
     }
 
     await client.query('BEGIN');
 
-    // Resolve conversation using phone number only (no customer record)
     const conversation = await resolveConversation({
       channel: 'whatsapp',
       context_type: 'customer',
-      context_id: null,          // No customer ID
+      context_id: null,
       phone_number: from,
-      centre_id: null,           // Can be assigned later
-      created_by: null,          // System message
+      centre_id: null,
+      created_by: null,
       is_group: false,
     });
 
-    // Save incoming message
     const savedMessage = await sendMessage({
       conversation_id: conversation.id,
-      sender_id: null,           // No staff ID for customer
+      sender_id: null,
       sender_type: 'customer',
       message: text,
       message_type: 'text',
@@ -42,16 +54,16 @@ router.post('/whatsapp', async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Emit socket event to staff (those in the conversation room)
     if (req.io) {
       req.io.to(`conversation:${conversation.id}`).emit('new_message', savedMessage);
     }
 
-    res.json({ success: true });
+    res.sendStatus(200);
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('WhatsApp webhook error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.sendStatus(500);
   } finally {
     client.release();
   }
