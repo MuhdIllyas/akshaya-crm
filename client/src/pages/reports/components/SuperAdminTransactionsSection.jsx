@@ -59,7 +59,7 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
     if (dateFilter?.toDate) params.append("to", dateFilter.toDate);
 
     fetch(
-    `http://localhost:5000/api/transaction/transactions?${params.toString()}`,
+    `${import.meta.env.VITE_API_URL}/api/transaction/transactions?${params.toString()}`,
     {
     headers: {
     Authorization: `Bearer ${localStorage.getItem("token")}`,
