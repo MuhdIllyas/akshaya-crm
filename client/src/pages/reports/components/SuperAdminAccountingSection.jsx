@@ -24,7 +24,7 @@ const SuperAdminAccountingSection = ({ centreId }) => {
 
   // load staff (centre-aware)
   useEffect(() => {
-    fetch(`http://localhost:5000/api/staff/all?centreId=${centreId}`, {
+    fetch(`${import.meta.env.VITE_API_URL}/api/staff/all?centreId=${centreId}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     })
       .then(res => res.json())
@@ -33,7 +33,7 @@ const SuperAdminAccountingSection = ({ centreId }) => {
 
   // load wallets (centre-aware)
   useEffect(() => {
-    fetch(`http://localhost:5000/api/wallet/my-centre-wallets?centreId=${centreId}`, {
+    fetch(`${import.meta.env.VITE_API_URL}/api/wallet/my-centre-wallets?centreId=${centreId}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     })
       .then(res => res.json())
