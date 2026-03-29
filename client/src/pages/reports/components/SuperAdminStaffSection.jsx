@@ -38,7 +38,7 @@ const SuperAdminStaffSection = ({ centreId }) => {
         });
         
         const res = await fetch(
-          `http://localhost:5000/api/staffreport/rating-distribution?${params.toString()}`,
+          `${import.meta.env.VITE_API_URL}/api/staffreport/rating-distribution?${params.toString()}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
