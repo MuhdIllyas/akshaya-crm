@@ -1852,7 +1852,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets }) => {
     setIsReconciling(true);
     try {
       const res = await fetch(
-        "http://localhost:5000/api/accounting/wallet-ledger-balances",
+        `${import.meta.env.VITE_API_URL}/api/accounting/wallet-ledger-balances`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -1881,7 +1881,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets }) => {
       console.log("FINAL RECON PAYLOAD:", reconciliations);
 
       await fetch(
-        "http://localhost:5000/api/accounting/wallet-reconcile",
+        `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconcile`,
         {
           method: "POST",
           headers: {
@@ -2306,7 +2306,7 @@ const AccountingSection = ({
     }
 
     const res = await fetch(
-      `http://localhost:5000/api/accounting/wallet-book-balances?${walletParams.toString()}`,
+      `${import.meta.env.VITE_API_URL}/api/accounting/wallet-book-balances?${walletParams.toString()}`,
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2361,7 +2361,7 @@ const AccountingSection = ({
       try {
         // Fetch daily summary
         const dailyRes = await fetch(
-          `http://localhost:5000/api/accounting/daily-summary?${buildQueryString({ date })}`,
+          `${import.meta.env.VITE_API_URL}/api/accounting/daily-summary?${buildQueryString({ date })}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2375,7 +2375,7 @@ const AccountingSection = ({
         
         // Fetch income
         const incomeRes = await fetch(
-          `http://localhost:5000/api/accounting/income?${buildQueryString({ date })}`,
+          `${import.meta.env.VITE_API_URL}/api/accounting/income?${buildQueryString({ date })}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2390,7 +2390,7 @@ const AccountingSection = ({
 
         // Fetch ledger data
         const ledgerRes = await fetch(
-          `http://localhost:5000/api/accounting/ledger?${buildQueryString({
+          `${import.meta.env.VITE_API_URL}/api/accounting/ledger?${buildQueryString({
             from: date,
             to: date
           })}`,
@@ -2407,7 +2407,7 @@ const AccountingSection = ({
 
         // Fetch expenses
         const expenseRes = await fetch(
-          `http://localhost:5000/api/expense?${buildQueryString()}`,
+          `${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2435,7 +2435,7 @@ const AccountingSection = ({
 
         // Fetch nightly closure data
         const nightlyRes = await fetch(
-          `http://localhost:5000/api/accounting/nightly-close?${buildQueryString({ date })}`,
+          `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close?${buildQueryString({ date })}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2507,7 +2507,7 @@ const AccountingSection = ({
 
   const fetchIncome = async () => {
     const res = await fetch(
-      `http://localhost:5000/api/accounting/income?${buildQueryString({ date })}`,
+      `${import.meta.env.VITE_API_URL}/api/accounting/income?${buildQueryString({ date })}`,
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2531,7 +2531,7 @@ const AccountingSection = ({
     if (ledgerFilters.category) params.category = ledgerFilters.category;
 
     const res = await fetch(
-      `http://localhost:5000/api/accounting/ledger?${buildQueryString(params)}`,
+      `${import.meta.env.VITE_API_URL}/api/accounting/ledger?${buildQueryString(params)}`,
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2546,7 +2546,7 @@ const AccountingSection = ({
   const fetchExpenses = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/expense?${buildQueryString()}`, 
+        `${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, 
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -2625,7 +2625,7 @@ const AccountingSection = ({
 
   const handleApproveExpense = async (expenseId) => {
     await fetch(
-      `http://localhost:5000/api/expense/${expenseId}/approve`,
+      `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/approve`,
       {
         method: 'PUT',
         headers: {
@@ -2634,7 +2634,7 @@ const AccountingSection = ({
       }
     );
 
-    const res = await fetch(`http://localhost:5000/api/expense?${buildQueryString()}`, {
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     });
     onUpdateAccounting('expenses', await res.json());
@@ -2642,7 +2642,7 @@ const AccountingSection = ({
 
   const handleRejectExpense = async (expenseId) => {
     await fetch(
-      `http://localhost:5000/api/expense/${expenseId}/reject`,
+      `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/reject`,
       {
         method: 'PUT',
         headers: {
@@ -2651,7 +2651,7 @@ const AccountingSection = ({
       }
     );
 
-    const res = await fetch(`http://localhost:5000/api/expense?${buildQueryString()}`, {
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     });
     onUpdateAccounting('expenses', await res.json());
@@ -2659,7 +2659,7 @@ const AccountingSection = ({
 
   const handleAdminExpenseSubmit = async (payload) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/expense?${buildQueryString()}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2674,7 +2674,7 @@ const AccountingSection = ({
         throw new Error(data.error || "Failed to create expense");
       }
 
-      const expRes = await fetch(`http://localhost:5000/api/expense?${buildQueryString()}`, {
+      const expRes = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -2705,7 +2705,7 @@ const AccountingSection = ({
         opening_balance: openingBalance
       };
 
-      const saveRes = await fetch(`http://localhost:5000/api/accounting/nightly-close?${buildQueryString()}`, {
+      const saveRes = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/nightly-close?${buildQueryString()}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2788,7 +2788,7 @@ const AccountingSection = ({
 
       // 1. Refresh Daily Summary
       const dailyRes = await fetch(
-        `http://localhost:5000/api/accounting/daily-summary?${buildQueryString({ date })}`,
+        `${import.meta.env.VITE_API_URL}/api/accounting/daily-summary?${buildQueryString({ date })}`,
         { headers }
       );
       if (dailyRes.ok) {
@@ -2798,7 +2798,7 @@ const AccountingSection = ({
 
       // 2. Refresh Income
       const incomeRes = await fetch(
-        `http://localhost:5000/api/accounting/income?${buildQueryString({ date })}`,
+        `${import.meta.env.VITE_API_URL}/api/accounting/income?${buildQueryString({ date })}`,
         { headers }
       );
       if (incomeRes.ok) {
