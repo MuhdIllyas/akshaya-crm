@@ -370,7 +370,7 @@ const rerunDailyClose = async (date) => {
   const token = localStorage.getItem("token");
 
   const res = await fetch(
-    "http://localhost:5000/api/walletreport/daily-close/re-run",
+    `${import.meta.env.VITE_API_URL}/api/walletreport/daily-close/re-run`,
     {
       method: "POST",
       headers: {
@@ -396,7 +396,7 @@ const fetchWalletSummary = async (from, to, centreId) => {
   if (centreId) params.append("centreId", centreId);
 
   const res = await fetch(
-    `http://localhost:5000/api/walletreport/wallets/summary?${params.toString()}`,
+    `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/summary?${params.toString()}`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }
@@ -413,7 +413,7 @@ const fetchDailyFlow = async (from, to, centreId) => {
   if (centreId) params.append("centreId", centreId);
 
   const res = await fetch(
-    `http://localhost:5000/api/walletreport/wallets/daily-flow?${params.toString()}`,
+    `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/daily-flow?${params.toString()}`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }
@@ -430,7 +430,7 @@ const fetchWalletDistribution = async (from, to, centreId) => {
   if (centreId) params.append("centreId", centreId);
 
   const res = await fetch(
-    `http://localhost:5000/api/walletreport/wallets/distribution?${params.toString()}`,
+    `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/distribution?${params.toString()}`,
     {
       headers: { Authorization: `Bearer ${token}` },
     }
@@ -497,7 +497,7 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
   if (centreId) params.append("centreId", centreId);
 
   const res = await fetch(
-    `http://localhost:5000/api/walletreport/wallets/${walletId}/daily?${params.toString()}`,
+    `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/${walletId}/daily?${params.toString()}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
