@@ -10,9 +10,9 @@ router.post('/whatsapp', async (req, res) => {
   const client = await pool.connect();
 
   try {
-    console.log("Webhook payload:", JSON.stringify(req.body, null, 2));
+    console.log("🔥 WEBHOOK HIT");
+    console.log("BODY:", JSON.stringify(req.body, null, 2));
 
-    // 🔥 FIX: Extract from Libromi format
     const msg = req.body.messages?.[0];
 
     if (!msg) {
@@ -20,12 +20,10 @@ router.post('/whatsapp', async (req, res) => {
     }
 
     const from = msg.from ? `+${msg.from}` : null;
-    const text = msg.text?.body || msg.button?.text || msg.interactive?.button_reply?.title;
-    const message_id = msg.id;
-    const timestamp = msg.timestamp;
+    const text = msg.text?.body;
 
     if (!from || !text) {
-      console.log("Invalid message format", { from, text });
+      console.log("Invalid payload", msg);
       return res.sendStatus(200);
     }
 
@@ -49,7 +47,7 @@ router.post('/whatsapp', async (req, res) => {
       message_type: 'text',
       direction: 'incoming',
       io: req.io,
-      external_message_id: message_id,
+      external_message_id: msg.id,
     });
 
     await client.query('COMMIT');
@@ -62,7 +60,7 @@ router.post('/whatsapp', async (req, res) => {
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('WhatsApp webhook error:', err);
+    console.error('Webhook error:', err);
     res.sendStatus(500);
   } finally {
     client.release();
