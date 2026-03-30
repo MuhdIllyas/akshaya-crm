@@ -1,6 +1,5 @@
 import express from "express";
 import { sendManualWhatsAppTemplate } from "../utils/messageRouter.js";
-import { authenticateToken } from "./collaboration/chat.js";
 
 const router = express.Router();
 
