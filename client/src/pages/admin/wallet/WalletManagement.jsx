@@ -126,30 +126,40 @@ const WalletManagement = () => {
     fetchStaffData();
   }, [navigate, currentStaff.role, currentStaff.centreId]);
 
-  // OPTIMIZED: Parallel fetching of today's balances
+  // OPTIMIZED: Use batch endpoint to fetch all today's balances in one request
   const fetchWalletData = async () => {
     try {
       setLoading(true);
       const walletRes = await getWallets();
-      const filteredWallets = currentStaff.role === "superadmin" ? walletRes.data : walletRes.data.filter(wallet => wallet.centre_id === adminCentreId);
+      const filteredWallets = currentStaff.role === "superadmin"
+        ? walletRes.data
+        : walletRes.data.filter(wallet => wallet.centre_id === adminCentreId);
       setWallets(filteredWallets || []);
 
-      // Fetch all today balances in parallel
       const balancesMap = {};
       if (filteredWallets.length > 0) {
-        const balancePromises = filteredWallets.map(async (wallet) => {
-          try {
-            const balance = await getWalletTodayBalance(wallet.id);
-            return { id: wallet.id, balance };
-          } catch (e) {
-            console.error(`Failed to fetch balance for wallet ${wallet.id}:`, e);
-            return { id: wallet.id, balance: null };
-          }
-        });
-        const balanceResults = await Promise.all(balancePromises);
-        balanceResults.forEach(({ id, balance }) => {
-          balancesMap[id] = balance;
-        });
+        const walletIds = filteredWallets.map(w => w.id);
+        try {
+          // Try batch endpoint first
+          const batchResponse = await axios.post('/api/wallet/today-balances', { walletIds });
+          Object.assign(balancesMap, batchResponse.data);
+        } catch (batchErr) {
+          console.error("Batch balance fetch failed, falling back to parallel calls:", batchErr);
+          // Fallback to parallel individual calls
+          const balancePromises = filteredWallets.map(async (wallet) => {
+            try {
+              const balance = await getWalletTodayBalance(wallet.id);
+              return { id: wallet.id, balance };
+            } catch (e) {
+              console.error(`Failed to fetch balance for wallet ${wallet.id}:`, e);
+              return { id: wallet.id, balance: null };
+            }
+          });
+          const balanceResults = await Promise.all(balancePromises);
+          balanceResults.forEach(({ id, balance }) => {
+            balancesMap[id] = balance;
+          });
+        }
       }
       setTodayBalances(balancesMap);
 
@@ -1128,7 +1138,7 @@ const WalletManagement = () => {
                                     </div>
                                   </div>
                                   <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Wallet Type *</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Ownership Type *</label>
                                     <div className="flex space-x-4">
                                       <label className="flex items-center">
                                         <input
