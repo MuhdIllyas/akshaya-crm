@@ -141,7 +141,7 @@ const Chat = ({
   // WhatsApp 24h window state
   const [lastCustomerMessageTime, setLastCustomerMessageTime] = useState(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState("reengagement_template");
+  const [selectedTemplate, setSelectedTemplate] = useState("reengagement_message");
   const [templateParams, setTemplateParams] = useState("");
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
@@ -923,7 +923,7 @@ const Chat = ({
                 onChange={(e) => setSelectedTemplate(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2"
               >
-                <option value="reengagement_template">Re‑engagement</option>
+                <option value="reengagement_message">Re‑engagement</option>
                 <option value="application_update">Application Update</option>
                 {/* Add more templates as needed */}
               </select>
