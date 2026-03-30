@@ -163,7 +163,8 @@ const Chat = ({
     const customerMessages = currentMessages.filter(m => m.sender_type === 'customer' && !m.isOptimistic);
     if (customerMessages.length > 0) {
       const lastMsg = customerMessages[customerMessages.length - 1];
-      const ts = lastMsg.created_at || lastMsg.time;
+      // ✅ Use createdAt (raw timestamp) instead of time (formatted string)
+      const ts = lastMsg.createdAt || lastMsg.created_at;
       if (ts) setLastCustomerMessageTime(new Date(ts));
     } else {
       setLastCustomerMessageTime(null);
