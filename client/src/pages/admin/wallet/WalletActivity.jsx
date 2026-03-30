@@ -30,7 +30,10 @@ import {
   getWallets, 
   getWalletTransactions,
   getStaff,
-  rechargeWallet, getWalletById , getWalletTodayBalance , getWalletDailyBalances
+  rechargeWallet, 
+  getWalletById, 
+  getWalletTodayBalance, 
+  getWalletDailyBalances
 } from "@/services/walletService";
 
 // Predefined color palette for consistent service colors
@@ -152,7 +155,7 @@ const WalletActivity = () => {
     return { start, end };
   };
 
-  // Fetch wallet data and transactions
+  // OPTIMIZED: Parallel fetching of all required data
   const fetchData = useCallback(async () => {
     console.log("fetchData: Initiating with walletId:", walletId);
 
@@ -176,8 +179,17 @@ const WalletActivity = () => {
     try {
       console.log("fetchData: Fetching wallet data for walletId:", walletId);
 
-      // Fetch wallet details
-      const walletRes = await getWalletById(walletId);
+      // Fetch all data in parallel for better performance
+      const [walletRes, transactionsRes, staffRes, todayBalanceRes] = await Promise.all([
+        getWalletById(walletId),
+        getWalletTransactions(walletId),
+        getStaff(),
+        getWalletTodayBalance(walletId).catch(e => {
+          console.error("Failed to fetch today balance", e);
+          return null;
+        })
+      ]);
+
       console.log("fetchData: Wallet response:", walletRes);
       const walletData = walletRes.data || {};
 
@@ -187,26 +199,12 @@ const WalletActivity = () => {
         throw new Error("Wallet data is incomplete or invalid");
       }
 
-      // Fetch transactions for this wallet
-      console.log("fetchData: Fetching transactions for walletId:", walletId);
-      const transactionsRes = await getWalletTransactions(walletId);
       console.log("fetchData: Transactions response:", transactionsRes);
       const transactionsData = Array.isArray(transactionsRes.data) ? transactionsRes.data : [];
 
-      try {
-          setTodayBalanceLoading(true);
-          const todayBalanceRes = await getWalletTodayBalance(walletId);
-          setTodayBalance(todayBalanceRes);
-        } catch (e) {
-          console.error("Failed to fetch today balance", e);
-          setTodayBalance(null);
-        } finally {
-          setTodayBalanceLoading(false);
-        }
+      setTodayBalance(todayBalanceRes);
+      setTodayBalanceLoading(false);
 
-      // Fetch staff members
-      console.log("fetchData: Fetching staff data");
-      const staffRes = await getStaff();
       console.log("fetchData: Staff response:", staffRes);
       const staffData = Array.isArray(staffRes) ? staffRes.map(staff => ({
         ...staff,
@@ -215,7 +213,7 @@ const WalletActivity = () => {
 
       // Map transactions to component format
       const mappedTransactions = transactionsData.map(t => {
-        const rawAmount = Number(t.amount) || 0; // Convert to number, default to 0 if invalid
+        const rawAmount = Number(t.amount) || 0;
         const mappedTransaction = {
           id: t.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
           date: t.created_at || new Date().toISOString(),
@@ -572,34 +570,36 @@ const WalletActivity = () => {
     }
   };
 
+  // OPTIMIZED: Fixed refresh function - now uses getWalletById correctly
   const handleRefresh = async () => {
     setLoading(true);
     setChartLoading(true);
     try {
-      // Refetch wallet data
-      const walletRes = await getWallets(walletId);
-      const walletData = walletRes.data;
+      // Fetch all data in parallel again
+      const [walletRes, transactionsRes, todayBalanceRes] = await Promise.all([
+        getWalletById(walletId),
+        getWalletTransactions(walletId),
+        getWalletTodayBalance(walletId).catch(e => null)
+      ]);
       
-      // Refetch transactions
-      const transactionsRes = await getWalletTransactions(walletId);
-      const transactionsData = transactionsRes.data;
+      const walletData = walletRes.data;
+      const transactionsData = Array.isArray(transactionsRes.data) ? transactionsRes.data : [];
       
       // Map transactions to component format
       const mappedTransactions = transactionsData.map(t => {
-      const rawAmount = Number(t.amount) || 0; // Convert to number, default to 0 if invalid
-      const mappedTransaction = {
-        id: t.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
-        date: t.created_at || new Date().toISOString(),
-        description: t.description || "No description",
-        amount: t.type === 'credit' ? rawAmount : -rawAmount,
-        type: t.type || "unknown",
-        walletId: t.wallet_id || walletId,
-        service: mapCategoryToServiceId(t.category || ""),
-        notes: t.category || "",
-        staffId: t.staff_id ? t.staff_id.toString() : null
-      };
-      return mappedTransaction;
-    });
+        const rawAmount = Number(t.amount) || 0;
+        return {
+          id: t.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
+          date: t.created_at || new Date().toISOString(),
+          description: t.description || "No description",
+          amount: t.type === 'credit' ? rawAmount : -rawAmount,
+          type: t.type || "unknown",
+          walletId: t.wallet_id || walletId,
+          service: mapCategoryToServiceId(t.category || ""),
+          notes: t.category || "",
+          staffId: t.staff_id ? t.staff_id.toString() : null
+        };
+      });
       
       // Update state
       setWallet(prev => ({
@@ -608,6 +608,7 @@ const WalletActivity = () => {
         lastTransaction: walletData.updated_at
       }));
       
+      setTodayBalance(todayBalanceRes);
       setTransactions(mappedTransactions);
       setFilteredTransactions(mappedTransactions);
     } catch (err) {
@@ -630,7 +631,7 @@ const WalletActivity = () => {
 
   const calculateStats = useMemo(() => {
   return filteredTransactions.reduce((stats, transaction) => {
-    const amount = Number(transaction.amount) || 0; // Ensure amount is a number
+    const amount = Number(transaction.amount) || 0;
     if (transaction.type === 'credit') {
       stats.credits += amount;
     } else if (transaction.type === 'debit') {
@@ -779,13 +780,9 @@ const WalletActivity = () => {
         staff_id: localStorage.getItem("id") ? parseInt(localStorage.getItem("id")) : null
       };
 
-      // Call the API to recharge the wallet
       await rechargeWallet(payload);
-
-      // Refresh wallet and transaction data
       await handleRefresh();
 
-      // Reset states
       setRechargeAmount("");
       setRechargeDescription("");
       setShowRechargeModal(false);
