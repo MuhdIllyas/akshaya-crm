@@ -950,9 +950,9 @@ const MessengerPage = ({ user }) => {
       }
 
       // ALWAYS use the chat message endpoint
-      const endpoint = `${API_BASE_URL}/api/chat/message`;
+      const onSendMessage = `${API_BASE_URL}/api/chat/message`;
 
-      const res = await fetch(endpoint, {
+      const res = await fetch(onSendMessage, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
