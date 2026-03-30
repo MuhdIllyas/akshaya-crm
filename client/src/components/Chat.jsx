@@ -424,16 +424,19 @@ const Chat = ({
     setSendingTemplate(true);
     try {
       const paramsArray = templateParams.split(",").map(p => p.trim()).filter(p => p);
-      await axios.post(`${API_BASE_URL}/api/whatsapp/send-template`, {
-        conversationId: activeConversation.id,
-        templateName: selectedTemplate,
-        params: paramsArray
-      }
-      {
-        headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      }
-    });
+      await axios.post(
+        `${API_BASE_URL}/api/whatsapp/send-template`,
+        {
+          conversationId: activeConversation.id,
+          templateName: selectedTemplate,
+          params: paramsArray
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
       toast.success("Template sent successfully");
       setShowTemplateModal(false);
       setTemplateParams("");
