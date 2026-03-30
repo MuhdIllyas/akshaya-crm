@@ -428,7 +428,12 @@ const Chat = ({
         conversationId: activeConversation.id,
         templateName: selectedTemplate,
         params: paramsArray
-      });
+      }
+      {
+        headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`
+      }
+    });
       toast.success("Template sent successfully");
       setShowTemplateModal(false);
       setTemplateParams("");
