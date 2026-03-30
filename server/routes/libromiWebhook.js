@@ -76,4 +76,8 @@ router.get("/check-webhook", async (req, res) => {
   }
 });
 
+router.get("/register-webhook", async (req, res) => {
+  res.json({ message: "Use POST method for this route" });
+});
+
 export default router;
