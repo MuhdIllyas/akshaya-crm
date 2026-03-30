@@ -23,7 +23,7 @@ export const useServiceChat = (conversationId, currentUser, token, apiBaseUrl) =
     if (!conversationId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${apiBaseUrl}/chat/messages/${conversationId}`, {
+      const res = await fetch(`${apiBaseUrl}/api/chat/messages/${conversationId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch messages');
@@ -172,7 +172,7 @@ export const useServiceChat = (conversationId, currentUser, token, apiBaseUrl) =
     if (file) formData.append('file', file);
 
     try {
-      const res = await fetch(`${apiBaseUrl}/chat/message`, {
+      const res = await fetch(`${apiBaseUrl}/api/chat/message`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -225,7 +225,7 @@ export const useServiceChat = (conversationId, currentUser, token, apiBaseUrl) =
         isTyping,
       });
     }
-    fetch(`${apiBaseUrl}/chat/typing`, {
+    fetch(`${apiBaseUrl}/api/chat/typing`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
