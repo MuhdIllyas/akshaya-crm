@@ -66,7 +66,7 @@ const CustomerRegistration = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post("http://localhost:5000/api/customer/send-aadhaar-otp", {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/send-aadhaar-otp`, {
         aadhaar: formData.aadhaar.replace(/\s/g, ''),
         phone: formData.primary_phone
       });
@@ -100,7 +100,7 @@ const CustomerRegistration = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post("http://localhost:5000/api/customer/verify-aadhaar-otp", {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/verify-aadhaar-otp`, {
         aadhaar: formData.aadhaar.replace(/\s/g, ''),
         otp: otp
       });
@@ -154,7 +154,7 @@ const CustomerRegistration = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post("http://localhost:5000/api/customer/register", {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/register`, {
         ...formData,
         aadhaar: formData.aadhaar.replace(/\s/g, '')
       });
