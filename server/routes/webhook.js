@@ -21,18 +21,44 @@ router.post('/whatsapp', async (req, res) => {
     const body = req.body;
 
     // ===============================
-    // 🔥 HANDLE MULTIPLE PAYLOAD FORMATS
+    // 🔥 FORMAT 1: META / WHATSAPP CLOUD STYLE (MOST IMPORTANT)
     // ===============================
+    if (body.entry && Array.isArray(body.entry)) {
+      const changes = body.entry[0]?.changes;
 
-    // Format 1: Flat structure
-    if (body.from && body.text) {
+      if (changes && changes.length > 0) {
+        const value = changes[0]?.value;
+        const messages = value?.messages;
+
+        if (messages && messages.length > 0) {
+          const msg = messages[0];
+
+          from = msg.from;
+          text =
+            msg.text?.body ||
+            msg.button?.text ||
+            msg.interactive?.button_reply?.title ||
+            msg.interactive?.list_reply?.title;
+
+          message_id = msg.id;
+          timestamp = msg.timestamp;
+        }
+      }
+    }
+
+    // ===============================
+    // 🔥 FORMAT 2: Flat structure
+    // ===============================
+    else if (body.from && body.text) {
       from = body.from;
       text = body.text;
       message_id = body.message_id || body.id;
       timestamp = body.timestamp;
     }
 
-    // Format 2: WhatsApp-like (messages array)
+    // ===============================
+    // 🔥 FORMAT 3: messages array
+    // ===============================
     else if (body.messages && Array.isArray(body.messages)) {
       const msg = body.messages[0];
 
@@ -48,7 +74,9 @@ router.post('/whatsapp', async (req, res) => {
       timestamp = msg.timestamp;
     }
 
-    // Format 3: Alternative structure
+    // ===============================
+    // 🔥 FORMAT 4: Alternative structure
+    // ===============================
     else if (body.data) {
       const msg = body.data;
 
@@ -70,11 +98,11 @@ router.post('/whatsapp', async (req, res) => {
     }
 
     // ===============================
-    // ❌ VALIDATION
+    // ❌ VALIDATION (DO NOT BREAK WEBHOOK)
     // ===============================
     if (!from || !text) {
-      console.log("⚠️ Invalid payload received:", body);
-      return res.sendStatus(200); // Do not fail webhook
+      console.log("⚠️ No valid message found in payload");
+      return res.sendStatus(200);
     }
 
     await client.query('BEGIN');
@@ -110,7 +138,7 @@ router.post('/whatsapp', async (req, res) => {
     await client.query('COMMIT');
 
     // ===============================
-    // 🔴 REAL-TIME SOCKET EMIT
+    // 🔴 REAL-TIME UPDATE
     // ===============================
     if (req.io) {
       req.io.to(`conversation:${conversation.id}`).emit('new_message', savedMessage);
