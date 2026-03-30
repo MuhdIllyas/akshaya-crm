@@ -215,7 +215,7 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
       const customerName = conversation.context_name || 'Customer';
       await sendWhatsAppTemplate({
         to,
-        templateName: "reengagement_template", // Change to your actual template name
+        templateName: "reengagement_message",
         params: [customerName]
       });
     } else {
