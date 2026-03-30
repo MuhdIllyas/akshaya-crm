@@ -1,4 +1,3 @@
-// Chat.jsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -21,8 +20,8 @@ import {
   FiClock,
   FiList,
   FiMessageSquare,
-  FiUser, // Added for customer avatar
-  FiSmartphone, // Added for WhatsApp badge
+  FiUser,
+  FiSmartphone,
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdCheckmarkCircleOutline } from "react-icons/io";
@@ -30,12 +29,22 @@ import { BsCircleFill } from "react-icons/bs";
 import { toast } from "react-toastify";
 import EmojiPicker from 'emoji-picker-react';
 import { socket } from "@/services/socket";
+import axios from "axios"; // <-- added for template API
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 if (!API_BASE_URL) {
   throw new Error("VITE_API_URL is not defined");
 }
+
+// Helper: check if last customer message is within 24 hours
+const isWithin24Hours = (lastMessageTime) => {
+  if (!lastMessageTime) return false;
+  const now = new Date();
+  const last = new Date(lastMessageTime);
+  const diffHours = (now - last) / (1000 * 60 * 60);
+  return diffHours <= 24;
+};
 
 // Helper to format date for task due dates
 const formatDate = (dateString) => {
@@ -56,15 +65,12 @@ const formatDate = (dateString) => {
 // TaskMessage component (interactive task card)
 const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
   const [completing, setCompleting] = useState(false);
-  
-  // Determine actual completion status from the live taskData passed from the workspace!
   const completed = taskData?.status === 'completed';
 
   const handleComplete = async () => {
     if (completing || completed) return;
     setCompleting(true);
     try {
-      // Let the parent Workspace handle the API call and state synchronization
       if (onStatusUpdate) {
         await onStatusUpdate(taskId, 'completed');
       }
@@ -75,7 +81,6 @@ const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
     }
   };
 
-  // Parse the text to extract title, assignee, due date
   const match = text.match(/📋 Task created: "(.*?)" assigned to (.*?)\. Due: (.*?)(\.|$)/);
   const title = match ? match[1] : text.replace(/^📋 Task created: /, '').replace(/\.$/, '');
   const assignee = match ? match[2] : '';
@@ -122,7 +127,7 @@ const Chat = ({
   onlineUsers = new Set(),
   serviceInfo = null,
   serviceEntryId = null,
-  onTaskStatusUpdate = null, // <-- Passed from Workspace for live sync
+  onTaskStatusUpdate = null,
 }) => {
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -133,6 +138,12 @@ const Chat = ({
   const [messageReadBy, setMessageReadBy] = useState({});
   const [isTyping, setIsTyping] = useState(false);
   const [showTasksModal, setShowTasksModal] = useState(false);
+  // WhatsApp 24h window state
+  const [lastCustomerMessageTime, setLastCustomerMessageTime] = useState(null);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState("reengagement_template");
+  const [templateParams, setTemplateParams] = useState("");
+  const [sendingTemplate, setSendingTemplate] = useState(false);
 
   const messagesEndRef = useRef(null);
   const emojiPickerRef = useRef(null);
@@ -143,17 +154,28 @@ const Chat = ({
 
   const currentMessages = messages[activeConversation?.id] || [];
 
+  // Compute if 24h window is open
+  const isWithinWindow = isWithin24Hours(lastCustomerMessageTime);
+
+  // Update last customer message time whenever messages change
+  useEffect(() => {
+    if (!activeConversation || activeConversation.channel !== 'whatsapp') return;
+    const customerMessages = currentMessages.filter(m => m.sender_type === 'customer' && !m.isOptimistic);
+    if (customerMessages.length > 0) {
+      const lastMsg = customerMessages[customerMessages.length - 1];
+      const ts = lastMsg.created_at || lastMsg.time;
+      if (ts) setLastCustomerMessageTime(new Date(ts));
+    } else {
+      setLastCustomerMessageTime(null);
+    }
+  }, [currentMessages, activeConversation]);
+
   // Get display name for the conversation (handles WhatsApp)
   const getConversationDisplayName = useCallback(() => {
     if (!activeConversation) return '';
-
-    // If it's a WhatsApp conversation
     if (activeConversation.channel === 'whatsapp') {
-      // Use context_name (customer name) if available, otherwise context_identifier (phone number)
       return activeConversation.context_name || activeConversation.context_identifier || 'WhatsApp User';
     }
-
-    // Internal conversation
     let displayName = activeConversation.name;
     if (!displayName && !activeConversation.is_group && activeConversation.participants) {
       const otherParticipants = activeConversation.participants.filter(p => p.staff_id !== currentUser.id);
@@ -164,12 +186,10 @@ const Chat = ({
     return displayName || 'Unknown Chat';
   }, [activeConversation, currentUser.id]);
 
-  // Get online status for a user - Convert to strings
   const isUserOnline = useCallback((userId) => {
     return onlineUsers.has(String(userId));
   }, [onlineUsers]);
 
-  // Determine if we should show online indicator (not for WhatsApp)
   const shouldShowOnlineIndicator = useCallback(() => {
     return activeConversation?.channel !== 'whatsapp' && !activeConversation?.is_group;
   }, [activeConversation]);
@@ -177,15 +197,11 @@ const Chat = ({
   // Join conversation room when active
   useEffect(() => {
     if (!socket.connected || !activeConversation?.id) return;
-
     console.log("Joining conversation:", activeConversation.id);
     socket.emit("join_conversation", activeConversation.id);
-
     return () => {
       console.log("Leaving conversation:", activeConversation.id);
       socket.emit("leave_conversation", activeConversation.id);
-
-      // Clear typing status when leaving
       if (isTyping) {
         fetch(`${API_BASE_URL}/api/chat/typing`, {
           method: "POST",
@@ -205,41 +221,29 @@ const Chat = ({
   // Listen for socket events
   useEffect(() => {
     if (!socket.connected || !activeConversation?.id) return;
-
-    // Handle typing indicator
     const handleTyping = (data) => {
       if (data.conversationId !== activeConversation?.id || data.userId === currentUser.id) return;
-      console.log("Typing event received:", data);
-      // The parent component already manages typingUsers via props
     };
-
-    // Handle messages read
     const handleMessagesRead = (data) => {
       if (data.conversationId !== activeConversation?.id) return;
-
       setMessageReadBy(prev => ({
         ...prev,
         ...data.messageIds.reduce((acc, id) => ({ ...acc, [id]: [...(prev[id] || []), data.readerId] }), {})
       }));
     };
-
     socket.on("typing", handleTyping);
     socket.on("messages_read", handleMessagesRead);
-
     return () => {
       socket.off("typing", handleTyping);
       socket.off("messages_read", handleMessagesRead);
     };
   }, [activeConversation?.id, currentUser.id]);
 
-  // Auto-scroll to latest messages
+  // Auto-scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       setTimeout(() => {
-        messagesEndRef.current.scrollIntoView({
-          behavior: "smooth",
-          block: "end"
-        });
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
       }, 100);
     }
   }, [currentMessages, activeConversation?.id]);
@@ -247,11 +251,9 @@ const Chat = ({
   // Mark messages as read
   useEffect(() => {
     if (!activeConversation || !currentMessages.length || !socket.connected) return;
-
     const unreadMessages = currentMessages
       .filter(msg => !msg.isCurrentUser && !msg.is_read_by_me && !msg.isOptimistic)
       .map(msg => msg.id);
-
     if (unreadMessages.length > 0) {
       const timeoutId = setTimeout(() => {
         socket.emit("mark_read", {
@@ -259,19 +261,15 @@ const Chat = ({
           conversationId: activeConversation.id
         });
       }, 1000);
-
       return () => clearTimeout(timeoutId);
     }
   }, [currentMessages, activeConversation?.id, activeConversation]);
 
-  // Throttled typing indicator
+  // Typing indicator
   const emitTyping = useCallback((typing) => {
     if (!activeConversation?.id) return;
-
     const now = Date.now();
     if (now - lastTypingEmitRef.current > 2000) {
-      console.log(`Emitting typing: ${typing} for conversation: ${activeConversation.id}`);
-
       if (socket.connected) {
         socket.emit("typing", {
           conversationId: activeConversation.id,
@@ -279,10 +277,7 @@ const Chat = ({
           userName: currentUser.name,
           isTyping: typing
         });
-      } else {
-        console.log("Socket not connected, cannot emit typing");
       }
-
       fetch(`${API_BASE_URL}/api/chat/typing`, {
         method: "POST",
         headers: {
@@ -293,28 +288,20 @@ const Chat = ({
           conversation_id: activeConversation.id,
           isTyping: typing
         })
-      })
-        .then(res => res.json())
-        .then(data => console.log("Typing API response:", data))
-        .catch(err => console.error("Typing API error:", err));
-
+      }).catch(err => console.error("Typing API error:", err));
       lastTypingEmitRef.current = now;
     }
   }, [activeConversation?.id, currentUser.id, currentUser.name, API_BASE_URL]);
 
-  // Handle input change with typing indicator
   const handleInputChange = (e) => {
     const value = e.target.value;
     setNewMessage(value);
-
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
     if (value.length > 0) {
       if (!isTyping) {
         setIsTyping(true);
         emitTyping(true);
       }
-
       typingTimeoutRef.current = setTimeout(() => {
         if (isTyping) {
           setIsTyping(false);
@@ -329,7 +316,6 @@ const Chat = ({
     }
   };
 
-  // Clean up typing status when leaving conversation
   useEffect(() => {
     return () => {
       if (isTyping && activeConversation?.id) emitTyping(false);
@@ -339,15 +325,12 @@ const Chat = ({
 
   const handleSendMessage = () => {
     if ((!newMessage.trim() && !fileToUpload) || !activeConversation) return;
-
     if (isTyping) {
       setIsTyping(false);
       emitTyping(false);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     }
-
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
     const optimisticMessage = {
       id: tempId,
       tempId: tempId,
@@ -364,9 +347,7 @@ const Chat = ({
       is_read_by_me: true,
       isOptimistic: true
     };
-
     onSendMessage(newMessage, fileToUpload, optimisticMessage);
-
     setNewMessage("");
     setFileToUpload(null);
   };
@@ -425,16 +406,36 @@ const Chat = ({
   const renderMessageStatus = (msg) => {
     if (!msg.isCurrentUser) return null;
     if (msg.isOptimistic) return <FiClock className="text-blue-200 ml-1" size={12} title="Sending..." />;
-
     const readers = getReadReceipts(msg.id);
     const otherParticipants = activeConversation?.participants?.filter(p => p.staff_id !== currentUser.id) || [];
-
     if (readers.length === otherParticipants.length && otherParticipants.length > 0) {
       return <IoMdCheckmarkCircle className="text-blue-300 ml-1" size={14} title="Read by everyone" />;
     } else if (readers.length > 0) {
       return <IoMdCheckmarkCircle className="text-blue-200 ml-1" size={14} title={`Read by ${readers.length} of ${otherParticipants.length}`} />;
     } else {
       return <IoMdCheckmarkCircleOutline className="text-blue-200 ml-1" size={14} title="Sent" />;
+    }
+  };
+
+  // Manual template send handler
+  const handleSendTemplate = async () => {
+    if (!activeConversation?.id) return;
+    setSendingTemplate(true);
+    try {
+      const paramsArray = templateParams.split(",").map(p => p.trim()).filter(p => p);
+      await axios.post("/api/whatsapp/send-template", {
+        conversationId: activeConversation.id,
+        templateName: selectedTemplate,
+        params: paramsArray
+      });
+      toast.success("Template sent successfully");
+      setShowTemplateModal(false);
+      setTemplateParams("");
+    } catch (err) {
+      console.error("Template send error:", err);
+      toast.error(err.response?.data?.error || "Failed to send template");
+    } finally {
+      setSendingTemplate(false);
     }
   };
 
@@ -496,11 +497,7 @@ const Chat = ({
   ) || [];
   const hasTasks = serviceInfo && serviceInfo.tasks && serviceInfo.tasks.length > 0;
   const isWhatsApp = activeConversation.channel === 'whatsapp';
-
-  // For WhatsApp, we don't show online status
   const showOnlineStatus = shouldShowOnlineIndicator();
-
-  // Determine if we have a single participant to show online dot for (for direct internal chats)
   const singleOtherParticipant = !activeConversation.is_group && !isWhatsApp && activeConversation.participants?.find(p => p.staff_id !== currentUser.id);
   const isParticipantOnline = singleOtherParticipant ? isUserOnline(singleOtherParticipant.staff_id) : false;
 
@@ -589,6 +586,16 @@ const Chat = ({
               <FiList size={18} />
             </button>
           )}
+          {/* WhatsApp Template Button (only if window expired) */}
+          {isWhatsApp && !isWithinWindow && (
+            <button
+              onClick={() => setShowTemplateModal(true)}
+              className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition"
+              title="Send Template"
+            >
+              <FiMessageSquare size={18} />
+            </button>
+          )}
           <button
             className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition relative"
             onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
@@ -637,10 +644,7 @@ const Chat = ({
                 const messageKey = msg.isOptimistic
                   ? `opt-${msg.tempId || msg.id}-${index}`
                   : `msg-${msg.id}`;
-
-                // Check if this is a system message with a task ID
                 const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
-
                 return (
                   <motion.div
                     key={messageKey}
@@ -658,7 +662,6 @@ const Chat = ({
                         <TaskMessage
                           taskId={msg.fileName}
                           text={msg.text}
-                          // Extract the live task data from the workspace!
                           taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
                           onStatusUpdate={onTaskStatusUpdate}
                         />
@@ -807,9 +810,13 @@ const Chat = ({
               value={newMessage}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
+              placeholder={
+                isWhatsApp && !isWithinWindow
+                  ? "24h window expired – use template button"
+                  : "Type a message..."
+              }
               className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-700"
-              disabled={isUploading}
+              disabled={isUploading || (isWhatsApp && !isWithinWindow)}
             />
             <div className="flex items-center gap-1">
               <input
@@ -822,7 +829,7 @@ const Chat = ({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="p-2 text-gray-500 hover:text-navy-700 rounded-full hover:bg-gray-200 transition"
-                disabled={isUploading}
+                disabled={isUploading || (isWhatsApp && !isWithinWindow)}
               >
                 <FiPaperclip size={18} />
               </button>
@@ -835,7 +842,7 @@ const Chat = ({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleSendMessage}
-              disabled={isUploading}
+              disabled={isUploading || (isWhatsApp && !isWithinWindow)}
               className="bg-navy-700 text-white p-3 rounded-full shadow-md hover:bg-navy-800 transition disabled:opacity-50"
             >
               <FiSend size={18} />
@@ -899,6 +906,53 @@ const Chat = ({
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTemplateModal(false)}>
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Send WhatsApp Template</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Template</label>
+              <select
+                value={selectedTemplate}
+                onChange={(e) => setSelectedTemplate(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2"
+              >
+                <option value="reengagement_template">Re‑engagement</option>
+                <option value="application_update">Application Update</option>
+                {/* Add more templates as needed */}
+              </select>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Parameters (comma separated)</label>
+              <input
+                type="text"
+                value={templateParams}
+                onChange={(e) => setTemplateParams(e.target.value)}
+                placeholder="e.g. John, APP-123"
+                className="w-full border rounded-lg px-3 py-2"
+              />
+              <p className="text-xs text-gray-500 mt-1">Example: Customer name, Application ID</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowTemplateModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendTemplate}
+                disabled={sendingTemplate}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {sendingTemplate ? "Sending..." : "Send"}
+              </button>
             </div>
           </div>
         </div>
