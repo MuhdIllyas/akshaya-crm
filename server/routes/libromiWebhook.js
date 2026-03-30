@@ -3,23 +3,26 @@ import axios from "axios";
 
 const router = express.Router();
 
-// 🔥 Register webhook to Libromi
+const LIBROMI_BASE_URL = "https://server2-wc.libromi.cloud/api/v1";
+const WEBHOOK_URL = process.env.WEBHOOK_URL || "https://akshaya-crm.onrender.com/api/webhook/whatsapp";
+
+// 🔥 Register webhook
 router.post("/register-webhook", async (req, res) => {
   try {
     const LIBROMI_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
 
     if (!LIBROMI_TOKEN) {
       return res.status(500).json({
-        error: "LIBROMI_ACCESS_TOKEN not found in environment variables"
+        error: "LIBROMI_ACCESS_TOKEN not set"
       });
     }
 
-    const webhookUrl = "https://akshaya-crm.onrender.com/api/webhook/whatsapp";
+    console.log("🚀 Registering webhook:", WEBHOOK_URL);
 
     const response = await axios.post(
-      "https://server2-wc.libromi.cloud/api/v1/webhook",
+      `${LIBROMI_BASE_URL}/webhook`,
       {
-        webhook_url: webhookUrl
+        webhook_url: WEBHOOK_URL
       },
       {
         headers: {
@@ -32,8 +35,18 @@ router.post("/register-webhook", async (req, res) => {
 
     console.log("✅ Webhook registered:", response.data);
 
+    // 🔍 Validate response
+    if (!response.data?.webhook_url) {
+      return res.status(400).json({
+        success: false,
+        message: "Webhook not stored properly",
+        data: response.data
+      });
+    }
+
     res.json({
       success: true,
+      message: "Webhook registered successfully",
       data: response.data
     });
 
@@ -47,13 +60,13 @@ router.post("/register-webhook", async (req, res) => {
   }
 });
 
-// 🔍 Verify webhook
+// 🔍 Check webhook
 router.get("/check-webhook", async (req, res) => {
   try {
     const LIBROMI_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
 
     const response = await axios.get(
-      "https://server2-wc.libromi.cloud/api/v1/webhook",
+      `${LIBROMI_BASE_URL}/webhook`,
       {
         headers: {
           Authorization: `Bearer ${LIBROMI_TOKEN}`,
@@ -64,7 +77,10 @@ router.get("/check-webhook", async (req, res) => {
 
     console.log("📌 Webhook status:", response.data);
 
-    res.json(response.data);
+    res.json({
+      success: true,
+      data: response.data
+    });
 
   } catch (err) {
     console.error("❌ Webhook check failed:", err.response?.data || err.message);
@@ -76,8 +92,11 @@ router.get("/check-webhook", async (req, res) => {
   }
 });
 
-router.get("/register-webhook", async (req, res) => {
-  res.json({ message: "Use POST method for this route" });
+// 🔧 Optional: quick browser check
+router.get("/register-webhook", (req, res) => {
+  res.json({
+    message: "Use POST method to register webhook"
+  });
 });
 
 export default router;
