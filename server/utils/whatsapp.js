@@ -2,7 +2,6 @@
 import axios from "axios";
 import { whatsappTemplates } from "../config/whatsappTemplates.js";
 
-// Existing OTP function (kept as is)
 export const sendWhatsAppOTP = async ({ phone, otp }) => {
   const tpl = whatsappTemplates.OTP_APP;
   const payload = {
@@ -17,7 +16,7 @@ export const sendWhatsAppOTP = async ({ phone, otp }) => {
   return axios.post(url, payload, { headers });
 };
 
-// NEW: Send a plain text message
+// Send plain text message
 export const sendWhatsAppText = async ({ to, message }) => {
   const payload = {
     to,
@@ -32,25 +31,25 @@ export const sendWhatsAppText = async ({ to, message }) => {
   return axios.post(url, payload, { headers });
 };
 
-// NEW: Send any template by name with parameters
+// Send template message – matches the exact cURL format
 export const sendWhatsAppTemplate = async ({ to, templateName, params = [] }) => {
-  // If you have a predefined config for templates, use it, otherwise build generic
-  // Here we assume the template name exists in your provider's system
   const payload = {
     to,
     type: "template",
     template: {
       name: templateName,
-      language: { code: "en" },
-      components: []
+      language: {
+        code: "en",
+        policy: "deterministic"   // as per the cURL example
+      },
+      components: params.length ? [
+        {
+          type: "body",
+          parameters: params.map(p => ({ type: "text", text: p }))
+        }
+      ] : []
     }
   };
-  if (params.length) {
-    payload.template.components.push({
-      type: "body",
-      parameters: params.map(p => ({ type: "text", text: p }))
-    });
-  }
   const headers = {
     Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
     "Content-Type": "application/json"
