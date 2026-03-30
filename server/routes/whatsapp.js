@@ -1,9 +1,10 @@
 import express from "express";
 import { sendManualWhatsAppTemplate } from "../utils/messageRouter.js";
 
+
 const router = express.Router();
 
-router.post("/send-template", async (req, res) => {
+router.post("/send-template", authenticateToken , async (req, res) => {
   const { conversationId, templateName, params } = req.body;
   const io = req.app.get("io"); // assuming you store io instance on app
 
