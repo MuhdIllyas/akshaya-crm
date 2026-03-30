@@ -1,6 +1,22 @@
+// messageRouter.js
 import pool from "../db.js";
 import axios from 'axios';
 import { addStaffToConversation } from './conversationService.js';
+import { isWithin24Hours } from '../utils/whatsappWindow.js';
+import { sendWhatsAppText, sendWhatsAppTemplate } from './whatsapp.js';
+
+/**
+ * Helper: Get last customer message time for a conversation
+ */
+async function getLastCustomerMessageTime(conversationId) {
+  const result = await pool.query(
+    `SELECT created_at FROM chat_messages
+     WHERE conversation_id = $1 AND sender_type = 'customer'
+     ORDER BY created_at DESC LIMIT 1`,
+    [conversationId]
+  );
+  return result.rows[0]?.created_at || null;
+}
 
 /**
  * Central Message Router
@@ -13,7 +29,7 @@ export async function sendMessage({
   message_type = "text",
   file = null,
   io = null,
-  direction = null,               // optional override
+  direction = null,
   external_message_id = null
 }) {
   const client = await pool.connect();
@@ -179,47 +195,54 @@ export async function sendMessage({
 }
 
 /**
- * Send outgoing WhatsApp message via Libromi API
+ * Send outgoing WhatsApp message with automatic 24‑hour window detection & fallback to template
  */
 async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) {
+  const to = conversation.phone_number;
+  if (!to) {
+    console.error('No phone number for WhatsApp conversation');
+    return;
+  }
+
+  // Get last customer message time
+  const lastCustomerTime = await getLastCustomerMessageTime(conversation.id);
+  const within24h = isWithin24Hours(lastCustomerTime);
+
   try {
-    const to = conversation.phone_number;
-    if (!to) {
-      console.error('No phone number for WhatsApp conversation');
-      return;
-    }
-
-    // For files, we'll send a text with a note (since Libromi may not support direct file send without template)
-    let payload;
-    if (fileUrl) {
-      // Construct a full URL if needed (base URL from env)
-      const baseUrl = process.env.APP_URL || 'http://localhost:5000';
-      const fullFileUrl = `${baseUrl}${fileUrl}`;
-      payload = {
+    if (!within24h) {
+      // Outside 24h window – send a re‑engagement template
+      console.log(`Outside 24h window for ${to}, sending template instead.`);
+      const customerName = conversation.context_name || 'Customer';
+      await sendWhatsAppTemplate({
         to,
-        type: 'text',
-        text: { body: `📎 ${fileName || 'File'} shared: ${fullFileUrl}\n\n${message || ''}` }
-      };
+        templateName: "reengagement_template", // Change to your actual template name
+        params: [customerName]
+      });
     } else {
-      payload = {
-        to,
-        type: 'text',
-        text: { body: message }
-      };
+      // Within 24h – send normal text (or file note)
+      if (fileUrl) {
+        const baseUrl = process.env.APP_URL || 'http://localhost:5000';
+        const fullFileUrl = `${baseUrl}${fileUrl}`;
+        await sendWhatsAppText({
+          to,
+          message: `📎 ${fileName || 'File'} shared: ${fullFileUrl}\n\n${message || ''}`
+        });
+      } else {
+        await sendWhatsAppText({ to, message });
+      }
     }
-
-    const response = await axios.post(`${process.env.LIBROMI_BASE_URL}/messages`, payload, {
-      headers: {
-        'Authorization': `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 10000,
-    });
-
-    console.log('WhatsApp message sent:', response.data);
   } catch (err) {
     console.error('Failed to send WhatsApp message:', err.response?.data || err.message);
-    // We don't throw here to avoid blocking the main flow
+    // Smart fallback: if normal message fails because of 24‑hour rule, retry with template
+    if (within24h && err.response?.data?.error?.includes("24 hours")) {
+      console.log("Normal message rejected due to 24h rule, retrying with template...");
+      const customerName = conversation.context_name || 'Customer';
+      await sendWhatsAppTemplate({
+        to,
+        templateName: "reengagement_template",
+        params: [customerName]
+      });
+    }
   }
 }
 
@@ -239,4 +262,51 @@ export async function sendSystemMessage(conversationId, message, io, taskId = nu
     io.to(`conversation:${conversationId}`).emit('new_message', systemMsg);
   }
   return systemMsg;
+}
+
+/**
+ * Manually send a WhatsApp template (used by API route)
+ */
+export async function sendManualWhatsAppTemplate({ conversationId, templateName, params = [], io }) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Fetch conversation
+    const convRes = await client.query(
+      `SELECT * FROM chat_conversations WHERE id = $1 AND channel = 'whatsapp'`,
+      [conversationId]
+    );
+    if (!convRes.rows.length) throw new Error("WhatsApp conversation not found");
+    const conversation = convRes.rows[0];
+
+    const to = conversation.phone_number;
+    if (!to) throw new Error("No phone number for this conversation");
+
+    // Send the template via our utility
+    await sendWhatsAppTemplate({ to, templateName, params });
+
+    // Save a system message to the conversation (for history)
+    const savedMsg = await client.query(
+      `INSERT INTO chat_messages
+       (conversation_id, sender_type, sender_id, message, message_type, direction, created_at)
+       VALUES ($1, 'system', NULL, $2, 'template', 'outgoing', NOW())
+       RETURNING *`,
+      [conversationId, `📨 Template sent: ${templateName}`]
+    );
+
+    await client.query("COMMIT");
+
+    if (io) {
+      io.to(`conversation:${conversationId}`).emit("new_message", savedMsg.rows[0]);
+    }
+
+    return { success: true, messageId: savedMsg.rows[0].id };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Manual template send error:", err);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
