@@ -423,7 +423,7 @@ const Chat = ({
     setSendingTemplate(true);
     try {
       const paramsArray = templateParams.split(",").map(p => p.trim()).filter(p => p);
-      await axios.post("/api/whatsapp/send-template", {
+      await axios.post(`${API_BASE_URL}/api/whatsapp/send-template`, {
         conversationId: activeConversation.id,
         templateName: selectedTemplate,
         params: paramsArray
