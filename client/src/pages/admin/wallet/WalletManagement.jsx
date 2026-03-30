@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -14,7 +14,8 @@ import {
   updateWallet,
   getStaff,
   rechargeWallet,
-  transferWallet, getWalletTodayBalance
+  transferWallet,
+  getWalletTodayBalance
 } from "@/services/walletService";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -125,24 +126,32 @@ const WalletManagement = () => {
     fetchStaffData();
   }, [navigate, currentStaff.role, currentStaff.centreId]);
 
+  // OPTIMIZED: Parallel fetching of today's balances
   const fetchWalletData = async () => {
     try {
       setLoading(true);
       const walletRes = await getWallets();
       const filteredWallets = currentStaff.role === "superadmin" ? walletRes.data : walletRes.data.filter(wallet => wallet.centre_id === adminCentreId);
       setWallets(filteredWallets || []);
-      const balancesMap = {};
 
-        for (const wallet of filteredWallets || []) {
+      // Fetch all today balances in parallel
+      const balancesMap = {};
+      if (filteredWallets.length > 0) {
+        const balancePromises = filteredWallets.map(async (wallet) => {
           try {
             const balance = await getWalletTodayBalance(wallet.id);
-            balancesMap[wallet.id] = balance;
+            return { id: wallet.id, balance };
           } catch (e) {
-            balancesMap[wallet.id] = null;
+            console.error(`Failed to fetch balance for wallet ${wallet.id}:`, e);
+            return { id: wallet.id, balance: null };
           }
-        }
-
-        setTodayBalances(balancesMap);
+        });
+        const balanceResults = await Promise.all(balancePromises);
+        balanceResults.forEach(({ id, balance }) => {
+          balancesMap[id] = balance;
+        });
+      }
+      setTodayBalances(balancesMap);
 
       const transactionRes = await getTransactions();
       setTransactions(transactionRes.data || []);
@@ -891,6 +900,7 @@ const WalletManagement = () => {
                 const WalletIcon = getWalletIcon(wallet.wallet_type);
                 const type = walletTypes.find(t => t.id === wallet.wallet_type);
                 const staff = getStaffMember(wallet.assigned_staff_id);
+                const todayBalanceData = todayBalances[wallet.id];
                 
                 return (
                   <motion.div
@@ -931,7 +941,7 @@ const WalletManagement = () => {
                             <div className="ml-2">
                               <p className="text-xs text-gray-600">Opening Balance</p>
                               <p className="font-bold text-gray-900 text-lg">
-                                 {todayBalances[wallet.id]?.opening_balance != null? formatAmount(todayBalances[wallet.id].opening_balance): "N/A"}
+                                {todayBalanceData?.opening_balance != null ? formatAmount(todayBalanceData.opening_balance) : "N/A"}
                               </p>
                             </div>
                           </div>
@@ -942,7 +952,7 @@ const WalletManagement = () => {
                             <div className="ml-2">
                               <p className="text-xs text-gray-600">Closing Balance</p>
                               <p className="font-bold text-gray-900 text-lg">
-                                  {todayBalances[wallet.id]?.closing_balance != null? formatAmount(todayBalances[wallet.id].closing_balance): "N/A"}
+                                {todayBalanceData?.closing_balance != null ? formatAmount(todayBalanceData.closing_balance) : "N/A"}
                               </p>
                             </div>
                           </div>
