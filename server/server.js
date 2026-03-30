@@ -40,6 +40,7 @@ import activityRoutes from "./routes/collaboration/activity.js";
 import chatRoutes from "./routes/collaboration/chat.js";
 import serviceCollaborationRoutes from "./routes/collaboration/serviceCollaboration.js";
 import webhookRoutes from "./routes/webhook.js";
+import libromiWebhookRoutes from "./routes/libromiWebhook.js";
 
 import staffperformanceRoutes from "./routes/staffPerformance.js";
 
@@ -288,6 +289,7 @@ app.use("/api/activities", activityRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/servicecollaboration", serviceCollaborationRoutes);
 app.use("/api/webhook", webhookRoutes);
+app.use("/api/libromi", libromiWebhookRoutes);
 
 /* ================================
    STATIC FILES
