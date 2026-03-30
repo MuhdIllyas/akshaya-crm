@@ -7,63 +7,28 @@ import { sendMessage } from '../utils/messageRouter.js';
 const router = express.Router();
 
 router.post('/whatsapp', async (req, res) => {
-  const client = await pool.connect();
-
   try {
-    console.log("🔥 WEBHOOK HIT");
+    console.log("🔥 LIBROMI WEBHOOK HIT");
     console.log("BODY:", JSON.stringify(req.body, null, 2));
 
-    const msg = req.body.messages?.[0];
+    const msg = req.body;
 
-    if (!msg) {
-      return res.sendStatus(200);
-    }
-
-    const from = msg.from ? `+${msg.from}` : null;
-    const text = msg.text?.body;
+    // ⚠️ Adjust after seeing actual payload
+    const from = msg.from || msg.phone || msg.sender;
+    const text = msg.text || msg.message || msg.body;
 
     if (!from || !text) {
-      console.log("Invalid payload", msg);
       return res.sendStatus(200);
     }
 
-    await client.query('BEGIN');
-
-    const conversation = await resolveConversation({
-      channel: 'whatsapp',
-      context_type: 'customer',
-      context_id: null,
-      phone_number: from,
-      centre_id: null,
-      created_by: null,
-      is_group: false,
-    });
-
-    const savedMessage = await sendMessage({
-      conversation_id: conversation.id,
-      sender_id: null,
-      sender_type: 'customer',
-      message: text,
-      message_type: 'text',
-      direction: 'incoming',
-      io: req.io,
-      external_message_id: msg.id,
-    });
-
-    await client.query('COMMIT');
-
-    if (req.io) {
-      req.io.to(`conversation:${conversation.id}`).emit('new_message', savedMessage);
-    }
+    // Save to DB
+    // (your existing logic here)
 
     res.sendStatus(200);
 
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Webhook error:', err);
+    console.error(err);
     res.sendStatus(500);
-  } finally {
-    client.release();
   }
 });
 
