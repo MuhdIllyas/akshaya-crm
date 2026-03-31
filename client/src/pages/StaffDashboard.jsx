@@ -21,7 +21,7 @@ const formatCurrency = (amount) => {
   return `₹${Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
 
-// Stat Card Component (inspired by StaffPerformance)
+// Stat Card Component
 const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
   <motion.div
     whileHover={{ y: -2 }}
@@ -66,7 +66,7 @@ const StaffDashboard = () => {
   // Performance metrics from backend (using staffPerformance endpoint)
   const [performance, setPerformance] = useState({
     completionRate: 0,
-    avgServiceTime: 'N/A',
+    avgTransactionValue: 0,
     customerSatisfaction: 'N/A',
     totalServices: 0,
     totalCollected: 0,
@@ -173,7 +173,7 @@ const StaffDashboard = () => {
         const { summary, ratings } = res.data.data;
         setPerformance({
           completionRate: summary.collection_rate || 0,
-          avgServiceTime: 'N/A', // will compute if needed
+          avgTransactionValue: summary.avg_transaction_value || 0,
           customerSatisfaction: ratings?.avg_rating ? `${ratings.avg_rating}/5` : 'N/A',
           totalServices: summary.total_services || 0,
           totalCollected: summary.total_collected || 0,
@@ -182,20 +182,6 @@ const StaffDashboard = () => {
           avgRating: ratings?.avg_rating || 0,
           totalReviews: ratings?.total_reviews || 0,
         });
-        // Optionally compute avg service time from recent_services
-        if (res.data.data.recent_services?.length) {
-          const times = res.data.data.recent_services
-            .filter(s => s.updated_at && s.created_at)
-            .map(s => {
-              const diff = new Date(s.updated_at) - new Date(s.created_at);
-              return diff / (1000 * 60); // minutes
-            })
-            .filter(t => t > 0);
-          if (times.length) {
-            const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
-            setPerformance(prev => ({ ...prev, avgServiceTime: `${avg}min` }));
-          }
-        }
       }
     } catch (err) {
       console.error('Error fetching performance:', err);
@@ -722,24 +708,33 @@ const StaffDashboard = () => {
                       <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
                     </div>
                   </div>
+
                   <div>
                     <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-gray-600">Avg. Service Time</span>
-                      <span className="font-medium text-gray-900">{performance.avgServiceTime}</span>
+                      <span className="text-gray-600">Avg Transaction Value</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${performance.avgServiceTime !== 'N/A' ? (parseInt(performance.avgServiceTime) / 60) * 100 : 0}%` }} />
+                      <div
+                        className="bg-blue-600 h-2 rounded-full"
+                        style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
+                      />
                     </div>
                   </div>
+
                   <div>
                     <div className="flex justify-between mb-1 text-sm">
                       <span className="text-gray-600">Customer Satisfaction</span>
                       <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-purple-600 h-2 rounded-full" style={{ width: `${performance.customerSatisfaction !== 'N/A' ? (parseFloat(performance.customerSatisfaction) / 5) * 100 : 0}%` }} />
+                      <div
+                        className="bg-purple-600 h-2 rounded-full"
+                        style={{ width: `${(performance.avgRating / 5) * 100}%` }}
+                      />
                     </div>
                   </div>
+
                   <div className="pt-2 border-t border-gray-100">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Collection Rate</span>
