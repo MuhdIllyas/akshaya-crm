@@ -41,9 +41,6 @@ const QuickServiceModal = ({ open, onClose, wallets }) => {
 
     setSubcategories(service.subcategories || []);
     setSubcategory(null);
-
-    // Auto-set department wallet from service
-    // (wallet id will go to backend directly)
   }, [service]);
 
   /* ───────────── When subcategory changes ───────────── */
