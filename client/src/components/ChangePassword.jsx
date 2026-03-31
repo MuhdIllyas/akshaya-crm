@@ -19,9 +19,17 @@ const ChangePassword = ({ username, onClose }) => {
     setMessage(null);
 
     try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found. Please log in again.");
+      }
+
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/users/change-password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         body: JSON.stringify({
           username,
           currentPassword,
@@ -35,13 +43,14 @@ const ChangePassword = ({ username, onClose }) => {
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
-        onClose(); // optional: close after success
+        // Optionally close after success after a short delay
+        setTimeout(() => onClose(), 1500);
       } else {
         setMessage(data.error || "Failed to update password.");
       }
     } catch (err) {
       console.error("Password change error:", err);
-      setMessage("Something went wrong.");
+      setMessage(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -52,7 +61,9 @@ const ChangePassword = ({ username, onClose }) => {
       <h2 className="text-xl font-bold mb-4 text-gray-800">Change Password</h2>
 
       {message && (
-        <div className="mb-4 text-sm text-red-600">{message}</div>
+        <div className={`mb-4 text-sm ${message.includes("success") ? "text-green-600" : "text-red-600"}`}>
+          {message}
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
