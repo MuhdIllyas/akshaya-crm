@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { FiUser, FiMail, FiPhone, FiCalendar, FiBriefcase, FiLock, FiEdit2, FiSave, FiX, FiPlus } from "react-icons/fi";
-import ChangePasswordModal from "../../components/ChangePasswordModal"; // we'll create this
+import ChangePasswordModal from "../components/ChangePasswordModal";
 
 const MyProfile = () => {
   const [profile, setProfile] = useState(null);
