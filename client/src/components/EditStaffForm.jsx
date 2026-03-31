@@ -26,9 +26,9 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
     emergencyContact: "",
     emergencyRelationship: "",
     centre_id: "",
-    start_time: "09:00", // New field
-    end_time: "17:00",   // New field
-    effective_from: new Date().toISOString().split("T")[0], // New field
+    start_time: "09:00",
+    end_time: "17:00",
+    effective_from: new Date().toISOString().split("T")[0],
   });
   const [photoPreview, setPhotoPreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,56 +38,95 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
   const fileInputRef = useRef(null);
   const userRole = localStorage.getItem("role");
 
+  // Helper to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      throw new Error("No authentication token found. Please log in again.");
+    }
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
 
-        // If staff prop is provided (from modal), use it; otherwise, fetch by ID
+        const staffId = id || staff?.id;
+        if (!staffId && !staff) {
+          throw new Error("Staff ID is missing");
+        }
+
         let staffData;
         if (staff) {
           staffData = staff;
         } else {
-          const response = await axios.get(`http://localhost:5000/api/staff/${id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-          });
+          const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/staff/${staffId}`,
+            { headers: getAuthHeaders() }
+          );
           staffData = response.data;
         }
 
         // Fetch current schedule
-        const scheduleResponse = await axios.get(`http://localhost:5000/api/staff/schedule/${id || staff.id}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-          params: { date: new Date().toISOString().split("T")[0] },
-        });
-        const schedule = scheduleResponse.data;
+        let schedule = {};
+        if (staffData.role !== "superadmin") {
+          try {
+            const scheduleResponse = await axios.get(
+              `${import.meta.env.VITE_API_URL}/api/staff/schedule/${staffId}`,
+              {
+                headers: getAuthHeaders(),
+                params: { date: new Date().toISOString().split("T")[0] },
+              }
+            );
+            schedule = scheduleResponse.data;
+          } catch (err) {
+            console.warn("Could not fetch schedule:", err);
+          }
+        }
 
         setFormData({
           ...staffData,
-          joinDate: staffData.joinDate ? new Date(staffData.joinDate).toISOString().split("T")[0] : "",
-          dob: staffData.dob ? new Date(staffData.dob).toISOString().split("T")[0] : "",
+          joinDate: staffData.joinDate
+            ? new Date(staffData.joinDate).toISOString().split("T")[0]
+            : "",
+          dob: staffData.dob
+            ? new Date(staffData.dob).toISOString().split("T")[0]
+            : "",
           centre_id: staffData.centre_id || "",
           start_time: schedule?.start_time || "09:00",
           end_time: schedule?.end_time || "17:00",
-          effective_from: schedule?.effective_from || new Date().toISOString().split("T")[0],
+          effective_from:
+            schedule?.effective_from || new Date().toISOString().split("T")[0],
         });
         setPhotoPreview(staffData.photo || null);
 
         // Fetch centres for dropdown
-        const centresResponse = await axios.get("http://localhost:5000/api/centres", {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
+        const centresResponse = await axios.get(
+          `${import.meta.env.VITE_API_URL}/api/centres`,
+          { headers: getAuthHeaders() }
+        );
         setCentres(centresResponse.data);
 
-        // Fetch reportsTo options
-        const staffResponse = await axios.get("http://localhost:5000/api/staff/all", {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        setReportsToOptions(staffResponse.data.filter(s => s.role === "superadmin" || s.role === "admin"));
+        // Fetch reportsTo options (superadmins and admins)
+        const staffResponse = await axios.get(
+          `${import.meta.env.VITE_API_URL}/api/staff/all`,
+          { headers: getAuthHeaders() }
+        );
+        setReportsToOptions(
+          staffResponse.data.filter(
+            (s) => s.role === "superadmin" || s.role === "admin"
+          )
+        );
 
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
-        setError(err.response?.data?.error || "Failed to load staff data");
+        setError(err.response?.data?.error || err.message || "Failed to load staff data");
         setLoading(false);
       }
     };
@@ -96,7 +135,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoChange = (e) => {
@@ -113,7 +152,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result);
-        setFormData(prev => ({ ...prev, photo: reader.result }));
+        setFormData((prev) => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(file);
     }
@@ -125,6 +164,8 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validation
     if (!formData.username || !formData.name || !formData.email || !formData.role) {
       toast.error("Username, name, email, and role are required", {
         position: "top-right",
@@ -133,26 +174,30 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       });
       return;
     }
-    if (formData.role !== "superadmin" && (!formData.start_time || !formData.end_time || !formData.effective_from)) {
-      toast.error("Start time, end time, and effective from date are required for non-superadmin roles", {
-        position: "top-right",
-        autoClose: 5000,
-        theme: "light",
-      });
+    if (
+      formData.role !== "superadmin" &&
+      (!formData.start_time || !formData.end_time || !formData.effective_from)
+    ) {
+      toast.error(
+        "Start time, end time, and effective from date are required for non-superadmin roles",
+        {
+          position: "top-right",
+          autoClose: 5000,
+          theme: "light",
+        }
+      );
       return;
     }
 
     try {
       setLoading(true);
-      const response = await axios.put(
-        `http://localhost:5000/api/staff/${id || staff.id}`,
+      const staffId = id || staff?.id;
+      if (!staffId) throw new Error("Staff ID missing");
+
+      await axios.put(
+        `${import.meta.env.VITE_API_URL}/api/staff/${staffId}`,
         formData,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "Content-Type": "application/json",
-          },
-        }
+        { headers: getAuthHeaders() }
       );
 
       toast.success("Staff profile updated successfully", {
@@ -164,7 +209,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       if (onUpdate) {
         onUpdate();
       } else {
-        navigate(`/dashboard/admin/staff/${id}`);
+        navigate(`/dashboard/admin/staff/${staffId}`);
       }
     } catch (err) {
       console.error("Error updating staff:", err);
