@@ -645,7 +645,7 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
 });
 
 // Change password
-router.post("/users/change-password", authMiddleware(["admin", "superadmin", "staff", "supervisor"]), async (req, res) => {
+router.post("/users/change-password", authMiddleware(["admin", "superadmin" ]), async (req, res) => {
   const { username, currentPassword, newPassword } = req.body;
 
   if (!username || !currentPassword || !newPassword) {
@@ -675,6 +675,64 @@ router.post("/users/change-password", authMiddleware(["admin", "superadmin", "st
     res.status(500).json({ error: "Server error" });
   } finally {
     client.release();
+  }
+});
+
+// Get logged-in staff profile
+router.get("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, username, name, role, department, email, phone, status,
+        join_date AS "joinDate", photo, employee_id AS "employeeId",
+        employment_type AS "employmentType", reports_to AS "reportsTo",
+        salary, dob, gender, emergency_contact AS "emergencyContact",
+        emergency_relationship AS "emergencyRelationship", centre_id AS "centreId",
+        created_at
+      FROM staff WHERE id = $1`,
+      [req.user.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: "Staff not found" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Update own profile (staff can update limited fields)
+router.put("/me", authMiddleware(["staff", "supervisor"]), async (req, res) => {
+  const { name, phone, emergencyContact, emergencyRelationship, photo } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE staff SET name = $1, phone = $2, emergency_contact = $3, emergency_relationship = $4, photo = $5
+       WHERE id = $6 RETURNING id, username, name, role, department, email, phone, status,
+         join_date AS "joinDate", photo, employee_id AS "employeeId",
+         employment_type AS "employmentType", reports_to AS "reportsTo",
+         salary, dob, gender, emergency_contact AS "emergencyContact",
+         emergency_relationship AS "emergencyRelationship", centre_id AS "centreId"`,
+      [name, phone, emergencyContact, emergencyRelationship, photo, req.user.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+// Change own password
+router.post("/me/change-password", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  try {
+    const userResult = await pool.query("SELECT password FROM staff WHERE id = $1", [req.user.id]);
+    if (userResult.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const match = await bcrypt.compare(currentPassword, userResult.rows[0].password);
+    if (!match) return res.status(401).json({ error: "Current password is incorrect" });
+    const hashedNew = await bcrypt.hash(newPassword, 10);
+    await pool.query("UPDATE staff SET password = $1 WHERE id = $2", [hashedNew, req.user.id]);
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
