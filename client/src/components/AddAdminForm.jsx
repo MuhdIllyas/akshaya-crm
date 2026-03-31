@@ -72,14 +72,10 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.username || !formData.name || !formData.email) {
-      toast.error("Username, name, and email are required", {
-        position: "top-right",
-        autoClose: 5000,
-        theme: "light"
-      });
+      toast.error("Username, name, and email are required");
       return;
     }
-
+  
     setLoading(true);
     try {
       const response = await axios.post(
@@ -87,7 +83,13 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
         {
           ...formData,
           role: "admin",
-          centre_id: centreId
+          centre_id: centreId,
+          // --- ADD THESE LINES ---
+          password: "Abcd@1234", // Your requested default
+          start_time: "00:00",    // Dummy value to bypass backend check
+          end_time: "00:00",      // Dummy value to bypass backend check
+          effective_from: new Date().toISOString().split("T")[0] 
+          // -----------------------
         },
         {
           headers: {
