@@ -28,7 +28,7 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
   useEffect(() => {
     const fetchReportsToOptions = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/api/staff/all", {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         setReportsToOptions(response.data.filter(staff => staff.role === "superadmin" || staff.role === "admin"));
@@ -83,7 +83,7 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
     setLoading(true);
     try {
       const response = await axios.post(
-        "http://localhost:5000/api/staff/add",
+        `${import.meta.env.VITE_API_URL}/api/staff/add`,
         {
           ...formData,
           role: "admin",
