@@ -317,8 +317,18 @@ router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
       return res.status(404).json({ error: "Staff not found" });
     }
 
-    if (req.user.role === "admin" && req.user.centre_id !== staffResult.rows[0].centreId) {
-      return res.status(403).json({ error: "Unauthorized to access this staff member" });
+    const staffData = staffResult.rows[0];
+
+    // Check permissions for Admin role
+    if (req.user.role === "admin") {
+      // 1. Prevent admins from accessing superadmin profiles
+      // 2. Prevent admins from accessing staff in other centres
+      const isDifferentCentre = Number(req.user.centre_id) !== Number(staffData.centreId);
+      const isSuperadminTarget = staffData.role === "superadmin";
+
+      if (isDifferentCentre || isSuperadminTarget) {
+        return res.status(403).json({ error: "Unauthorized access to this staff profile" });
+      }
     }
 
     const activityResult = await client.query(
@@ -332,7 +342,7 @@ router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
       [id, limit, offset]
     );
 
-    const staff = staffResult.rows[0];
+    const staff = staffData;
     staff.recentActivity = activityResult.rows;
 
     res.json(staff);
@@ -476,36 +486,39 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
   try {
     await client.query("BEGIN");
 
-    const staffResult = await client.query("SELECT centre_id, username, name FROM staff WHERE id = $1", [id]);
-    if (staffResult.rows.length === 0) {
+    // Fetch existing data to verify ownership/permissions
+    const staffCheck = await client.query("SELECT id, centre_id, role, username, name FROM staff WHERE id = $1", [id]);
+    if (staffCheck.rows.length === 0) {
       return res.status(404).json({ error: "Staff not found" });
     }
 
-    const existingStaff = staffResult.rows[0];
+    const existingStaff = staffCheck.rows[0];
 
-    const centreId = req.user.role === "admin" ? req.user.centre_id : centre_id;
-    if (!centreId && role !== "superadmin") {
-      console.log("Update staff: Centre ID is required for non-superadmin roles");
-      return res.status(400).json({ error: "Centre ID is required for non-superadmin roles" });
+    // Permission enforcement for Admins
+    if (req.user.role === "admin") {
+      const isDifferentCentre = Number(req.user.centre_id) !== Number(existingStaff.centre_id);
+      const isSuperadminTarget = existingStaff.role === "superadmin";
+
+      if (isDifferentCentre || isSuperadminTarget) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ error: "Unauthorized access: You cannot edit this staff member" });
+      }
     }
 
-    // Validate centre exists if provided
-    if (centreId) {
-      const centreCheck = await client.query("SELECT id FROM centres WHERE id = $1", [centreId]);
-      if (centreCheck.rows.length === 0) {
-        console.log(`Update staff: Invalid centre ID ${centreId}`);
-        return res.status(400).json({ error: "Invalid centre ID" });
-      }
+    // Determine target Centre ID: Admins are locked to their own centre_id
+    const targetCentreId = req.user.role === "admin" ? req.user.centre_id : centre_id;
+    
+    if (!targetCentreId && role !== "superadmin") {
+      return res.status(400).json({ error: "Centre ID is required" });
     }
 
     // Validate required fields
     if (!username || !name || !role || !email) {
-      console.log(`Missing required fields: ${JSON.stringify({ username, name, role, email })}`);
       return res.status(400).json({ error: "Username, name, role, and email are required" });
     }
+    
     if (role !== "superadmin" && (!start_time || !end_time || !effective_from)) {
-      console.log(`Missing schedule fields for role ${role}: ${JSON.stringify({ start_time, end_time, effective_from })}`);
-      return res.status(400).json({ error: "Start time, end time, and effective from date are required for non-superadmin roles" });
+      return res.status(400).json({ error: "Schedule details are required" });
     }
 
     // Update staff
@@ -557,7 +570,7 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
         gender || null,
         emergencyContact || null,
         emergencyRelationship || null,
-        centreId || null,
+        targetCentreId || null,
         permissions || null,
         id,
       ]
@@ -570,66 +583,46 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
       const [startHour, startMinute] = start_time.split(':').map(Number);
       const [endHour, endMinute] = end_time.split(':').map(Number);
       let standardHours = endHour - startHour + (endMinute - startMinute) / 60;
-      if (standardHours < 0) standardHours += 24; // Handle night shifts
+      if (standardHours < 0) standardHours += 24;
 
-      // Check if a schedule exists for the staff
       const existingSchedule = await client.query(
-        `
-        SELECT id FROM staff_schedules
-        WHERE staff_id = $1 AND effective_from = $2
-        `,
+        `SELECT id FROM staff_schedules WHERE staff_id = $1 AND effective_from = $2`,
         [id, effective_from]
       );
 
       if (existingSchedule.rows.length > 0) {
-        // Update existing schedule
         await client.query(
-          `
-          UPDATE staff_schedules
-          SET start_time = $1, end_time = $2, standard_hours = $3, updated_at = NOW()
-          WHERE staff_id = $4 AND effective_from = $5
-          `,
+          `UPDATE staff_schedules SET start_time = $1, end_time = $2, standard_hours = $3, updated_at = NOW()
+           WHERE staff_id = $4 AND effective_from = $5`,
           [start_time, end_time, standardHours, id, effective_from]
         );
       } else {
-        // Insert new schedule
         await client.query(
-          `
-          INSERT INTO staff_schedules (
-            staff_id, centre_id, start_time, end_time, standard_hours, effective_from, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
-          `,
-          [id, centreId, start_time, end_time, standardHours, effective_from]
+          `INSERT INTO staff_schedules (staff_id, centre_id, start_time, end_time, standard_hours, effective_from, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [id, targetCentreId, start_time, end_time, standardHours, effective_from]
         );
       }
     }
 
-    // Log staff update activity
+    // Log update in system activity log
     await client.query(
-      `
-      INSERT INTO activity_log (staff_id, action, timestamp, details)
-      VALUES ($1, $2, $3, $4)
-      `,
-      [
-        req.user.id,
-        "staff_updated",
-        new Date(),
-        `Updated staff: ${username} (ID: ${id})`,
-      ]
+      `INSERT INTO activity_log (staff_id, action, timestamp, details) VALUES ($1, $2, $3, $4)`,
+      [req.user.id, "staff_updated", new Date(), `Updated staff: ${username} (ID: ${id})`]
     );
 
+    // Update centre admin mapping
     if (role === "admin") {
-      await client.query("UPDATE centres SET admin_id = $1 WHERE id = $2", [id, centreId]);
+      await client.query("UPDATE centres SET admin_id = $1 WHERE id = $2", [id, targetCentreId]);
     } else {
       await client.query("UPDATE centres SET admin_id = NULL WHERE admin_id = $1", [id]);
     }
 
     await client.query("COMMIT");
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log staff update activity
+    // Comprehensive Activity Logging Utility
     await logActivity({
-      centre_id: centreId || existingStaff.centre_id,
+      centre_id: targetCentreId || existingStaff.centre_id,
       related_type: 'staff',
       related_id: id,
       action: 'Staff Updated',
@@ -637,7 +630,6 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
     res.status(200).json({ message: "Staff updated successfully", staff: updatedStaff });
   } catch (err) {
