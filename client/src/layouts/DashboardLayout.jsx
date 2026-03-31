@@ -345,23 +345,23 @@ const DashboardLayout = () => {
         <div className="border-t border-navy-700 py-4 px-3">
           <nav className="space-y-1">
             <Link 
-              to="/dashboard/profile"
-              onClick={() => handleNavigation("/dashboard/profile")}
+              to="/dashboard/my-profile"   // Changed from "/dashboard/profile" to the unified profile route
+              onClick={() => handleNavigation("/dashboard/my-profile")}
               className={`flex items-center rounded-xl transition-all duration-200 group relative ${
                 isCollapsed ? "justify-center p-3" : "p-3"
               } ${
-                activePath === "/dashboard/profile"
+                activePath === "/dashboard/my-profile"
                   ? "bg-navy-700 text-white border-r-2 border-blue-400 shadow-sm" 
                   : "text-blue-200 hover:bg-navy-700 hover:text-white"
               }`}
               title={isCollapsed ? "My Profile" : ""}
             >
               <div className={isCollapsed ? "w-6 h-6" : "w-5 h-5"}>
-                <ProfileIcon isActive={activePath === "/dashboard/profile"} isCollapsed={isCollapsed} />
+                <ProfileIcon isActive={activePath === "/dashboard/my-profile"} isCollapsed={isCollapsed} />
               </div>
               {!isCollapsed && (
                 <span className={`ml-3 font-medium ${
-                  activePath === "/dashboard/profile" ? "text-white" : "text-blue-200"
+                  activePath === "/dashboard/my-profile" ? "text-white" : "text-blue-200"
                 }`}>
                   My Profile
                 </span>
