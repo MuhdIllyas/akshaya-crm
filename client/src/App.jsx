@@ -37,6 +37,7 @@ import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
 import AllEntries from './pages/AllEntries';
 import CustomerProfileSystem from './pages/CustomerProfileSystem';
+import MyProfile from './pages/MyProfile';
 import CampaignManagement from "./pages/campaign/CampaignManagement";
 import axios from "axios";
 import Login from "./pages/Login";
@@ -369,6 +370,10 @@ const App = () => {
             <Route
               path="staff/customers/:customerId"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/myprofile"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><MyProfile /></ProtectedRoute>}
             />
           </Route>
         </Route>
