@@ -37,7 +37,7 @@ import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
 import AllEntries from './pages/AllEntries';
 import CustomerProfileSystem from './pages/CustomerProfileSystem';
-import MyProfile from './pages/MyProfile';
+import MyProfile from './pages/MyProfile';   // <-- import unified MyProfile
 import CampaignManagement from "./pages/campaign/CampaignManagement";
 import axios from "axios";
 import Login from "./pages/Login";
@@ -149,7 +149,6 @@ const CustomerProtectedRoute = ({ children }) => {
       }
 
       try {
-        // You'll need to create this endpoint in your backend
         const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/customer/verify`, {
           headers: { Authorization: `Bearer ${customerToken}` },
         });
@@ -222,6 +221,18 @@ const App = () => {
             <Route path="admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="staff" element={<ProtectedRoute allowedRoles={["staff"]}><StaffDashboard /></ProtectedRoute>} />
             <Route path="supervisor" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorDashboard /></ProtectedRoute>} />
+
+            {/* Unified My Profile route for staff, admin, superadmin */}
+            <Route
+              path="my-profile"
+              element={<ProtectedRoute allowedRoles={["staff", "admin", "superadmin"]}><MyProfile /></ProtectedRoute>}
+            />
+
+            {/* Staff-specific MyProfile (optional, can keep for backward compatibility) */}
+            <Route
+              path="staff/myprofile"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><MyProfile /></ProtectedRoute>}
+            />
 
             <Route
               path="admin/staff"
@@ -371,49 +382,43 @@ const App = () => {
               path="staff/customers/:customerId"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
             />
-            <Route
-              path="staff/myprofile"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><MyProfile /></ProtectedRoute>}
-            />
           </Route>
         </Route>
 
         {/* Customer Protected Routes (separate from staff/admin) */}
         <Route element={<DashboardLayout />}>
-
-            <Route
-              path="/customer/dashboard"
-              element={<CustomerProtectedRoute><CustomerDashboard /></CustomerProtectedRoute>}
-            />
-            <Route
-              path="/customer/myservices"
-              element={<CustomerProtectedRoute><CustomerMyServices /></CustomerProtectedRoute>}
-            />
-            <Route
-              path="/customer/myservices/continue/:id"
-              element={<CustomerProtectedRoute><ContinueApplication /></CustomerProtectedRoute>}
-            />
-            <Route
-              path="/customer/myservices/:id/documents"
-              element={<CustomerProtectedRoute><ApplicationDocuments /></CustomerProtectedRoute>}
-            />
-            <Route
-              path="/customer/myservices/:id/confirmation"
-              element={<CustomerProtectedRoute><ConfirmationPage /></CustomerProtectedRoute>}
-            />
-            <Route
-              path="/customer/myservices/:id/timeline"
-              element={<CustomerProtectedRoute><ViewServiceDetails /></CustomerProtectedRoute>}
-            />
-            <Route
-              path="/customer/mydocuments"
-              element={<CustomerProtectedRoute><CustomerMyDocuments /></CustomerProtectedRoute>}
-            />
-            <Route
-              path="/customer/myprofile"
-              element={<CustomerProtectedRoute><CustomerProfile /></CustomerProtectedRoute>}
-            />
-          
+          <Route
+            path="/customer/dashboard"
+            element={<CustomerProtectedRoute><CustomerDashboard /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/myservices"
+            element={<CustomerProtectedRoute><CustomerMyServices /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/myservices/continue/:id"
+            element={<CustomerProtectedRoute><ContinueApplication /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/myservices/:id/documents"
+            element={<CustomerProtectedRoute><ApplicationDocuments /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/myservices/:id/confirmation"
+            element={<CustomerProtectedRoute><ConfirmationPage /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/myservices/:id/timeline"
+            element={<CustomerProtectedRoute><ViewServiceDetails /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/mydocuments"
+            element={<CustomerProtectedRoute><CustomerMyDocuments /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/myprofile"
+            element={<CustomerProtectedRoute><CustomerProfile /></CustomerProtectedRoute>}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
