@@ -1,3 +1,4 @@
+// for admin and superadmin
 import { useState } from "react";
 
 const ChangePassword = ({ username, onClose }) => {
