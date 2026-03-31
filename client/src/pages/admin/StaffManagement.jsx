@@ -169,7 +169,7 @@ const StaffManagement = () => {
                       </h3>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link
-                          to={`/dashboard/management/staff/edit/${staff.id}`}
+                          to={`/dashboard/admin/staff/edit/${staff.id}`} 
                           className="text-gray-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-50 transition-all"
                           title="Edit staff"
                         >
@@ -214,13 +214,13 @@ const StaffManagement = () => {
 
                 <div className="flex justify-between items-center pt-4 border-t border-gray-100">
                   <Link
-                    to={`/dashboard/management/staff/edit/${staff.id}`}
+                    to=to={`/dashboard/admin/staff/${staff.id}`} 
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg hover:bg-blue-50 transition-all"
                   >
                     Edit
                   </Link>
                   <Link
-                    to={`/dashboard/management/staff/${staff.id}`}
+                    to=to={`/dashboard/admin/staff/${staff.id}`} 
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg hover:bg-blue-50 transition-all"
                   >
                     View Profile
