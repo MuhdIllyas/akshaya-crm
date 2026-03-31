@@ -37,7 +37,7 @@ import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
 import AllEntries from './pages/AllEntries';
 import CustomerProfileSystem from './pages/CustomerProfileSystem';
-import MyProfile from './pages/MyProfile';   // <-- import unified MyProfile
+import MyProfile from './pages/MyProfile';
 import CampaignManagement from "./pages/campaign/CampaignManagement";
 import axios from "axios";
 import Login from "./pages/Login";
