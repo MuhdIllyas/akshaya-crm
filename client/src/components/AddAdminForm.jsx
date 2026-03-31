@@ -84,12 +84,7 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
           ...formData,
           role: "admin",
           centre_id: centreId,
-          // --- ADD THESE LINES ---
-          password: "Abcd@1234", // Your requested default
-          start_time: "00:00",    // Dummy value to bypass backend check
-          end_time: "00:00",      // Dummy value to bypass backend check
-          effective_from: new Date().toISOString().split("T")[0] 
-          // -----------------------
+          password: "Abcd@1234" 
         },
         {
           headers: {
