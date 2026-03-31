@@ -7,7 +7,7 @@ import {
   FiUsers, FiClock, FiCheckCircle, FiPlayCircle, FiPlus, FiSearch, 
   FiAlertCircle, FiRefreshCw, FiCalendar, FiBarChart2, FiTrendingUp,
   FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign,
-  FiBriefcase, FiActivity, FiStar
+  FiBriefcase, FiActivity, FiStar, FiInfo
 } from 'react-icons/fi';
 import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
