@@ -4,6 +4,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import DashboardLayout from "./layouts/DashboardLayout";
 import AdminDashboard from "./pages/AdminDashboard";
+import StaffTasks from "./pages/staff/StaffTasks";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
@@ -325,6 +326,10 @@ const App = () => {
             <Route
               path="staff/token"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><TokenGenerator /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/tasks"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><StaffTasks /></ProtectedRoute>}
             />
             <Route
               path="staff/performance"
