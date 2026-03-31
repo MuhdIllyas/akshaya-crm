@@ -89,6 +89,17 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
           }
         }
 
+        // Determine centre_id: for admin, use their own centre from localStorage
+        let finalCentreId = staffData.centre_id || "";
+        if (userRole === "admin") {
+          const adminCentreId = localStorage.getItem("centre_id");
+          if (adminCentreId) {
+            finalCentreId = adminCentreId;
+          } else {
+            console.warn("Admin has no centre_id in localStorage");
+          }
+        }
+
         setFormData({
           ...staffData,
           joinDate: staffData.joinDate
@@ -97,7 +108,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
           dob: staffData.dob
             ? new Date(staffData.dob).toISOString().split("T")[0]
             : "",
-          centre_id: staffData.centre_id || "",
+          centre_id: finalCentreId,
           start_time: schedule?.start_time || "09:00",
           end_time: schedule?.end_time || "17:00",
           effective_from:
@@ -105,14 +116,21 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
         });
         setPhotoPreview(staffData.photo || null);
 
-        // Fetch centres for dropdown
-        const centresResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL}/api/centres`,
-          { headers: getAuthHeaders() }
-        );
-        setCentres(centresResponse.data);
+        // Fetch centres ONLY if user is superadmin
+        if (userRole === "superadmin") {
+          try {
+            const centresResponse = await axios.get(
+              `${import.meta.env.VITE_API_URL}/api/centres`,
+              { headers: getAuthHeaders() }
+            );
+            setCentres(centresResponse.data);
+          } catch (err) {
+            console.warn("Could not fetch centres:", err);
+            // Not a critical error, continue
+          }
+        }
 
-        // Fetch reportsTo options (superadmins and admins)
+        // Fetch reportsTo options (superadmins and admins) – always needed
         const staffResponse = await axios.get(
           `${import.meta.env.VITE_API_URL}/api/staff/all`,
           { headers: getAuthHeaders() }
@@ -131,7 +149,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       }
     };
     fetchData();
-  }, [id, staff]);
+  }, [id, staff, userRole]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -194,9 +212,15 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       const staffId = id || staff?.id;
       if (!staffId) throw new Error("Staff ID missing");
 
+      // For admin, force centre_id to their own centre (prevent overriding)
+      let submitData = { ...formData };
+      if (userRole === "admin") {
+        submitData.centre_id = localStorage.getItem("centre_id");
+      }
+
       await axios.put(
         `${import.meta.env.VITE_API_URL}/api/staff/${staffId}`,
-        formData,
+        submitData,
         { headers: getAuthHeaders() }
       );
 
@@ -359,27 +383,35 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
               <option value="supervisor">Supervisor</option>
             </select>
           </div>
+          {/* Centre field - show only for superadmin, for admin show disabled with auto value */}
           <div>
             <label htmlFor="centre_id" className="block text-sm font-medium text-gray-700 mb-1.5">
               Centre
             </label>
-            <select
-              id="centre_id"
-              name="centre_id"
-              value={formData.centre_id}
-              onChange={handleChange}
-              disabled={loading || userRole !== "superadmin"}
-              className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition ${
-                userRole !== "superadmin" ? "bg-gray-100 cursor-not-allowed" : ""
-              }`}
-            >
-              <option value="">Select a centre</option>
-              {centres.map((centre) => (
-                <option key={centre.id} value={centre.id}>
-                  {centre.name}
-                </option>
-              ))}
-            </select>
+            {userRole === "superadmin" ? (
+              <select
+                id="centre_id"
+                name="centre_id"
+                value={formData.centre_id}
+                onChange={handleChange}
+                disabled={loading}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+              >
+                <option value="">Select a centre</option>
+                {centres.map((centre) => (
+                  <option key={centre.id} value={centre.id}>
+                    {centre.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={centres.find(c => c.id == formData.centre_id)?.name || "Your Centre"}
+                disabled
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-gray-100 cursor-not-allowed"
+              />
+            )}
           </div>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
