@@ -51,6 +51,18 @@ const StaffDashboard = () => {
   const [processingBookings, setProcessingBookings] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
+  // State for real dashboard metrics
+  const [dashboardMetrics, setDashboardMetrics] = useState({
+    totalTokens: 0,
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+    campaign: 0,
+    completionRate: 0,
+    avgServiceTime: 'N/A',
+    customerSatisfaction: 'N/A',
+  });
+
   // Ref to prevent duplicate joinCentre emits
   const hasJoinedCentre = useRef(false);
 
@@ -179,6 +191,19 @@ const StaffDashboard = () => {
     }
   }, [staffId]);
 
+  // --- Fetch real dashboard metrics from backend ---
+  const fetchDashboardMetrics = useCallback(async () => {
+    try {
+      const res = await api.get('/staff/dashboard');
+      if (res.data.success) {
+        setDashboardMetrics(res.data.data.metrics);
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard metrics:', err);
+      // Keep default values on error
+    }
+  }, []);
+
   // Load wallets
   useEffect(() => {
     getWalletsForCentre()
@@ -201,6 +226,7 @@ const StaffDashboard = () => {
         await refreshTokens();
         await fetchServiceEntries();
         await fetchOnlineBookings();
+        await fetchDashboardMetrics(); // NEW: fetch real metrics
       } catch (err) {
         console.error('Error fetching data:', err.response?.data || err.message);
         setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
@@ -210,7 +236,7 @@ const StaffDashboard = () => {
       }
     };
     fetchData();
-  }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings]);
+  }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchDashboardMetrics]);
 
   // --- Socket event listeners (token updates, etc.) ---
   useEffect(() => {
@@ -266,6 +292,7 @@ const StaffDashboard = () => {
         await fetchServiceEntries();
         await fetchOnlineBookings();
         await refreshTokens(); // Refresh tokens to update status
+        await fetchDashboardMetrics(); // Also refresh metrics
       }
     };
 
@@ -282,7 +309,7 @@ const StaffDashboard = () => {
       socket.off('tokenReassigned', onTokenReassigned);
       socket.off('serviceEntryCreated', onServiceEntryCreated);
     };
-  }, [centreId, staffId, refreshTokens, fetchServiceEntries, fetchOnlineBookings]);
+  }, [centreId, staffId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchDashboardMetrics]);
 
   // ---------- Helper Functions (unchanged) ----------
   const getCategoryName = (categoryId) => {
@@ -413,7 +440,7 @@ const StaffDashboard = () => {
 
   const groupedTokens = groupTokensByDate(filteredTokens);
 
-  // Status counts
+  // Status counts (computed from local tokens for stats cards)
   const statusCounts = {
     pending: activeTokens.filter(t => t.status === 'pending').length,
     inProgress: activeTokens.filter(t => t.status === 'in-progress' || t.status === 'processing').length,
@@ -446,13 +473,10 @@ const StaffDashboard = () => {
     }
   };
 
-  // Calculate metrics
-  const completionRate = statusCounts.total > 0 
-    ? Math.round((statusCounts.completed / statusCounts.total) * 100) 
-    : 0;
-
-  const avgServiceTime = "24min"; // This would come from actual data
-  const customerSatisfaction = "4.8/5"; // This would come from actual data
+  // These are now derived from dashboardMetrics (real data)
+  const completionRate = dashboardMetrics.completionRate;
+  const avgServiceTime = dashboardMetrics.avgServiceTime;
+  const customerSatisfaction = dashboardMetrics.customerSatisfaction;
 
   const handleTakeWork = async (bookingId) => {
     try {
@@ -1072,7 +1096,7 @@ const StaffDashboard = () => {
 
             {/* Sidebar - Analytics & Recent Activity */}
             <div className="space-y-6">
-              {/* Performance Metrics */}
+              {/* Performance Metrics - NOW USING REAL DATA */}
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance Metrics</h3>
                 <div className="space-y-4">
@@ -1094,9 +1118,15 @@ const StaffDashboard = () => {
                       <span className="text-sm font-medium text-gray-600">Avg. Service Time</span>
                       <span className="text-sm font-semibold text-gray-900">{avgServiceTime}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '75%' }}></div>
-                    </div>
+                    {/* Optional progress bar (e.g., if you want to show a target) */}
+                    {avgServiceTime !== 'N/A' && (
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full" 
+                          style={{ width: `${Math.min((parseInt(avgServiceTime) / 60) * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -1104,14 +1134,19 @@ const StaffDashboard = () => {
                       <span className="text-sm font-medium text-gray-600">Customer Satisfaction</span>
                       <span className="text-sm font-semibold text-gray-900">{customerSatisfaction}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-purple-600 h-2 rounded-full" style={{ width: '96%' }}></div>
-                    </div>
+                    {customerSatisfaction !== 'N/A' && (
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-purple-600 h-2 rounded-full" 
+                          style={{ width: `${(parseFloat(customerSatisfaction) / 5) * 100}%` }}
+                        ></div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Recent Activity */}
+              {/* Recent Activity (unchanged - already using real data) */}
               <div className="bg-white rounded-lg border border-gray-200">
                 <div className="px-6 py-4 border-b border-gray-200">
                   <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
@@ -1169,7 +1204,7 @@ const StaffDashboard = () => {
                 </div>
               </div>
 
-              {/* Quick Actions */}
+              {/* Quick Actions (unchanged) */}
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-3">
