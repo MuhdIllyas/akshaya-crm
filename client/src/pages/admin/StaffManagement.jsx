@@ -220,7 +220,7 @@ const StaffManagement = () => {
                     Edit
                   </Link>
                   <Link
-                    to=to={`/dashboard/admin/staff/${staff.id}`} 
+                    to={`/dashboard/admin/staff/${staff.id}`} 
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg hover:bg-blue-50 transition-all"
                   >
                     View Profile
