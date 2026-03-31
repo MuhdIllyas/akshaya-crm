@@ -15,13 +15,28 @@ const StaffProfile = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
+  // Helper to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      throw new Error("No authentication token found");
+    }
+    return {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+  };
+
   useEffect(() => {
     const fetchStaff = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/${id}`);
+        const headers = getAuthHeaders();
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/${id}`, {
+          headers,
+        });
         
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
@@ -54,8 +69,10 @@ const StaffProfile = () => {
   // Delete function
   const handleDelete = async () => {
     try {
+      const headers = getAuthHeaders();
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/${id}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers,
       });
 
       if (res.ok) {
@@ -164,20 +181,18 @@ const StaffProfile = () => {
           <button
             onClick={() => setShowPasswordModal(true)}
             className="flex items-center border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2.5 rounded-xl transition-colors"
-            >
+          >
             <FiLock className="mr-2" />
-              Change Password
-            </button>
-            {showPasswordModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <ChangePassword
+            Change Password
+          </button>
+          {showPasswordModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <ChangePassword
                 username={staff.username}
                 onClose={() => setShowPasswordModal(false)}
               />
             </div>
-            )}
-
-          {/* Delete Button */}
+          )}
           <button
             onClick={() => setShowDeleteModal(true)}
             className="flex items-center bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 font-medium px-4 py-2.5 rounded-xl transition-colors"
@@ -347,14 +362,14 @@ const StaffProfile = () => {
                 <p className="text-sm text-gray-500 mb-1">Permissions</p>
                 <p className="font-medium">
                   {staff.permissions 
-                    ? staff.permissions.join(", ") 
+                    ? (Array.isArray(staff.permissions) ? staff.permissions.join(", ") : staff.permissions)
                     : "Basic access"}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">Account Created</p>
                 <p className="font-medium">
-                  {new Date(staff.createdAt).toLocaleDateString()}
+                  {staff.createdAt ? new Date(staff.createdAt).toLocaleDateString() : "N/A"}
                 </p>
               </div>
             </div>
