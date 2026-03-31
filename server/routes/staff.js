@@ -140,7 +140,7 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), async (req, res) =>
     if (!username || !name || !role || !email || !password) {
       return res.status(400).json({ error: "Username, name, role, email, and password are required" });
     }
-    if (role !== "superadmin" && (!start_time || !end_time || !effective_from)) {
+    if (role !== "superadmin" && role !== "admin" && (!start_time || !end_time || !effective_from)) {
       return res.status(400).json({ error: "Start time, end time, and effective from date are required for non-superadmin roles" });
     }
 
