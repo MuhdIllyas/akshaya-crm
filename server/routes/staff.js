@@ -644,7 +644,7 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
   }
 });
 
-// Change password
+// Change password - used by admin / superadmin - changing passwords for others
 router.post("/users/change-password", authMiddleware(["admin", "superadmin" ]), async (req, res) => {
   const { username, currentPassword, newPassword } = req.body;
 
@@ -700,7 +700,7 @@ router.get("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"])
 });
 
 // Update own profile (staff can update limited fields)
-router.put("/me", authMiddleware(["staff", "supervisor"]), async (req, res) => {
+router.put("/me", authMiddleware(["staff", "supervisor", "admin" , "superadmin"]), async (req, res) => {
   const { name, phone, emergencyContact, emergencyRelationship, photo } = req.body;
   try {
     const result = await pool.query(
