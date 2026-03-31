@@ -538,4 +538,99 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
   }
 });
 
+// ==============================================
+// STAFF DASHBOARD (Real data)
+// ==============================================
+router.get('/dashboard', authMiddleware(['staff']), async (req, res) => {
+  const staffId = req.user.id;
+
+  try {
+    // 1️⃣ Token statistics (only tokens assigned to this staff)
+    const tokenStats = await pool.query(`
+      SELECT 
+        COUNT(*) FILTER (WHERE staff_id = $1) AS total_assigned,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND status = 'pending') AS pending,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND status IN ('in-progress','processing')) AS in_progress,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND status = 'completed') AS completed,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND type = 'campaign') AS campaign
+      FROM tokens
+      WHERE staff_id = $1
+    `, [staffId]);
+
+    const totalAssigned = parseInt(tokenStats.rows[0].total_assigned || 0);
+    const pending = parseInt(tokenStats.rows[0].pending || 0);
+    const inProgress = parseInt(tokenStats.rows[0].in_progress || 0);
+    const completed = parseInt(tokenStats.rows[0].completed || 0);
+    const campaign = parseInt(tokenStats.rows[0].campaign || 0);
+    const completionRate = totalAssigned > 0 ? Math.round((completed / totalAssigned) * 100) : 0;
+
+    // 2️⃣ Average service time (minutes) from completed service entries
+    const avgServiceTimeRes = await pool.query(`
+      SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) AS avg_minutes
+      FROM service_entries
+      WHERE staff_id = $1 AND status = 'completed' AND updated_at IS NOT NULL
+    `, [staffId]);
+
+    const avgMinutes = avgServiceTimeRes.rows[0].avg_minutes
+      ? Math.round(avgServiceTimeRes.rows[0].avg_minutes)
+      : 0;
+    const avgServiceTime = avgMinutes > 0 ? `${avgMinutes}min` : 'N/A';
+
+    // 3️⃣ Customer satisfaction (average service rating from submitted reviews)
+    const satisfactionRes = await pool.query(`
+      SELECT AVG(service_rating) AS avg_rating
+      FROM service_reviews
+      WHERE staff_id = $1 AND is_submitted = true
+    `, [staffId]);
+
+    const avgRating = satisfactionRes.rows[0].avg_rating
+      ? parseFloat(satisfactionRes.rows[0].avg_rating).toFixed(1)
+      : 0;
+    const customerSatisfaction = avgRating > 0 ? `${avgRating}/5` : 'N/A';
+
+    // 4️⃣ Recent activity (last 5 service entries)
+    const recentActivity = await pool.query(`
+      SELECT 
+        se.id, 
+        se.customer_name, 
+        se.created_at, 
+        se.status, 
+        s.name AS service_name
+      FROM service_entries se
+      LEFT JOIN services s ON se.category_id = s.id
+      WHERE se.staff_id = $1
+      ORDER BY se.created_at DESC
+      LIMIT 5
+    `, [staffId]);
+
+    const formattedRecent = recentActivity.rows.map(entry => ({
+      id: entry.id,
+      customerName: entry.customer_name,
+      serviceName: entry.service_name,
+      status: entry.status,
+      createdAt: entry.created_at,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        metrics: {
+          totalTokens: totalAssigned,
+          pending,
+          inProgress,
+          completed,
+          campaign,
+          completionRate,
+          avgServiceTime,
+          customerSatisfaction,
+        },
+        recentActivity: formattedRecent,
+      },
+    });
+  } catch (err) {
+    console.error('Error fetching staff dashboard:', err);
+    res.status(500).json({ error: 'Failed to fetch dashboard data' });
+  }
+});
+
 export default router;
