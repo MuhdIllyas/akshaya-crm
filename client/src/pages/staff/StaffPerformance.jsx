@@ -350,7 +350,7 @@ const StaffPerformance = () => {
       
       // Fetch dashboard data
       const response = await fetch(
-        `http://localhost:5000/api/staffperformance/dashboard?${params.toString()}`,
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -363,7 +363,7 @@ const StaffPerformance = () => {
       
       // Fetch achievements
       const achievementsResponse = await fetch(
-        'http://localhost:5000/api/staffperformance/achievements',
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/achievements`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -375,7 +375,7 @@ const StaffPerformance = () => {
       
       // Fetch comparison data
       const comparisonResponse = await fetch(
-        `http://localhost:5000/api/staffperformance/compare?period=${period}`,
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/compare?period=${period}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -387,7 +387,7 @@ const StaffPerformance = () => {
       
       // Fetch service breakdown
       const breakdownResponse = await fetch(
-        `http://localhost:5000/api/staffperformance/service-breakdown?${params.toString()}`,
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/service-breakdown?${params.toString()}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -409,7 +409,7 @@ const StaffPerformance = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/staffperformance/daily-log?date=${date}`,
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/daily-log?date=${date}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
