@@ -168,7 +168,7 @@ const StaffDashboard = () => {
   // --- Fetch performance metrics from staffPerformance endpoint ---
   const fetchPerformance = useCallback(async () => {
     try {
-      const res = await api.get('/staff-performance/dashboard', { params: { period: 'month' } });
+      const res = await api.get('/staffperformance/dashboard', { params: { period: 'month' } });
       if (res.data.success) {
         const { summary, ratings } = res.data.data;
         setPerformance({
