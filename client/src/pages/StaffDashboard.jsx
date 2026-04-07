@@ -7,7 +7,7 @@ import {
   FiUsers, FiClock, FiCheckCircle, FiPlayCircle, FiPlus, FiSearch, 
   FiAlertCircle, FiRefreshCw, FiCalendar, FiBarChart2, FiTrendingUp,
   FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign,
-  FiBriefcase, FiActivity, FiStar, FiInfo
+  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight
 } from 'react-icons/fi';
 import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
@@ -19,6 +19,12 @@ import { socket, connectSocket } from '@/services/socket';
 const formatCurrency = (amount) => {
   if (amount === undefined || amount === null) return '₹0';
   return `₹${Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+};
+
+const formatDate = (date) => {
+  if (!date) return '—';
+  const d = new Date(date);
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 // Stat Card Component
@@ -63,7 +69,13 @@ const StaffDashboard = () => {
   const [processingBookings, setProcessingBookings] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  // Performance metrics from backend (using staffPerformance endpoint)
+  // Period state (same as StaffPerformance)
+  const [period, setPeriod] = useState('month');
+  const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+
+  // Performance metrics from backend
   const [performance, setPerformance] = useState({
     completionRate: 0,
     avgTransactionValue: 0,
@@ -165,29 +177,49 @@ const StaffDashboard = () => {
     }
   }, [staffId]);
 
-  // --- Fetch performance metrics from staffPerformance endpoint ---
+  // --- Fetch performance metrics with period support ---
   const fetchPerformance = useCallback(async () => {
+    setPerformanceLoading(true);
     try {
-      const res = await api.get('/staffperformance/dashboard', { params: { period: 'month' } });
-      if (res.data.success) {
-        const { summary, ratings } = res.data.data;
-        setPerformance({
-          completionRate: summary.collection_rate || 0,
-          avgTransactionValue: summary.avg_transaction_value || 0,
-          customerSatisfaction: ratings?.avg_rating ? `${ratings.avg_rating}/5` : 'N/A',
-          totalServices: summary.total_services || 0,
-          totalCollected: summary.total_collected || 0,
-          collectionRate: summary.collection_rate || 0,
-          incentiveScore: summary.incentive_score || 0,
-          avgRating: ratings?.avg_rating || 0,
-          totalReviews: ratings?.total_reviews || 0,
-        });
+      const token = localStorage.getItem('token');
+      let params = new URLSearchParams();
+      
+      if (period === 'custom' && customDateRange.from && customDateRange.to) {
+        params.append('from', customDateRange.from);
+        params.append('to', customDateRange.to);
+        params.append('period', 'custom');
+      } else {
+        params.append('period', period);
       }
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (!response.ok) throw new Error('Failed to fetch performance data');
+      
+      const result = await response.json();
+      const { summary, ratings } = result.data;
+      
+      setPerformance({
+        completionRate: summary.collection_rate || 0,
+        avgTransactionValue: summary.avg_transaction_value || 0,
+        customerSatisfaction: ratings?.avg_rating ? `${ratings.avg_rating}/5` : 'N/A',
+        totalServices: summary.total_services || 0,
+        totalCollected: summary.total_collected || 0,
+        collectionRate: summary.collection_rate || 0,
+        incentiveScore: summary.incentive_score || 0,
+        avgRating: ratings?.avg_rating || 0,
+        totalReviews: ratings?.total_reviews || 0,
+      });
     } catch (err) {
       console.error('Error fetching performance:', err);
-      // Keep default values
+      toast.error('Failed to load performance data');
+    } finally {
+      setPerformanceLoading(false);
     }
-  }, []);
+  }, [period, customDateRange]);
 
   // Load wallets (unchanged)
   useEffect(() => {
@@ -215,6 +247,13 @@ const StaffDashboard = () => {
     };
     fetchData();
   }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance]);
+
+  // Refetch performance when period changes
+  useEffect(() => {
+    if (!loading) {
+      fetchPerformance();
+    }
+  }, [period, customDateRange, fetchPerformance, loading]);
 
   // --- Socket events (unchanged) ---
   useEffect(() => {
@@ -269,7 +308,7 @@ const StaffDashboard = () => {
   const handleStartService = (tokenId) => navigate(`/dashboard/staff/token/${tokenId}/service`);
   const handleViewDetails = (tokenId) => navigate(`/dashboard/staff/token/${tokenId}/details`);
   const formatTime = (dateString) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const formatDate = (dateString) => {
+  const formatDateUI = (dateString) => {
     const date = new Date(dateString);
     const today = new Date();
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
@@ -414,13 +453,102 @@ const StaffDashboard = () => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              {/* Period Selector */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowDatePicker(!showDatePicker)}
+                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <FiCalendar className="h-4 w-4 text-gray-500" />
+                  <span className="text-sm">
+                    {period === 'today' && 'Today'}
+                    {period === 'week' && 'This Week'}
+                    {period === 'month' && 'This Month'}
+                    {period === 'quarter' && 'This Quarter'}
+                    {period === 'year' && 'This Year'}
+                    {period === 'custom' && 'Custom Range'}
+                  </span>
+                  <FiChevronRight className="h-4 w-4 text-gray-500 transform rotate-90" />
+                </button>
+                
+                <AnimatePresence>
+                  {showDatePicker && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowDatePicker(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64"
+                      >
+                        <div className="p-3">
+                          <button
+                            onClick={() => { setPeriod('today'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'today' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            Today
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('week'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'week' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Week
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('month'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'month' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Month
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('quarter'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'quarter' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Quarter
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('year'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'year' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Year
+                          </button>
+                          <div className="border-t border-gray-200 my-2"></div>
+                          <div className="space-y-2">
+                            <input
+                              type="date"
+                              value={customDateRange.from}
+                              onChange={(e) => setCustomDateRange(prev => ({ ...prev, from: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              placeholder="From Date"
+                            />
+                            <input
+                              type="date"
+                              value={customDateRange.to}
+                              onChange={(e) => setCustomDateRange(prev => ({ ...prev, to: e.target.value }))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              placeholder="To Date"
+                            />
+                            <button
+                              onClick={() => { setPeriod('custom'); setShowDatePicker(false); }}
+                              className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+              
               <span className="text-xs text-gray-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
               <button
                 onClick={refreshTokens}
                 className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                disabled={loading}
+                title="Refresh"
               >
-                <FiRefreshCw className={`h-4 w-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+                <FiRefreshCw className="h-4 w-4 text-gray-600" />
               </button>
             </div>
           </div>
@@ -575,7 +703,7 @@ const StaffDashboard = () => {
                         <div key={date}>
                           <div className="flex items-center gap-2 mb-3">
                             <FiCalendar className="h-4 w-4 text-gray-500" />
-                            <h3 className="font-medium text-gray-700">{formatDate(date)}</h3>
+                            <h3 className="font-medium text-gray-700">{formatDateUI(date)}</h3>
                             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{dateTokens.length}</span>
                           </div>
                           <div className="space-y-3">
@@ -667,7 +795,7 @@ const StaffDashboard = () => {
                         className="transition-all duration-1000"
                         strokeWidth="12"
                         strokeDasharray={339.292}
-                        strokeDashoffset={339.292 * (1 - performance.incentiveScore / 100)}
+                        strokeDashoffset={339.292 * (1 - (performanceLoading ? 0 : performance.incentiveScore / 100))}
                         strokeLinecap="round"
                         stroke={`url(#gradient)`}
                         fill="transparent"
@@ -683,9 +811,9 @@ const StaffDashboard = () => {
                       </defs>
                     </svg>
                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                      <p className="text-2xl font-bold text-gray-900">{performance.incentiveScore}%</p>
+                      <p className="text-2xl font-bold text-gray-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
                       <p className="text-xs text-gray-500">
-                        {performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement'}
+                        {!performanceLoading && (performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement')}
                       </p>
                     </div>
                   </div>
@@ -698,58 +826,66 @@ const StaffDashboard = () => {
                   <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
                   Performance Metrics
                 </h3>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-gray-600">Completion Rate</span>
-                      <span className="font-medium text-gray-900">{performance.completionRate}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
-                    </div>
+                {performanceLoading ? (
+                  <div className="space-y-3">
+                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
                   </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between mb-1 text-sm">
+                        <span className="text-gray-600">Completion Rate</span>
+                        <span className="font-medium text-gray-900">{performance.completionRate}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
+                      </div>
+                    </div>
 
-                  <div>
-                    <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-gray-600">Avg Transaction Value</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
+                    <div>
+                      <div className="flex justify-between mb-1 text-sm">
+                        <span className="text-gray-600">Avg Transaction Value</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full"
+                          style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
 
-                  <div>
-                    <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-gray-600">Customer Satisfaction</span>
-                      <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
+                    <div>
+                      <div className="flex justify-between mb-1 text-sm">
+                        <span className="text-gray-600">Customer Satisfaction</span>
+                        <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-purple-600 h-2 rounded-full"
+                          style={{ width: `${(performance.avgRating / 5) * 100}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-purple-600 h-2 rounded-full"
-                        style={{ width: `${(performance.avgRating / 5) * 100}%` }}
-                      />
-                    </div>
-                  </div>
 
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Collection Rate</span>
-                      <span className="font-medium text-gray-900">{performance.collectionRate}%</span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-2">
-                      <span className="text-gray-600">Total Revenue</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(performance.totalCollected)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-2">
-                      <span className="text-gray-600">Total Services</span>
-                      <span className="font-medium text-gray-900">{performance.totalServices}</span>
+                    <div className="pt-2 border-t border-gray-100">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Collection Rate</span>
+                        <span className="font-medium text-gray-900">{performance.collectionRate}%</span>
+                      </div>
+                      <div className="flex justify-between text-sm mt-2">
+                        <span className="text-gray-600">Total Revenue</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(performance.totalCollected)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm mt-2">
+                        <span className="text-gray-600">Total Services</span>
+                        <span className="font-medium text-gray-900">{performance.totalServices}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Recent Activity */}
