@@ -243,10 +243,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/", (req, res) => {
-  res.send("API is running 🚀");
-});
-
 /* ================================
    SOCKET ACCESS IN ROUTES
 ================================ */
