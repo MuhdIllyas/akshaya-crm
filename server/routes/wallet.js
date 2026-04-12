@@ -557,6 +557,39 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
+router.get("/transactions/:walletId", async (req, res) => {
+  const { walletId } = req.params;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+  const offset = parseInt(req.query.offset) || 0;
+
+  try {
+    const result = await req.db.query(`
+      SELECT 
+        wt.id,
+        wt.wallet_id,
+        wt.staff_id,
+        wt.type,
+        wt.amount,
+        LEFT(wt.description, 200) AS description,
+        wt.created_at,
+        w.name AS wallet_name,
+        s.name AS staff_name,
+        LEFT(s.photo, 50000) AS staff_photo
+      FROM wallet_transactions wt
+      JOIN wallets w ON wt.wallet_id = w.id
+      LEFT JOIN staff s ON wt.staff_id = s.id
+      WHERE wt.wallet_id = $1
+      ORDER BY wt.created_at DESC
+      LIMIT $2 OFFSET $3
+    `, [walletId, limit, offset]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Wallet transactions error:", err);
+    res.status(500).json({ error: "Failed to fetch transactions" });
+  }
+});
+
 // Get audit logs - unchanged
 router.get('/audit-logs', async (req, res) => {
   try {
