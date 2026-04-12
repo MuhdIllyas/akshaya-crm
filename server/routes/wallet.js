@@ -287,11 +287,24 @@ router.delete('/:id', async (req, res) => {
 
 // Get all transactions with optional pagination
 router.get('/transactions', async (req, res) => {
-  const { limit = 1000, offset = 0 } = req.query;
+  const { limit = 50, offset = 0, centre_id } = req.query;
+
   try {
-    const result = await req.db.query(`
+    // ✅ Safety: limit cap (avoid heavy load)
+    const safeLimit = Math.min(parseInt(limit) || 50, 100);
+    const safeOffset = parseInt(offset) || 0;
+
+    // ✅ Base query
+    let query = `
       SELECT 
-        wt.*,
+        wt.id,
+        wt.wallet_id,
+        wt.staff_id,
+        wt.type,
+        wt.amount,
+        wt.description,
+        wt.category,
+        wt.created_at,
         w.name AS wallet_name,
         s.name AS staff_name,
         s.role AS staff_role,
@@ -299,9 +312,36 @@ router.get('/transactions', async (req, res) => {
       FROM wallet_transactions wt
       LEFT JOIN wallets w ON wt.wallet_id = w.id
       LEFT JOIN staff s ON wt.staff_id = s.id
+    `;
+
+    let values = [];
+    let whereClauses = [];
+
+    // ✅ Centre filter (IMPORTANT for performance)
+    if (req.user.role !== 'superadmin') {
+      whereClauses.push(`w.centre_id = $${values.length + 1}`);
+      values.push(req.user.centre_id);
+    } else if (centre_id) {
+      whereClauses.push(`w.centre_id = $${values.length + 1}`);
+      values.push(centre_id);
+    }
+
+    // ✅ Apply WHERE if exists
+    if (whereClauses.length > 0) {
+      query += ` WHERE ` + whereClauses.join(' AND ');
+    }
+
+    // ✅ Order + pagination
+    query += `
       ORDER BY wt.created_at DESC
-      LIMIT $1 OFFSET $2
-    `, [parseInt(limit), parseInt(offset)]);
+      LIMIT $${values.length + 1}
+      OFFSET $${values.length + 2}
+    `;
+
+    values.push(safeLimit, safeOffset);
+
+    const result = await req.db.query(query, values);
+
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching transactions:', err);
