@@ -518,26 +518,42 @@ router.get('/wallets/:walletId', async (req, res) => {
 });
 
 // Get transactions for a specific wallet - unchanged
-router.get('/transactions/:walletId', async (req, res) => {
-  const { walletId } = req.params;
+router.get('/transactions', async (req, res) => {
+  const centreId = req.user.centre_id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+  const offset = (page - 1) * limit;
+
   try {
     const result = await req.db.query(`
       SELECT 
-        wt.*,
+        wt.id,
+        wt.wallet_id,
+        wt.staff_id,
+        wt.type,
+        wt.amount,
+        wt.description,
+        wt.created_at,
         w.name AS wallet_name,
         s.name AS staff_name,
-        s.role AS staff_role,
         s.photo AS staff_photo
       FROM wallet_transactions wt
-      LEFT JOIN wallets w ON wt.wallet_id = w.id
+      JOIN wallets w ON wt.wallet_id = w.id
       LEFT JOIN staff s ON wt.staff_id = s.id
-      WHERE wt.wallet_id = $1
+      WHERE w.centre_id = $1
       ORDER BY wt.created_at DESC
-    `, [walletId]);
-    res.json(result.rows);
+      LIMIT $2 OFFSET $3
+    `, [centreId, limit, offset]);
+
+    res.json({
+      data: result.rows,
+      page,
+      limit
+    });
+
   } catch (err) {
-    console.error('Error fetching wallet transactions:', err);
-    res.status(500).json({ error: 'Failed to fetch wallet transactions' });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
   }
 });
 
