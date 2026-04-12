@@ -149,7 +149,13 @@ const WalletManagement = () => {
       if (filteredWallets.length > 0) {
         const walletIds = filteredWallets.map(w => w.id);
         try {
-          const batchResponse = await axios.post(`${API_BASE}/api/wallet/today-balances`, { walletIds });
+          // ✅ FIX: Include authorization token
+          const token = localStorage.getItem("token");
+          const batchResponse = await axios.post(
+            `${API_BASE}/api/wallet/today-balances`,
+            { walletIds },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
           Object.assign(balancesMap, batchResponse.data);
         } catch (batchErr) {
           console.error("Batch balance fetch failed, falling back to parallel calls:", batchErr);
