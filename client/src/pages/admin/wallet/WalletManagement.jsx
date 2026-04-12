@@ -19,6 +19,8 @@ import {
 } from "@/services/walletService";
 import { Link, useNavigate } from "react-router-dom";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
 // Icons
 const WalletIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
@@ -147,7 +149,7 @@ const WalletManagement = () => {
       if (filteredWallets.length > 0) {
         const walletIds = filteredWallets.map(w => w.id);
         try {
-          const batchResponse = await axios.post('/api/wallet/today-balances', { walletIds });
+          const batchResponse = await axios.post(`${API_BASE}/api/wallet/today-balances`, { walletIds });
           Object.assign(balancesMap, batchResponse.data);
         } catch (batchErr) {
           console.error("Batch balance fetch failed, falling back to parallel calls:", batchErr);
