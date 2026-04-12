@@ -56,6 +56,14 @@ const { Pool } = pkg;
 const app = express();
 const httpServer = createServer(app);
 
+app.use(cors({
+  origin: [
+    "https://akshayasahayi.com",
+    "https://www.akshayasahayi.com"
+  ],
+  credentials: true
+}));
+
 /* ================================
    SOCKET.IO SETUP
 ================================ */
