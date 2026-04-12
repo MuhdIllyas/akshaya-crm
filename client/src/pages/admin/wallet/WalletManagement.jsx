@@ -3,7 +3,7 @@ import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiPlus, FiRefreshCw, FiChevronDown, FiChevronUp, FiSearch,
-  FiX, FiEdit, FiTrash, FiArrowDown, FiArrowUp, FiMapPin
+  FiX, FiEdit, FiArrowDown, FiArrowUp, FiMapPin
 } from "react-icons/fi";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -52,7 +52,6 @@ const WalletManagement = () => {
   const storedId = localStorage.getItem("id");
   const storedUser = localStorage.getItem("username");
   const storedRole = localStorage.getItem("role");
-  const storedPhoto = localStorage.getItem("photoUrl");
   const storedCentreId = localStorage.getItem("centre_id");
 
   const currentStaff = {
@@ -110,13 +109,6 @@ const WalletManagement = () => {
   const [transferToWalletId, setTransferToWalletId] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [transferDescription, setTransferDescription] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState("All");
-  const [selectedStatus, setSelectedStatus] = useState("All");
-  const [viewMode, setViewMode] = useState("table");
-
-  const departments = ["All", "Accounts", "Reception", "Front Office", "Aadhaar", "Staff Executive", "Customer Relations"];
-  const statuses = ["All", "Active", "On Leave", "Terminated"];
 
   // Debounce search input
   useEffect(() => {
@@ -136,7 +128,7 @@ const WalletManagement = () => {
     fetchStaffData();
   }, [navigate, currentStaff.role, currentStaff.centreId]);
 
-  const fetchWalletData = async () => {
+  const fetchWalletData = useCallback(async () => {
     try {
       setLoading(true);
       const walletRes = await getWallets();
@@ -149,7 +141,6 @@ const WalletManagement = () => {
       if (filteredWallets.length > 0) {
         const walletIds = filteredWallets.map(w => w.id);
         try {
-          // ✅ FIX: Include authorization token
           const token = localStorage.getItem("token");
           const batchResponse = await axios.post(
             `${API_BASE}/api/wallet/today-balances`,
@@ -158,43 +149,35 @@ const WalletManagement = () => {
           );
           Object.assign(balancesMap, batchResponse.data);
         } catch (batchErr) {
-          console.error("Batch balance fetch failed, falling back to parallel calls:", batchErr);
-          const balancePromises = filteredWallets.map(async (wallet) => {
+          // Fallback: sequential requests (more stable than parallel)
+          for (const wallet of filteredWallets) {
             try {
               const balance = await getWalletTodayBalance(wallet.id);
-              return { id: wallet.id, balance };
+              balancesMap[wallet.id] = balance;
             } catch (e) {
-              console.error(`Failed to fetch balance for wallet ${wallet.id}:`, e);
-              return { id: wallet.id, balance: null };
+              balancesMap[wallet.id] = null;
             }
-          });
-          const balanceResults = await Promise.all(balancePromises);
-          balanceResults.forEach(({ id, balance }) => {
-            balancesMap[id] = balance;
-          });
+          }
         }
       }
       setTodayBalances(balancesMap);
 
-      // OPTIMIZED: Fetch only latest 100 transactions (backend caps at 100)
       const transactionRes = await getTransactions(100, 0);
       setTransactions(transactionRes.data || []);
     } catch (err) {
-      console.error("Error loading wallet data:", err);
       setWallets([]);
       setTransactions([]);
       toast.error("Failed to load wallet data.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentStaff.role, adminCentreId]);
 
-  const fetchStaffData = async () => {
+  const fetchStaffData = useCallback(async () => {
     try {
       setStaffLoading(true);
       setStaffError(null);
       const staffData = await getStaff(currentStaff.role === "superadmin" ? null : adminCentreId);
-      console.log("Raw Staff:", staffData);
       const mappedStaff = staffData.map(staff => ({
         ...staff,
         photoUrl: staff.photo || null,
@@ -204,45 +187,13 @@ const WalletManagement = () => {
       }));
       setStaffMembers(mappedStaff || []);
     } catch (err) {
-      console.error("Error loading staff data:", err);
       setStaffError("Failed to load staff data.");
       setStaffMembers([]);
       toast.error("Failed to load staff data.");
     } finally {
       setStaffLoading(false);
     }
-  };
-
-  const handleAddStaff = async () => {
-    try {
-      const staffData = await getStaff(currentStaff.role === "superadmin" ? null : adminCentreId);
-      console.log("Refreshed Staff:", staffData);
-      const mappedStaff = staffData.map(staff => ({
-        ...staff,
-        photoUrl: staff.photo || null,
-        centre_name: staff.centre_name || "Unknown",
-        department: staff.department || "N/A",
-        status: staff.status || "Active",
-      }));
-      setStaffMembers(mappedStaff || []);
-      toast.success("Staff added successfully");
-    } catch (err) {
-      console.error("Error refreshing staff:", err);
-      toast.error(err.response?.data?.error || "Failed to refresh staff list.");
-    }
-    setShowAddForm(false);
-  };
-
-  const filteredStaff = staffMembers.filter((staff) => {
-    const matchesSearch =
-      staff.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-      staff.email?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-      staff.phone?.includes(debouncedSearchQuery) ||
-      staff.username?.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
-    const matchesDepartment = selectedDepartment === "All" || staff.department === selectedDepartment;
-    const matchesStatus = selectedStatus === "All" || staff.status === selectedStatus;
-    return matchesSearch && matchesDepartment && matchesStatus;
-  });
+  }, [currentStaff.role, adminCentreId]);
 
   useEffect(() => {
     if (editingId) {
@@ -263,27 +214,30 @@ const WalletManagement = () => {
     }
   }, [editingId, wallets, expandedId]);
 
-  const formatAmount = (amount) => {
+  const formatAmount = useCallback((amount) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : (typeof amount === 'number' ? amount : 0);
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(num);
-  };
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    }).format(num);
+  }, []);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setLoading(true);
     setStaffLoading(true);
     fetchWalletData();
     fetchStaffData();
     toast.success("Data refreshed successfully!");
-  };
+  }, [fetchWalletData, fetchStaffData]);
 
-  const toggleDetails = (id) => {
-    setExpandedId(expandedId === id ? null : id);
-    if (editingId === id) {
-      setEditingId(null);
-    }
-  };
+  const toggleDetails = useCallback((id) => {
+    setExpandedId(prev => prev === id ? null : id);
+    if (editingId === id) setEditingId(null);
+  }, [editingId]);
 
-  const handleAddWallet = async () => {
+  const handleAddWallet = useCallback(async () => {
     if (!newWallet.name || !newWallet.balance) {
       toast.error("Wallet name and balance are required.");
       return;
@@ -299,17 +253,16 @@ const WalletManagement = () => {
         centre_id: adminCentreId
       };
       await createWallet(payload);
-      fetchWalletData();
+      await fetchWalletData();
       setNewWallet({ name: "", balance: "", type: "personal", isOnline: true, staffId: "", walletType: "bank" });
       setIsAdding(false);
       toast.success("Wallet added successfully!");
     } catch (err) {
-      console.error("Error creating wallet:", err);
       toast.error("Failed to create wallet.");
     }
-  };
+  }, [newWallet, adminCentreId, fetchWalletData]);
 
-  const handleEditWallet = async () => {
+  const handleEditWallet = useCallback(async () => {
     if (!editForm.name || !editForm.balance) {
       toast.error("Wallet name and balance are required.");
       return;
@@ -324,16 +277,15 @@ const WalletManagement = () => {
         status: editForm.isOnline ? "online" : "offline"
       };
       await updateWallet(editingId, payload);
-      fetchWalletData();
+      await fetchWalletData();
       setEditingId(null);
       toast.success("Wallet updated successfully!");
     } catch (err) {
-      console.error("Error updating wallet:", err);
       toast.error("Failed to update wallet.");
     }
-  };
+  }, [editForm, editingId, fetchWalletData]);
 
-  const handleRecharge = async (walletId) => {
+  const handleRecharge = useCallback(async (walletId) => {
     if (!rechargeAmount || Number(rechargeAmount) <= 0) {
       toast.error("Please enter a valid recharge amount.");
       return;
@@ -354,12 +306,11 @@ const WalletManagement = () => {
       setRechargeDescription("");
       toast.success(`Successfully recharged ${formatAmount(amount)} to wallet.`);
     } catch (err) {
-      console.error("Recharge failed:", err);
       toast.error("Recharge failed. Please try again.");
     }
-  };
+  }, [rechargeAmount, rechargeDescription, currentStaff.id, fetchWalletData, formatAmount]);
 
-  const handleTransfer = async () => {
+  const handleTransfer = useCallback(async () => {
     if (!transferFromWalletId || !transferToWalletId || !transferAmount || Number(transferAmount) <= 0) {
       toast.error("Please select source and destination wallets and enter a valid amount.");
       return;
@@ -392,12 +343,11 @@ const WalletManagement = () => {
       setTransferDescription("");
       toast.success(`Successfully transferred ${formatAmount(amount)}.`);
     } catch (err) {
-      console.error("Transfer failed:", err);
       toast.error(err.response?.data?.error || "Transfer failed. Please try again.");
     }
-  };
+  }, [transferFromWalletId, transferToWalletId, transferAmount, transferDescription, currentStaff.id, navigate, fetchWalletData, formatAmount]);
 
-  const getStaffMember = (id) => {
+  const getStaffMember = useCallback((id) => {
     if (!id && currentStaff) return currentStaff;
     const staff = staffMembers.find(s => s.id === Number(id));
     return staff ? {
@@ -412,19 +362,19 @@ const WalletManagement = () => {
       photoUrl: null,
       avatarColor: "bg-slate-600"
     };
-  };
+  }, [staffMembers, currentStaff]);
 
-  const getWalletName = (id) => {
+  const getWalletName = useCallback((id) => {
     const wallet = wallets.find(w => w.id === id);
     return wallet ? wallet.name : "Unknown Wallet";
-  };
+  }, [wallets]);
 
-  const getWalletIcon = (typeId) => {
+  const getWalletIcon = useCallback((typeId) => {
     const type = walletTypes.find(t => t.id === typeId);
     return type ? type.icon : WalletIcon;
-  };
+  }, []);
 
-  const getTransactionStaff = (transaction) => {
+  const getTransactionStaff = useCallback((transaction) => {
     if (transaction.staff_id) {
       return {
         name: transaction.staff_name || `Staff ID ${transaction.staff_id}`,
@@ -432,19 +382,27 @@ const WalletManagement = () => {
         photoUrl: transaction.staff_photo || null,
         avatarColor: "bg-slate-700"
       };
-    } else {
-      return {
-        name: "System",
-        role: "Auto-generated",
-        photoUrl: null,
-        avatarColor: "bg-slate-600"
-      };
     }
-  };
+    return {
+      name: "System",
+      role: "Auto-generated",
+      photoUrl: null,
+      avatarColor: "bg-slate-600"
+    };
+  }, []);
 
-  const totalBalance = wallets.reduce((sum, wallet) => sum + (Number(wallet?.balance) || 0), 0);
-  const personalCount = wallets.filter(w => w && !w.is_shared).length;
-  const sharedCount = wallets.filter(w => w && w.is_shared).length;
+  const totalBalance = useMemo(() => 
+    wallets.reduce((sum, wallet) => sum + (Number(wallet?.balance) || 0), 0),
+    [wallets]
+  );
+  const personalCount = useMemo(() => 
+    wallets.filter(w => w && !w.is_shared).length,
+    [wallets]
+  );
+  const sharedCount = useMemo(() => 
+    wallets.filter(w => w && w.is_shared).length,
+    [wallets]
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -463,7 +421,7 @@ const WalletManagement = () => {
         getTransactionStaff(t).name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
       )
     );
-  }, [transactions, wallets, debouncedSearchQuery]);
+  }, [transactions, wallets, debouncedSearchQuery, getTransactionStaff]);
 
   const indexOfLastTransaction = currentPage * transactionsPerPage;
   const indexOfFirstTransaction = indexOfLastTransaction - transactionsPerPage;
@@ -1539,7 +1497,7 @@ const WalletManagement = () => {
                           className="w-12 h-12 rounded-full object-cover mr-4"
                         />
                       ) : (
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white ${staff.avatarColor} mr-4`}>
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white bg-slate-700 mr-4`}>
                           {staff.name.charAt(0)}
                         </div>
                       )}
