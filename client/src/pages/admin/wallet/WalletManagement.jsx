@@ -60,7 +60,6 @@ const WalletManagement = () => {
     centreId: storedCentreId ? Number(storedCentreId) : null
   };
 
-  // Get admin's center ID
   const adminCentreId = currentStaff.centreId;
 
   const walletTypes = [
@@ -82,7 +81,8 @@ const WalletManagement = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const transactionsPerPage = 5;
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
     name: "",
@@ -116,6 +116,14 @@ const WalletManagement = () => {
   const departments = ["All", "Accounts", "Reception", "Front Office", "Aadhaar", "Staff Executive", "Customer Relations"];
   const statuses = ["All", "Active", "On Leave", "Terminated"];
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   useEffect(() => {
     if (currentStaff.role !== "superadmin" && !currentStaff.centreId) {
       toast.error("Centre ID is missing. Please log in again.");
@@ -126,7 +134,6 @@ const WalletManagement = () => {
     fetchStaffData();
   }, [navigate, currentStaff.role, currentStaff.centreId]);
 
-  // OPTIMIZED: Use batch endpoint to fetch all today's balances in one request
   const fetchWalletData = async () => {
     try {
       setLoading(true);
@@ -140,12 +147,10 @@ const WalletManagement = () => {
       if (filteredWallets.length > 0) {
         const walletIds = filteredWallets.map(w => w.id);
         try {
-          // Try batch endpoint first
           const batchResponse = await axios.post('/api/wallet/today-balances', { walletIds });
           Object.assign(balancesMap, batchResponse.data);
         } catch (batchErr) {
           console.error("Batch balance fetch failed, falling back to parallel calls:", batchErr);
-          // Fallback to parallel individual calls
           const balancePromises = filteredWallets.map(async (wallet) => {
             try {
               const balance = await getWalletTodayBalance(wallet.id);
@@ -163,7 +168,8 @@ const WalletManagement = () => {
       }
       setTodayBalances(balancesMap);
 
-      const transactionRes = await getTransactions();
+      // OPTIMIZED: Fetch only latest 100 transactions (backend caps at 100)
+      const transactionRes = await getTransactions(100, 0);
       setTransactions(transactionRes.data || []);
     } catch (err) {
       console.error("Error loading wallet data:", err);
@@ -221,10 +227,10 @@ const WalletManagement = () => {
 
   const filteredStaff = staffMembers.filter((staff) => {
     const matchesSearch =
-      staff.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      staff.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      staff.phone?.includes(searchQuery) ||
-      staff.username?.toLowerCase().includes(searchQuery.toLowerCase());
+      staff.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      staff.email?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      staff.phone?.includes(debouncedSearchQuery) ||
+      staff.username?.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
     const matchesDepartment = selectedDepartment === "All" || staff.department === selectedDepartment;
     const matchesStatus = selectedStatus === "All" || staff.status === selectedStatus;
     return matchesSearch && matchesDepartment && matchesStatus;
@@ -432,7 +438,6 @@ const WalletManagement = () => {
   const personalCount = wallets.filter(w => w && !w.is_shared).length;
   const sharedCount = wallets.filter(w => w && w.is_shared).length;
 
-  // Filter transactions for today only
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
@@ -445,12 +450,12 @@ const WalletManagement = () => {
       new Date(t.created_at) >= today &&
       new Date(t.created_at) < tomorrow &&
       (
-        t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getTransactionStaff(t).name.toLowerCase().includes(searchQuery.toLowerCase())
+        t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        t.category?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        getTransactionStaff(t).name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
       )
     );
-  }, [transactions, wallets, searchQuery]);
+  }, [transactions, wallets, debouncedSearchQuery]);
 
   const indexOfLastTransaction = currentPage * transactionsPerPage;
   const indexOfFirstTransaction = indexOfLastTransaction - transactionsPerPage;
@@ -733,13 +738,13 @@ const WalletManagement = () => {
                 <input
                   type="text"
                   placeholder="Search wallets or transactions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
               <button 
-                onClick={() => setSearchQuery("")}
+                onClick={() => setSearchInput("")}
                 className="ml-3 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
               >
                 Clear
@@ -1010,7 +1015,6 @@ const WalletManagement = () => {
                           <ChevronIcon open={expandedId === wallet.id} />
                         </motion.button>
 
-                        {/* Responsive action buttons */}
                         <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-2">
                           <motion.button
                             whileHover={{ scale: 1.02 }}
@@ -1262,8 +1266,8 @@ const WalletManagement = () => {
                   <input
                     type="text"
                     placeholder="Search today's transactions..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   />
                 </div>
@@ -1366,7 +1370,7 @@ const WalletManagement = () => {
                             <FiSearch className="h-12 w-12 text-gray-400 mb-4" />
                             <h3 className="text-lg font-medium text-gray-700">No transactions today</h3>
                             <p className="text-gray-500 mt-2">
-                              {searchQuery ? 'Try different search terms' : 'No transactions recorded for today.'}
+                              {debouncedSearchQuery ? 'Try different search terms' : 'No transactions recorded for today.'}
                             </p>
                           </div>
                         </td>
