@@ -146,23 +146,26 @@ export const getWalletById = async (walletId) => {
   }
 };
 
-// Get transactions for a specific wallet (for WalletActivity)
-export const getWalletTransactions = async (walletId) => {
+// Get transactions for a specific wallet (for WalletActivity) - OPTIMIZED with pagination
+export const getWalletTransactions = async (walletId, limit = 100, offset = 0) => {
   if (!walletId) {
     console.error("getWalletTransactions: No walletId provided");
     throw new Error("Wallet ID is required");
   }
   const token = localStorage.getItem("token");
-  console.log("getWalletTransactions: Requesting walletId:", walletId, "Token:", token ? "Present" : "Missing");
+  console.log("getWalletTransactions: Requesting walletId:", walletId, "limit:", limit, "offset:", offset);
   if (!token) {
     throw new Error("No authentication token found");
   }
   try {
-    const response = await axios.get(`${API_URL}/api/wallet/transactions/${walletId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await axios.get(
+      `${API_URL}/api/wallet/transactions/${walletId}?limit=${limit}&offset=${offset}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
     console.log("getWalletTransactions response:", response.data);
     return response;
   } catch (error) {
