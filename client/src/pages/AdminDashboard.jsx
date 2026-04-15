@@ -895,18 +895,10 @@ const AdminDashboard = () => {
         // Show success toast only if component is still mounted
         if (isMountedRef.current) {
           // Use double requestAnimationFrame to ensure DOM is fully painted
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (isMountedRef.current) {
-                toast.success('Dashboard loaded successfully', {
-                  autoClose: 3000,
-                  position: "top-right"
-                });
-              }
-            });
-          });
+          if (isMountedRef.current) {
+            toast.success('Data refreshed successfully');
+          }
         }
-
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
         
