@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const Login = () => {
@@ -9,11 +9,11 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [isCustomerLogin, setIsCustomerLogin] = useState(false); // New state
-  const [customerPhone, setCustomerPhone] = useState(""); // For customer login
-  const [customerOtp, setCustomerOtp] = useState(""); // For customer OTP
-  const [otpSent, setOtpSent] = useState(false); // OTP status
-  const [otpTimer, setOtpTimer] = useState(0); // OTP timer
+  const [isCustomerLogin, setIsCustomerLogin] = useState(false);
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerOtp, setCustomerOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -23,48 +23,36 @@ const Login = () => {
       toast.error("Session expired, please log in again", {
         position: "top-right",
         autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "light",
         toastId: "session-expired",
       });
-      // Clear the state so it doesn't show again on refresh
       window.history.replaceState({}, document.title);
     } else if (location.state?.reason === "customer_session_expired") {
       toast.error("Customer session expired, please log in again", {
         position: "top-right",
         autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "light",
         toastId: "customer-session-expired",
       });
-      // Clear the state so it doesn't show again on refresh
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
-  // Load remembered username
+  // Load remembered username (with delay to avoid mount collision)
   useEffect(() => {
     const savedUsername = localStorage.getItem("remembered_username");
     const savedRememberMe = localStorage.getItem("remember_me") === "true";
+    
     if (savedUsername && savedRememberMe) {
       setUser((prev) => ({ ...prev, username: savedUsername }));
       setRememberMe(true);
-      toast.info("Username auto-filled from saved credentials", {
-        position: "top-right",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "light",
-        toastId: "load-username",
-      });
+      
+      // ✅ Delay toast to avoid mount collision
+      setTimeout(() => {
+        toast.info("Username auto-filled from saved credentials", {
+          position: "top-right",
+          autoClose: 3000,
+          toastId: "load-username",
+        });
+      }, 300);
     }
   }, []);
 
@@ -101,11 +89,6 @@ const Login = () => {
           toast.success("Credentials saved for next login", {
             position: "top-right",
             autoClose: 3000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
-            theme: "light",
             toastId: "save-credentials",
           });
         } else {
@@ -116,11 +99,6 @@ const Login = () => {
         toast.success(`Welcome ${res.data.role} ${res.data.username}`, {
           position: "top-right",
           autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          theme: "light",
           toastId: "login-success",
         });
 
@@ -133,11 +111,6 @@ const Login = () => {
       toast.error(errorMessage, {
         position: "top-right",
         autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "light",
         toastId: "login-error",
       });
       console.error("Login error:", err.response?.data || err.message);
@@ -146,7 +119,6 @@ const Login = () => {
     }
   };
 
-  // Customer OTP functions
   const sendCustomerOTP = async () => {
     if (!customerPhone || customerPhone.length < 10) {
       toast.error("Please enter a valid phone number");
@@ -161,7 +133,7 @@ const Login = () => {
 
       if (response.data.success) {
         setOtpSent(true);
-        setOtpTimer(60); // 60 seconds
+        setOtpTimer(60);
         toast.success("OTP sent to your WhatsApp");
       }
     } catch (error) {
@@ -185,7 +157,6 @@ const Login = () => {
       });
 
       if (response.data.success) {
-        // Store customer token and info
         localStorage.setItem("role", "customer");
         localStorage.setItem("customer_token", response.data.token);
         localStorage.setItem("customer_id", response.data.customerId);
@@ -223,21 +194,11 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <ToastContainer
-        position="top-right"
-        autoClose={5000}
-        hideProgressBar={false}
-        newestOnTop={true}  // ✅ FIXED: Prevents old toasts from showing after navigation
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
+      {/* ❌ ToastContainer REMOVED - Now using global container from App.jsx */}
+      
       <div className="w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
         <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
-          {/* Background pattern remains same */}
+          {/* Background pattern */}
           <div className="absolute inset-0 opacity-10">
             <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
               <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
@@ -279,7 +240,7 @@ const Login = () => {
 
         <div className="w-full md:w-3/5 p-8 md:p-10">
           <div className="max-w-md mx-auto">
-            {/* Toggle Switch for Login Type */}
+            {/* Toggle Switch */}
             <div className="flex mb-6 border-b border-gray-200">
               <button
                 className={`flex-1 py-3 text-center font-medium ${!isCustomerLogin ? 'text-navy-700 border-b-2 border-navy-700' : 'text-gray-500'}`}
@@ -306,7 +267,7 @@ const Login = () => {
 
             <div className="space-y-5">
               {isCustomerLogin ? (
-                // Customer Login Form (OTP based)
+                // Customer Login Form
                 <>
                   <div>
                     <label htmlFor="customerPhone" className="block text-gray-700 text-sm font-medium mb-2">
@@ -370,7 +331,7 @@ const Login = () => {
                   </div>
                 </>
               ) : (
-                // Admin/Staff Login Form (Original)
+                // Admin/Staff Login Form
                 <>
                   <div>
                     <label htmlFor="username" className="block text-gray-700 text-sm font-medium mb-2">
@@ -474,7 +435,6 @@ const Login = () => {
                 )}
               </button>
               
-              {/* Customer Registration Link */}
               {isCustomerLogin && (
                 <div className="text-center mt-4">
                   <p className="text-gray-600 text-sm">
@@ -508,23 +468,6 @@ const Login = () => {
         .text-navy-800 { color: #172a45; }
         .focus\\:ring-navy-500:focus { --tw-ring-color: #1e3a5f; }
         .border-navy-500 { border-color: #1e3a5f; }
-        .Toastify__toast--success {
-          background-color: #2c5282 !important;
-          color: #ffffff !important;
-          border-radius: 0.75rem !important;
-        }
-        .Toastify__toast--error {
-          background-color: #fef2f2 !important;
-          color: #dc2626 !important;
-          border: 1px solid #f87171 !important;
-          border-radius: 0.75rem !important;
-        }
-        .Toastify__toast--info {
-          background-color: #e0f2fe !important;
-          color: #075985 !important;
-          border: 1px solid #38bdf8 !important;
-          border-radius: 0.75rem !important;
-        }
       `}</style>
     </div>
   );
