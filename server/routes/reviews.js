@@ -51,7 +51,7 @@ export async function createReviewRequest({
         to: formattedPhone,
         type: "template",
         template: {
-          name: "service_feedback_request",
+          name: "service_feedback",
           language: {
             code: "en",
             policy: "deterministic"
