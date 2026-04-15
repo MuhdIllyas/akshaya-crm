@@ -39,57 +39,55 @@ export async function createReviewRequest({
     );
 
   // Send WhatsApp Template (Libromi)
-  if (process.env.LIBROMI_ACCESS_TOKEN) {
-
-    const formattedPhone = customerPhone.startsWith("+91")
-      ? customerPhone
-      : `+91${customerPhone}`;
-
-    await axios.post(
-      "https://wa-api.cloud/api/v1/messages",
-      {
-        to: formattedPhone,
-        type: "template",
-        template: {
-          name: "service_feedback",
-          language: {
-            code: "en",
-            policy: "deterministic"
-          },
-          components: [
-            {
-              type: "body"
-            },
-            {
-              type: "button",
-              sub_type: "url",
-              index: "0",
-              parameters: [
-                {
-                  type: "text",
-                  text: token   // 🔥 this is your dynamic URL part
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-  }
-
-    return { success: true, token };
-
-  } catch (error) {
-    console.error("Review request error:", error);
-    return { success: false, error };
-  }
-}
+   const formattedPhone = customerPhone.startsWith("+91")
+     ? customerPhone
+     : `+91${customerPhone}`;
+   
+   const reviewUrl = `${process.env.FRONTEND_URL}/review/${token}`;
+   
+   try {
+     const response = await axios.post(
+       "https://wa-api.cloud/api/v1/messages",
+       {
+         to: formattedPhone,
+         type: "template",
+         template: {
+           name: "service_feedback", // ✅ FIXED NAME
+           language: {
+             code: "en",
+             policy: "deterministic"
+           },
+           components: [
+             {
+               type: "body"
+             },
+             {
+               type: "button",
+               sub_type: "url",
+               index: "0",
+               parameters: [
+                 {
+                   type: "text",
+                   text: reviewUrl // ✅ THIS MUST MATCH BUTTON VARIABLE
+                 }
+               ]
+             }
+           ]
+         }
+       },
+       {
+         headers: {
+           Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
+           "Content-Type": "application/json"
+         }
+       }
+     );
+   
+     console.log("✅ WhatsApp sent:", response.data);
+   
+   } catch (err) {
+     console.error("❌ WhatsApp error:", err.response?.data || err.message);
+   }
 
 /* -------------------------------------------------------
    2️⃣ GET PUBLIC REVIEW BY TOKEN (Check if already submitted)
