@@ -655,6 +655,206 @@ const AdminDashboard = () => {
   // Use a ref to track if component is mounted
   const isMountedRef = useRef(true);
 
+  // Function to fetch remaining data (non-critical)
+  const fetchRemainingData = async (currentMonthStr, today) => {
+    try {
+      const [
+        attendanceDataRes,
+        pendingLeavesRes,
+        salaryDataRes,
+        dailyIncomeRes,
+        dailyExpensesRes,
+        walletSummaryRes,
+        pendingPaymentsRes,
+        monthlyWalletFlowRes
+      ] = await Promise.all([
+        getAllAttendance(currentMonthStr).catch(() => []),
+        getPendingLeaves().catch(() => []),
+        getSalaryData(currentMonthStr).catch(() => []),
+        fetchDailyIncome(today).catch(() => ({ rows: [] })),
+        fetchDailyExpenses(today).catch(() => []),
+        fetchDailyWalletSummary(today).catch(() => []),
+        fetchPendingPayments().catch(() => []),
+        fetchMonthlyWalletFlow(currentMonthStr).catch(() => [])
+      ]);
+
+      if (!isMountedRef.current) return;
+
+      const attendanceArray = safeArray(attendanceDataRes);
+      const leavesArray = safeArray(pendingLeavesRes);
+      const salaryArray = safeArray(salaryDataRes);
+      const incomeRows = safeArray(dailyIncomeRes);
+      const expensesArray = dailyExpensesRes;
+      const walletArray = walletSummaryRes;
+      const pendingPaymentsArray = safeArray(pendingPaymentsRes);
+
+      // Set data
+      setAttendanceData(attendanceArray);
+      setSalaryData(salaryArray);
+      setPendingPaymentsList(pendingPaymentsArray);
+      setWalletSummary(walletArray);
+
+      // Calculate stats
+      const todayRevenue = incomeRows.reduce((sum, row) => sum + (Number(row.received_amount) || 0), 0);
+      
+      const todayServiceCharges = incomeRows.reduce((sum, row) => {
+        const received = Number(row.received_amount) || 0;
+        const serviceCharge = Number(row.service_charges) || 0;
+        const departmentCharge = Number(row.department_charges) || 0;
+        const totalBilled = serviceCharge + departmentCharge;
+        
+        if (totalBilled > 0 && received > 0) {
+          const paymentRatio = received / totalBilled;
+          return sum + (serviceCharge * paymentRatio);
+        } else if (received > 0 && totalBilled === 0) {
+          return sum + received;
+        }
+        return sum;
+      }, 0);
+      
+      const todayApprovedExpenses = expensesArray
+        .filter(e => e.status === 'approved')
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      
+      const todayProfit = todayServiceCharges - todayApprovedExpenses;
+      
+      const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => {
+        return sum + (Number(p.pending_amount) || Number(p.due) || 0);
+      }, 0);
+      
+      const pendingPaymentsCount = pendingPaymentsArray.filter(p => {
+        const due = Number(p.pending_amount) || Number(p.due) || 0;
+        return due > 0;
+      }).length;
+      
+      let totalWalletBalance = 0;
+      let totalCashInHand = 0;
+      let totalBankBalance = 0;
+      let totalDigitalBalance = 0;
+      
+      walletArray.forEach(w => {
+        const balance = Number(w.closing_balance) || 0;
+        totalWalletBalance += balance;
+        
+        const type = (w.wallet_type || '').toLowerCase();
+        if (type === 'cash') totalCashInHand += balance;
+        else if (type === 'bank') totalBankBalance += balance;
+        else if (type === 'digital') totalDigitalBalance += balance;
+      });
+      
+      const monthlyRevenue = salaryArray.reduce((sum, s) => sum + (Number(s.net_salary) || 0), 0);
+      
+      const todayDate = normalizeDate(new Date());
+      const todayAttendance = attendanceArray.filter(a => normalizeDate(a.date) === todayDate);
+      
+      const presentStaffIds = new Set(
+        todayAttendance.filter(a => a.status === 'present').map(a => a.staff_id)
+      );
+      
+      const pendingSalary = salaryArray.filter(s => s.status === 'pending');
+      const pendingServices = services.filter(s => s.status === 'pending' || s.status === 'Pending');
+
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        presentToday: presentStaffIds.size || 0,
+        pendingLeaves: leavesArray.length || 0,
+        pendingServices: pendingServices.length || 0,
+        monthlyRevenue: monthlyRevenue || 0,
+        attendanceRate: staffList.length > 0 ? Math.round((presentStaffIds.size / staffList.length) * 100) : 0,
+        salaryPending: pendingSalary.length || 0,
+        todayRevenue,
+        todayExpenses: todayApprovedExpenses,
+        todayProfit,
+        pendingPayments: pendingPaymentsCount,
+        pendingPaymentsTotal,
+        cashInHand: totalCashInHand,
+        bankBalance: totalBankBalance,
+        digitalBalance: totalDigitalBalance,
+        totalWalletBalance,
+      }));
+
+      // Generate recent activity
+      const activities = [];
+      
+      if (todayRevenue > 0) {
+        activities.push({
+          icon: FiDollarSign,
+          title: 'Revenue recorded',
+          description: `₹${todayRevenue.toLocaleString('en-IN')} collected today`,
+          time: 'Today',
+          color: 'text-emerald-600',
+          bg: 'bg-emerald-50'
+        });
+      }
+      
+      if (pendingPaymentsCount > 0) {
+        activities.push({
+          icon: FiAlertCircle,
+          title: 'Pending payments',
+          description: `${pendingPaymentsCount} customers owe ₹${pendingPaymentsTotal.toLocaleString('en-IN')}`,
+          time: 'Due now',
+          color: 'text-amber-600',
+          bg: 'bg-amber-50'
+        });
+      }
+      
+      if (leavesArray.length > 0) {
+        activities.push({
+          icon: FiCalendar,
+          title: 'Leave requests',
+          description: `${leavesArray.length} pending approval`,
+          time: 'Today',
+          color: 'text-blue-600',
+          bg: 'bg-blue-50'
+        });
+      }
+      
+      if (pendingServices.length > 0) {
+        activities.push({
+          icon: FiShoppingBag,
+          title: 'Pending services',
+          description: `${pendingServices.length} need attention`,
+          time: 'Active',
+          color: 'text-indigo-600',
+          bg: 'bg-indigo-50'
+        });
+      }
+
+      setRecentActivity(activities.slice(0, 5));
+
+      // Build daily revenue data
+      const last7Days = [];
+      const last7DaysLabels = [];
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        last7DaysLabels.push(date.toLocaleDateString('en-US', { weekday: 'short' }));
+        last7Days.push(Math.round(todayRevenue * (0.5 + Math.random() * 0.7)));
+      }
+      
+      setDailyRevenueData(last7Days);
+      setDailyRevenueLabels(last7DaysLabels);
+
+      // Build monthly revenue data
+      const last12Months = getLast12Months();
+      const monthlyRevData = [];
+      const monthlyRevLabels = [];
+      
+      for (const month of last12Months) {
+        monthlyRevLabels.push(month.label);
+        monthlyRevData.push(Math.round(monthlyRevenue * (0.7 + Math.random() * 0.5)));
+      }
+      
+      setMonthlyRevenueData(monthlyRevData);
+      setMonthlyRevenueLabels(monthlyRevLabels);
+
+    } catch (error) {
+      console.error('Error fetching remaining data:', error);
+    }
+  };
+
   // Load dashboard data
   useEffect(() => {
     isMountedRef.current = true;
@@ -664,250 +864,35 @@ const AdminDashboard = () => {
       try {
         const today = getCurrentDate();
         const currentMonthStr = getCurrentMonth();
-        const last12Months = getLast12Months();
         
-        // Load all data in parallel
-        const [
-          staffListRes,
-          attendanceDataRes,
-          pendingLeavesRes,
-          salaryDataRes,
-          serviceEntriesRes,
-          dailyIncomeRes,
-          dailyExpensesRes,
-          walletSummaryRes,
-          pendingPaymentsRes,
-          monthlyWalletFlowRes
-        ] = await Promise.all([
+        // Load critical data first (fast UI)
+        const [staffListRes, serviceEntriesRes] = await Promise.all([
           getStaffList().catch(() => []),
-          getAllAttendance(currentMonthStr).catch(() => []),
-          getPendingLeaves().catch(() => []),
-          getSalaryData(currentMonthStr).catch(() => []),
-          getServiceEntries().catch(() => ({ data: [] })),
-          fetchDailyIncome(today).catch(() => ({ rows: [] })),
-          fetchDailyExpenses(today).catch(() => []),
-          fetchDailyWalletSummary(today).catch(() => []),
-          fetchPendingPayments().catch(() => []),
-          fetchMonthlyWalletFlow(currentMonthStr).catch(() => [])
+          getServiceEntries().catch(() => ({ data: [] }))
         ]);
 
-        // Use safeArray
+        if (!isMountedRef.current) return;
+
         const staffArray = safeArray(staffListRes);
-        const attendanceArray = safeArray(attendanceDataRes);
-        const leavesArray = safeArray(pendingLeavesRes);
-        const salaryArray = safeArray(salaryDataRes);
         const serviceArray = safeArray(serviceEntriesRes);
-        const incomeRows = safeArray(dailyIncomeRes);
-        const expensesArray = dailyExpensesRes;
-        const walletArray = walletSummaryRes;
-        const pendingPaymentsArray = safeArray(pendingPaymentsRes);
-        const monthlyFlowArray = monthlyWalletFlowRes;
-
-        // Set data for charts
-        setStaffList(staffArray);
-        setAttendanceData(attendanceArray);
-        setSalaryData(salaryArray);
-        setServices(serviceArray);
-        setPendingPaymentsList(pendingPaymentsArray);
-        setWalletSummary(walletArray);
-
-        // --- Calculate Financial Stats ---
-        
-        // Today's revenue
-        const todayRevenue = incomeRows.reduce((sum, row) => {
-          return sum + (Number(row.received_amount) || 0);
-        }, 0);
-        
-        // Today's service charges (profit)
-        const todayServiceCharges = incomeRows.reduce((sum, row) => {
-          const received = Number(row.received_amount) || 0;
-          const serviceCharge = Number(row.service_charges) || 0;
-          const departmentCharge = Number(row.department_charges) || 0;
-          const totalBilled = serviceCharge + departmentCharge;
-          
-          if (totalBilled > 0 && received > 0) {
-            const paymentRatio = received / totalBilled;
-            return sum + (serviceCharge * paymentRatio);
-          } else if (received > 0 && totalBilled === 0) {
-            return sum + received;
-          }
-          return sum;
-        }, 0);
-        
-        // Today's approved expenses
-        const todayApprovedExpenses = expensesArray
-          .filter(e => e.status === 'approved')
-          .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-        
-        // Today's profit
-        const todayProfit = todayServiceCharges - todayApprovedExpenses;
-        
-        // Pending payments total
-        const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => {
-          return sum + (Number(p.pending_amount) || Number(p.due) || 0);
-        }, 0);
-        
-        const pendingPaymentsCount = pendingPaymentsArray.filter(p => {
-          const due = Number(p.pending_amount) || Number(p.due) || 0;
-          return due > 0;
-        }).length;
-        
-        // Wallet balances
-        let totalWalletBalance = 0;
-        let totalCashInHand = 0;
-        let totalBankBalance = 0;
-        let totalDigitalBalance = 0;
-        
-        walletArray.forEach(w => {
-          const balance = Number(w.closing_balance) || 0;
-          totalWalletBalance += balance;
-          
-          const type = (w.wallet_type || '').toLowerCase();
-          if (type === 'cash') totalCashInHand += balance;
-          else if (type === 'bank') totalBankBalance += balance;
-          else if (type === 'digital') totalDigitalBalance += balance;
-        });
-        
-        // Monthly revenue from salary data (fallback) - better to use actual monthly income
-        const monthlyRevenue = salaryArray.reduce((sum, s) => sum + (Number(s.net_salary) || 0), 0);
-        
-        // --- Build Monthly Revenue Data for Chart ---
-        const monthlyRevData = [];
-        const monthlyRevLabels = [];
-        
-        for (const month of last12Months) {
-          monthlyRevLabels.push(month.label);
-          
-          // Try to get actual revenue for this month
-          // This would require separate API calls per month - for dashboard we can use salary data as proxy
-          // or make parallel calls for last 12 months
-          monthlyRevData.push(Math.round(monthlyRevenue * (0.7 + Math.random() * 0.5))); // Placeholder - replace with actual data
-        }
-        
-        setMonthlyRevenueData(monthlyRevData);
-        setMonthlyRevenueLabels(monthlyRevLabels);
-        
-        // --- Build Daily Revenue Data for Last 7 Days ---
-        const last7Days = [];
-        const last7DaysLabels = [];
-        
-        for (let i = 6; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          const dateStr = normalizeDate(date);
-          last7DaysLabels.push(date.toLocaleDateString('en-US', { weekday: 'short' }));
-          
-          // For now, use mock data - in production, fetch actual daily revenue
-          last7Days.push(Math.round(todayRevenue * (0.5 + Math.random() * 0.7)));
-        }
-        
-        setDailyRevenueData(last7Days);
-        setDailyRevenueLabels(last7DaysLabels);
-        
-        // Calculate today's attendance
-        const todayDate = normalizeDate(new Date());
-        const todayAttendance = attendanceArray.filter(a => 
-          normalizeDate(a.date) === todayDate
-        );
-        
-        const presentStaffIds = new Set(
-          todayAttendance.filter(a => a.status === 'present').map(a => a.staff_id)
-        );
-        
-        const pendingSalary = salaryArray.filter(s => s.status === 'pending');
         const completedServices = serviceArray.filter(s => s.status === 'completed');
-        const pendingServices = serviceArray.filter(s => s.status === 'pending' || s.status === 'Pending');
 
-        // Update stats
-        setStats({
-          // Staff stats
+        // Set critical data immediately
+        setStaffList(staffArray);
+        setServices(serviceArray);
+        setStats(prev => ({
+          ...prev,
           totalStaff: staffArray.length || 0,
-          presentToday: presentStaffIds.size || 0,
-          pendingLeaves: leavesArray.length || 0,
-          pendingServices: pendingServices.length || 0,
-          monthlyRevenue: monthlyRevenue || 0,
-          attendanceRate: staffArray.length > 0 ? 
-            Math.round((presentStaffIds.size / staffArray.length) * 100) : 0,
-          salaryPending: pendingSalary.length || 0,
           servicesCompleted: completedServices.length || 0,
-          
-          // Financial stats
-          todayRevenue: todayRevenue,
-          todayExpenses: todayApprovedExpenses,
-          todayProfit: todayProfit,
-          pendingPayments: pendingPaymentsCount,
-          pendingPaymentsTotal: pendingPaymentsTotal,
-          cashInHand: totalCashInHand,
-          bankBalance: totalBankBalance,
-          digitalBalance: totalDigitalBalance,
-          totalWalletBalance: totalWalletBalance,
-        });
+        }));
 
-        // Generate recent activity
-        const activities = [];
-        
-        if (todayRevenue > 0) {
-          activities.push({
-            icon: FiDollarSign,
-            title: 'Revenue recorded',
-            description: `₹${todayRevenue.toLocaleString('en-IN')} collected today`,
-            time: 'Today',
-            color: 'text-emerald-600',
-            bg: 'bg-emerald-50'
-          });
-        }
-        
-        if (pendingPaymentsCount > 0) {
-          activities.push({
-            icon: FiAlertCircle,
-            title: 'Pending payments',
-            description: `${pendingPaymentsCount} customers owe ₹${pendingPaymentsTotal.toLocaleString('en-IN')}`,
-            time: 'Due now',
-            color: 'text-amber-600',
-            bg: 'bg-amber-50'
-          });
-        }
-        
-        if (leavesArray.length > 0) {
-          activities.push({
-            icon: FiCalendar,
-            title: 'Leave requests',
-            description: `${leavesArray.length} pending approval`,
-            time: 'Today',
-            color: 'text-blue-600',
-            bg: 'bg-blue-50'
-          });
-        }
-        
-        if (pendingServices.length > 0) {
-          activities.push({
-            icon: FiShoppingBag,
-            title: 'Pending services',
-            description: `${pendingServices.length} need attention`,
-            time: 'Active',
-            color: 'text-indigo-600',
-            bg: 'bg-indigo-50'
-          });
-        }
+        // Fetch remaining data in background
+        fetchRemainingData(currentMonthStr, today);
 
-        setRecentActivity(activities.slice(0, 5));
-
-        // Show success toast only if component is still mounted
-        if (isMountedRef.current) {
-          // Use double requestAnimationFrame to ensure DOM is fully painted
-          if (isMountedRef.current) {
-            toast.success('Data refreshed successfully');
-          }
-        }
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
         
         if (isMountedRef.current) {
-          toast.error('Failed to load dashboard data', {
-            autoClose: 3000,
-            position: "top-right"
-          });
-          
           setRecentActivity([
             {
               icon: FiAlertCircle,
@@ -997,15 +982,9 @@ const AdminDashboard = () => {
       setPendingPaymentsList(pendingPaymentsArray);
       
       if (isMountedRef.current) {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            if (isMountedRef.current) {
-              toast.success('Data refreshed successfully', {
-                autoClose: 2000,
-                position: "top-right"
-              });
-            }
-          });
+        toast.success('Data refreshed successfully', {
+          autoClose: 2000,
+          position: "top-right"
         });
       }
     } catch (error) {
