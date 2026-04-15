@@ -11,6 +11,7 @@ import {
   FiSmartphone, FiDatabase, FiPieChart
 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom'; // ✅ Use useNavigate instead of window.location
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -52,7 +53,7 @@ import {
 import { getServiceEntries, getTrackingEntries } from '/src/services/serviceService';
 
 // ---------------------------------------------------------------------
-// Safe Toast Implementation (Same as ServiceLogs.jsx)
+// Safe Toast Implementation
 // ---------------------------------------------------------------------
 const createSafeToast = () => {
   let toast = null;
@@ -61,50 +62,29 @@ const createSafeToast = () => {
     toast = module.toast;
   }).catch((error) => {
     console.warn('Toast notifications disabled:', error);
-    toast = {
-      success: (msg) => console.log('SUCCESS:', msg),
-      error: (msg) => console.error('ERROR:', msg),
-      info: (msg) => console.info('INFO:', msg),
-      warn: (msg) => console.warn('WARN:', msg),
-    };
   });
 
   return {
     success: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.success) {
-          toast.success(message, { position: "top-right", autoClose: 3000, ...options });
-        } else {
-          console.log('SUCCESS:', message);
-        }
-      }, 0);
+      if (toast?.success) {
+        toast.success(message, { position: "top-right", autoClose: 3000, ...options });
+      } else {
+        console.log('SUCCESS:', message);
+      }
     },
     error: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.error) {
-          toast.error(message, { position: "top-right", autoClose: 3000, ...options });
-        } else {
-          console.error('ERROR:', message);
-        }
-      }, 0);
+      if (toast?.error) {
+        toast.error(message, { position: "top-right", autoClose: 3000, ...options });
+      } else {
+        console.error('ERROR:', message);
+      }
     },
     info: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.info) {
-          toast.info(message, { position: "top-right", autoClose: 2000, ...options });
-        } else {
-          console.info('INFO:', message);
-        }
-      }, 0);
-    },
-    warn: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.warn) {
-          toast.warn(message, { position: "top-right", autoClose: 3000, ...options });
-        } else {
-          console.warn('WARN:', message);
-        }
-      }, 0);
+      if (toast?.info) {
+        toast.info(message, { position: "top-right", autoClose: 2000, ...options });
+      } else {
+        console.info('INFO:', message);
+      }
     }
   };
 };
@@ -241,7 +221,6 @@ const getLast12Months = () => {
   return months;
 };
 
-// Safe array function
 const safeArray = (data) => {
   if (Array.isArray(data)) return data;
   if (data && typeof data === 'object') {
@@ -262,9 +241,7 @@ const fetchDailyIncome = async (date) => {
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/accounting/income?date=${date}`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
     
@@ -283,9 +260,7 @@ const fetchDailyExpenses = async (date) => {
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/expense?date=${date}`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
     
@@ -309,9 +284,7 @@ const fetchDailyWalletSummary = async (date) => {
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/summary?from=${date}&to=${date}`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
     
@@ -334,9 +307,7 @@ const fetchMonthlyWalletFlow = async (month) => {
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/daily-flow?from=${startDate}&to=${endDate}`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
     
@@ -355,9 +326,7 @@ const fetchPendingPayments = async () => {
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
     
@@ -371,7 +340,7 @@ const fetchPendingPayments = async () => {
 };
 
 // ---------------------------------------------------------------------
-// Chart Components
+// Chart Components (AttendanceTrendChart, ServiceStatusChart, etc.)
 // ---------------------------------------------------------------------
 const AttendanceTrendChart = ({ attendanceData = [] }) => {
   const last7Days = Array.from({ length: 7 }, (_, i) => {
@@ -394,10 +363,7 @@ const AttendanceTrendChart = ({ attendanceData = [] }) => {
       return hours > 9 || (hours === 9 && minutes > 30);
     }).length;
 
-    return {
-      present: presentCount,
-      late: lateCount
-    };
+    return { present: presentCount, late: lateCount };
   });
 
   const chartData = {
@@ -644,6 +610,8 @@ const DailyRevenueChart = ({ dailyData = [], labels = [] }) => {
 // MAIN DASHBOARD COMPONENT
 // ---------------------------------------------------------------------
 const AdminDashboard = () => {
+  const navigate = useNavigate(); // ✅ Use useNavigate instead of window.location
+  
   const [stats, setStats] = useState({
     totalStaff: 0,
     presentToday: 0,
@@ -653,8 +621,6 @@ const AdminDashboard = () => {
     attendanceRate: 0,
     salaryPending: 0,
     servicesCompleted: 0,
-    
-    // Financial stats
     todayRevenue: 0,
     todayExpenses: 0,
     todayProfit: 0,
@@ -671,8 +637,6 @@ const AdminDashboard = () => {
   const [attendanceData, setAttendanceData] = useState([]);
   const [salaryData, setSalaryData] = useState([]);
   const [staffList, setStaffList] = useState([]);
-  
-  // Financial data states
   const [dailyRevenueData, setDailyRevenueData] = useState([]);
   const [dailyRevenueLabels, setDailyRevenueLabels] = useState([]);
   const [monthlyRevenueData, setMonthlyRevenueData] = useState([]);
@@ -682,10 +646,13 @@ const AdminDashboard = () => {
   
   const [currentMonth] = useState(getCurrentMonth());
   const isMountedRef = useRef(true);
+  const abortControllerRef = useRef(null);
+  const hasShownInitialToastRef = useRef(false); // ✅ Track if toast already shown
 
   // Load dashboard data
   useEffect(() => {
     isMountedRef.current = true;
+    abortControllerRef.current = new AbortController();
     
     const loadDashboardData = async () => {
       setLoading(true);
@@ -719,7 +686,11 @@ const AdminDashboard = () => {
           fetchMonthlyWalletFlow(currentMonthStr).catch(() => [])
         ]);
 
-        if (!isMountedRef.current) return;
+        // ✅ CRITICAL: Check if component is still mounted AND not navigating away
+        if (!isMountedRef.current) {
+          console.log('AdminDashboard: Component unmounted, skipping state updates');
+          return;
+        }
 
         // Use safeArray
         const staffArray = safeArray(staffListRes);
@@ -740,14 +711,9 @@ const AdminDashboard = () => {
         setPendingPaymentsList(pendingPaymentsArray);
         setWalletSummary(walletArray);
 
-        // --- Calculate Financial Stats ---
+        // Calculate Financial Stats
+        const todayRevenue = incomeRows.reduce((sum, row) => sum + (Number(row.received_amount) || 0), 0);
         
-        // Today's revenue
-        const todayRevenue = incomeRows.reduce((sum, row) => {
-          return sum + (Number(row.received_amount) || 0);
-        }, 0);
-        
-        // Today's service charges (profit)
         const todayServiceCharges = incomeRows.reduce((sum, row) => {
           const received = Number(row.received_amount) || 0;
           const serviceCharge = Number(row.service_charges) || 0;
@@ -763,15 +729,12 @@ const AdminDashboard = () => {
           return sum;
         }, 0);
         
-        // Today's approved expenses
         const todayApprovedExpenses = expensesArray
           .filter(e => e.status === 'approved')
           .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
         
-        // Today's profit
         const todayProfit = todayServiceCharges - todayApprovedExpenses;
         
-        // Pending payments total
         const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => {
           return sum + (Number(p.pending_amount) || Number(p.due) || 0);
         }, 0);
@@ -781,7 +744,6 @@ const AdminDashboard = () => {
           return due > 0;
         }).length;
         
-        // Wallet balances
         let totalWalletBalance = 0;
         let totalCashInHand = 0;
         let totalBankBalance = 0;
@@ -797,10 +759,9 @@ const AdminDashboard = () => {
           else if (type === 'digital') totalDigitalBalance += balance;
         });
         
-        // Monthly revenue from salary data
         const monthlyRevenue = salaryArray.reduce((sum, s) => sum + (Number(s.net_salary) || 0), 0);
         
-        // --- Build Monthly Revenue Data for Chart ---
+        // Build Monthly Revenue Data for Chart
         const monthlyRevData = [];
         const monthlyRevLabels = [];
         
@@ -812,7 +773,7 @@ const AdminDashboard = () => {
         setMonthlyRevenueData(monthlyRevData);
         setMonthlyRevenueLabels(monthlyRevLabels);
         
-        // --- Build Daily Revenue Data for Last 7 Days ---
+        // Build Daily Revenue Data for Last 7 Days
         const last7Days = [];
         const last7DaysLabels = [];
         
@@ -828,9 +789,7 @@ const AdminDashboard = () => {
         
         // Calculate today's attendance
         const todayDate = normalizeDate(new Date());
-        const todayAttendance = attendanceArray.filter(a => 
-          normalizeDate(a.date) === todayDate
-        );
+        const todayAttendance = attendanceArray.filter(a => normalizeDate(a.date) === todayDate);
         
         const presentStaffIds = new Set(
           todayAttendance.filter(a => a.status === 'present').map(a => a.staff_id)
@@ -847,11 +806,9 @@ const AdminDashboard = () => {
           pendingLeaves: leavesArray.length || 0,
           pendingServices: pendingServices.length || 0,
           monthlyRevenue: monthlyRevenue || 0,
-          attendanceRate: staffArray.length > 0 ? 
-            Math.round((presentStaffIds.size / staffArray.length) * 100) : 0,
+          attendanceRate: staffArray.length > 0 ? Math.round((presentStaffIds.size / staffArray.length) * 100) : 0,
           salaryPending: pendingSalary.length || 0,
           servicesCompleted: completedServices.length || 0,
-          
           todayRevenue: todayRevenue,
           todayExpenses: todayApprovedExpenses,
           todayProfit: todayProfit,
@@ -912,10 +869,16 @@ const AdminDashboard = () => {
 
         setRecentActivity(activities.slice(0, 5));
 
-        // ✅ SIMPLE TOAST - No requestAnimationFrame, no delays
-        // Only show on initial load if data was actually loaded
-        if (staffArray.length > 0) {
-          toast.success(`Loaded ${staffArray.length} staff, ${serviceArray.length} services`);
+        // ✅ ONLY show toast on INITIAL load, not on every re-render
+        // ✅ Check mounted AND that we haven't shown toast yet
+        if (isMountedRef.current && !hasShownInitialToastRef.current && staffArray.length > 0) {
+          hasShownInitialToastRef.current = true;
+          // Small delay to ensure UI is fully rendered
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              toast.success(`Dashboard ready • ${staffArray.length} staff • ${serviceArray.length} services`);
+            }
+          }, 100);
         }
 
       } catch (error) {
@@ -944,12 +907,16 @@ const AdminDashboard = () => {
 
     loadDashboardData();
     
+    // ✅ Cleanup: Cancel any pending operations and mark as unmounted
     return () => {
       isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, []);
+  }, []); // ✅ Empty dependency array - only run once on mount
 
-  // Handle refresh
+  // Handle refresh (USER ACTION - should show toast)
   const handleRefresh = async () => {
     toast.info('Refreshing data...');
     setLoading(true);
@@ -963,6 +930,7 @@ const AdminDashboard = () => {
         fetchPendingPayments()
       ]);
 
+      // ✅ Check mounted before updating
       if (!isMountedRef.current) return;
 
       const incomeRows = safeArray(dailyIncomeRes);
@@ -1010,8 +978,10 @@ const AdminDashboard = () => {
       
       setPendingPaymentsList(pendingPaymentsArray);
       
-      // ✅ SIMPLE TOAST - Works like ServiceLogs
-      toast.success('Data refreshed successfully');
+      // ✅ User-initiated refresh - should show toast
+      if (isMountedRef.current) {
+        toast.success('Data refreshed successfully');
+      }
       
     } catch (error) {
       console.error('Refresh failed:', error);
@@ -1025,13 +995,13 @@ const AdminDashboard = () => {
     }
   };
 
-  // Navigation handlers
-  const navigateToAttendance = () => window.location.href = '/admin/attendance';
-  const navigateToLeaves = () => window.location.href = '/admin/attendance#leave';
-  const navigateToSalary = () => window.location.href = '/admin/attendance#salary';
-  const navigateToServices = () => window.location.href = '/admin/services';
-  const navigateToReports = () => window.location.href = '/admin/reports';
-  const navigateToPendingPayments = () => window.location.href = '/admin/reports?tab=pendingPayments';
+  // Navigation handlers using useNavigate
+  const navigateToAttendance = () => navigate('/admin/attendance');
+  const navigateToLeaves = () => navigate('/admin/attendance#leave');
+  const navigateToSalary = () => navigate('/admin/attendance#salary');
+  const navigateToServices = () => navigate('/admin/services');
+  const navigateToReports = () => navigate('/admin/reports');
+  const navigateToPendingPayments = () => navigate('/admin/reports?tab=pendingPayments');
 
   if (loading) {
     return (
