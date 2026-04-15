@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -54,10 +54,11 @@ import ConfirmationPage from './components/ConfirmationPage';
 import ViewServiceDetails from './components/ViewServiceDetails';
 import PublicReview from './components/PublicReview';
 
+// ---------------------------------------------------------------------
+// Protected Route Component (FIXED - No toasts, no retry logic)
+// ---------------------------------------------------------------------
 const ProtectedRoute = ({ allowedRoles, children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const maxRetries = 2;
   const token = localStorage.getItem("token")?.trim();
   const role = localStorage.getItem("role")?.trim()?.toLowerCase();
 
@@ -73,44 +74,27 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
         const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/verify`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        console.log("ProtectedRoute: Token verification successful:", response.data);
-        console.log("ProtectedRoute: Checking role:", { role, allowedRoles });
+        console.log("ProtectedRoute: Token verification successful");
+        
+        // Check role permissions
         if (allowedRoles && !allowedRoles.includes(role)) {
           console.warn(`ProtectedRoute: Role ${role} not allowed. Allowed roles: ${allowedRoles}`);
-          toast.error("Unauthorized access. Redirecting to login.", {
-            position: "top-right",
-            autoClose: 3000,
-            theme: "light",
-            toastId: "role-error",
-          });
           setIsAuthenticated(false);
           return;
         }
+        
         setIsAuthenticated(true);
       } catch (err) {
-        console.error("ProtectedRoute: Token verification failed:", {
-          message: err.message,
-          status: err.response?.status,
-          data: err.response?.data,
-          retryCount,
-        });
-        if (retryCount < maxRetries && err.response?.status === 401) {
-          console.log(`ProtectedRoute: Retrying token verification (${retryCount + 1}/${maxRetries})`);
-          setRetryCount(prev => prev + 1);
-          return;
-        }
-        toast.error(err.response?.data?.error || "Session expired, please log in again", {
-          position: "top-right",
-          autoClose: 3000,
-          theme: "light",
-          toastId: "session-error",
-        });
+        console.warn("ProtectedRoute: Token verification failed - Session expired");
+        // Don't show toast here - will be handled by Login page via state
         setIsAuthenticated(false);
       }
     };
+    
     verifyToken();
-  }, [token, role, allowedRoles, retryCount]);
+  }, [token, role, allowedRoles]);
 
+  // Loading state
   if (isAuthenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -129,14 +113,18 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
     );
   }
 
+  // Redirect with state for Login page to handle toast
   if (!isAuthenticated || !token) {
-    console.log("ProtectedRoute: Redirecting to /login due to no authentication or token");
-    return <Navigate to="/login" replace />;
+    console.log("ProtectedRoute: Redirecting to /login due to no authentication");
+    return <Navigate to="/login" replace state={{ reason: "session_expired" }} />;
   }
 
   return children ? children : <Outlet />;
 };
 
+// ---------------------------------------------------------------------
+// Customer Protected Route Component (FIXED - No toasts)
+// ---------------------------------------------------------------------
 const CustomerProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const customerToken = localStorage.getItem("customer_token");
@@ -150,18 +138,14 @@ const CustomerProtectedRoute = ({ children }) => {
       }
 
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/customer/verify`, {
+        await axios.get(`${import.meta.env.VITE_API_URL}/api/customer/verify`, {
           headers: { Authorization: `Bearer ${customerToken}` },
         });
         console.log("CustomerProtectedRoute: Token verification successful");
         setIsAuthenticated(true);
       } catch (err) {
-        console.error("CustomerProtectedRoute: Token verification failed:", err);
-        toast.error("Session expired, please log in again", {
-          position: "top-right",
-          autoClose: 3000,
-          theme: "light",
-        });
+        console.warn("CustomerProtectedRoute: Token verification failed - Session expired");
+        // Don't show toast here - will be handled by Login page via state
         setIsAuthenticated(false);
       }
     };
@@ -187,13 +171,17 @@ const CustomerProtectedRoute = ({ children }) => {
     );
   }
 
+  // Redirect with state for Login page to handle toast
   if (!isAuthenticated || !customerToken) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ reason: "customer_session_expired" }} />;
   }
 
   return children;
 };
 
+// ---------------------------------------------------------------------
+// Main App Component
+// ---------------------------------------------------------------------
 const App = () => {
   return (
     <>
@@ -201,7 +189,7 @@ const App = () => {
         position="top-right"
         autoClose={5000}
         hideProgressBar={false}
-        newestOnTop={false}
+        newestOnTop={true}
         closeOnClick
         rtl={false}
         pauseOnFocusLoss
