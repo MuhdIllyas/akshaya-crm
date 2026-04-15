@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FiUsers, FiClock, FiCalendar, FiDollarSign,
   FiTrendingUp, FiBarChart2, FiCheckCircle, FiAlertCircle,
@@ -651,9 +651,14 @@ const AdminDashboard = () => {
     toDate: getCurrentDate()
   });
   const [currentMonth] = useState(getCurrentMonth());
+  
+  // Use a ref to track if component is mounted
+  const isMountedRef = useRef(true);
 
   // Load dashboard data
   useEffect(() => {
+    isMountedRef.current = true;
+    
     const loadDashboardData = async () => {
       setLoading(true);
       try {
@@ -887,33 +892,62 @@ const AdminDashboard = () => {
 
         setRecentActivity(activities.slice(0, 5));
 
-        toast.success('Dashboard loaded successfully');
+        // Show success toast only if component is still mounted
+        if (isMountedRef.current) {
+          // Use double requestAnimationFrame to ensure DOM is fully painted
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (isMountedRef.current) {
+                toast.success('Dashboard loaded successfully', {
+                  autoClose: 3000,
+                  position: "top-right"
+                });
+              }
+            });
+          });
+        }
 
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
-        toast.error('Failed to load dashboard data');
         
-        setRecentActivity([
-          {
-            icon: FiAlertCircle,
-            title: 'Data load error',
-            description: 'Some data may be unavailable',
-            time: 'Just now',
-            color: 'text-rose-600',
-            bg: 'bg-rose-50'
-          }
-        ]);
+        if (isMountedRef.current) {
+          toast.error('Failed to load dashboard data', {
+            autoClose: 3000,
+            position: "top-right"
+          });
+          
+          setRecentActivity([
+            {
+              icon: FiAlertCircle,
+              title: 'Data load error',
+              description: 'Some data may be unavailable',
+              time: 'Just now',
+              color: 'text-rose-600',
+              bg: 'bg-rose-50'
+            }
+          ]);
+        }
       } finally {
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
     };
 
     loadDashboardData();
+    
+    // Cleanup function
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   // Handle refresh
   const handleRefresh = async () => {
-    toast.info('Refreshing data...');
+    toast.info('Refreshing data...', {
+      autoClose: 2000,
+      position: "top-right"
+    });
     setLoading(true);
     
     try {
@@ -970,12 +1004,30 @@ const AdminDashboard = () => {
       
       setPendingPaymentsList(pendingPaymentsArray);
       
-      toast.success('Data refreshed successfully');
+      if (isMountedRef.current) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (isMountedRef.current) {
+              toast.success('Data refreshed successfully', {
+                autoClose: 2000,
+                position: "top-right"
+              });
+            }
+          });
+        });
+      }
     } catch (error) {
       console.error('Refresh failed:', error);
-      toast.error('Failed to refresh data');
+      if (isMountedRef.current) {
+        toast.error('Failed to refresh data', {
+          autoClose: 3000,
+          position: "top-right"
+        });
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
