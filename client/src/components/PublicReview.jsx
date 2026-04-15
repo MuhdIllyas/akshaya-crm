@@ -139,7 +139,7 @@ const PublicReview = () => {
               If you believe this is an error, please contact the Akshaya Centre where you availed the service.
             </p>
             <button
-              onClick={() => window.location.href = 'https://akshayacentre.gov.in'}
+              onClick={() => window.location.href = 'https://akshayasahayi.com'}
               className="w-full px-6 py-3 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition-colors"
             >
               Visit Akshaya Centre Homepage
