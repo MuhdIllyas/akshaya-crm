@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -15,7 +15,40 @@ const Login = () => {
   const [otpSent, setOtpSent] = useState(false); // OTP status
   const [otpTimer, setOtpTimer] = useState(0); // OTP timer
   const navigate = useNavigate();
+  const location = useLocation();
 
+  // ✅ Handle session expired toast from ProtectedRoute redirect
+  useEffect(() => {
+    if (location.state?.reason === "session_expired") {
+      toast.error("Session expired, please log in again", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "light",
+        toastId: "session-expired",
+      });
+      // Clear the state so it doesn't show again on refresh
+      window.history.replaceState({}, document.title);
+    } else if (location.state?.reason === "customer_session_expired") {
+      toast.error("Customer session expired, please log in again", {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "light",
+        toastId: "customer-session-expired",
+      });
+      // Clear the state so it doesn't show again on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  // Load remembered username
   useEffect(() => {
     const savedUsername = localStorage.getItem("remembered_username");
     const savedRememberMe = localStorage.getItem("remember_me") === "true";
@@ -194,7 +227,7 @@ const Login = () => {
         position="top-right"
         autoClose={5000}
         hideProgressBar={false}
-        newestOnTop={false}
+        newestOnTop={true}  // ✅ FIXED: Prevents old toasts from showing after navigation
         closeOnClick
         rtl={false}
         pauseOnFocusLoss
