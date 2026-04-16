@@ -175,7 +175,7 @@ const PublicReview = () => {
             </p>
           </div>
           <button
-            onClick={() => window.location.href = 'https://akshayacentre.gov.in'}
+            onClick={() => window.location.href = 'https://akshayasahayi.com'}
             className="w-full px-6 py-3 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition-colors"
           >
             Return to Homepage
@@ -203,7 +203,7 @@ const PublicReview = () => {
             </p>
           </div>
           <button
-            onClick={() => window.location.href = 'https://akshayacentre.gov.in'}
+            onClick={() => window.location.href = 'https://akshayasahayi.com'}
             className="w-full px-6 py-3 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition-colors"
           >
             Return to Homepage
@@ -346,7 +346,7 @@ const PublicReview = () => {
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-gray-500">
-          <p>Powered by Akshaya Centre | Government of Kerala Initiative</p>
+          <p>Powered by Akshaya e Centre Pukayur | Government of Kerala Initiative</p>
           <p className="mt-1">For any assistance, please contact the Akshaya Centre where you availed the service.</p>
         </div>
       </div>
