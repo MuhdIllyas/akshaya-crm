@@ -47,6 +47,8 @@ import staffperformanceRoutes from "./routes/staffPerformance.js";
 
 dotenv.config();
 
+import "./routes/scheduler.js";
+
 const { Pool } = pkg;
 
 /* ================================
