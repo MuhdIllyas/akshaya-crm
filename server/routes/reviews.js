@@ -66,7 +66,7 @@ export async function createReviewRequest({
                 parameters: [
                   {
                     type: "text",
-                    text: reviewUrl
+                    text: token
                   }
                 ]
               }
