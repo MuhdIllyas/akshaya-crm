@@ -61,7 +61,9 @@ app.use(cors({
     "https://akshayasahayi.com",
     "https://www.akshayasahayi.com"
   ],
-  credentials: true
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 /* ================================
@@ -70,7 +72,10 @@ app.use(cors({
 
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || "*",
+    origin: [
+      "https://akshayasahayi.com",
+      "https://www.akshayasahayi.com"
+    ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   },
