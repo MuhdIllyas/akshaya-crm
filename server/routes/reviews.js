@@ -87,9 +87,12 @@ export async function createReviewRequest({
     return { success: true, token };
 
   } catch (error) {
-    console.error("Review request error:", error);
-    return { success: false, error };
-  }
+  console.error("❌ WhatsApp FULL ERROR:");
+  console.error("Status:", error.response?.status);
+  console.error("Data:", error.response?.data);
+  console.error("Message:", error.message);
+  return { success: false, error };
+}
 }
 
 /* -------------------------------------------------------
