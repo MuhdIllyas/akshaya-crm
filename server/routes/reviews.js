@@ -38,50 +38,51 @@ export async function createReviewRequest({
       ]
     );
 
-  // Send WhatsApp Template (Libromi)
-  if (process.env.LIBROMI_ACCESS_TOKEN) {
+    // Send WhatsApp Template (Libromi)
+    if (process.env.LIBROMI_ACCESS_TOKEN) {
+      const formattedPhone = customerPhone.startsWith("+91")
+        ? customerPhone
+        : `+91${customerPhone}`;
 
-    const formattedPhone = customerPhone.startsWith("+91")
-      ? customerPhone
-      : `+91${customerPhone}`;
+      const reviewUrl = `${process.env.FRONTEND_URL}/review/${token}`;
 
-    await axios.post(
-      "https://wa-api.cloud/api/v1/messages",
-      {
-        to: formattedPhone,
-        type: "template",
-        template: {
-          name: "service_feedback_request",
-          language: {
-            code: "en",
-            policy: "deterministic"
-          },
-          components: [
-            {
-              type: "body"
+      await axios.post(
+        "https://wa-api.cloud/api/v1/messages",
+        {
+          to: formattedPhone,
+          type: "template",
+          template: {
+            name: "service_feedback",
+            language: {
+              code: "en",
+              policy: "deterministic"
             },
-            {
-              type: "button",
-              sub_type: "url",
-              index: "0",
-              parameters: [
-                {
-                  type: "text",
-                  text: token   // 🔥 this is your dynamic URL part
-                }
-              ]
-            }
-          ]
+            components: [
+              {
+                type: "body"
+              },
+              {
+                type: "button",
+                sub_type: "url",
+                index: "0",
+                parameters: [
+                  {
+                    type: "text",
+                    text: reviewUrl
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
+            "Content-Type": "application/json"
+          }
         }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-  }
+      );
+    }
 
     return { success: true, token };
 
