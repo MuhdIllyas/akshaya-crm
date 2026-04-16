@@ -40,9 +40,7 @@ export async function createReviewRequest({
 
     // Send WhatsApp Template (Libromi)
     if (process.env.LIBROMI_ACCESS_TOKEN) {
-      const formattedPhone = customerPhone.startsWith("+91")
-        ? customerPhone
-        : `+91${customerPhone}`;
+      const formattedPhone = entry.phone.startsWith('+91') ? entry.phone : `+91${entry.phone.replace(/^\+91/, '')}`;
 
       const reviewUrl = `${process.env.FRONTEND_URL}/review/${token}`;
 
