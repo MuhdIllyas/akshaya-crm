@@ -1985,7 +1985,8 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
           );
 
           if (existingReview.rows.length === 0) {
-
+            console.log("🔥 createReviewRequest CALLED");
+            
             createReviewRequest({
               centreId: centreId,
               trackingId: updatedEntry.id,
@@ -1994,7 +1995,6 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
               customerName: entryData.customer_name,
               customerPhone: entryData.phone,
               centreName: "Your Centre Name"
-              console.log("🔥 createReviewRequest CALLED");
             }).catch(err =>
               console.error("Review auto-send failed:", err)
             );
