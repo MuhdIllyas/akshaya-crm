@@ -1969,23 +1969,44 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     );
     const updatedEntry = result.rows[0];
 
+    // 🔹 DEBUG: Check if status is 'completed'
+    console.log("🔥 STATUS COMPLETED CHECK - Status value:", status);
+    console.log("🔥 STATUS COMPLETED BLOCK ENTERED:", status === 'completed');
+    
     // 🔹 AUTO CREATE REVIEW ONLY FOR NON-REGISTERED CUSTOMERS
     if (status === 'completed') {
 
-      console.log("🔥 STATUS COMPLETED TRIGGERED");
+      console.log("🔥 STATUS COMPLETED BLOCK ENTERED");
       const entryData = serviceEntry.rows[0];
+      
+      console.log("🔥 customer_service_id value:", entryData.customer_service_id);
+      console.log("🔥 Condition check (!entryData.customer_service_id):", !entryData.customer_service_id);
 
       // Only create token review if NOT booked through portal
       if (!entryData.customer_service_id) {
 
+        console.log("🔥 INSIDE NON-PORTAL BLOCK - About to create review");
+        
         try {
           const existingReview = await client.query(
             'SELECT id FROM service_reviews WHERE tracking_id = $1',
             [updatedEntry.id]
           );
 
+          console.log("🔥 Existing review check result:", existingReview.rows.length);
+
           if (existingReview.rows.length === 0) {
-            console.log("🔥 createReviewRequest CALLED");
+            console.log("🔥 CALLING createReviewRequest NOW...");
+            
+            console.log("🔥 Review params:", {
+              centreId: centreId,
+              trackingId: updatedEntry.id,
+              serviceId: null,
+              staffId: entryData.staff_id,
+              customerName: entryData.customer_name,
+              customerPhone: entryData.phone,
+              centreName: "Your Centre Name"
+            });
             
             createReviewRequest({
               centreId: centreId,
@@ -1998,6 +2019,10 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
             }).catch(err =>
               console.error("Review auto-send failed:", err)
             );
+            
+            console.log("🔥 createReviewRequest CALLED - function executed");
+          } else {
+            console.log("🔥 Review already exists - skipping");
           }
 
         } catch (err) {
