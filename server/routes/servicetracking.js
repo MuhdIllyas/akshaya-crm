@@ -1972,6 +1972,7 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     // 🔹 AUTO CREATE REVIEW ONLY FOR NON-REGISTERED CUSTOMERS
     if (status === 'completed') {
 
+      console.log("🔥 STATUS COMPLETED TRIGGERED");
       const entryData = serviceEntry.rows[0];
 
       // Only create token review if NOT booked through portal
@@ -1993,6 +1994,7 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
               customerName: entryData.customer_name,
               customerPhone: entryData.phone,
               centreName: "Your Centre Name"
+              console.log("🔥 createReviewRequest CALLED");
             }).catch(err =>
               console.error("Review auto-send failed:", err)
             );
