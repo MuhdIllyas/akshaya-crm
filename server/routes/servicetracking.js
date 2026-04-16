@@ -1989,7 +1989,7 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
         
         try {
           const existingReview = await client.query(
-            'SELECT id FROM service_reviews WHERE tracking_id = $1',
+            'SELECT id FROM service_reviews WHERE tracking_id = $1 AND is_submitted = true',
             [updatedEntry.id]
           );
 
