@@ -1,585 +1,638 @@
-// src/pages/Home.jsx
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { toast } from 'react-toastify';
+// src/pages/LandingPage.jsx
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, useInView, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  FiHome, FiFileText, FiCheckCircle, FiClock, FiAlertCircle,
-  FiBell, FiUser, FiCalendar, FiActivity, FiTrendingUp,
-  FiArrowRight, FiRefreshCw, FiSearch, FiFilter, FiMoreVertical,
-  FiSmartphone, FiDollarSign, FiPackage, FiUsers, FiAward,
-  FiMessageSquare, FiChevronRight, FiDownload, FiEye,
-  FiXCircle, FiInfo, FiExternalLink
-} from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import axios from 'axios';
+import {
+  FiSmartphone, FiFileText, FiCreditCard, FiShield,
+  FiUsers, FiAward, FiClock, FiMapPin, FiPhone,
+  FiMail, FiChevronRight, FiCheckCircle, FiStar,
+  FiCalendar, FiArrowRight, FiSend, FiBell, FiX,
+  FiMenu, FiChevronDown, FiExternalLink, FiHome,
+  FiInfo, FiHelpCircle, FiMessageCircle, FiGlobe,
+  FiTrendingUp, FiPackage, FiDollarSign, FiUserPlus,
+  FiDownload, FiSearch, FiAlertCircle, FiThumbsUp,
+  FiFacebook, FiTwitter, FiInstagram, FiYoutube,
+  FiLinkedin, FiShare2, FiBookOpen, FiVideo
+} from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 
 // ---------------------------------------------------------------------
 // UI Components
 // ---------------------------------------------------------------------
 
-// Stats Card Component
-const StatsCard = ({ title, value, icon: Icon, color, bg, onClick }) => (
+// Animated Counter Component
+const AnimatedCounter = ({ value, duration = 2000 }) => {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true });
+
+  useEffect(() => {
+    if (inView) {
+      let start = 0;
+      const increment = value / (duration / 16);
+      const timer = setInterval(() => {
+        start += increment;
+        if (start >= value) {
+          setCount(value);
+          clearInterval(timer);
+        } else {
+          setCount(Math.floor(start));
+        }
+      }, 16);
+      return () => clearInterval(timer);
+    }
+  }, [inView, value, duration]);
+
+  return <span ref={ref}>{count.toLocaleString()}+</span>;
+};
+
+// Service Card Component
+const ServiceCard = ({ service, index }) => (
   <motion.div
-    whileHover={{ y: -2 }}
-    onClick={onClick}
-    className={`bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg transition-all duration-300 ${onClick ? 'cursor-pointer' : ''}`}
+    initial={{ opacity: 0, y: 20 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    transition={{ delay: index * 0.1 }}
+    whileHover={{ y: -8, scale: 1.02 }}
+    className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 group"
   >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-        <p className="text-2xl font-bold text-gray-900">{value}</p>
-      </div>
-      <div className={`p-3 rounded-xl ${bg}`}>
-        <Icon className={`h-5 w-5 ${color}`} />
+    <div className="w-14 h-14 bg-gradient-to-br from-navy-500 to-navy-700 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+      {service.icon}
+    </div>
+    <h3 className="text-xl font-bold text-gray-900 mb-2">{service.title}</h3>
+    <p className="text-gray-600 mb-4 line-clamp-2">{service.description}</p>
+    <Link
+      to={service.link || '#'}
+      className="inline-flex items-center text-navy-600 font-medium hover:text-navy-700"
+    >
+      Learn More <FiArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+    </Link>
+  </motion.div>
+);
+
+// News Card Component
+const NewsCard = ({ news, index }) => (
+  <motion.div
+    initial={{ opacity: 0, x: -20 }}
+    whileInView={{ opacity: 1, x: 0 }}
+    viewport={{ once: true }}
+    transition={{ delay: index * 0.1 }}
+    className="bg-white rounded-xl p-5 shadow-md hover:shadow-xl transition-all border border-gray-100"
+  >
+    <div className="flex items-start space-x-3">
+      {news.image && (
+        <img src={news.image} alt={news.title} className="w-20 h-20 rounded-lg object-cover" />
+      )}
+      <div className="flex-1">
+        <div className="flex items-center space-x-2 mb-1">
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+            news.category === 'New' ? 'bg-green-100 text-green-700' :
+            news.category === 'Update' ? 'bg-blue-100 text-blue-700' :
+            'bg-orange-100 text-orange-700'
+          }`}>
+            {news.category}
+          </span>
+          <span className="text-xs text-gray-500">{news.date}</span>
+        </div>
+        <h4 className="font-semibold text-gray-900 mb-1">{news.title}</h4>
+        <p className="text-sm text-gray-600 line-clamp-2">{news.description}</p>
       </div>
     </div>
   </motion.div>
 );
 
-// Notification Item Component
-const NotificationItem = ({ notification, onClick }) => {
-  const getIcon = (type) => {
-    switch (type) {
-      case 'success': return FiCheckCircle;
-      case 'warning': return FiAlertCircle;
-      case 'info': return FiInfo;
-      case 'error': return FiXCircle;
-      default: return FiBell;
-    }
-  };
-
-  const getColor = (type) => {
-    switch (type) {
-      case 'success': return { bg: 'bg-emerald-50', text: 'text-emerald-600' };
-      case 'warning': return { bg: 'bg-amber-50', text: 'text-amber-600' };
-      case 'info': return { bg: 'bg-blue-50', text: 'text-blue-600' };
-      case 'error': return { bg: 'bg-rose-50', text: 'text-rose-600' };
-      default: return { bg: 'bg-gray-50', text: 'text-gray-600' };
-    }
-  };
-
-  const Icon = getIcon(notification.type);
-  const colors = getColor(notification.type);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ backgroundColor: '#f9fafb' }}
-      onClick={() => onClick?.(notification)}
-      className={`p-4 border-b border-gray-100 cursor-pointer transition-colors ${!notification.read ? 'bg-blue-50/30' : ''}`}
-    >
-      <div className="flex items-start space-x-3">
-        <div className={`p-2 rounded-lg ${colors.bg} flex-shrink-0`}>
-          <Icon className={`h-4 w-4 ${colors.text}`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="text-sm font-medium text-gray-900 truncate">
-              {notification.title}
-            </h4>
-            {!notification.read && (
-              <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></span>
-            )}
-          </div>
-          <p className="text-xs text-gray-600 line-clamp-2 mb-1">{notification.message}</p>
-          <p className="text-xs text-gray-400">{notification.time}</p>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-// Application Card Component
-const ApplicationCard = ({ application, onClick }) => {
-  const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'completed': return { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' };
-      case 'pending': return { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' };
-      case 'processing': return { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' };
-      case 'rejected': return { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' };
-      default: return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' };
-    }
-  };
-
-  const statusColors = getStatusColor(application.status);
-
-  return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      className={`bg-white rounded-lg border ${statusColors.border} p-4 hover:shadow-md transition-all cursor-pointer`}
-      onClick={() => onClick?.(application)}
-    >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center space-x-2">
-          <div className="p-1.5 bg-navy-50 rounded">
-            <FiFileText className="h-4 w-4 text-navy-600" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-900">{application.service_name || application.name}</p>
-            <p className="text-xs text-gray-500">{application.application_id || application.id}</p>
-          </div>
-        </div>
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors.bg} ${statusColors.text}`}>
-          {application.status}
+// Testimonial Card Component
+const TestimonialCard = ({ testimonial, index }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.9 }}
+    whileInView={{ opacity: 1, scale: 1 }}
+    viewport={{ once: true }}
+    transition={{ delay: index * 0.1 }}
+    className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100"
+  >
+    <div className="flex items-center mb-4">
+      {[...Array(5)].map((_, i) => (
+        <FiStar key={i} className={`h-5 w-5 ${i < testimonial.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`} />
+      ))}
+    </div>
+    <p className="text-gray-700 mb-4 italic">"{testimonial.content}"</p>
+    <div className="flex items-center">
+      <div className="w-12 h-12 bg-gradient-to-br from-navy-100 to-navy-200 rounded-full flex items-center justify-center">
+        <span className="text-navy-700 font-bold text-lg">
+          {testimonial.name.charAt(0)}
         </span>
       </div>
-      
-      <div className="space-y-1 mb-3">
-        <div className="flex items-center text-xs text-gray-600">
-          <FiUser className="h-3 w-3 mr-1" />
-          <span>{application.applicant_name || application.customer_name}</span>
-        </div>
-        <div className="flex items-center text-xs text-gray-600">
-          <FiCalendar className="h-3 w-3 mr-1" />
-          <span>Applied: {new Date(application.created_at || application.date).toLocaleDateString('en-IN')}</span>
-        </div>
+      <div className="ml-3">
+        <p className="font-semibold text-gray-900">{testimonial.name}</p>
+        <p className="text-sm text-gray-500">{testimonial.location}</p>
       </div>
-      
-      {application.progress !== undefined && (
-        <div className="mt-3">
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span className="text-gray-600">Progress</span>
-            <span className="font-medium text-gray-700">{application.progress}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-1.5">
-            <div 
-              className="bg-navy-600 h-1.5 rounded-full transition-all"
-              style={{ width: `${application.progress}%` }}
-            />
-          </div>
-        </div>
+    </div>
+  </motion.div>
+);
+
+// FAQ Item Component
+const FAQItem = ({ faq, isOpen, onToggle }) => (
+  <div className="border-b border-gray-200 last:border-0">
+    <button
+      onClick={onToggle}
+      className="w-full py-4 flex items-center justify-between text-left hover:text-navy-600 transition-colors"
+    >
+      <span className="font-medium text-gray-900">{faq.question}</span>
+      <FiChevronDown className={`h-5 w-5 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+    </button>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="overflow-hidden"
+        >
+          <p className="pb-4 text-gray-600">{faq.answer}</p>
+        </motion.div>
       )}
-    </motion.div>
-  );
-};
-
-// Service Category Card
-const ServiceCategoryCard = ({ category, onClick }) => (
-  <motion.div
-    whileHover={{ scale: 1.02 }}
-    onClick={onClick}
-    className="bg-gradient-to-br from-navy-50 to-blue-50 rounded-xl p-5 border border-navy-100 cursor-pointer hover:shadow-lg transition-all"
-  >
-    <div className="flex items-center space-x-3 mb-3">
-      <div className="p-2 bg-navy-100 rounded-lg">
-        <FiPackage className="h-5 w-5 text-navy-600" />
-      </div>
-      <h3 className="font-semibold text-gray-900">{category.name}</h3>
-    </div>
-    <p className="text-sm text-gray-600 mb-3">{category.description}</p>
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-gray-500">{category.count} services</span>
-      <FiArrowRight className="h-4 w-4 text-navy-600" />
-    </div>
-  </motion.div>
-);
-
-// Quick Link Card
-const QuickLinkCard = ({ title, icon: Icon, color, bg, onClick }) => (
-  <motion.div
-    whileHover={{ y: -2 }}
-    onClick={onClick}
-    className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-all"
-  >
-    <div className="flex items-center space-x-3">
-      <div className={`p-2.5 rounded-xl ${bg}`}>
-        <Icon className={`h-5 w-5 ${color}`} />
-      </div>
-      <span className="font-medium text-gray-700 text-sm">{title}</span>
-    </div>
-  </motion.div>
-);
-
-// Section Header
-const SectionHeader = ({ title, icon: Icon, action, actionText, onAction }) => (
-  <div className="flex items-center justify-between mb-4">
-    <div className="flex items-center space-x-2">
-      {Icon && <Icon className="h-5 w-5 text-navy-600" />}
-      <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-    </div>
-    {action && (
-      <button
-        onClick={onAction}
-        className="text-sm text-navy-600 hover:text-navy-700 font-medium flex items-center"
-      >
-        {actionText || 'View All'} <FiChevronRight className="h-4 w-4 ml-1" />
-      </button>
-    )}
+    </AnimatePresence>
   </div>
 );
 
+// Navigation Bar Component
+const Navbar = ({ onLoginClick, scrolled }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const navLinks = [
+    { name: 'Home', href: '#home' },
+    { name: 'Services', href: '#services' },
+    { name: 'About', href: '#about' },
+    { name: 'News', href: '#news' },
+    { name: 'Contact', href: '#contact' },
+  ];
+
+  const handleSmoothScroll = (e, href) => {
+    e.preventDefault();
+    const element = document.querySelector(href);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+    setMobileMenuOpen(false);
+  };
+
+  return (
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      scrolled ? 'bg-white/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
+    }`}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 md:h-20">
+          {/* Logo */}
+          <div className="flex items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center"
+            >
+              <div className="w-10 h-10 bg-gradient-to-br from-navy-600 to-navy-800 rounded-xl flex items-center justify-center">
+                <FiShield className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-3">
+                <h1 className="text-xl font-bold text-navy-900">Akshaya</h1>
+                <p className="text-xs text-navy-600">e-Centre Pukayur</p>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-8">
+            {navLinks.map((link) => (
+              <a
+                key={link.name}
+                href={link.href}
+                onClick={(e) => handleSmoothScroll(e, link.href)}
+                className="text-gray-700 hover:text-navy-600 font-medium transition-colors"
+              >
+                {link.name}
+              </a>
+            ))}
+          </div>
+
+          {/* Desktop Actions */}
+          <div className="hidden md:flex items-center space-x-4">
+            <button
+              onClick={onLoginClick}
+              className="px-5 py-2.5 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-xl hover:shadow-lg transition-all duration-300 font-medium"
+            >
+              Sign In
+            </button>
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            {mobileMenuOpen ? <FiX className="h-6 w-6" /> : <FiMenu className="h-6 w-6" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="md:hidden bg-white border-t border-gray-100"
+          >
+            <div className="px-4 py-4 space-y-2">
+              {navLinks.map((link) => (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  onClick={(e) => handleSmoothScroll(e, link.href)}
+                  className="block py-2 text-gray-700 hover:text-navy-600 font-medium"
+                >
+                  {link.name}
+                </a>
+              ))}
+              <button
+                onClick={() => {
+                  onLoginClick();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full mt-4 px-5 py-2.5 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-xl font-medium"
+              >
+                Sign In
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </nav>
+  );
+};
+
+// Newsletter Subscription Component
+const NewsletterSection = () => {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+
+  const handleSubscribe = async (e) => {
+    e.preventDefault();
+    if (!email || !name) {
+      toast.error('Please enter your name and email');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      await axios.post(`${apiUrl}/api/newsletter/subscribe`, { name, email });
+      
+      setSubscribed(true);
+      toast.success('Successfully subscribed to newsletter!');
+      setEmail('');
+      setName('');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Subscription failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="py-16 bg-gradient-to-br from-navy-50 to-blue-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="bg-white rounded-3xl p-8 md:p-12 shadow-xl border border-navy-100"
+        >
+          <div className="max-w-3xl mx-auto text-center">
+            <div className="inline-flex p-3 bg-navy-100 rounded-2xl mb-6">
+              <FiMail className="h-8 w-8 text-navy-600" />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Stay Updated with Akshaya
+            </h2>
+            <p className="text-gray-600 mb-8 text-lg">
+              Subscribe to our newsletter for the latest services, announcements, and digital empowerment initiatives.
+            </p>
+
+            {subscribed ? (
+              <motion.div
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                className="bg-green-50 rounded-xl p-6 border border-green-200"
+              >
+                <FiCheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
+                <h3 className="text-xl font-semibold text-green-800 mb-2">Thank You for Subscribing!</h3>
+                <p className="text-green-700">
+                  You'll now receive updates about new services and announcements.
+                </p>
+              </motion.div>
+            ) : (
+              <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  placeholder="Your Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="flex-1 px-5 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+                  disabled={loading}
+                />
+                <input
+                  type="email"
+                  placeholder="Your Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="flex-1 px-5 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-8 py-3 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-xl hover:shadow-lg transition-all duration-300 font-medium disabled:opacity-50 flex items-center justify-center"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Subscribe <FiSend className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+            <p className="text-xs text-gray-500 mt-4">
+              We respect your privacy. Unsubscribe at any time.
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+};
+
 // ---------------------------------------------------------------------
-// Main Home Component
+// Main Landing Page Component
 // ---------------------------------------------------------------------
 const Home = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  
-  // State for data
+  const [scrolled, setScrolled] = useState(false);
+  const [services, setServices] = useState([]);
+  const [news, setNews] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
   const [stats, setStats] = useState({
-    totalApplications: 0,
-    pendingApplications: 0,
-    completedToday: 0,
-    activeServices: 0,
-    unreadNotifications: 0,
-    pendingPayments: 0,
+    customers: 0,
+    services: 0,
+    applications: 0,
+    satisfaction: 0
   });
-  
-  const [recentApplications, setRecentApplications] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [serviceCategories, setServiceCategories] = useState([]);
+  const [openFAQ, setOpenFAQ] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
-  const [todaySchedule, setTodaySchedule] = useState([]);
-  const [userInfo, setUserInfo] = useState({
-    name: '',
-    role: '',
-    centre_name: ''
-  });
+  const [loading, setLoading] = useState(true);
 
-  // Get user info from localStorage
+  // Handle scroll effect
   useEffect(() => {
-    const username = localStorage.getItem('username') || 'User';
-    const role = localStorage.getItem('role') || 'Staff';
-    const centreName = localStorage.getItem('centre_name') || 'Akshaya e-Centre Pukayur';
-    
-    setUserInfo({
-      name: username,
-      role: role.charAt(0).toUpperCase() + role.slice(1),
-      centre_name: centreName
-    });
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Fetch all home page data
-  const fetchHomeData = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
-      const apiUrl = import.meta.env.VITE_API_URL;
-
-      // Parallel API calls
-      const [
-        applicationsRes,
-        notificationsRes,
-        statsRes,
-        categoriesRes,
-        announcementsRes,
-        scheduleRes
-      ] = await Promise.allSettled([
-        axios.get(`${apiUrl}/api/applications/recent?limit=6`, { headers }),
-        axios.get(`${apiUrl}/api/notifications?limit=5`, { headers }),
-        axios.get(`${apiUrl}/api/dashboard/stats`, { headers }),
-        axios.get(`${apiUrl}/api/services/categories`, { headers }),
-        axios.get(`${apiUrl}/api/announcements?limit=3`, { headers }),
-        axios.get(`${apiUrl}/api/schedule/today`, { headers })
-      ]);
-
-      // Process applications
-      if (applicationsRes.status === 'fulfilled' && applicationsRes.value.data) {
-        const apps = applicationsRes.value.data.applications || applicationsRes.value.data || [];
-        setRecentApplications(Array.isArray(apps) ? apps.slice(0, 6) : []);
-      }
-
-      // Process notifications
-      if (notificationsRes.status === 'fulfilled' && notificationsRes.value.data) {
-        const notifs = notificationsRes.value.data.notifications || notificationsRes.value.data || [];
-        setNotifications(Array.isArray(notifs) ? notifs : []);
-        const unreadCount = Array.isArray(notifs) ? notifs.filter(n => !n.read).length : 0;
-        setStats(prev => ({ ...prev, unreadNotifications: unreadCount }));
-      }
-
-      // Process stats
-      if (statsRes.status === 'fulfilled' && statsRes.value.data) {
-        const statsData = statsRes.value.data;
-        setStats(prev => ({
-          ...prev,
-          totalApplications: statsData.totalApplications || 0,
-          pendingApplications: statsData.pendingApplications || 0,
-          completedToday: statsData.completedToday || 0,
-          activeServices: statsData.activeServices || 0,
-          pendingPayments: statsData.pendingPayments || 0,
-        }));
-      }
-
-      // Process service categories
-      if (categoriesRes.status === 'fulfilled' && categoriesRes.value.data) {
-        const categories = categoriesRes.value.data.categories || categoriesRes.value.data || [];
-        setServiceCategories(Array.isArray(categories) ? categories : []);
-      }
-
-      // Process announcements
-      if (announcementsRes.status === 'fulfilled' && announcementsRes.value.data) {
-        const announcements = announcementsRes.value.data.announcements || announcementsRes.value.data || [];
-        setAnnouncements(Array.isArray(announcements) ? announcements : []);
-      }
-
-      // Process schedule
-      if (scheduleRes.status === 'fulfilled' && scheduleRes.value.data) {
-        const schedule = scheduleRes.value.data.schedule || scheduleRes.value.data || [];
-        setTodaySchedule(Array.isArray(schedule) ? schedule : []);
-      }
-
-    } catch (error) {
-      console.error('Error fetching home data:', error);
-      
-      // Set mock data for demo/preview
-      setMockData();
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  // Mock data for preview/demo
-  const setMockData = () => {
-    setStats({
-      totalApplications: 156,
-      pendingApplications: 23,
-      completedToday: 18,
-      activeServices: 12,
-      unreadNotifications: 5,
-      pendingPayments: 8,
-    });
-
-    setRecentApplications([
-      {
-        id: 'APP001',
-        application_id: 'AKS-2024-001',
-        service_name: 'Aadhaar Update',
-        applicant_name: 'Rajesh Kumar',
-        customer_name: 'Rajesh Kumar',
-        status: 'Processing',
-        created_at: new Date().toISOString(),
-        progress: 65
-      },
-      {
-        id: 'APP002',
-        application_id: 'AKS-2024-002',
-        service_name: 'Income Certificate',
-        applicant_name: 'Priya Sharma',
-        customer_name: 'Priya Sharma',
-        status: 'Pending',
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-        progress: 30
-      },
-      {
-        id: 'APP003',
-        application_id: 'AKS-2024-003',
-        service_name: 'PAN Card Application',
-        applicant_name: 'Mohammed Aslam',
-        customer_name: 'Mohammed Aslam',
-        status: 'Completed',
-        created_at: new Date(Date.now() - 172800000).toISOString(),
-        progress: 100
-      },
-      {
-        id: 'APP004',
-        application_id: 'AKS-2024-004',
-        service_name: 'Caste Certificate',
-        applicant_name: 'Lakshmi Menon',
-        customer_name: 'Lakshmi Menon',
-        status: 'Processing',
-        created_at: new Date(Date.now() - 259200000).toISOString(),
-        progress: 80
-      },
-      {
-        id: 'APP005',
-        application_id: 'AKS-2024-005',
-        service_name: 'Driving License Renewal',
-        applicant_name: 'Suresh Nair',
-        customer_name: 'Suresh Nair',
-        status: 'Pending',
-        created_at: new Date(Date.now() - 345600000).toISOString(),
-        progress: 45
-      },
-      {
-        id: 'APP006',
-        application_id: 'AKS-2024-006',
-        service_name: 'Birth Certificate',
-        applicant_name: 'Anjali Krishnan',
-        customer_name: 'Anjali Krishnan',
-        status: 'Processing',
-        created_at: new Date(Date.now() - 432000000).toISOString(),
-        progress: 55
-      }
-    ]);
-
-    setNotifications([
-      {
-        id: 1,
-        title: 'New Application Submitted',
-        message: 'Aadhaar Update application submitted by Rajesh Kumar requires verification.',
-        type: 'info',
-        time: '5 minutes ago',
-        read: false
-      },
-      {
-        id: 2,
-        title: 'Application Approved',
-        message: 'Income Certificate application for Priya Sharma has been approved.',
-        type: 'success',
-        time: '1 hour ago',
-        read: false
-      },
-      {
-        id: 3,
-        title: 'Payment Pending',
-        message: '3 applications have pending payments. Please follow up with customers.',
-        type: 'warning',
-        time: '3 hours ago',
-        read: false
-      },
-      {
-        id: 4,
-        title: 'Service Update',
-        message: 'e-District portal will be under maintenance on Sunday from 10 AM to 2 PM.',
-        type: 'info',
-        time: 'Yesterday',
-        read: true
-      },
-      {
-        id: 5,
-        title: 'New Announcement',
-        message: 'New service added: Digital Life Certificate for pensioners.',
-        type: 'success',
-        time: 'Yesterday',
-        read: false
-      }
-    ]);
-
-    setServiceCategories([
-      { id: 1, name: 'Aadhaar Services', description: 'Enrolment, Update, PVC Card', count: 5 },
-      { id: 2, name: 'Certificate Services', description: 'Income, Caste, Birth, Death', count: 8 },
-      { id: 3, name: 'PAN Card Services', description: 'New PAN, Correction, Reprint', count: 4 },
-      { id: 4, name: 'Driving License', description: 'New, Renewal, Duplicate', count: 6 },
-    ]);
-
-    setAnnouncements([
-      {
-        id: 1,
-        title: 'New Digital Service Available',
-        content: 'e-Filing of Income Tax Returns now available at our centre.',
-        date: '2024-01-15',
-        type: 'info'
-      },
-      {
-        id: 2,
-        title: 'Holiday Notice',
-        content: 'Centre will remain closed on Republic Day (Jan 26th).',
-        date: '2024-01-10',
-        type: 'warning'
-      }
-    ]);
-
-    setTodaySchedule([
-      { id: 1, time: '10:00 AM', title: 'Token System - Aadhaar', count: 5 },
-      { id: 2, time: '11:30 AM', title: 'Certificate Applications', count: 3 },
-      { id: 3, time: '02:00 PM', title: 'PAN Card Verification', count: 2 },
-      { id: 4, time: '03:30 PM', title: 'Driving License - Photo', count: 4 },
-    ]);
-  };
-
+  // Fetch public data
   useEffect(() => {
-    fetchHomeData();
+    const fetchPublicData = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL;
+        
+        const [
+          servicesRes,
+          newsRes,
+          testimonialsRes,
+          statsRes,
+          announcementsRes
+        ] = await Promise.allSettled([
+          axios.get(`${apiUrl}/api/public/services`),
+          axios.get(`${apiUrl}/api/public/news`),
+          axios.get(`${apiUrl}/api/public/testimonials`),
+          axios.get(`${apiUrl}/api/public/stats`),
+          axios.get(`${apiUrl}/api/public/announcements`)
+        ]);
+
+        // Process services
+        if (servicesRes.status === 'fulfilled' && servicesRes.value.data) {
+          setServices(servicesRes.value.data.services || mockServices);
+        } else {
+          setServices(mockServices);
+        }
+
+        // Process news
+        if (newsRes.status === 'fulfilled' && newsRes.value.data) {
+          setNews(newsRes.value.data.news || mockNews);
+        } else {
+          setNews(mockNews);
+        }
+
+        // Process testimonials
+        if (testimonialsRes.status === 'fulfilled' && testimonialsRes.value.data) {
+          setTestimonials(testimonialsRes.value.data.testimonials || mockTestimonials);
+        } else {
+          setTestimonials(mockTestimonials);
+        }
+
+        // Process stats
+        if (statsRes.status === 'fulfilled' && statsRes.value.data) {
+          setStats(statsRes.value.data);
+        } else {
+          setStats(mockStats);
+        }
+
+        // Process announcements
+        if (announcementsRes.status === 'fulfilled' && announcementsRes.value.data) {
+          setAnnouncements(announcementsRes.value.data.announcements || mockAnnouncements);
+        } else {
+          setAnnouncements(mockAnnouncements);
+        }
+
+      } catch (error) {
+        console.error('Error fetching public data:', error);
+        // Set mock data on error
+        setServices(mockServices);
+        setNews(mockNews);
+        setTestimonials(mockTestimonials);
+        setStats(mockStats);
+        setAnnouncements(mockAnnouncements);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPublicData();
   }, []);
 
-  // Refresh handler
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    toast.info('Refreshing data...');
-    await fetchHomeData();
-    toast.success('Data refreshed successfully');
-  };
-
-  // Navigation handlers
-  const handleApplicationClick = (application) => {
-    navigate(`/applications/${application.id}`);
-  };
-
-  const handleNotificationClick = (notification) => {
-    // Mark as read
-    setNotifications(prev => 
-      prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-    );
-    
-    // Navigate based on notification type
-    if (notification.link) {
-      navigate(notification.link);
+  // Mock data
+  const mockServices = [
+    {
+      id: 1,
+      icon: <FiFileText className="h-7 w-7 text-white" />,
+      title: 'Certificate Services',
+      description: 'Income, Caste, Birth, Death, Marriage certificates and more from government portals.',
+      link: '#'
+    },
+    {
+      id: 2,
+      icon: <FiSmartphone className="h-7 w-7 text-white" />,
+      title: 'Aadhaar Services',
+      description: 'New enrolment, updates, PVC card, and demographic changes for Aadhaar.',
+      link: '#'
+    },
+    {
+      id: 3,
+      icon: <FiCreditCard className="h-7 w-7 text-white" />,
+      title: 'PAN Card Services',
+      description: 'New PAN application, corrections, reprint, and e-PAN download services.',
+      link: '#'
+    },
+    {
+      id: 4,
+      icon: <FiShield className="h-7 w-7 text-white" />,
+      title: 'Digital Life Certificate',
+      description: 'Jeevan Pramaan for pensioners - easy and convenient digital certification.',
+      link: '#'
+    },
+    {
+      id: 5,
+      icon: <FiUsers className="h-7 w-7 text-white" />,
+      title: 'Welfare Schemes',
+      description: 'Assistance with various government welfare schemes and applications.',
+      link: '#'
+    },
+    {
+      id: 6,
+      icon: <FiGlobe className="h-7 w-7 text-white" />,
+      title: 'e-District Services',
+      description: 'Online services from revenue department and other government agencies.',
+      link: '#'
     }
-  };
-
-  const handleCategoryClick = (category) => {
-    navigate(`/services?category=${category.id}`);
-  };
-
-  const handleViewAllApplications = () => {
-    navigate('/applications');
-  };
-
-  const handleViewAllNotifications = () => {
-    navigate('/notifications');
-  };
-
-  const handleNewApplication = () => {
-    navigate('/applications/new');
-  };
-
-  // Quick actions configuration
-  const quickActions = [
-    { 
-      title: 'New Application', 
-      icon: FiFileText, 
-      color: 'text-navy-600', 
-      bg: 'bg-navy-50',
-      onClick: () => navigate('/applications/new')
-    },
-    { 
-      title: 'Search Customer', 
-      icon: FiSearch, 
-      color: 'text-blue-600', 
-      bg: 'bg-blue-50',
-      onClick: () => navigate('/customers')
-    },
-    { 
-      title: 'Collect Payment', 
-      icon: FiDollarSign, 
-      color: 'text-emerald-600', 
-      bg: 'bg-emerald-50',
-      onClick: () => navigate('/payments/collect')
-    },
-    { 
-      title: 'View Reports', 
-      icon: FiTrendingUp, 
-      color: 'text-purple-600', 
-      bg: 'bg-purple-50',
-      onClick: () => navigate('/reports')
-    },
   ];
 
-  // Get greeting based on time
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
+  const mockNews = [
+    {
+      id: 1,
+      title: 'New Digital Service: e-Filing of Income Tax Returns',
+      description: 'We now offer assistance with e-filing income tax returns for individuals and businesses.',
+      category: 'New',
+      date: '2 days ago',
+      image: null
+    },
+    {
+      id: 2,
+      title: 'Extended Working Hours for Certificate Services',
+      description: 'Certificate services now available from 9 AM to 6 PM on all working days.',
+      category: 'Update',
+      date: '5 days ago',
+      image: null
+    },
+    {
+      id: 3,
+      title: 'Digital Literacy Program Registration Open',
+      description: 'Free digital literacy classes for senior citizens. Limited seats available.',
+      category: 'Announcement',
+      date: '1 week ago',
+      image: null
+    }
+  ];
+
+  const mockTestimonials = [
+    {
+      id: 1,
+      name: 'Rajesh Kumar',
+      location: 'Pukayur',
+      rating: 5,
+      content: 'Excellent service! Got my Aadhaar update done quickly without any hassle. Staff is very helpful and professional.'
+    },
+    {
+      id: 2,
+      name: 'Lakshmi Menon',
+      location: 'Koduvally',
+      rating: 5,
+      content: 'Very efficient service for income certificate. The staff guided me through the entire process. Highly recommended!'
+    },
+    {
+      id: 3,
+      name: 'Mohammed Aslam',
+      location: 'Thamarassery',
+      rating: 4,
+      content: 'Got my PAN card correction done here. Quick service and reasonable charges. Will definitely come back.'
+    }
+  ];
+
+  const mockStats = {
+    customers: 15000,
+    services: 50,
+    applications: 25000,
+    satisfaction: 98
   };
 
-  // Get current date
-  const getCurrentDate = () => {
-    return new Date().toLocaleDateString('en-IN', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+  const mockAnnouncements = [
+    {
+      id: 1,
+      title: 'New Service Alert! 🎉',
+      message: 'Digital Life Certificate (Jeevan Pramaan) for pensioners now available at our centre.',
+      type: 'success'
+    },
+    {
+      id: 2,
+      title: 'Holiday Notice',
+      message: 'Centre will remain closed on upcoming public holidays. Please plan your visit accordingly.',
+      type: 'warning'
+    }
+  ];
+
+  const faqs = [
+    {
+      question: 'What documents are required for Aadhaar update?',
+      answer: 'You need to bring your original Aadhaar card and supporting documents for the specific update (e.g., address proof, ID proof). Our staff will guide you through the process.'
+    },
+    {
+      question: 'What are the working hours of Akshaya Centre?',
+      answer: 'We are open Monday to Saturday from 9:00 AM to 6:00 PM. The centre remains closed on Sundays and public holidays.'
+    },
+    {
+      question: 'How long does it take to get a certificate?',
+      answer: 'Most certificates are issued within 7-15 working days depending on the type of certificate and government processing time. Some services offer tatkal (urgent) options.'
+    },
+    {
+      question: 'Do I need to book an appointment?',
+      answer: 'Walk-ins are welcome, but we recommend booking an appointment for faster service. You can book through our website or by calling our centre.'
+    },
+    {
+      question: 'What payment methods are accepted?',
+      answer: 'We accept cash, UPI, debit/credit cards, and digital wallets for your convenience.'
+    }
+  ];
+
+  const handleLoginClick = () => {
+    navigate('/login');
+  };
+
+  const handleWhatsAppClick = () => {
+    window.open('https://wa.me/919876543210', '_blank');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-navy-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-navy-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600 font-medium">Loading Akshaya e-Centre...</p>
         </div>
       </div>
@@ -587,298 +640,501 @@ const Home = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-navy-800 to-navy-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold">
-                {getGreeting()}, {userInfo.name}! 👋
-              </h1>
-              <p className="text-navy-200 mt-1">
-                {userInfo.centre_name} • {getCurrentDate()}
-              </p>
-            </div>
-            <div className="mt-4 md:mt-0 flex items-center space-x-3">
-              <button
-                onClick={handleRefresh}
-                className="flex items-center space-x-2 px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
-                disabled={refreshing}
-              >
-                <FiRefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                <span className="text-sm">Refresh</span>
-              </button>
-              <Link
-                to="/profile"
-                className="flex items-center space-x-2 px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors"
-              >
-                <FiUser className="h-4 w-4" />
-                <span className="text-sm">{userInfo.role}</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-white">
+      {/* Navigation */}
+      <Navbar onLoginClick={handleLoginClick} scrolled={scrolled} />
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          <StatsCard
-            title="Total Applications"
-            value={stats.totalApplications}
-            icon={FiFileText}
-            color="text-blue-600"
-            bg="bg-blue-50"
-            onClick={handleViewAllApplications}
-          />
-          <StatsCard
-            title="Pending"
-            value={stats.pendingApplications}
-            icon={FiClock}
-            color="text-amber-600"
-            bg="bg-amber-50"
-            onClick={handleViewAllApplications}
-          />
-          <StatsCard
-            title="Completed Today"
-            value={stats.completedToday}
-            icon={FiCheckCircle}
-            color="text-emerald-600"
-            bg="bg-emerald-50"
-            onClick={handleViewAllApplications}
-          />
-          <StatsCard
-            title="Active Services"
-            value={stats.activeServices}
-            icon={FiPackage}
-            color="text-indigo-600"
-            bg="bg-indigo-50"
-          />
-          <StatsCard
-            title="Pending Payments"
-            value={stats.pendingPayments}
-            icon={FiDollarSign}
-            color="text-rose-600"
-            bg="bg-rose-50"
-            onClick={() => navigate('/payments/pending')}
-          />
-          <StatsCard
-            title="Notifications"
-            value={stats.unreadNotifications}
-            icon={FiBell}
-            color="text-purple-600"
-            bg="bg-purple-50"
-            onClick={handleViewAllNotifications}
-          />
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mb-6">
-          <SectionHeader title="Quick Actions" icon={FiActivity} />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {quickActions.map((action, index) => (
-              <QuickLinkCard key={index} {...action} />
-            ))}
-          </div>
-        </div>
-
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Recent Applications */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <SectionHeader
-                title="Recent Applications"
-                icon={FiFileText}
-                action
-                actionText="View All"
-                onAction={handleViewAllApplications}
-              />
-              
-              <div className="px-4 pb-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {recentApplications.map((app) => (
-                    <ApplicationCard
-                      key={app.id}
-                      application={app}
-                      onClick={handleApplicationClick}
-                    />
-                  ))}
+      {/* Announcement Bar */}
+      {announcements.length > 0 && (
+        <div className="fixed top-16 md:top-20 left-0 right-0 z-40">
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+            <div className="max-w-7xl mx-auto px-4 py-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FiBell className="h-4 w-4 animate-pulse" />
+                  <p className="text-sm font-medium">{announcements[0].message}</p>
                 </div>
-                
-                {recentApplications.length === 0 && (
-                  <div className="text-center py-8">
-                    <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No recent applications</p>
-                    <button
-                      onClick={handleNewApplication}
-                      className="mt-3 text-navy-600 hover:text-navy-700 font-medium text-sm"
-                    >
-                      Create New Application →
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column - Notifications & Schedule */}
-          <div className="space-y-6">
-            {/* Notifications */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <SectionHeader
-                title="Notifications"
-                icon={FiBell}
-                action
-                actionText="View All"
-                onAction={handleViewAllNotifications}
-              />
-              
-              <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
-                {notifications.map((notification) => (
-                  <NotificationItem
-                    key={notification.id}
-                    notification={notification}
-                    onClick={handleNotificationClick}
-                  />
-                ))}
-                
-                {notifications.length === 0 && (
-                  <div className="text-center py-8">
-                    <FiBell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No new notifications</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Today's Schedule */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <SectionHeader
-                title="Today's Schedule"
-                icon={FiCalendar}
-              />
-              
-              <div className="p-4">
-                {todaySchedule.length > 0 ? (
-                  <div className="space-y-3">
-                    {todaySchedule.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="text-sm font-medium text-navy-600 w-20">{item.time}</div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                            <p className="text-xs text-gray-500">{item.count} appointments</p>
-                          </div>
-                        </div>
-                        <FiChevronRight className="h-4 w-4 text-gray-400" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <FiCalendar className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500 text-sm">No appointments scheduled</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Service Categories */}
-        <div className="mt-6">
-          <SectionHeader
-            title="Service Categories"
-            icon={FiPackage}
-            action
-            actionText="All Services"
-            onAction={() => navigate('/services')}
-          />
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {serviceCategories.map((category) => (
-              <ServiceCategoryCard
-                key={category.id}
-                category={category}
-                onClick={handleCategoryClick}
-              />
-            ))}
-            
-            {serviceCategories.length === 0 && (
-              <div className="col-span-4 text-center py-8">
-                <FiPackage className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No service categories available</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Announcements Banner */}
-        {announcements.length > 0 && (
-          <div className="mt-6">
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-amber-100 rounded-lg">
-                  <FiInfo className="h-5 w-5 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-1">Announcements</h3>
-                  <div className="space-y-2">
-                    {announcements.slice(0, 2).map((announcement) => (
-                      <div key={announcement.id} className="text-sm">
-                        <span className="font-medium text-gray-800">{announcement.title}:</span>
-                        <span className="text-gray-600 ml-1">{announcement.content}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <button
-                  onClick={() => navigate('/announcements')}
-                  className="text-navy-600 hover:text-navy-700"
-                >
-                  <FiExternalLink className="h-4 w-4" />
+                <button className="text-white/80 hover:text-white">
+                  <FiX className="h-4 w-4" />
                 </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Footer */}
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <p className="text-sm text-gray-500">
-              © 2025 Muhammed Illyas. All rights reserved.
-            </p>
-            <p className="text-sm text-gray-500">
-              Akshaya e-Centre Pukayur • Digital Empowerment Initiative
-            </p>
+      {/* Hero Section */}
+      <section id="home" className="relative min-h-screen flex items-center pt-20">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-navy-100 rounded-full opacity-20" />
+          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-100 rounded-full opacity-20" />
+        </div>
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Hero Content */}
+            <motion.div
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="inline-flex items-center px-3 py-1 bg-navy-50 rounded-full mb-6">
+                <FiAward className="h-4 w-4 text-navy-600 mr-2" />
+                <span className="text-sm font-medium text-navy-700">Kerala's Trusted e-Governance Partner</span>
+              </div>
+              
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+                Your Gateway to
+                <span className="text-navy-600 block">Digital Empowerment</span>
+              </h1>
+              
+              <p className="text-lg text-gray-600 mb-8 max-w-lg">
+                Akshaya e-Centre Pukayur provides seamless access to government services, 
+                certificates, and digital solutions for citizens across Kerala.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 mb-8">
+                <button
+                  onClick={handleLoginClick}
+                  className="px-8 py-4 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-xl hover:shadow-xl transition-all duration-300 font-medium text-lg flex items-center justify-center"
+                >
+                  Access Services <FiArrowRight className="ml-2 h-5 w-5" />
+                </button>
+                <a
+                  href="#services"
+                  className="px-8 py-4 border-2 border-navy-600 text-navy-600 rounded-xl hover:bg-navy-50 transition-all duration-300 font-medium text-lg flex items-center justify-center"
+                >
+                  Explore Services
+                </a>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-white rounded-xl shadow-md">
+                  <p className="text-2xl font-bold text-navy-600">
+                    <AnimatedCounter value={stats.customers} />
+                  </p>
+                  <p className="text-xs text-gray-600">Happy Customers</p>
+                </div>
+                <div className="text-center p-3 bg-white rounded-xl shadow-md">
+                  <p className="text-2xl font-bold text-navy-600">
+                    <AnimatedCounter value={stats.services} />
+                  </p>
+                  <p className="text-xs text-gray-600">Services</p>
+                </div>
+                <div className="text-center p-3 bg-white rounded-xl shadow-md">
+                  <p className="text-2xl font-bold text-navy-600">
+                    <AnimatedCounter value={stats.applications} />
+                  </p>
+                  <p className="text-xs text-gray-600">Applications</p>
+                </div>
+                <div className="text-center p-3 bg-white rounded-xl shadow-md">
+                  <p className="text-2xl font-bold text-navy-600">{stats.satisfaction}%</p>
+                  <p className="text-xs text-gray-600">Satisfaction</p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Hero Image/Illustration */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="relative"
+            >
+              <div className="relative z-10 bg-gradient-to-br from-navy-600 to-navy-800 rounded-3xl p-8 shadow-2xl">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                    <FiFileText className="h-8 w-8 text-white mb-3" />
+                    <h3 className="text-white font-semibold mb-1">Certificates</h3>
+                    <p className="text-navy-100 text-sm">Income, Caste, Birth & More</p>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                    <FiSmartphone className="h-8 w-8 text-white mb-3" />
+                    <h3 className="text-white font-semibold mb-1">Aadhaar</h3>
+                    <p className="text-navy-100 text-sm">Enrolment & Updates</p>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                    <FiCreditCard className="h-8 w-8 text-white mb-3" />
+                    <h3 className="text-white font-semibold mb-1">PAN Card</h3>
+                    <p className="text-navy-100 text-sm">New & Correction</p>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                    <FiGlobe className="h-8 w-8 text-white mb-3" />
+                    <h3 className="text-white font-semibold mb-1">e-District</h3>
+                    <p className="text-navy-100 text-sm">Online Services</p>
+                  </div>
+                </div>
+                
+                {/* Floating Elements */}
+                <div className="absolute -top-4 -right-4 bg-green-500 rounded-full p-3 shadow-lg">
+                  <FiCheckCircle className="h-6 w-6 text-white" />
+                </div>
+                <div className="absolute -bottom-4 -left-4 bg-blue-500 rounded-full p-3 shadow-lg">
+                  <FiStar className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </motion.div>
           </div>
         </div>
-      </div>
+
+        {/* Scroll Indicator */}
+        <motion.div
+          animate={{ y: [0, 10, 0] }}
+          transition={{ repeat: Infinity, duration: 2 }}
+          className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
+        >
+          <a href="#services" className="text-gray-400 hover:text-navy-600 transition-colors">
+            <FiChevronDown className="h-6 w-6" />
+          </a>
+        </motion.div>
+      </section>
+
+      {/* Services Section */}
+      <section id="services" className="py-20 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Our <span className="text-navy-600">Services</span>
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Comprehensive range of government and digital services at your fingertips
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {services.map((service, index) => (
+              <ServiceCard key={service.id} service={service} index={index} />
+            ))}
+          </div>
+
+          <div className="text-center mt-12">
+            <button
+              onClick={handleLoginClick}
+              className="px-8 py-3 bg-navy-600 text-white rounded-xl hover:bg-navy-700 transition-all duration-300 font-medium inline-flex items-center"
+            >
+              View All Services <FiArrowRight className="ml-2 h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* About Section */}
+      <section id="about" className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+            >
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
+                About <span className="text-navy-600">Akshaya e-Centre</span>
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Akshaya is a flagship project of the Kerala State IT Mission, designed to bridge 
+                the digital divide and provide e-governance services to citizens across the state.
+              </p>
+              <p className="text-gray-600 mb-6">
+                Our centre at Pukayur is committed to delivering efficient, transparent, and 
+                accessible government services to the local community. We strive to empower 
+                citizens through digital literacy and convenient access to essential services.
+              </p>
+              
+              <div className="space-y-3">
+                <div className="flex items-center">
+                  <FiCheckCircle className="h-5 w-5 text-green-500 mr-3" />
+                  <span className="text-gray-700">ISO Certified Centre</span>
+                </div>
+                <div className="flex items-center">
+                  <FiCheckCircle className="h-5 w-5 text-green-500 mr-3" />
+                  <span className="text-gray-700">Trained and Experienced Staff</span>
+                </div>
+                <div className="flex items-center">
+                  <FiCheckCircle className="h-5 w-5 text-green-500 mr-3" />
+                  <span className="text-gray-700">Quick and Reliable Service</span>
+                </div>
+                <div className="flex items-center">
+                  <FiCheckCircle className="h-5 w-5 text-green-500 mr-3" />
+                  <span className="text-gray-700">Affordable Service Charges</span>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="relative"
+            >
+              <div className="bg-gradient-to-br from-navy-50 to-blue-50 rounded-3xl p-8">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white rounded-xl p-6 text-center shadow-md">
+                    <FiClock className="h-8 w-8 text-navy-600 mx-auto mb-3" />
+                    <h4 className="font-semibold text-gray-900 mb-1">Working Hours</h4>
+                    <p className="text-sm text-gray-600">Mon-Sat: 9AM - 6PM</p>
+                    <p className="text-sm text-gray-600">Sunday: Closed</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 text-center shadow-md">
+                    <FiMapPin className="h-8 w-8 text-navy-600 mx-auto mb-3" />
+                    <h4 className="font-semibold text-gray-900 mb-1">Location</h4>
+                    <p className="text-sm text-gray-600">Main Road, Pukayur</p>
+                    <p className="text-sm text-gray-600">Kozhikode, Kerala</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 text-center shadow-md">
+                    <FiPhone className="h-8 w-8 text-navy-600 mx-auto mb-3" />
+                    <h4 className="font-semibold text-gray-900 mb-1">Contact</h4>
+                    <p className="text-sm text-gray-600">+91 98765 43210</p>
+                    <p className="text-sm text-gray-600">pukayur@akshaya.gov.in</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 text-center shadow-md">
+                    <FiAward className="h-8 w-8 text-navy-600 mx-auto mb-3" />
+                    <h4 className="font-semibold text-gray-900 mb-1">Experience</h4>
+                    <p className="text-sm text-gray-600">15+ Years</p>
+                    <p className="text-sm text-gray-600">of Excellence</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* News & Updates Section */}
+      <section id="news" className="py-20 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Latest <span className="text-navy-600">News & Updates</span>
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Stay informed about new services, announcements, and important updates
+            </p>
+          </motion.div>
+
+          <div className="space-y-4">
+            {news.map((item, index) => (
+              <NewsCard key={item.id} news={item} index={index} />
+            ))}
+          </div>
+
+          <div className="text-center mt-8">
+            <button className="text-navy-600 hover:text-navy-700 font-medium inline-flex items-center">
+              View All News <FiArrowRight className="ml-2 h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials Section */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              What Our <span className="text-navy-600">Customers Say</span>
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Hear from thousands of satisfied customers who trust Akshaya e-Centre
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {testimonials.map((testimonial, index) => (
+              <TestimonialCard key={testimonial.id} testimonial={testimonial} index={index} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Frequently Asked <span className="text-navy-600">Questions</span>
+            </h2>
+            <p className="text-gray-600">
+              Find answers to common questions about our services
+            </p>
+          </motion.div>
+
+          <div className="bg-white rounded-2xl p-6 shadow-lg">
+            {faqs.map((faq, index) => (
+              <FAQItem
+                key={index}
+                faq={faq}
+                isOpen={openFAQ === index}
+                onToggle={() => setOpenFAQ(openFAQ === index ? null : index)}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Newsletter Section */}
+      <NewsletterSection />
+
+      {/* Contact & Footer Section */}
+      <footer id="contact" className="bg-gradient-to-br from-navy-900 to-navy-800 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+            {/* About Column */}
+            <div>
+              <div className="flex items-center mb-4">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <FiShield className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-xl font-bold">Akshaya</h3>
+                  <p className="text-xs text-navy-200">e-Centre Pukayur</p>
+                </div>
+              </div>
+              <p className="text-navy-200 mb-4">
+                Your trusted partner for e-governance and digital services in Kerala.
+              </p>
+              <div className="flex space-x-3">
+                <a href="#" className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
+                  <FiFacebook className="h-5 w-5" />
+                </a>
+                <a href="#" className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
+                  <FiTwitter className="h-5 w-5" />
+                </a>
+                <a href="#" className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
+                  <FiInstagram className="h-5 w-5" />
+                </a>
+                <a href="#" className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
+                  <FiYoutube className="h-5 w-5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h4 className="text-lg font-semibold mb-4">Quick Links</h4>
+              <ul className="space-y-2">
+                <li><a href="#home" className="text-navy-200 hover:text-white transition-colors">Home</a></li>
+                <li><a href="#services" className="text-navy-200 hover:text-white transition-colors">Services</a></li>
+                <li><a href="#about" className="text-navy-200 hover:text-white transition-colors">About Us</a></li>
+                <li><a href="#news" className="text-navy-200 hover:text-white transition-colors">News</a></li>
+                <li><button onClick={handleLoginClick} className="text-navy-200 hover:text-white transition-colors">Login</button></li>
+              </ul>
+            </div>
+
+            {/* Services Links */}
+            <div>
+              <h4 className="text-lg font-semibold mb-4">Our Services</h4>
+              <ul className="space-y-2">
+                <li><a href="#" className="text-navy-200 hover:text-white transition-colors">Aadhaar Services</a></li>
+                <li><a href="#" className="text-navy-200 hover:text-white transition-colors">Certificates</a></li>
+                <li><a href="#" className="text-navy-200 hover:text-white transition-colors">PAN Card</a></li>
+                <li><a href="#" className="text-navy-200 hover:text-white transition-colors">e-District</a></li>
+                <li><a href="#" className="text-navy-200 hover:text-white transition-colors">Digital Life Certificate</a></li>
+              </ul>
+            </div>
+
+            {/* Contact Info */}
+            <div>
+              <h4 className="text-lg font-semibold mb-4">Contact Us</h4>
+              <ul className="space-y-3">
+                <li className="flex items-start">
+                  <FiMapPin className="h-5 w-5 text-navy-200 mr-3 mt-0.5" />
+                  <span className="text-navy-200">Main Road, Pukayur, Kozhikode, Kerala - 673571</span>
+                </li>
+                <li className="flex items-center">
+                  <FiPhone className="h-5 w-5 text-navy-200 mr-3" />
+                  <span className="text-navy-200">+91 98765 43210</span>
+                </li>
+                <li className="flex items-center">
+                  <FiMail className="h-5 w-5 text-navy-200 mr-3" />
+                  <span className="text-navy-200">pukayur@akshaya.gov.in</span>
+                </li>
+              </ul>
+              
+              {/* WhatsApp Contact */}
+              <button
+                onClick={handleWhatsAppClick}
+                className="mt-4 w-full flex items-center justify-center px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+              >
+                <FaWhatsapp className="h-5 w-5 mr-2" />
+                <span>Chat on WhatsApp</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className="pt-8 border-t border-white/10">
+            <div className="flex flex-col md:flex-row justify-between items-center">
+              <p className="text-navy-200 text-sm mb-4 md:mb-0">
+                © 2025 Muhammed Illyas. All rights reserved.
+              </p>
+              <div className="flex space-x-6">
+                <a href="#" className="text-navy-200 hover:text-white text-sm transition-colors">Privacy Policy</a>
+                <a href="#" className="text-navy-200 hover:text-white text-sm transition-colors">Terms of Service</a>
+                <a href="#" className="text-navy-200 hover:text-white text-sm transition-colors">Cookie Policy</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* Floating WhatsApp Button */}
+      <motion.button
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        whileHover={{ scale: 1.1 }}
+        onClick={handleWhatsAppClick}
+        className="fixed bottom-6 right-6 z-50 bg-green-500 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all"
+      >
+        <FaWhatsapp className="h-6 w-6" />
+      </motion.button>
 
       {/* Custom Styles */}
       <style>{`
         .bg-navy-50 { background-color: #f0f4f8; }
         .bg-navy-100 { background-color: #d9e2ec; }
         .bg-navy-200 { background-color: #bccde0; }
+        .bg-navy-500 { background-color: #3b6ea5; }
         .bg-navy-600 { background-color: #2c5282; }
         .bg-navy-700 { background-color: #1e3a5f; }
         .bg-navy-800 { background-color: #172a45; }
         .bg-navy-900 { background-color: #0a192f; }
+        .text-navy-100 { color: #d9e2ec; }
         .text-navy-200 { color: #bccde0; }
         .text-navy-600 { color: #2c5282; }
         .text-navy-700 { color: #1e3a5f; }
+        .text-navy-900 { color: #0a192f; }
         .border-navy-100 { border-color: #d9e2ec; }
-        .border-navy-200 { border-color: #bccde0; }
         
         .line-clamp-2 {
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+        }
+
+        html {
+          scroll-behavior: smooth;
         }
       `}</style>
     </div>
