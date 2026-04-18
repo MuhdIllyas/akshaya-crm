@@ -42,6 +42,7 @@ import MyProfile from './pages/MyProfile';
 import CampaignManagement from "./pages/campaign/CampaignManagement";
 import axios from "axios";
 import Login from "./pages/Login";
+import Home from "./pages/Home";
 
 import CustomerRegistration from './pages/CustomerRegistration';
 import CustomerDashboard from './pages/customers/CustomerDashboard';
@@ -199,6 +200,7 @@ const App = () => {
       />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/home" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
         <Route path="/review/:token" element={<PublicReview />} /> 
