@@ -657,11 +657,23 @@ router.get('/entries', authenticateToken, async (req, res) => {
 
     const entries = [];
     for (const entry of entriesResult.rows) {
+      // 🔥 FIXED: Only fetch the LATEST non-reversal payment for each correction group
       const paymentsResult = await client.query(`
-        SELECT p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
+        SELECT DISTINCT ON (p.correction_group_id)
+          p.id, 
+          p.wallet_id, 
+          p.amount, 
+          p.status, 
+          w.name AS wallet_name, 
+          w.wallet_type,
+          p.correction_group_id,
+          p.is_reversal,
+          p.created_at
         FROM payments p
         JOIN wallets w ON p.wallet_id = w.id
         WHERE p.service_entry_id = $1
+          AND p.is_reversal = FALSE
+        ORDER BY p.correction_group_id, p.created_at DESC
       `, [entry.id]);
 
       entries.push({
@@ -696,6 +708,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
           method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
           amount: parseFloat(p.amount),
           status: p.status,
+          correction_group_id: p.correction_group_id,
           workSource: entry.work_source,
           customerServiceId: entry.customer_service_id,  
         })),
@@ -730,11 +743,24 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
     }
 
     const entry = result.rows[0];
+    
+    // 🔥 FIXED: Only fetch the LATEST non-reversal payment for each correction group
     const paymentsResult = await client.query(`
-      SELECT p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
+      SELECT DISTINCT ON (p.correction_group_id)
+        p.id, 
+        p.wallet_id, 
+        p.amount, 
+        p.status, 
+        w.name AS wallet_name, 
+        w.wallet_type,
+        p.correction_group_id,
+        p.is_reversal,
+        p.created_at
       FROM payments p
       JOIN wallets w ON p.wallet_id = w.id
       WHERE p.service_entry_id = $1
+        AND p.is_reversal = FALSE
+      ORDER BY p.correction_group_id, p.created_at DESC
     `, [entry.id]);
 
     const formattedEntry = {
@@ -1641,12 +1667,23 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       ]
     );
 
-    // Fetch updated payments
+    // 🔥 FIXED: Only fetch the LATEST non-reversal payment for each correction group
     const paymentsResult = await client.query(`
-      SELECT p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
+      SELECT DISTINCT ON (p.correction_group_id)
+        p.id, 
+        p.wallet_id, 
+        p.amount, 
+        p.status, 
+        w.name AS wallet_name, 
+        w.wallet_type,
+        p.correction_group_id,
+        p.is_reversal,
+        p.created_at
       FROM payments p
       JOIN wallets w ON p.wallet_id = w.id
       WHERE p.service_entry_id = $1
+        AND p.is_reversal = FALSE
+      ORDER BY p.correction_group_id, p.created_at DESC
     `, [id]);
 
     await client.query('COMMIT');
