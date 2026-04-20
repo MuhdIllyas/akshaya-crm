@@ -114,7 +114,7 @@ const ServiceEntry = () => {
    */
   const checkCorrectionStatus = async (paymentId) => {
     try {
-      const response = await api.get(`/wallet/payments/${paymentId}/correction-status`);
+      const response = await api.get(`/payments/${paymentId}/correction-status`);
       setCorrectionStatus(prev => ({
         ...prev,
         [paymentId]: response.data
@@ -181,7 +181,7 @@ const ServiceEntry = () => {
     setCorrectionModal(prev => ({ ...prev, loading: true }));
     
     try {
-      const response = await api.put(`/wallet/payments/${payment.id}/correct`, {
+      const response = await api.put(`/payments/${payment.id}/correct`, {
         new_amount: parseFloat(newAmount),
         new_wallet_id: parseInt(newWalletId),
         reason: reason.trim()
@@ -216,7 +216,7 @@ const ServiceEntry = () => {
     setPaymentHistoryModal({ isOpen: true, paymentId, history: [], loading: true });
     
     try {
-      const response = await api.get(`/wallet/payments/${paymentId}/history`);
+      const response = await api.get(`/payments/${paymentId}/history`);
       setPaymentHistoryModal(prev => ({
         ...prev,
         history: response.data,
