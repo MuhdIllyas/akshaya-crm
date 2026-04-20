@@ -2,7 +2,8 @@ import express from 'express';
 import pool from '../db.js';
 import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
-import { logActivity } from "../utils/activityLogger.js"; // Add this import
+import { logActivity } from "../utils/activityLogger.js";
+import crypto from 'crypto'; // ADDED: For payment correction_group_id generation
 
 const router = express.Router();
 
@@ -1080,13 +1081,27 @@ router.post('/entry', authenticateToken, async (req, res) => {
     }
 
     /* ───────────── PAYMENTS & WALLET CREDIT ───────────── */
+    /* 🔥 UPDATED: Correction-compatible payment creation */
 
     for (const payment of payments) {
-      await client.query(
+      // 🔥 NEW: Generate correction_group_id for each payment
+      const groupId = crypto.randomUUID();
+      
+      // Insert payment with correction fields
+      const paymentRes = await client.query(
         `INSERT INTO payments (
-          service_entry_id, wallet_id, amount, status, created_at
-        ) VALUES ($1,$2,$3,$4,NOW())`,
-        [serviceEntryId, payment.wallet, payment.amount, payment.status]
+          service_entry_id, wallet_id, amount, status, correction_group_id, original_payment_id, created_at
+        ) VALUES ($1, $2, $3, $4, $5, NULL, NOW())
+        RETURNING id`,
+        [serviceEntryId, payment.wallet, payment.amount, payment.status, groupId]
+      );
+      
+      const paymentId = paymentRes.rows[0].id;
+      
+      // 🔥 CRITICAL: Set original_payment_id = self
+      await client.query(
+        `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
+        [paymentId]
       );
 
       if (payment.status === 'received') {
@@ -1104,14 +1119,15 @@ router.post('/entry', authenticateToken, async (req, res) => {
 
         await client.query(
           `INSERT INTO wallet_transactions (
-            wallet_id, staff_id, type, amount, description, category, reference_id, created_at
-          ) VALUES ($1,$2,'credit',$3,$4,'Service Payment',$5, NOW())`,
+            wallet_id, staff_id, type, amount, description, category, reference_id, correction_group_id, created_at
+          ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, $6, NOW())`,
           [
             payment.wallet,
             staffId,
             payment.amount,
             `${walletType === 'cash' ? 'Cash' : 'Online'} payment for ${serviceName} (#${serviceEntryId})`,
-            serviceEntryId
+            serviceEntryId,
+            groupId  // 🔥 NEW: Same group_id as payment
           ]
         );
       }
@@ -1310,7 +1326,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     if (createdDate.getTime() !== today.getTime()) {
       await client.query('ROLLBACK');
       return res.status(403).json({
-        error: 'Editing is allowed only for today’s service entries'
+        error: 'Editing is allowed only for today\'s service entries'
       });
     }
 
@@ -2598,37 +2614,6 @@ router.get('/tokens/history', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/servicemanagement/campaigns/active
-router.get('/campaigns/active', authenticateToken, async (req, res) => {
-  const { centre_id } = req.query;
-
-  try {
-    let query = `
-      SELECT c.*, s.name AS service_name, ct.name AS centre_name,
-             (SELECT COUNT(*) FROM tokens t WHERE t.campaign_id = c.id) AS tokens_generated
-      FROM campaigns c
-      LEFT JOIN services s ON c.service_id = s.id
-      LEFT JOIN centres ct ON c.centre_id = ct.id
-      WHERE CURRENT_DATE BETWEEN c.start_date AND c.end_date
-    `;
-    const values = [];
-    if (req.user.role !== 'superadmin') {
-      query += ` AND c.centre_id = $1`;
-      values.push(req.user.centre_id);
-    } else if (centre_id && centre_id !== 'all') {
-      query += ` AND c.centre_id = $1`;
-      values.push(centre_id);
-    }
-    query += ` ORDER BY c.created_at DESC`;
-
-    const result = await pool.query(query, values);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching active campaigns:', err);
-    res.status(500).json({ error: 'Failed to fetch active campaigns: ' + err.message });
-  }
-});
-
 // DELETE /api/servicemanagement/tokens/:tokenId
 router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
   const { tokenId } = req.params;
@@ -2812,7 +2797,6 @@ router.get("/pending-payments",authenticateToken,async (req, res) => {
 // Receive pending payment (CREDIT ONLY)
 router.post("/pending-payments/:id/receive-payment",authenticateToken,
   async (req, res) => {
-    const { from , to } = req.query;
     const client = await pool.connect();
     try {
       const serviceEntryId = req.params.id;
@@ -2822,17 +2806,6 @@ router.post("/pending-payments/:id/receive-payment",authenticateToken,
         return res.status(400).json({
           error: "wallet_id and valid amount are required"
         });
-      }
-
-      //Date Wise Filters      
-      if (from) {
-        conditions.push(`se.created_at >= $${idx++}`);
-        values.push(`${from} 00:00:00`);
-      }
-
-      if (to) {
-        conditions.push(`se.created_at <= $${idx++}`);
-        values.push(`${to} 23:59:59`);
       }
 
       await client.query("BEGIN");
@@ -2847,19 +2820,32 @@ router.post("/pending-payments/:id/receive-payment",authenticateToken,
         throw new Error("Service entry not found");
       }
 
-      // 2️⃣ Insert payment record (RECEIVED)
-      await client.query(
+      // 🔥 UPDATED: Correction-compatible payment creation
+      const groupId = crypto.randomUUID();
+      
+      const paymentRes = await client.query(
         `
         INSERT INTO payments (
           service_entry_id,
           wallet_id,
           amount,
           status,
+          correction_group_id,
+          original_payment_id,
           created_at
         )
-        VALUES ($1, $2, $3, 'received', NOW())
+        VALUES ($1, $2, $3, 'received', $4, NULL, NOW())
+        RETURNING id
         `,
-        [serviceEntryId, wallet_id, amount]
+        [serviceEntryId, wallet_id, amount, groupId]
+      );
+      
+      const paymentId = paymentRes.rows[0].id;
+      
+      // 🔥 CRITICAL: Set original_payment_id = self
+      await client.query(
+        `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
+        [paymentId]
       );
 
       // 3️⃣ CREDIT wallet (IMPORTANT)
@@ -2872,7 +2858,7 @@ router.post("/pending-payments/:id/receive-payment",authenticateToken,
         [amount, wallet_id]
       );
 
-      // 4️⃣ Wallet transaction log (CREDIT)
+      // 4️⃣ Wallet transaction log (CREDIT) with correction_group_id
       await client.query(
         `
         INSERT INTO wallet_transactions (
@@ -2883,16 +2869,18 @@ router.post("/pending-payments/:id/receive-payment",authenticateToken,
           description,
           category,
           reference_id,
+          correction_group_id,
           created_at
         )
-        VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, NOW())
+        VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, $6, NOW())
         `,
         [
           wallet_id,
           req.user.id,
           amount,
           `Pending payment collected for service #${serviceEntryId}`,
-          serviceEntryId
+          serviceEntryId,
+          groupId  // 🔥 NEW: Same group_id as payment
         ]
       );
 
