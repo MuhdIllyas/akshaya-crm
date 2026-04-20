@@ -1,16 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FiUser, FiPhone, FiCreditCard, FiDollarSign, FiCheck, FiX, FiCheckCircle, FiChevronDown, FiPlus, FiTrash2, FiCalendar, FiClock, FiEye, FiLink, FiFileText } from 'react-icons/fi';
+import { 
+  FiUser, FiPhone, FiCreditCard, FiDollarSign, FiCheck, FiX, FiCheckCircle, 
+  FiChevronDown, FiPlus, FiTrash2, FiCalendar, FiClock, FiEye, FiLink, 
+  FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory 
+} from 'react-icons/fi';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById , updateServiceEntry } from '/src/services/serviceService';
+import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry } from '/src/services/serviceService';
 import api from '@/services/serviceService';
 
 const ServiceEntry = () => {
   const { tokenId, customerServiceId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // ========== STATE FOR PAYMENT CORRECTION ==========
+  const [correctionModal, setCorrectionModal] = useState({
+    isOpen: false,
+    payment: null,
+    loading: false
+  });
+  const [paymentHistoryModal, setPaymentHistoryModal] = useState({
+    isOpen: false,
+    paymentId: null,
+    history: [],
+    loading: false
+  });
+  const [correctionStatus, setCorrectionStatus] = useState({});
+  
   const [formData, setFormData] = useState({
     tokenId: tokenId || '',
     customerName: '',
@@ -46,6 +65,11 @@ const ServiceEntry = () => {
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const isEditMode = Boolean(editingEntryId);
+  
+  // Get user role for correction limits
+  const userRole = localStorage.getItem('role') || 'staff';
+  const userId = localStorage.getItem('id');
+
   const handleEditEntry = (entry) => {
     setEditingEntryId(entry.id);
 
@@ -67,22 +91,165 @@ const ServiceEntry = () => {
     });
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };  
+  };
 
   const paymentStatusOptions = [
     { id: 'received', name: 'Received', color: 'bg-emerald-100 text-emerald-800' },
     { id: 'pending', name: 'Pending', color: 'bg-amber-100 text-amber-800' },
   ];
 
-const isToday = (dateStr) => {
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  const t = new Date();
-  d.setHours(0,0,0,0);
-  t.setHours(0,0,0,0);
-  return d.getTime() === t.getTime();
-};
+  const isToday = (dateStr) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const t = new Date();
+    d.setHours(0,0,0,0);
+    t.setHours(0,0,0,0);
+    return d.getTime() === t.getTime();
+  };
 
+  // ========== PAYMENT CORRECTION FUNCTIONS ==========
+  
+  /**
+   * Check correction status for a payment
+   */
+  const checkCorrectionStatus = async (paymentId) => {
+    try {
+      const response = await api.get(`/wallet/payments/${paymentId}/correction-status`);
+      setCorrectionStatus(prev => ({
+        ...prev,
+        [paymentId]: response.data
+      }));
+      return response.data;
+    } catch (err) {
+      console.error('Error checking correction status:', err);
+      return null;
+    }
+  };
+
+  /**
+   * Open correction modal
+   */
+  const openCorrectionModal = async (payment, entry) => {
+    // Check correction status first
+    const status = await checkCorrectionStatus(payment.id);
+    
+    if (!status) {
+      toast.error('Unable to check correction status');
+      return;
+    }
+    
+    if (!status.can_correct) {
+      toast.error(`Correction limit reached (max ${status.max_corrections_staff} corrections). Please contact admin.`);
+      return;
+    }
+    
+    setCorrectionModal({
+      isOpen: true,
+      payment: {
+        ...payment,
+        serviceEntryId: entry.id,
+        originalAmount: payment.amount
+      },
+      loading: false,
+      newAmount: payment.amount,
+      newWalletId: payment.wallet,
+      reason: ''
+    });
+  };
+
+  /**
+   * Submit payment correction
+   */
+  const submitCorrection = async () => {
+    const { payment, newAmount, newWalletId, reason } = correctionModal;
+    
+    if (!newAmount || newAmount <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    
+    if (!newWalletId) {
+      toast.error('Please select a wallet');
+      return;
+    }
+    
+    if (!reason || reason.trim().length < 5) {
+      toast.error('Please provide a reason (at least 5 characters)');
+      return;
+    }
+    
+    setCorrectionModal(prev => ({ ...prev, loading: true }));
+    
+    try {
+      const response = await api.put(`/wallet/payments/${payment.id}/correct`, {
+        new_amount: parseFloat(newAmount),
+        new_wallet_id: parseInt(newWalletId),
+        reason: reason.trim()
+      });
+      
+      toast.success('Payment corrected successfully!');
+      
+      // Refresh service entries to show updated data
+      const entriesRes = await getServiceEntries(true);
+      setServiceEntries(entriesRes.data);
+      
+      // Clear correction status cache
+      setCorrectionStatus(prev => {
+        const updated = { ...prev };
+        delete updated[payment.id];
+        return updated;
+      });
+      
+      setCorrectionModal({ isOpen: false, payment: null, loading: false });
+    } catch (err) {
+      console.error('Correction error:', err);
+      toast.error(err.response?.data?.error || 'Failed to correct payment');
+    } finally {
+      setCorrectionModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  /**
+   * View payment correction history
+   */
+  const viewPaymentHistory = async (paymentId) => {
+    setPaymentHistoryModal({ isOpen: true, paymentId, history: [], loading: true });
+    
+    try {
+      const response = await api.get(`/wallet/payments/${paymentId}/history`);
+      setPaymentHistoryModal(prev => ({
+        ...prev,
+        history: response.data,
+        loading: false
+      }));
+    } catch (err) {
+      console.error('Error fetching payment history:', err);
+      toast.error('Failed to load payment history');
+      setPaymentHistoryModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  /**
+   * Check if user can correct payments
+   */
+  const canCorrectPayment = (payment, entry) => {
+    // Only for received payments
+    if (payment.status !== 'received') return false;
+    
+    // Check if payment has correction_group_id (correction-compatible)
+    // All new payments will have this
+    
+    // Staff can only correct today's entries
+    if (userRole === 'staff') {
+      return isToday(entry.created_at);
+    }
+    
+    // Admin/Superadmin can correct any
+    return userRole === 'admin' || userRole === 'superadmin';
+  };
+
+  // ========== EXISTING useEffect HOOKS (UNCHANGED) ==========
+  
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -235,6 +402,8 @@ const isToday = (dateStr) => {
     fetchData();
   }, [tokenId, customerServiceId]);
 
+  // ========== REMAINING EXISTING useEffect HOOKS (UNCHANGED) ==========
+  
   useEffect(() => {
     if (formData.category && categories.length > 0) {
       const category = categories.find(cat => cat.id === parseInt(formData.category));
@@ -573,7 +742,7 @@ const isToday = (dateStr) => {
         {
           method: defaultMethod,
           wallet: defaultWallet,
-          amount: String(remaining), // ✅ AUTO-FILL
+          amount: String(remaining),
           status: 'received',
         },
       ],
@@ -593,9 +762,6 @@ const isToday = (dateStr) => {
 
     const errors = [];
 
-    // =========================
-    // VALIDATIONS (UNCHANGED)
-    // =========================
     if (!formData.customerName.trim()) errors.push('Customer name is required');
     if (!formData.phone.trim()) errors.push('Phone number is required');
     if (!formData.category || isNaN(parseInt(formData.category))) errors.push('Service category is required and must be a valid ID');
@@ -655,9 +821,6 @@ const isToday = (dateStr) => {
       return;
     }
 
-    // =========================
-    // BUILD PAYLOAD
-    // =========================
     const submissionData = {
       tokenId: formData.tokenId || null,
       customerName: formData.customerName.trim(),
@@ -671,7 +834,6 @@ const isToday = (dateStr) => {
       expiryDate: formData.hasExpiry ? formData.expiryDate : null,
       serviceWalletId: formData.serviceWalletId ? parseInt(formData.serviceWalletId) : null,
       staffId: parseInt(staffId),
-      // ❌ payments intentionally excluded during edit
     };
 
     if (!editingEntryId) {
@@ -689,9 +851,6 @@ const isToday = (dateStr) => {
     );
 
     try {
-      // =========================
-      // CREATE vs UPDATE
-      // =========================
       if (editingEntryId) {
         await updateServiceEntry(editingEntryId, submissionData);
         toast.success('Service entry updated successfully!', { autoClose: 3500 });
@@ -706,9 +865,6 @@ const isToday = (dateStr) => {
         navigate('/dashboard/staff');
       }, 3500);
 
-      // =========================
-      // RESET FORM
-      // =========================
       setEditingEntryId(null);
       setFormData({
         tokenId: '',
@@ -737,8 +893,6 @@ const isToday = (dateStr) => {
       setPendingAmount(0);
       setBalanceAmount(0);
       setDaysRemaining(null);
-
-      // Stay on SAME PAGE (no navigation)
     } catch (err) {
       console.error('ServiceEntry.jsx: Submission error:', err.response?.data || err.message);
 
@@ -769,54 +923,59 @@ const isToday = (dateStr) => {
     return 'N/A';
   };
 
-const formatPayments = (payments = [], totalCharge = 0) => {
-  const walletSummary = {};
+  const formatPayments = (payments = [], totalCharge = 0) => {
+    const walletSummary = {};
 
-  payments.forEach(p => {
-    const walletId = String(p.wallet);
+    payments.forEach(p => {
+      const walletId = String(p.wallet);
 
-    if (!walletSummary[walletId]) {
-      walletSummary[walletId] = {
-        received: 0,
-        pending: 0,
-        method: p.method,
-      };
-    }
+      if (!walletSummary[walletId]) {
+        walletSummary[walletId] = {
+          received: 0,
+          pending: 0,
+          method: p.method,
+        };
+      }
 
-    if (p.status === 'received') {
-      walletSummary[walletId].received += Number(p.amount) || 0;
-    }
+      if (p.status === 'received') {
+        walletSummary[walletId].received += Number(p.amount) || 0;
+      }
 
-    if (p.status === 'pending') {
-      walletSummary[walletId].pending += Number(p.amount) || 0;
-    }
-  });
+      if (p.status === 'pending') {
+        walletSummary[walletId].pending += Number(p.amount) || 0;
+      }
+    });
 
-  const output = [];
+    const output = [];
 
-  Object.entries(walletSummary).forEach(([walletId, data]) => {
-    let walletName = 'Counter';
+    Object.entries(walletSummary).forEach(([walletId, data]) => {
+      let walletName = 'Counter';
 
-    const wallet =
-      data.method === 'cash'
-        ? wallets.offline.find(w => w.id === parseInt(walletId))
-        : wallets.online.find(w => w.id === parseInt(walletId));
+      const wallet =
+        data.method === 'cash'
+          ? wallets.offline.find(w => w.id === parseInt(walletId))
+          : wallets.online.find(w => w.id === parseInt(walletId));
 
-    if (wallet) {
-      walletName = wallet.name;
-    }
+      if (wallet) {
+        walletName = wallet.name;
+      }
 
-    if (data.received > 0) {
-      output.push(`${walletName}: ₹${data.received} (received)`);
-    }
+      if (data.received > 0) {
+        output.push(`${walletName}: ₹${data.received} (received)`);
+      }
 
-    if (data.pending > 0) {
-      output.push(`${walletName}: ₹${data.pending} (pending)`);
-    }
-  });
+      if (data.pending > 0) {
+        output.push(`${walletName}: ₹${data.pending} (pending)`);
+      }
+    });
 
-  return output.join(', ');
-};
+    return output.join(', ');
+  };
+
+  const getWalletName = (walletId) => {
+    const wallet = [...wallets.offline, ...wallets.online].find(w => w.id === parseInt(walletId));
+    return wallet ? wallet.name : 'Unknown Wallet';
+  };
 
   if (loading) {
     return (
@@ -1360,12 +1519,13 @@ const formatPayments = (payments = [], totalCharge = 0) => {
               className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
             >
               <FiCheckCircle className="h-5 w-5" />
-              Submit Service Entry
+              {editingEntryId ? 'Update Service Entry' : 'Submit Service Entry'}
             </button>
           </div>
         </form>
       </motion.div>
 
+      {/* ========== TODAY'S SERVICE ENTRIES TABLE (UPDATED WITH CORRECTION ACTIONS) ========== */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
         <div className="flex justify-between items-center mb-5">
           <h3 className="text-lg font-semibold text-gray-900">Today's Service Entries</h3>
@@ -1417,7 +1577,49 @@ const formatPayments = (payments = [], totalCharge = 0) => {
                       <div className="text-gray-500">{getSubcategoryName(entry.category, entry.subcategory)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₹{entry.totalCharge.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">{formatPayments(entry.payments, entry.totalCharge)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                      <div className="space-y-1">
+                        {entry.payments.map((payment, idx) => {
+                          const status = correctionStatus[payment.id];
+                          const hasBeenCorrected = status?.corrections_used > 0;
+                          
+                          return (
+                            <div key={idx} className="flex items-center justify-between gap-2">
+                              <span>
+                                {getWalletName(payment.wallet)}: ₹{Number(payment.amount).toFixed(2)} 
+                                ({payment.status})
+                                {hasBeenCorrected && (
+                                  <span className="ml-1 text-amber-600" title={`Corrected ${status.corrections_used} time(s)`}>
+                                    <FiRotateCcw className="inline h-3 w-3" />
+                                  </span>
+                                )}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {/* History button */}
+                                <button
+                                  onClick={() => viewPaymentHistory(payment.id)}
+                                  className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                  title="View correction history"
+                                >
+                                  <FiHistory className="h-3.5 w-3.5" />
+                                </button>
+                                
+                                {/* Correct button - only show for received payments */}
+                                {canCorrectPayment(payment, entry) && payment.status === 'received' && (
+                                  <button
+                                    onClick={() => openCorrectionModal(payment, entry)}
+                                    className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
+                                    title="Correct this payment"
+                                  >
+                                    <FiEdit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2.5 py-1 text-xs font-medium rounded-full ${
@@ -1432,20 +1634,21 @@ const formatPayments = (payments = [], totalCharge = 0) => {
                       <button
                         onClick={() => setSelectedEntry(entry)}
                         className="text-indigo-600 hover:text-indigo-900 p-1.5 rounded-lg hover:bg-indigo-50"
+                        title="View details"
                       >
                         <FiEye className="h-5 w-5" />
                       </button>
 
-                        {isToday(entry.created_at) && !entry.is_edited && (
-                          <button
-                            onClick={() => handleEditEntry(entry)}
-                            className="text-emerald-600 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50"
-                            title="You can edit this entry only once"
-                          >
-                            ✏️
-                          </button>
-                        )}
-                        {isToday(entry.created_at) && entry.is_edited && (
+                      {isToday(entry.created_at) && !entry.is_edited && (
+                        <button
+                          onClick={() => handleEditEntry(entry)}
+                          className="text-emerald-600 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50"
+                          title="Edit this entry (once only)"
+                        >
+                          ✏️
+                        </button>
+                      )}
+                      {isToday(entry.created_at) && entry.is_edited && (
                         <span
                           className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700"
                           title="This entry has already been edited"
@@ -1462,8 +1665,9 @@ const formatPayments = (payments = [], totalCharge = 0) => {
         )}
       </div>
 
+      {/* ========== ENTRY DETAILS MODAL (UNCHANGED) ========== */}
       {selectedEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Service Entry Details</h2>
@@ -1539,6 +1743,223 @@ const formatPayments = (payments = [], totalCharge = 0) => {
                   );
                 })()}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== PAYMENT CORRECTION MODAL ========== */}
+      {correctionModal.isOpen && correctionModal.payment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <FiRotateCcw className="h-5 w-5 text-amber-600" />
+                Correct Payment
+              </h2>
+              <button 
+                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Original payment info */}
+              <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                <p className="text-sm text-amber-800 font-medium mb-2">Original Payment</p>
+                <p className="text-gray-700">
+                  <strong>Amount:</strong> ₹{Number(correctionModal.payment.amount).toFixed(2)}
+                </p>
+                <p className="text-gray-700">
+                  <strong>Wallet:</strong> {getWalletName(correctionModal.payment.wallet)}
+                </p>
+              </div>
+              
+              {/* Correction limit warning for staff */}
+              {userRole === 'staff' && correctionStatus[correctionModal.payment.id] && (
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <FiAlertCircle className="inline mr-1" />
+                    Corrections used: {correctionStatus[correctionModal.payment.id].corrections_used} of 2
+                  </p>
+                </div>
+              )}
+              
+              {/* New amount */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Amount (₹) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={correctionModal.newAmount}
+                  onChange={(e) => setCorrectionModal(prev => ({ ...prev, newAmount: e.target.value }))}
+                  min="0.01"
+                  step="0.01"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Enter new amount"
+                />
+              </div>
+              
+              {/* New wallet */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Wallet <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={correctionModal.newWalletId}
+                  onChange={(e) => setCorrectionModal(prev => ({ ...prev, newWalletId: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select wallet</option>
+                  <optgroup label="Cash Wallets">
+                    {wallets.offline.map(w => (
+                      <option key={w.id} value={String(w.id)}>
+                        {w.name} (₹{w.balance})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Digital Wallets">
+                    {wallets.online.map(w => (
+                      <option key={w.id} value={String(w.id)}>
+                        {w.name} (₹{w.balance})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+              
+              {/* Reason */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Correction Reason <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={correctionModal.reason}
+                  onChange={(e) => setCorrectionModal(prev => ({ ...prev, reason: e.target.value }))}
+                  rows={3}
+                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Explain why this payment needs correction..."
+                />
+                <p className="text-xs text-gray-500 mt-1">Minimum 5 characters</p>
+              </div>
+              
+              {/* Important note */}
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <p className="text-xs text-gray-600">
+                  <FiAlertCircle className="inline mr-1 text-amber-600" />
+                  <strong>Note:</strong> This will reverse the original payment and create a new corrected payment. 
+                  All changes are logged for audit purposes.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false })}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitCorrection}
+                disabled={correctionModal.loading}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {correctionModal.loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <FiCheck className="h-4 w-4" />
+                    Confirm Correction
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== PAYMENT HISTORY MODAL ========== */}
+      {paymentHistoryModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <FiHistory className="h-5 w-5 text-indigo-600" />
+                Payment Correction History
+              </h2>
+              <button 
+                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [] })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
+            
+            {paymentHistoryModal.loading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            ) : paymentHistoryModal.history.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No correction history found</p>
+            ) : (
+              <div className="space-y-3">
+                {paymentHistoryModal.history.map((entry, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`p-4 rounded-lg border ${
+                      entry.entry_type === 'Original' 
+                        ? 'bg-gray-50 border-gray-200' 
+                        : entry.entry_type === 'Reversal'
+                          ? 'bg-rose-50 border-rose-200'
+                          : 'bg-emerald-50 border-emerald-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        entry.entry_type === 'Original' 
+                          ? 'bg-gray-200 text-gray-700'
+                          : entry.entry_type === 'Reversal'
+                            ? 'bg-rose-200 text-rose-700'
+                            : 'bg-emerald-200 text-emerald-700'
+                      }`}>
+                        {entry.entry_type}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(entry.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="text-sm">
+                      <strong>Amount:</strong> ₹{Number(entry.amount).toFixed(2)} → {entry.wallet_name}
+                    </p>
+                    {entry.edit_reason && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        <strong>Reason:</strong> {entry.edit_reason}
+                      </p>
+                    )}
+                    {entry.edited_by_name && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        By: {entry.edited_by_name}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [] })}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
