@@ -10,6 +10,24 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry } from '/src/services/serviceService';
 import api from '@/services/serviceService';
+import axios from 'axios';
+
+// Create a separate axios instance for wallet API calls
+const walletApi = axios.create({
+  baseURL: '/api',
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
+// Add token interceptor
+walletApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 const ServiceEntry = () => {
   const { tokenId, customerServiceId } = useParams();
@@ -20,7 +38,10 @@ const ServiceEntry = () => {
   const [correctionModal, setCorrectionModal] = useState({
     isOpen: false,
     payment: null,
-    loading: false
+    loading: false,
+    newAmount: '',
+    newWalletId: '',
+    reason: ''
   });
   const [paymentHistoryModal, setPaymentHistoryModal] = useState({
     isOpen: false,
@@ -114,7 +135,7 @@ const ServiceEntry = () => {
    */
   const checkCorrectionStatus = async (paymentId) => {
     try {
-      const response = await api.get(`/payments/${paymentId}/correction-status`);
+      const response = await walletApi.get(`/wallet/payments/${paymentId}/correction-status`);
       setCorrectionStatus(prev => ({
         ...prev,
         [paymentId]: response.data
@@ -181,7 +202,7 @@ const ServiceEntry = () => {
     setCorrectionModal(prev => ({ ...prev, loading: true }));
     
     try {
-      const response = await api.put(`/payments/${payment.id}/correct`, {
+      const response = await walletApi.put(`/wallet/payments/${payment.id}/correct`, {
         new_amount: parseFloat(newAmount),
         new_wallet_id: parseInt(newWalletId),
         reason: reason.trim()
@@ -200,7 +221,7 @@ const ServiceEntry = () => {
         return updated;
       });
       
-      setCorrectionModal({ isOpen: false, payment: null, loading: false });
+      setCorrectionModal({ isOpen: false, payment: null, loading: false, newAmount: '', newWalletId: '', reason: '' });
     } catch (err) {
       console.error('Correction error:', err);
       toast.error(err.response?.data?.error || 'Failed to correct payment');
@@ -216,7 +237,7 @@ const ServiceEntry = () => {
     setPaymentHistoryModal({ isOpen: true, paymentId, history: [], loading: true });
     
     try {
-      const response = await api.get(`/payments/${paymentId}/history`);
+      const response = await walletApi.get(`/wallet/payments/${paymentId}/history`);
       setPaymentHistoryModal(prev => ({
         ...prev,
         history: response.data,
@@ -236,9 +257,6 @@ const ServiceEntry = () => {
     // Only for received payments
     if (payment.status !== 'received') return false;
     
-    // Check if payment has correction_group_id (correction-compatible)
-    // All new payments will have this
-    
     // Staff can only correct today's entries
     if (userRole === 'staff') {
       return isToday(entry.created_at);
@@ -248,7 +266,7 @@ const ServiceEntry = () => {
     return userRole === 'admin' || userRole === 'superadmin';
   };
 
-  // ========== EXISTING useEffect HOOKS (UNCHANGED) ==========
+  // ========== EXISTING useEffect HOOKS ==========
   
   useEffect(() => {
     const fetchData = async () => {
@@ -402,8 +420,6 @@ const ServiceEntry = () => {
     fetchData();
   }, [tokenId, customerServiceId]);
 
-  // ========== REMAINING EXISTING useEffect HOOKS (UNCHANGED) ==========
-  
   useEffect(() => {
     if (formData.category && categories.length > 0) {
       const category = categories.find(cat => cat.id === parseInt(formData.category));
@@ -977,6 +993,30 @@ const ServiceEntry = () => {
     return wallet ? wallet.name : 'Unknown Wallet';
   };
 
+  // Helper function for safe date formatting
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      return date.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
+  };
+
+  // Helper function for safe amount formatting
+  const formatAmount = (amount) => {
+    const num = parseFloat(amount);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-6 flex justify-center items-center h-[80vh]">
@@ -1525,7 +1565,7 @@ const ServiceEntry = () => {
         </form>
       </motion.div>
 
-      {/* ========== TODAY'S SERVICE ENTRIES TABLE (UPDATED WITH CORRECTION ACTIONS) ========== */}
+      {/* ========== TODAY'S SERVICE ENTRIES TABLE ========== */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
         <div className="flex justify-between items-center mb-5">
           <h3 className="text-lg font-semibold text-gray-900">Today's Service Entries</h3>
@@ -1665,7 +1705,7 @@ const ServiceEntry = () => {
         )}
       </div>
 
-      {/* ========== ENTRY DETAILS MODAL (UNCHANGED) ========== */}
+      {/* ========== ENTRY DETAILS MODAL ========== */}
       {selectedEntry && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -1758,7 +1798,7 @@ const ServiceEntry = () => {
                 Correct Payment
               </h2>
               <button 
-                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false })}
+                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false, newAmount: '', newWalletId: '', reason: '' })}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FiX className="h-6 w-6" />
@@ -1770,7 +1810,7 @@ const ServiceEntry = () => {
               <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
                 <p className="text-sm text-amber-800 font-medium mb-2">Original Payment</p>
                 <p className="text-gray-700">
-                  <strong>Amount:</strong> ₹{Number(correctionModal.payment.amount).toFixed(2)}
+                  <strong>Amount:</strong> ₹{formatAmount(correctionModal.payment.amount)}
                 </p>
                 <p className="text-gray-700">
                   <strong>Wallet:</strong> {getWalletName(correctionModal.payment.wallet)}
@@ -1858,7 +1898,7 @@ const ServiceEntry = () => {
             
             <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false })}
+                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false, newAmount: '', newWalletId: '', reason: '' })}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Cancel
@@ -1932,11 +1972,11 @@ const ServiceEntry = () => {
                         {entry.entry_type}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {new Date(entry.created_at).toLocaleString()}
+                        {formatDate(entry.created_at)}
                       </span>
                     </div>
                     <p className="text-sm">
-                      <strong>Amount:</strong> ₹{Number(entry.amount).toFixed(2)} → {entry.wallet_name}
+                      <strong>Amount:</strong> ₹{formatAmount(entry.amount)} → {entry.wallet_name || 'Unknown Wallet'}
                     </p>
                     {entry.edit_reason && (
                       <p className="text-sm text-gray-600 mt-1">
@@ -1946,6 +1986,11 @@ const ServiceEntry = () => {
                     {entry.edited_by_name && (
                       <p className="text-xs text-gray-500 mt-1">
                         By: {entry.edited_by_name}
+                      </p>
+                    )}
+                    {entry.edited_at && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Corrected: {formatDate(entry.edited_at)}
                       </p>
                     )}
                   </div>
