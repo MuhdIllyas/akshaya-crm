@@ -10,24 +10,6 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry } from '/src/services/serviceService';
 import api from '@/services/serviceService';
-import axios from 'axios';
-
-// Create a separate axios instance for wallet API calls
-const walletApi = axios.create({
-  baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  }
-});
-
-// Add token interceptor
-walletApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
 
 const ServiceEntry = () => {
   const { tokenId, customerServiceId } = useParams();
@@ -132,10 +114,11 @@ const ServiceEntry = () => {
   
   /**
    * Check correction status for a payment
+   * Routes are now in servicemanagement.js
    */
   const checkCorrectionStatus = async (paymentId) => {
     try {
-      const response = await walletApi.get(`/wallet/payments/${paymentId}/correction-status`);
+      const response = await api.get(`/payments/${paymentId}/correction-status`);
       setCorrectionStatus(prev => ({
         ...prev,
         [paymentId]: response.data
@@ -202,7 +185,7 @@ const ServiceEntry = () => {
     setCorrectionModal(prev => ({ ...prev, loading: true }));
     
     try {
-      const response = await walletApi.put(`/wallet/payments/${payment.id}/correct`, {
+      const response = await api.put(`/payments/${payment.id}/correct`, {
         new_amount: parseFloat(newAmount),
         new_wallet_id: parseInt(newWalletId),
         reason: reason.trim()
@@ -237,16 +220,26 @@ const ServiceEntry = () => {
     setPaymentHistoryModal({ isOpen: true, paymentId, history: [], loading: true });
     
     try {
-      const response = await walletApi.get(`/wallet/payments/${paymentId}/history`);
+      const response = await api.get(`/payments/${paymentId}/history`);
+      console.log('Payment history response:', response.data);
+      
+      // Ensure history is always an array
+      let historyData = [];
+      if (Array.isArray(response.data)) {
+        historyData = response.data;
+      } else if (response.data && typeof response.data === 'object') {
+        historyData = [response.data];
+      }
+      
       setPaymentHistoryModal(prev => ({
         ...prev,
-        history: response.data,
+        history: historyData,
         loading: false
       }));
     } catch (err) {
       console.error('Error fetching payment history:', err);
       toast.error('Failed to load payment history');
-      setPaymentHistoryModal(prev => ({ ...prev, loading: false }));
+      setPaymentHistoryModal(prev => ({ ...prev, history: [], loading: false }));
     }
   };
 
@@ -264,6 +257,30 @@ const ServiceEntry = () => {
     
     // Admin/Superadmin can correct any
     return userRole === 'admin' || userRole === 'superadmin';
+  };
+
+  // Helper function for safe date formatting
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      return date.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
+  };
+
+  // Helper function for safe amount formatting
+  const formatAmount = (amount) => {
+    const num = parseFloat(amount);
+    return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
   // ========== EXISTING useEffect HOOKS ==========
@@ -991,30 +1008,6 @@ const ServiceEntry = () => {
   const getWalletName = (walletId) => {
     const wallet = [...wallets.offline, ...wallets.online].find(w => w.id === parseInt(walletId));
     return wallet ? wallet.name : 'Unknown Wallet';
-  };
-
-  // Helper function for safe date formatting
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    try {
-      const date = new Date(dateStr);
-      if (isNaN(date.getTime())) return 'Invalid Date';
-      return date.toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return 'Invalid Date';
-    }
-  };
-
-  // Helper function for safe amount formatting
-  const formatAmount = (amount) => {
-    const num = parseFloat(amount);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
   if (loading) {
@@ -1935,7 +1928,7 @@ const ServiceEntry = () => {
                 Payment Correction History
               </h2>
               <button 
-                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [] })}
+                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [], loading: false })}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FiX className="h-6 w-6" />
@@ -1946,7 +1939,7 @@ const ServiceEntry = () => {
               <div className="flex justify-center py-8">
                 <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
-            ) : paymentHistoryModal.history.length === 0 ? (
+            ) : !Array.isArray(paymentHistoryModal.history) || paymentHistoryModal.history.length === 0 ? (
               <p className="text-gray-500 text-center py-8">No correction history found</p>
             ) : (
               <div className="space-y-3">
@@ -1969,7 +1962,7 @@ const ServiceEntry = () => {
                             ? 'bg-rose-200 text-rose-700'
                             : 'bg-emerald-200 text-emerald-700'
                       }`}>
-                        {entry.entry_type}
+                        {entry.entry_type || 'Payment'}
                       </span>
                       <span className="text-xs text-gray-500">
                         {formatDate(entry.created_at)}
@@ -2000,7 +1993,7 @@ const ServiceEntry = () => {
             
             <div className="flex justify-end mt-6">
               <button
-                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [] })}
+                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [], loading: false })}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close
