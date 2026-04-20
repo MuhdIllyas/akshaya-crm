@@ -3179,13 +3179,14 @@ router.put('/customer-services/:id/take', authenticateToken, async (req, res) =>
 
 // ========== PAYMENT CORRECTION ROUTES ==========
 
-// GET /api/wallet/payments/service/:serviceEntryId - Clean view (latest only, no reversals)
+// GET /api/servicemanagement/payments/service/:serviceEntryId - Clean view (latest only, no reversals)
 router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, res) => {
   const { serviceEntryId } = req.params;
+  const client = await pool.connect();
   
   try {
     // Get only the latest non-reversal payments (clean UI view)
-    const result = await req.db.query(
+    const result = await client.query(
       `SELECT DISTINCT ON (p.correction_group_id)
         p.id,
         p.service_entry_id,
@@ -3225,7 +3226,7 @@ router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, r
 
     // Check access
     if (result.rows.length > 0) {
-      const serviceEntryRes = await req.db.query(
+      const serviceEntryRes = await client.query(
         `SELECT se.*, s.centre_id 
          FROM service_entries se
          JOIN staff s ON se.staff_id = s.id
@@ -3245,17 +3246,35 @@ router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, r
   } catch (err) {
     console.error('Error fetching payments:', err);
     res.status(500).json({ error: 'Failed to fetch payments' });
+  } finally {
+    client.release();
   }
 });
 
-// GET /api/wallet/payments/:paymentId/history - Full correction history
+// GET /api/servicemanagement/payments/:paymentId/history - Full correction history
 router.get('/payments/:paymentId/history', authenticateToken, async (req, res) => {
   const { paymentId } = req.params;
+  const client = await pool.connect();
   
   try {
     // First get the payment to find its correction_group_id
-    const paymentRes = await req.db.query(
-      `SELECT correction_group_id, service_entry_id FROM payments WHERE id = $1`,
+    const paymentRes = await client.query(
+      `SELECT 
+        p.id, 
+        p.correction_group_id, 
+        p.service_entry_id,
+        p.amount,
+        p.wallet_id,
+        p.status,
+        p.is_reversal,
+        p.created_at,
+        p.edited_at,
+        p.edit_reason,
+        p.edited_by,
+        w.name AS wallet_name
+       FROM payments p
+       JOIN wallets w ON p.wallet_id = w.id
+       WHERE p.id = $1`,
       [paymentId]
     );
     
@@ -3266,11 +3285,26 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
     const groupId = paymentRes.rows[0].correction_group_id;
     
     if (!groupId) {
-      return res.json([paymentRes.rows[0]]);
+      // Old payment without correction group - just return the single payment as array
+      const payment = paymentRes.rows[0];
+      return res.json([{
+        id: payment.id,
+        amount: parseFloat(payment.amount),
+        wallet_id: payment.wallet_id,
+        wallet_name: payment.wallet_name,
+        status: payment.status,
+        is_reversal: payment.is_reversal || false,
+        created_at: payment.created_at,
+        edited_at: payment.edited_at,
+        edit_reason: payment.edit_reason,
+        edited_by: payment.edited_by,
+        edited_by_name: null,
+        entry_type: 'Original'
+      }]);
     }
 
     // Get all payments in this correction group (full history)
-    const result = await req.db.query(
+    const result = await client.query(
       `SELECT 
         p.id,
         p.amount,
@@ -3283,33 +3317,58 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
         p.edited_at,
         p.edit_reason,
         p.edited_by,
-        s.name AS edited_by_name,
-        CASE 
-          WHEN p.is_reversal THEN 'Reversal'
-          WHEN p.id = $1 THEN 'Original'
-          ELSE 'Correction'
-        END AS entry_type
+        s.name AS edited_by_name
       FROM payments p
       JOIN wallets w ON p.wallet_id = w.id
       LEFT JOIN staff s ON p.edited_by = s.id
-      WHERE p.correction_group_id = $2
+      WHERE p.correction_group_id = $1
       ORDER BY p.created_at ASC`,
-      [paymentId, groupId]
+      [groupId]
     );
 
-    res.json(result.rows);
+    // Add entry_type to each row
+    const history = result.rows.map(row => {
+      let entryType = 'Correction';
+      if (row.is_reversal) {
+        entryType = 'Reversal';
+      } else if (row.id === parseInt(paymentId)) {
+        entryType = 'Original';
+      }
+      
+      return {
+        id: row.id,
+        amount: parseFloat(row.amount),
+        wallet_id: row.wallet_id,
+        wallet_name: row.wallet_name,
+        wallet_type: row.wallet_type,
+        status: row.status,
+        is_reversal: row.is_reversal || false,
+        created_at: row.created_at,
+        edited_at: row.edited_at,
+        edit_reason: row.edit_reason,
+        edited_by: row.edited_by,
+        edited_by_name: row.edited_by_name,
+        entry_type: entryType
+      };
+    });
+
+    // Always return an array
+    res.json(history);
   } catch (err) {
     console.error('Error fetching payment history:', err);
     res.status(500).json({ error: 'Failed to fetch payment history' });
+  } finally {
+    client.release();
   }
 });
 
-// GET /api/wallet/payments/:paymentId/correction-status - Check if correction allowed
+// GET /api/servicemanagement/payments/:paymentId/correction-status - Check if correction allowed
 router.get('/payments/:paymentId/correction-status', authenticateToken, async (req, res) => {
   const { paymentId } = req.params;
+  const client = await pool.connect();
   
   try {
-    const paymentRes = await req.db.query(
+    const paymentRes = await client.query(
       `SELECT correction_group_id, service_entry_id FROM payments WHERE id = $1 AND is_reversal = FALSE`,
       [paymentId]
     );
@@ -3320,7 +3379,7 @@ router.get('/payments/:paymentId/correction-status', authenticateToken, async (r
     
     const groupId = paymentRes.rows[0].correction_group_id;
     
-    const countRes = await req.db.query(
+    const countRes = await client.query(
       `SELECT COUNT(*) as correction_count
        FROM payments 
        WHERE correction_group_id = $1 
@@ -3345,12 +3404,14 @@ router.get('/payments/:paymentId/correction-status', authenticateToken, async (r
   } catch (err) {
     console.error('Error checking correction status:', err);
     res.status(500).json({ error: 'Failed to check correction status' });
+  } finally {
+    client.release();
   }
 });
 
-// PUT /api/wallet/payments/:id/correct - Main correction endpoint
+// PUT /api/servicemanagement/payments/:id/correct - Main correction endpoint
 router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
-  const client = await req.db.connect();
+  const client = await pool.connect();
   
   try {
     const paymentId = parseInt(req.params.id);
@@ -3396,7 +3457,7 @@ router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
       throw new Error('Cannot correct a reversal payment');
     }
 
-    const groupId = original.correction_group_id || require('crypto').randomUUID();
+    const groupId = original.correction_group_id || crypto.randomUUID();
 
     // 2. STAFF CORRECTION LIMIT CHECK (max 2 corrections = original + 2 new = 3 total non-reversal entries)
     if (user.role === 'staff') {
