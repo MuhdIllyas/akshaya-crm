@@ -1151,7 +1151,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
 
         await client.query(
           `INSERT INTO wallet_transactions (
-            wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, payment_id, created_at
+            wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, reference_payment_id, created_at
           ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())`,
           [
             payment.wallet,
@@ -2913,7 +2913,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
         reference_id,
         reference_type,
         correction_group_id,
-        payment_id,
+        reference_payment_id,
         created_at
       )
       VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())
@@ -3578,7 +3578,7 @@ router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
     await client.query(
       `INSERT INTO wallet_transactions (
         wallet_id, staff_id, type, amount, description, category,
-        reference_id, reference_type, correction_group_id, payment_id, created_at
+        reference_id, reference_type, correction_group_id, reference_payment_id, created_at
       ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())`,
       [new_wallet_id, original.service_staff_id || user.id, new_amount, `Corrected payment: ${reason} (Was: ₹${original.amount} from ${original.wallet_name})`, original.service_entry_id, groupId, newPaymentId]
     );
