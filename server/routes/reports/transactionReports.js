@@ -36,7 +36,7 @@ router.use(authenticateToken);
 router.use(requireAdmin);
 
 /* ================================
-   TRANSACTION REPORTS
+   TRANSACTION REPORTS (FIXED FOR CORRECTION SYSTEM)
 ================================ */
 router.get("/transactions", async (req, res) => {
   const {
@@ -126,7 +126,7 @@ router.get("/transactions", async (req, res) => {
     // Build the main query
     const query = `
       WITH
-      -- 1️⃣ All non-transfer transactions with joins
+      -- 1️⃣ All non-transfer transactions (ONLY LATEST NON-REVERSAL)
       normal_transactions AS (
         SELECT
           wt.id::INTEGER,
@@ -141,16 +141,23 @@ router.get("/transactions", async (req, res) => {
           wt.created_at::TIMESTAMP,
           wt.staff_id::INTEGER,
           se.customer_name::TEXT
-        FROM wallet_transactions wt
+        FROM (
+          -- 🔥 FIXED: Only get latest non-reversal transaction per correction group
+          SELECT DISTINCT ON (correction_group_id)
+            *
+          FROM wallet_transactions
+          WHERE (is_reversal IS NULL OR is_reversal = FALSE)
+          ORDER BY correction_group_id, created_at DESC
+        ) wt
         JOIN wallets w ON w.id = wt.wallet_id
         LEFT JOIN service_entries se
-        ON se.id = wt.reference_id
-        AND wt.category = 'Service Payment'
+          ON se.id = wt.reference_id
+         AND wt.category = 'Service Payment'
         WHERE wt.category <> 'Transfer'
         AND w.centre_id = $1
       ),
       
-      -- 2️⃣ Group transfer debit + credit into one logical row with joins
+      -- 2️⃣ Group transfer debit + credit into one logical row (exclude reversals)
       grouped_transfers AS (
         SELECT
           wt.reference_id::INTEGER    AS id,
@@ -168,6 +175,8 @@ router.get("/transactions", async (req, res) => {
         FROM wallet_transactions wt
         JOIN wallets w ON w.id = wt.wallet_id
         WHERE wt.category = 'Transfer'
+        -- 🔥 FIXED: Exclude reversals (transfers shouldn't have them, but safe)
+        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
         AND w.centre_id = $1
         GROUP BY wt.reference_id
       ),
@@ -226,7 +235,7 @@ router.get("/transactions", async (req, res) => {
       ORDER BY ${dbSortBy} ${sort_order}
       LIMIT $${filterIndex} OFFSET $${filterIndex + 1}`;
 
-    // Count query
+    // Count query (FIXED to exclude reversals and duplicates)
     const countQuery = `
       WITH
       normal_transactions AS (
@@ -243,13 +252,20 @@ router.get("/transactions", async (req, res) => {
           wt.created_at::TIMESTAMP,
           wt.staff_id::INTEGER,
           se.customer_name::TEXT
-          FROM wallet_transactions wt
-          JOIN wallets w ON w.id = wt.wallet_id
-          LEFT JOIN service_entries se
+        FROM (
+          -- 🔥 FIXED: Only get latest non-reversal transaction per correction group
+          SELECT DISTINCT ON (correction_group_id)
+            *
+          FROM wallet_transactions
+          WHERE (is_reversal IS NULL OR is_reversal = FALSE)
+          ORDER BY correction_group_id, created_at DESC
+        ) wt
+        JOIN wallets w ON w.id = wt.wallet_id
+        LEFT JOIN service_entries se
           ON se.id = wt.reference_id
-          AND wt.category = 'Service Payment'
-          WHERE wt.category <> 'Transfer'
-          AND w.centre_id = $1
+         AND wt.category = 'Service Payment'
+        WHERE wt.category <> 'Transfer'
+        AND w.centre_id = $1
       ),
       
       grouped_transfers AS (
@@ -266,11 +282,13 @@ router.get("/transactions", async (req, res) => {
           wt.reference_id::INTEGER    AS reference_id,
           'Wallet Transfer'::TEXT     AS description,
           NULL::TEXT                  AS customer_name
-          FROM wallet_transactions wt
-          JOIN wallets w ON w.id = wt.wallet_id
-          WHERE wt.category = 'Transfer'
-          AND w.centre_id = $1
-          GROUP BY wt.reference_id
+        FROM wallet_transactions wt
+        JOIN wallets w ON w.id = wt.wallet_id
+        WHERE wt.category = 'Transfer'
+        -- 🔥 FIXED: Exclude reversals
+        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+        AND w.centre_id = $1
+        GROUP BY wt.reference_id
       )
       
       SELECT COUNT(*) as total
@@ -310,8 +328,8 @@ router.get("/transactions", async (req, res) => {
         customerName: r.customer_name || null,
         description: r.description,
         referenceId: r.reference_id,
-        date: r.created_at.toISOString().split("T")[0],
-        time: r.created_at.toISOString().split("T")[1].slice(0, 5)
+        date: r.created_at ? r.created_at.toISOString().split("T")[0] : null,
+        time: r.created_at ? r.created_at.toISOString().split("T")[1].slice(0, 5) : null
       }))
     });
   } catch (err) {
