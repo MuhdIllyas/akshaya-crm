@@ -9,7 +9,8 @@ import {
   FiUsers, FiSettings, FiCircle, FiAlertTriangle,
   FiClock, FiBook, FiRefreshCw, FiPlus, FiMinus, FiInfo,
   FiCheck as FiCheckIcon, FiXCircle, FiUser, FiBriefcase, FiHome,
-  FiFilter, FiDownload, FiChevronRight, FiEye, FiPieChart, FiStar
+  FiFilter, FiDownload, FiChevronRight, FiEye, FiPieChart, FiStar,
+  FiRotateCcw
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -1169,7 +1170,7 @@ const IncomeViewComponent = ({ transactions = [] }) => {
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-gray-900 text-sm flex items-center">
                 <FiFileText className="h-4 w-4 mr-2 text-gray-600" />
-                Income Transactions
+                Income Transactions (Corrected View)
               </h3>
               <span className="text-xs text-gray-600">
                 {rows.length} transactions • ₹{totalCollected.toLocaleString()} total
@@ -1281,13 +1282,14 @@ const IncomeViewComponent = ({ transactions = [] }) => {
                             <FiCheck className="h-2 w-2 mr-1" />
                             Completed
                           </span>
-                          <div>
-                            {row.was_pending && (
-                              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-                                Pending Received
+                          {row.was_pending && (
+                            <div className="mt-1">
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex items-center">
+                                <FiRotateCcw className="h-2 w-2 mr-1" />
+                                Was Pending
                               </span>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3">
                           <button
@@ -1415,7 +1417,7 @@ const IncomeViewComponent = ({ transactions = [] }) => {
   );
 };
 
-// Ledger View Component
+// Ledger View Component (Updated for Correction System)
 const LedgerView = ({ ledger, onLedgerRowClick }) => {
   const totalCredits = ledger.reduce((sum, tx) => 
     sum + (tx.type === 'credit' ? Number(tx.amount || 0) : 0), 0);
@@ -1645,7 +1647,7 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-gray-900 text-sm flex items-center">
                 <FiBook className="h-4 w-4 mr-2 text-gray-600" />
-                Ledger Transactions
+                Ledger Transactions (Corrected View)
               </h3>
               <div className="flex items-center space-x-2">
                 <span className="text-xs text-gray-600">
@@ -1656,6 +1658,10 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
                 </span>
               </div>
             </div>
+            <p className="text-xs text-gray-500 mt-1 flex items-center">
+              <FiInfo className="h-3 w-3 mr-1" />
+              Showing corrected transactions only (reversals hidden)
+            </p>
           </div>
           
           <div className="overflow-x-auto max-h-[500px]">
@@ -1688,6 +1694,7 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
                   const isCredit = tx.type === 'credit';
                   const transactionDate = new Date(tx.created_at);
                   const rowKey = `ledger-${tx.id || index}`;
+                  const isReversal = tx.is_reversal;
 
                   return (
                     <tr
@@ -2300,7 +2307,6 @@ const AccountingSection = ({
   const refreshWalletBookBalances = async () => {
     const walletParams = new URLSearchParams();
     
-    // ADDED: Pass centreId for superadmin
     if (isSuperAdmin && centreId) {
       walletParams.append("centreId", centreId);
     }
@@ -2346,7 +2352,6 @@ const AccountingSection = ({
   const buildQueryString = (params = {}) => {
     const allParams = { ...params };
     
-    // ADDED: Add centreId for superadmin
     if (isSuperAdmin && centreId) {
       allParams.centreId = centreId;
     }
@@ -2478,7 +2483,7 @@ const AccountingSection = ({
     };
 
     fetchAllInitialData();
-  }, [date, centreId, isSuperAdmin]); // ADDED: Added isSuperAdmin to dependencies
+  }, [date, centreId, isSuperAdmin]);
 
   // Fetch data for active tab
   useEffect(() => {
@@ -2525,7 +2530,6 @@ const AccountingSection = ({
       to: ledgerFilters.to || date,
     };
 
-    // Add optional filters
     if (ledgerFilters.staff_id) params.staff_id = ledgerFilters.staff_id;
     if (ledgerFilters.wallet_id) params.wallet_id = ledgerFilters.wallet_id;
     if (ledgerFilters.category) params.category = ledgerFilters.category;
