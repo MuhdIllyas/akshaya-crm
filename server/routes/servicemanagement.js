@@ -3323,6 +3323,7 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
         p.wallet_id,
         p.status,
         p.is_reversal,
+        p.original_payment_id,
         p.created_at,
         p.edited_at,
         p.edit_reason,
@@ -3358,6 +3359,7 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
       }]);
     }
 
+    // Get all payments in this correction group, ordered by creation time
     const result = await client.query(
       `SELECT 
         p.id,
@@ -3367,6 +3369,7 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
         w.wallet_type,
         p.status,
         p.is_reversal,
+        p.original_payment_id,
         p.created_at,
         p.edited_at,
         p.edit_reason,
@@ -3380,12 +3383,18 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
       [groupId]
     );
 
+    // 🔥 FIXED: Properly identify entry types
     const history = result.rows.map(row => {
-      let entryType = 'Correction';
+      let entryType;
+      
       if (row.is_reversal) {
         entryType = 'Reversal';
-      } else if (row.id === parseInt(paymentId)) {
+      } else if (row.original_payment_id === row.id) {
+        // This is the original payment (self-referencing)
         entryType = 'Original';
+      } else {
+        // This is a correction (new corrected payment)
+        entryType = 'Correction';
       }
       
       return {
