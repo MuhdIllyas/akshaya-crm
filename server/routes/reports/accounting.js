@@ -64,7 +64,6 @@ router.get('/daily-summary', async (req, res) => {
     /* --------------------------------------------------
        2️⃣ TODAY TRANSACTIONS (EXCLUDE TRANSFERS AND REVERSALS)
     -------------------------------------------------- */
-    // 🔥 FIXED: Exclude reversals and only count latest non-reversal transactions
     const txRes = await client.query(
       `
       SELECT
@@ -210,7 +209,6 @@ router.get('/ledger', async (req, res) => {
       `;
     }
 
-    // 🔥 FIXED: Only show latest non-reversal transactions per correction group
     const ledgerRes = await client.query(
       `
       SELECT DISTINCT ON (wt.correction_group_id)
@@ -287,10 +285,6 @@ router.get('/income', async (req, res) => {
     const params = [centreId];
     let whereClause = `
       WHERE s.centre_id = $1
-        AND wt.category = 'Service Payment'
-        AND wt.type = 'credit'
-        AND wt.reference_type = 'payment'
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
     `;
 
     // single day (payment date)
@@ -332,7 +326,7 @@ router.get('/income', async (req, res) => {
       `;
     }
 
-    // 🔥 FIXED: Use subquery to get only latest non-reversal wallet transactions
+    // 🔥 FIXED: Include all needed columns in CTE
     const incomeRes = await client.query(
       `
       WITH latest_transactions AS (
@@ -342,7 +336,11 @@ router.get('/income', async (req, res) => {
           amount,
           created_at,
           reference_id,
-          correction_group_id
+          correction_group_id,
+          category,
+          type,
+          reference_type,
+          is_reversal
         FROM wallet_transactions
         WHERE category = 'Service Payment'
           AND type = 'credit'
@@ -352,26 +350,15 @@ router.get('/income', async (req, res) => {
       )
       SELECT
         se.id AS service_entry_id,
-
-        -- service context
         se.customer_name,
         sv.name AS service_name,
         s.name AS staff_name,
-
         se.created_at AS service_date,
-
-        -- charges (reference)
         se.service_charges,
         se.department_charges,
         (se.service_charges + se.department_charges) AS service_total,
-
-        -- 🔥 ACTUAL RECEIVED CASH (from latest transactions only)
         SUM(wt.amount) AS received_amount,
-
-        -- wallets involved
         STRING_AGG(DISTINCT w.name, ', ') AS payment_wallets,
-
-        -- audit breakdown
         JSON_AGG(
           JSONB_BUILD_OBJECT(
             'wallet', w.name,
@@ -380,25 +367,18 @@ router.get('/income', async (req, res) => {
           )
           ORDER BY wt.created_at
         ) AS wallet_breakdown,
-
-        -- payment date
         MAX(wt.created_at) AS received_at,
-
-        -- 🔥 PENDING → RECEIVED FLAG
         CASE
           WHEN MAX(wt.created_at)::date > se.created_at::date
           THEN true
           ELSE false
         END AS was_pending
-
       FROM latest_transactions wt
       JOIN service_entries se ON se.id = wt.reference_id
       JOIN staff s ON s.id = se.staff_id
       JOIN services sv ON sv.id = se.category_id
       JOIN wallets w ON w.id = wt.wallet_id
-
       ${whereClause}
-
       GROUP BY
         se.id,
         se.customer_name,
@@ -407,7 +387,6 @@ router.get('/income', async (req, res) => {
         se.created_at,
         se.service_charges,
         se.department_charges
-
       ORDER BY MAX(wt.created_at) DESC;
       `,
       params
@@ -443,7 +422,6 @@ router.get('/wallet-balances', async (req, res) => {
       return res.status(400).json({ error: "centreId is required" });
     }
 
-    // 🔥 FIXED: Exclude reversals from balance calculation
     const result = await client.query(`
       SELECT
         w.id,
@@ -523,15 +501,12 @@ router.get('/wallet-book-balances', async (req, res) => {
       return res.status(400).json({ error: "centreId is required" });
     }
 
-    // 🔥 FIXED: Exclude reversals from movement calculation
     const result = await client.query(`
       SELECT
         w.id,
         w.name,
         w.wallet_type,
-
         COALESCE(wdb.opening_balance, 0) AS opening_balance,
-
         COALESCE(
           SUM(
             CASE
@@ -542,8 +517,6 @@ router.get('/wallet-book-balances', async (req, res) => {
           ),
           0
         ) AS net_movement,
-
-        -- ✅ TRUE BOOK BALANCE
         COALESCE(wdb.opening_balance, 0) +
         COALESCE(
           SUM(
@@ -555,26 +528,20 @@ router.get('/wallet-book-balances', async (req, res) => {
           ),
           0
         ) AS book_balance
-
       FROM wallets w
-
       LEFT JOIN wallet_daily_balances wdb
         ON wdb.wallet_id = w.id
        AND wdb.date = CURRENT_DATE
-
       LEFT JOIN wallet_transactions wt
         ON wt.wallet_id = w.id
        AND wt.created_at::date = CURRENT_DATE
        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-
       WHERE w.centre_id = $1
-
       GROUP BY
         w.id,
         w.name,
         w.wallet_type,
         wdb.opening_balance
-
       ORDER BY w.name
     `, [centreId]);
 
@@ -606,7 +573,6 @@ router.get('/wallet-ledger-balances', async (req, res) => {
       return res.status(400).json({ error: "centreId is required" });
     }
 
-    // 🔥 FIXED: Exclude reversals from balance calculation
     const result = await client.query(
       `
       SELECT
