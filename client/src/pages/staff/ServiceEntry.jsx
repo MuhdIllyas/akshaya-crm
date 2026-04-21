@@ -114,7 +114,6 @@ const ServiceEntry = () => {
   
   /**
    * Check correction status for a payment
-   * Routes are now in servicemanagement.js
    */
   const checkCorrectionStatus = async (paymentId) => {
     try {
@@ -1618,15 +1617,21 @@ const ServiceEntry = () => {
                           
                           return (
                             <div key={idx} className="flex items-center justify-between gap-2">
-                              <span>
-                                {getWalletName(payment.wallet)}: ₹{Number(payment.amount).toFixed(2)} 
-                                ({payment.status})
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span>
+                                  {getWalletName(payment.wallet)}: ₹{Number(payment.amount).toFixed(2)} 
+                                  ({payment.status})
+                                </span>
                                 {hasBeenCorrected && (
-                                  <span className="ml-1 text-amber-600" title={`Corrected ${status.corrections_used} time(s)`}>
-                                    <FiRotateCcw className="inline h-3 w-3" />
+                                  <span 
+                                    className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5"
+                                    title={`Corrected ${status.corrections_used} time(s)`}
+                                  >
+                                    <FiRotateCcw className="h-3 w-3" />
+                                    Edited
                                   </span>
                                 )}
-                              </span>
+                              </div>
                               <div className="flex items-center gap-1">
                                 {/* History button */}
                                 <button
@@ -1942,56 +1947,106 @@ const ServiceEntry = () => {
             ) : !Array.isArray(paymentHistoryModal.history) || paymentHistoryModal.history.length === 0 ? (
               <p className="text-gray-500 text-center py-8">No correction history found</p>
             ) : (
-              <div className="space-y-3">
-                {paymentHistoryModal.history.map((entry, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`p-4 rounded-lg border ${
-                      entry.entry_type === 'Original' 
-                        ? 'bg-gray-50 border-gray-200' 
-                        : entry.entry_type === 'Reversal'
-                          ? 'bg-rose-50 border-rose-200'
-                          : 'bg-emerald-50 border-emerald-200'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        entry.entry_type === 'Original' 
-                          ? 'bg-gray-200 text-gray-700'
-                          : entry.entry_type === 'Reversal'
-                            ? 'bg-rose-200 text-rose-700'
-                            : 'bg-emerald-200 text-emerald-700'
-                      }`}>
-                        {entry.entry_type || 'Payment'}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {formatDate(entry.created_at)}
-                      </span>
+              <div className="space-y-4">
+                {/* Timeline header */}
+                <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+                  <span>Showing all versions (oldest first)</span>
+                  <span className="flex-1 h-px bg-gray-200"></span>
+                </div>
+                
+                {paymentHistoryModal.history.map((entry, idx) => {
+                  // Determine colors and icons based on entry type
+                  const getEntryStyles = (type) => {
+                    switch (type) {
+                      case 'Original':
+                        return {
+                          bg: 'bg-blue-50',
+                          border: 'border-blue-200',
+                          badge: 'bg-blue-200 text-blue-700',
+                          icon: '💳'
+                        };
+                      case 'Reversal':
+                        return {
+                          bg: 'bg-rose-50',
+                          border: 'border-rose-200',
+                          badge: 'bg-rose-200 text-rose-700',
+                          icon: '↩️'
+                        };
+                      case 'Correction':
+                        return {
+                          bg: 'bg-emerald-50',
+                          border: 'border-emerald-200',
+                          badge: 'bg-emerald-200 text-emerald-700',
+                          icon: '✅'
+                        };
+                      default:
+                        return {
+                          bg: 'bg-gray-50',
+                          border: 'border-gray-200',
+                          badge: 'bg-gray-200 text-gray-700',
+                          icon: '📝'
+                        };
+                    }
+                  };
+                  
+                  const styles = getEntryStyles(entry.entry_type);
+                  const isLatest = idx === paymentHistoryModal.history.length - 1;
+                  
+                  return (
+                    <div key={idx} className="relative">
+                      {/* Timeline connector */}
+                      {idx < paymentHistoryModal.history.length - 1 && (
+                        <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-gray-300 -mb-4"></div>
+                      )}
+                      
+                      <div className={`p-4 rounded-lg border ${styles.bg} ${styles.border} relative ml-2`}>
+                        {/* Timeline dot */}
+                        <div className={`absolute -left-[13px] top-5 w-3 h-3 rounded-full ${entry.entry_type === 'Original' ? 'bg-blue-500' : entry.entry_type === 'Reversal' ? 'bg-rose-500' : 'bg-emerald-500'} border-2 border-white`}></div>
+                        
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${styles.badge}`}>
+                              {styles.icon} {entry.entry_type}
+                            </span>
+                            {isLatest && entry.entry_type !== 'Original' && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                Current
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {formatDate(entry.created_at)}
+                          </span>
+                        </div>
+                        
+                        <div className="ml-1 space-y-1.5">
+                          <p className="text-sm font-medium">
+                            Amount: <span className="font-semibold">₹{formatAmount(entry.amount)}</span>
+                            <span className="text-gray-500 mx-2">→</span>
+                            <span className="font-medium">{entry.wallet_name || 'Unknown Wallet'}</span>
+                          </p>
+                          
+                          {entry.edit_reason && (
+                            <p className="text-sm text-gray-600 bg-white/50 p-2 rounded">
+                              <strong>Reason:</strong> {entry.edit_reason}
+                            </p>
+                          )}
+                          
+                          {entry.edited_by_name && (
+                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                              <FiUser className="h-3 w-3" />
+                              Corrected by: {entry.edited_by_name}
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-sm">
-                      <strong>Amount:</strong> ₹{formatAmount(entry.amount)} → {entry.wallet_name || 'Unknown Wallet'}
-                    </p>
-                    {entry.edit_reason && (
-                      <p className="text-sm text-gray-600 mt-1">
-                        <strong>Reason:</strong> {entry.edit_reason}
-                      </p>
-                    )}
-                    {entry.edited_by_name && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        By: {entry.edited_by_name}
-                      </p>
-                    )}
-                    {entry.edited_at && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Corrected: {formatDate(entry.edited_at)}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-end mt-6 pt-3 border-t border-gray-200">
               <button
                 onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [], loading: false })}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
