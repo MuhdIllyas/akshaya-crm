@@ -3,7 +3,7 @@ import pool from '../db.js';
 import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
 import { logActivity } from "../utils/activityLogger.js";
-import crypto from 'crypto'; // ADDED: For payment correction_group_id generation
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -1080,8 +1080,11 @@ router.post('/entry', authenticateToken, async (req, res) => {
     const debitWalletId = serviceWalletId || resolvedServiceWalletId;
 
     if (debitWalletId && Number(finalDepartmentCharge) > 0) {
+      // 🔥 FIXED: Department debit now has correction_group_id
+      const deptGroupId = crypto.randomUUID();
+      
       await client.query(
-        'UPDATE wallets SET balance = balance - $1 WHERE id = $2',
+        'UPDATE wallets SET balance = balance - $1 WHERE id = $2 RETURNING balance',
         [Number(finalDepartmentCharge), Number(debitWalletId)]
       );
 
@@ -1094,14 +1097,17 @@ router.post('/entry', authenticateToken, async (req, res) => {
           description,
           category,
           reference_id,
+          reference_type,
+          correction_group_id,
           created_at
-        ) VALUES ($1,$2,'debit',$3,$4,'Department Payment',$5, NOW())`,
+        ) VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, NOW())`,
         [
           Number(debitWalletId),
           Number(staffId),
           Number(finalDepartmentCharge),
           `Department charge for ${serviceName} (#${serviceEntryId})`,
-          serviceEntryId
+          serviceEntryId,
+          deptGroupId
         ]
       );
     }
@@ -1139,21 +1145,22 @@ router.post('/entry', authenticateToken, async (req, res) => {
         const walletType = walletRes.rows[0].wallet_type;
 
         await client.query(
-          'UPDATE wallets SET balance = balance + $1 WHERE id = $2',
+          'UPDATE wallets SET balance = balance + $1 WHERE id = $2 RETURNING balance',
           [payment.amount, payment.wallet]
         );
 
         await client.query(
           `INSERT INTO wallet_transactions (
-            wallet_id, staff_id, type, amount, description, category, reference_id, correction_group_id, created_at
-          ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, $6, NOW())`,
+            wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, payment_id, created_at
+          ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())`,
           [
             payment.wallet,
             staffId,
             payment.amount,
             `${walletType === 'cash' ? 'Cash' : 'Online'} payment for ${serviceName} (#${serviceEntryId})`,
             serviceEntryId,
-            groupId  // 🔥 NEW: Same group_id as payment
+            groupId,
+            paymentId
           ]
         );
       }
@@ -1168,7 +1175,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
       } else if (status === 'not_received') {
         tokenStatus = 'processed';
       } else if (status === 'pending') {
-        tokenStatus = 'in-progress'; // Changed from 'processing' to 'in-progress' to match frontend
+        tokenStatus = 'in-progress';
       }
 
       await client.query(
@@ -1181,21 +1188,19 @@ router.post('/entry', authenticateToken, async (req, res) => {
         `,
         [
           tokenStatus,
-          staffId || req.user.id,  // ensure we capture who completed it
+          staffId || req.user.id,
           tokenId
         ]
       );
 
       // Emit socket event for real-time update
       if (tokenCentreId) {
-        // Emit general tokenUpdate event
         io.emit('tokenUpdate', {
           tokenId: tokenId,
           status: tokenStatus,
           message: `Token ${tokenId} status updated to ${tokenStatus}`
         });
         
-        // Emit centre-specific event
         io.to(`centre_${tokenCentreId}`).emit(`tokenUpdate:${tokenCentreId}`, {
           tokenId: tokenId,
           status: tokenStatus
@@ -1220,7 +1225,6 @@ router.post('/entry', authenticateToken, async (req, res) => {
     await client.query('COMMIT');
 
     // ========== ACTIVITY LOGGING ==========
-    // Log service completion activity
     if (status === 'completed') {
       await logActivity({
         centre_id: centreId,
@@ -1232,7 +1236,6 @@ router.post('/entry', authenticateToken, async (req, res) => {
         performed_by_role: req.user.role
       });
     }
-    // ======================================
 
     res.status(201).json({
       message: 'Service entry created successfully',
@@ -1595,7 +1598,6 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       await client.query('UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2', 
         [tokenStatus, updatedEntry.token_id]);
       
-      // Emit both general and centre-specific events
       io.emit('tokenUpdate', {
         tokenId: updatedEntry.token_id,
         status: tokenStatus,
@@ -1626,7 +1628,6 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
           [trackingStatus, parseInt(id)]
         );
         
-        // Also update the tracking record with any customer details if available
         if (updatedEntry.customer_service_id) {
           await client.query(
             `UPDATE service_tracking
@@ -1689,7 +1690,6 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     await client.query('COMMIT');
 
     // ========== ACTIVITY LOGGING ==========
-    // Log service completion on update if status changed to completed
     if (status === 'completed' && existingEntry.status !== 'completed') {
       await logActivity({
         centre_id: centreId,
@@ -1701,7 +1701,6 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
         performed_by_role: req.user.role
       });
     }
-    // ======================================
 
     // Format response
     const formattedEntry = {
@@ -2054,8 +2053,6 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // FIXED: Remove the staff_id condition from the token query
-    // We want to find the token regardless of who it's currently assigned to
     const tokenResult = await client.query(
       'SELECT * FROM tokens WHERE token_id = $1',
       [tokenId]
@@ -2692,282 +2689,301 @@ router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
   }
 });
 
-//pending - payments
-router.get("/pending-payments",authenticateToken,async (req, res) => {
+// ========== PENDING PAYMENTS (FIXED QUERIES) ==========
 
-    const { from , to } = req.query;
-    const client = await pool.connect();
-    try {
-      const { role, id: userId, centre_id } = req.user;
-      const { centreId: queryCentreId } = req.query;
-        let CentreId = req.user.centre_id;
+// GET /api/servicemanagement/pending-payments
+router.get("/pending-payments", authenticateToken, async (req, res) => {
+  const { from, to } = req.query;
+  const client = await pool.connect();
+  try {
+    const { role, id: userId, centre_id } = req.user;
+    const { centreId: queryCentreId } = req.query;
+    let CentreId = req.user.centre_id;
 
-
-        if (role === "superadmin" && queryCentreId) {
-        CentreId = Number(queryCentreId);
-        }
-
-
-        if ((role === "admin" || role === "superadmin") && !CentreId) {
-        return res.status(400).json({ error: "centreId is required" });
-      }
-
-      let conditions = [];
-      let values = [];
-      let idx = 1;
-
-      // Staff: own pending payments
-      if (role === "staff") {
-        conditions.push(`se.staff_id = $${idx++}`);
-        values.push(userId);
-      }
-
-      // Admin: centre-wide
-      if (role === "admin" || role === "superadmin") {
-        conditions.push(`st.centre_id = $${idx++}`);
-        values.push(CentreId);
-      }
-
-      // Date wise Filters
-      if (from) {
-        conditions.push(`se.created_at >= $${idx++}`);
-        values.push(`${from} 00:00:00`);
-      }
-
-      if (to) {
-        conditions.push(`se.created_at <= $${idx++}`);
-        values.push(`${to} 23:59:59`);
-      }
-
-      const whereClause = conditions.length
-        ? `WHERE ${conditions.join(" AND ")}`
-        : "";
-
-      const query = `
-        SELECT
-          se.id AS service_entry_id,
-          se.customer_name,
-          se.phone AS customer_phone,
-          se.total_charges,
-          se.created_at,
-
-          se.staff_id,
-          st.name AS staff_name,
-
-          s.name AS service_name,
-          sc.name AS subcategory_name,
-
-          -- Total received
-          COALESCE(
-            SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-            0
-          ) AS paid_amount,
-
-          -- Pending balance
-          se.total_charges -
-          COALESCE(
-            SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-            0
-          ) AS pending_amount,
-
-          -- 🔑 FULL PAYMENT HISTORY
-          COALESCE(
-            json_agg(
-              json_build_object(
-                'id', p.id,
-                'wallet_id', p.wallet_id,
-                'wallet_name', w.name,
-                'amount', p.amount,
-                'status', p.status,
-                'created_at', p.created_at
-              )
-              ORDER BY p.created_at
-            ) FILTER (WHERE p.id IS NOT NULL),
-            '[]'
-          ) AS payment_history
-
-        FROM service_entries se
-        JOIN staff st ON st.id = se.staff_id
-        LEFT JOIN services s ON s.id = se.category_id
-        LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
-        LEFT JOIN payments p ON p.service_entry_id = se.id
-        LEFT JOIN wallets w ON w.id = p.wallet_id
-
-        ${whereClause}
-
-        GROUP BY
-          se.id,
-          se.customer_name,
-          se.phone,
-          se.total_charges,
-          se.created_at,
-
-          se.staff_id,
-          st.name,
-
-          s.name,
-          sc.name
-
-        -- Only services that STILL have pending balance
-        HAVING
-          se.total_charges >
-          COALESCE(
-            SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-            0
-          )
-
-        ORDER BY pending_amount DESC
-      `;
-      
-      const { rows } = await client.query(query, values);
-
-      res.json(rows);
-    } catch (err) {
-      console.error("Pending payments error:", err);
-      res.status(500).json({ error: "Failed to fetch pending payments" });
-    } finally {
-      client.release();
+    if (role === "superadmin" && queryCentreId) {
+      CentreId = Number(queryCentreId);
     }
-  }
-);
 
-// Receive pending payment (CREDIT ONLY)
-router.post("/pending-payments/:id/receive-payment",authenticateToken,
-  async (req, res) => {
-    const client = await pool.connect();
-    try {
-      const serviceEntryId = req.params.id;
-      const { wallet_id, amount } = req.body;
+    if ((role === "admin" || role === "superadmin") && !CentreId) {
+      return res.status(400).json({ error: "centreId is required" });
+    }
 
-      if (!wallet_id || !amount || Number(amount) <= 0) {
-        return res.status(400).json({
-          error: "wallet_id and valid amount are required"
-        });
-      }
+    let conditions = [];
+    let values = [];
+    let idx = 1;
 
-      await client.query("BEGIN");
+    // Staff: own pending payments
+    if (role === "staff") {
+      conditions.push(`se.staff_id = $${idx++}`);
+      values.push(userId);
+    }
 
-      // 1️⃣ Ensure service entry exists
-      const serviceRes = await client.query(
-        `SELECT id FROM service_entries WHERE id = $1`,
-        [serviceEntryId]
-      );
+    // Admin: centre-wide
+    if (role === "admin" || role === "superadmin") {
+      conditions.push(`st.centre_id = $${idx++}`);
+      values.push(CentreId);
+    }
 
-      if (serviceRes.rows.length === 0) {
-        throw new Error("Service entry not found");
-      }
+    // Date wise Filters
+    if (from) {
+      conditions.push(`se.created_at >= $${idx++}`);
+      values.push(`${from} 00:00:00`);
+    }
 
-      // 🔥 UPDATED: Correction-compatible payment creation
-      const groupId = crypto.randomUUID();
+    if (to) {
+      conditions.push(`se.created_at <= $${idx++}`);
+      values.push(`${to} 23:59:59`);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    // 🔥 FIXED: Use subquery to get only latest non-reversal payments
+    const query = `
+      SELECT
+        se.id AS service_entry_id,
+        se.customer_name,
+        se.phone AS customer_phone,
+        se.total_charges,
+        se.created_at,
+        se.staff_id,
+        st.name AS staff_name,
+        s.name AS service_name,
+        sc.name AS subcategory_name,
+        
+        -- Total received from LATEST payments only
+        COALESCE(
+          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
+          0
+        ) AS paid_amount,
+        
+        -- Pending balance
+        se.total_charges -
+        COALESCE(
+          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
+          0
+        ) AS pending_amount,
+        
+        -- Payment history (latest versions only)
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', p.id,
+              'wallet_id', p.wallet_id,
+              'wallet_name', p.wallet_name,
+              'amount', p.amount,
+              'status', p.status,
+              'created_at', p.created_at
+            )
+            ORDER BY p.created_at
+          ) FILTER (WHERE p.id IS NOT NULL),
+          '[]'
+        ) AS payment_history
+
+      FROM service_entries se
+      JOIN staff st ON st.id = se.staff_id
+      LEFT JOIN services s ON s.id = se.category_id
+      LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
       
-      const paymentRes = await client.query(
-        `
-        INSERT INTO payments (
+      -- 🔥 CRITICAL FIX: Only latest non-reversal payments
+      LEFT JOIN (
+        SELECT DISTINCT ON (correction_group_id)
+          id,
           service_entry_id,
           wallet_id,
           amount,
           status,
-          correction_group_id,
-          original_payment_id,
-          created_at
+          created_at,
+          w.name AS wallet_name
+        FROM payments
+        JOIN wallets w ON wallet_id = w.id
+        WHERE is_reversal = FALSE
+        ORDER BY correction_group_id, created_at DESC
+      ) p ON p.service_entry_id = se.id
+
+      ${whereClause}
+
+      GROUP BY
+        se.id,
+        se.customer_name,
+        se.phone,
+        se.total_charges,
+        se.created_at,
+        se.staff_id,
+        st.name,
+        s.name,
+        sc.name
+
+      -- Only services that STILL have pending balance
+      HAVING
+        se.total_charges >
+        COALESCE(
+          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
+          0
         )
-        VALUES ($1, $2, $3, 'received', $4, NULL, NOW())
-        RETURNING id
-        `,
-        [serviceEntryId, wallet_id, amount, groupId]
-      );
-      
-      const paymentId = paymentRes.rows[0].id;
-      
-      // 🔥 CRITICAL: Set original_payment_id = self
-      await client.query(
-        `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
-        [paymentId]
-      );
 
-      // 3️⃣ CREDIT wallet (IMPORTANT)
-      await client.query(
-        `
-        UPDATE wallets
-        SET balance = balance + $1
-        WHERE id = $2
-        `,
-        [amount, wallet_id]
-      );
+      ORDER BY pending_amount DESC
+    `;
+    
+    const { rows } = await client.query(query, values);
+    res.json(rows);
+  } catch (err) {
+    console.error("Pending payments error:", err);
+    res.status(500).json({ error: "Failed to fetch pending payments" });
+  } finally {
+    client.release();
+  }
+});
 
-      // 4️⃣ Wallet transaction log (CREDIT) with correction_group_id
-      await client.query(
-        `
-        INSERT INTO wallet_transactions (
-          wallet_id,
-          staff_id,
-          type,
+// Receive pending payment (CREDIT ONLY)
+router.post("/pending-payments/:id/receive-payment", authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const serviceEntryId = req.params.id;
+    const { wallet_id, amount } = req.body;
+
+    if (!wallet_id || !amount || Number(amount) <= 0) {
+      return res.status(400).json({
+        error: "wallet_id and valid amount are required"
+      });
+    }
+
+    await client.query("BEGIN");
+
+    // 1️⃣ Ensure service entry exists
+    const serviceRes = await client.query(
+      `SELECT id FROM service_entries WHERE id = $1`,
+      [serviceEntryId]
+    );
+
+    if (serviceRes.rows.length === 0) {
+      throw new Error("Service entry not found");
+    }
+
+    // 🔥 UPDATED: Correction-compatible payment creation
+    const groupId = crypto.randomUUID();
+    
+    const paymentRes = await client.query(
+      `
+      INSERT INTO payments (
+        service_entry_id,
+        wallet_id,
+        amount,
+        status,
+        correction_group_id,
+        original_payment_id,
+        created_at
+      )
+      VALUES ($1, $2, $3, 'received', $4, NULL, NOW())
+      RETURNING id
+      `,
+      [serviceEntryId, wallet_id, amount, groupId]
+    );
+    
+    const paymentId = paymentRes.rows[0].id;
+    
+    // 🔥 CRITICAL: Set original_payment_id = self
+    await client.query(
+      `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
+      [paymentId]
+    );
+
+    // 3️⃣ CREDIT wallet
+    await client.query(
+      `
+      UPDATE wallets
+      SET balance = balance + $1
+      WHERE id = $2
+      RETURNING balance
+      `,
+      [amount, wallet_id]
+    );
+
+    // 4️⃣ Wallet transaction log with correction_group_id and payment_id
+    await client.query(
+      `
+      INSERT INTO wallet_transactions (
+        wallet_id,
+        staff_id,
+        type,
+        amount,
+        description,
+        category,
+        reference_id,
+        reference_type,
+        correction_group_id,
+        payment_id,
+        created_at
+      )
+      VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())
+      `,
+      [
+        wallet_id,
+        req.user.id,
+        amount,
+        `Pending payment collected for service #${serviceEntryId}`,
+        serviceEntryId,
+        groupId,
+        paymentId
+      ]
+    );
+
+    // 5️⃣ Recalculate service entry status
+    const totalsRes = await client.query(
+      `
+      SELECT
+        se.total_charges,
+        COALESCE(SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END), 0) AS received
+      FROM service_entries se
+      LEFT JOIN (
+        SELECT DISTINCT ON (correction_group_id)
+          service_entry_id,
           amount,
-          description,
-          category,
-          reference_id,
-          correction_group_id,
-          created_at
-        )
-        VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, $6, NOW())
-        `,
-        [
-          wallet_id,
-          req.user.id,
-          amount,
-          `Pending payment collected for service #${serviceEntryId}`,
-          serviceEntryId,
-          groupId  // 🔥 NEW: Same group_id as payment
-        ]
-      );
+          status
+        FROM payments
+        WHERE is_reversal = FALSE
+        ORDER BY correction_group_id, created_at DESC
+      ) p ON p.service_entry_id = se.id
+      WHERE se.id = $1
+      GROUP BY se.total_charges
+      `,
+      [serviceEntryId]
+    );
 
-      // 5️⃣ Recalculate service entry status
-      const totalsRes = await client.query(
+    const { total_charges, received } = totalsRes.rows[0];
+
+    if (Number(received) >= Number(total_charges)) {
+      await client.query(
         `
-        SELECT
-          se.total_charges,
-          COALESCE(SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END), 0) AS received
-        FROM service_entries se
-        LEFT JOIN payments p ON p.service_entry_id = se.id
-        WHERE se.id = $1
-        GROUP BY se.total_charges
+        UPDATE service_entries
+        SET status = 'completed',
+            updated_at = NOW()
+        WHERE id = $1
         `,
         [serviceEntryId]
       );
-
-      const { total_charges, received } = totalsRes.rows[0];
-
-      if (Number(received) >= Number(total_charges)) {
-        await client.query(
-          `
-          UPDATE service_entries
-          SET status = 'completed',
-              updated_at = NOW()
-          WHERE id = $1
-          `,
-          [serviceEntryId]
-        );
-      }
-
-      await client.query("COMMIT");
-
-      res.json({
-        success: true,
-        message: "Pending payment collected successfully"
-      });
-
-    } catch (err) {
-      await client.query("ROLLBACK");
-      console.error("Receive payment error:", err);
-      res.status(500).json({
-        error: err.message || "Failed to receive payment"
-      });
-    } finally {
-      client.release();
     }
-  }
-);
 
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      message: "Pending payment collected successfully"
+    });
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Receive payment error:", err);
+    res.status(500).json({
+      error: err.message || "Failed to receive payment"
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/servicemanagement/pending-payments/history
 router.get("/pending-payments/history", authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -2991,7 +3007,6 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         return res.status(500).json({ error: "Admin has no assigned centre" });
       }
     } else {
-      // staff or other roles - will be handled below
       CentreId = null;
     }
 
@@ -3011,7 +3026,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       values.push(CentreId);
     }
 
-    // Date filters (now applied for admin & superadmin)
+    // Date filters
     if (from) {
       conditions.push(`se.created_at::date >= $${idx++}`);
       values.push(from);
@@ -3025,6 +3040,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       ? `WHERE ${conditions.join(" AND ")}`
       : "";
 
+    // 🔥 FIXED: Use subquery to get only latest non-reversal payments
     const query = `
       SELECT
         se.id AS service_entry_id,
@@ -3033,29 +3049,28 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         se.total_charges,
         se.created_at,
         se.updated_at,
-
         s.name AS service_name,
         sc.name AS subcategory_name,
-
+        
         COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         ) AS paid_amount,
-
+        
         se.total_charges -
         COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         ) AS pending_amount,
-
+        
         COALESCE(
           json_agg(
             json_build_object(
-              'id',          p.id,
-              'wallet_name', w.name,
-              'amount',      p.amount,
-              'status',      p.status,
-              'created_at',  p.created_at
+              'id', p.id,
+              'wallet_name', p.wallet_name,
+              'amount', p.amount,
+              'status', p.status,
+              'created_at', p.created_at
             )
             ORDER BY p.created_at
           ) FILTER (WHERE p.id IS NOT NULL),
@@ -3066,8 +3081,21 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       JOIN staff st ON st.id = se.staff_id
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
-      LEFT JOIN payments p ON p.service_entry_id = se.id
-      LEFT JOIN wallets w ON w.id = p.wallet_id
+      
+      -- 🔥 CRITICAL FIX: Only latest non-reversal payments
+      LEFT JOIN (
+        SELECT DISTINCT ON (correction_group_id)
+          id,
+          service_entry_id,
+          amount,
+          status,
+          created_at,
+          w.name AS wallet_name
+        FROM payments
+        JOIN wallets w ON wallet_id = w.id
+        WHERE is_reversal = FALSE
+        ORDER BY correction_group_id, created_at DESC
+      ) p ON p.service_entry_id = se.id
 
       ${whereClause}
 
@@ -3081,14 +3109,12 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         s.name,
         sc.name
 
-      -- History condition: fully paid now, but was previously pending (had more than one payment)
+      -- History condition: fully paid now, but was previously pending
       HAVING
-        -- Fully paid
         se.total_charges <= COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         )
-        -- Had multiple payments → means it was partially paid before completion
         AND COUNT(p.id) > 1
 
       ORDER BY se.updated_at DESC
@@ -3105,10 +3131,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
   }
 });
 
-/********************************************** 
- * New Route for Customer Online Work Booking * 
-**********************************************/
-// Get Single Customer Service
+// ========== CUSTOMER ONLINE WORK BOOKING ==========
+
 // GET /api/servicemanagement/customer-services/:id
 router.get('/customer-services/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -3176,7 +3200,7 @@ router.get('/customer-services', authenticateToken, async (req, res) => {
   }
 });
 
-// Take Online Customer Service Work
+// PUT /api/servicemanagement/customer-services/:id/take
 router.put('/customer-services/:id/take', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
@@ -3216,13 +3240,12 @@ router.put('/customer-services/:id/take', authenticateToken, async (req, res) =>
 
 // ========== PAYMENT CORRECTION ROUTES ==========
 
-// GET /api/servicemanagement/payments/service/:serviceEntryId - Clean view (latest only, no reversals)
+// GET /api/servicemanagement/payments/service/:serviceEntryId
 router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, res) => {
   const { serviceEntryId } = req.params;
   const client = await pool.connect();
   
   try {
-    // Get only the latest non-reversal payments (clean UI view)
     const result = await client.query(
       `SELECT DISTINCT ON (p.correction_group_id)
         p.id,
@@ -3236,7 +3259,6 @@ router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, r
         p.correction_group_id,
         w.name AS wallet_name,
         w.wallet_type,
-        -- Check if this payment has been corrected
         EXISTS (
           SELECT 1 FROM payments p2 
           WHERE p2.correction_group_id = p.correction_group_id 
@@ -3244,7 +3266,6 @@ router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, r
           AND p2.id != p.id
           AND p2.created_at > p.created_at
         ) AS has_been_corrected,
-        -- Get original amount for display
         (
           SELECT amount FROM payments p3 
           WHERE p3.correction_group_id = p.correction_group_id 
@@ -3261,7 +3282,6 @@ router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, r
       [serviceEntryId]
     );
 
-    // Check access
     if (result.rows.length > 0) {
       const serviceEntryRes = await client.query(
         `SELECT se.*, s.centre_id 
@@ -3288,13 +3308,12 @@ router.get('/payments/service/:serviceEntryId', authenticateToken, async (req, r
   }
 });
 
-// GET /api/servicemanagement/payments/:paymentId/history - Full correction history
+// GET /api/servicemanagement/payments/:paymentId/history
 router.get('/payments/:paymentId/history', authenticateToken, async (req, res) => {
   const { paymentId } = req.params;
   const client = await pool.connect();
   
   try {
-    // First get the payment to find its correction_group_id
     const paymentRes = await client.query(
       `SELECT 
         p.id, 
@@ -3322,7 +3341,6 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
     const groupId = paymentRes.rows[0].correction_group_id;
     
     if (!groupId) {
-      // Old payment without correction group - just return the single payment as array
       const payment = paymentRes.rows[0];
       return res.json([{
         id: payment.id,
@@ -3340,7 +3358,6 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
       }]);
     }
 
-    // Get all payments in this correction group (full history)
     const result = await client.query(
       `SELECT 
         p.id,
@@ -3363,7 +3380,6 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
       [groupId]
     );
 
-    // Add entry_type to each row
     const history = result.rows.map(row => {
       let entryType = 'Correction';
       if (row.is_reversal) {
@@ -3389,7 +3405,6 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
       };
     });
 
-    // Always return an array
     res.json(history);
   } catch (err) {
     console.error('Error fetching payment history:', err);
@@ -3399,7 +3414,7 @@ router.get('/payments/:paymentId/history', authenticateToken, async (req, res) =
   }
 });
 
-// GET /api/servicemanagement/payments/:paymentId/correction-status - Check if correction allowed
+// GET /api/servicemanagement/payments/:paymentId/correction-status
 router.get('/payments/:paymentId/correction-status', authenticateToken, async (req, res) => {
   const { paymentId } = req.params;
   const client = await pool.connect();
@@ -3425,8 +3440,7 @@ router.get('/payments/:paymentId/correction-status', authenticateToken, async (r
     );
     
     const correctionCount = parseInt(countRes.rows[0].correction_count);
-    const correctionsUsed = correctionCount - 1; // Subtract original
-    const maxCorrections = req.user.role === 'staff' ? 2 : null;
+    const correctionsUsed = correctionCount - 1;
     const canCorrect = req.user.role === 'staff' ? correctionsUsed < 2 : true;
     
     res.json({
@@ -3446,7 +3460,7 @@ router.get('/payments/:paymentId/correction-status', authenticateToken, async (r
   }
 });
 
-// PUT /api/servicemanagement/payments/:id/correct - Main correction endpoint
+// PUT /api/servicemanagement/payments/:id/correct
 router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   
@@ -3455,7 +3469,6 @@ router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
     const { new_amount, new_wallet_id, reason } = req.body;
     const user = req.user;
 
-    // Validation
     if (!new_amount || new_amount <= 0) {
       return res.status(400).json({ error: 'new_amount must be a positive number' });
     }
@@ -3468,7 +3481,6 @@ router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
 
     await client.query('BEGIN');
 
-    // 1. Get original payment with wallet info
     const paymentRes = await client.query(
       `SELECT p.*, w.centre_id, w.name as wallet_name, se.staff_id as service_staff_id
        FROM payments p
@@ -3484,19 +3496,16 @@ router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
 
     const original = paymentRes.rows[0];
     
-    // Check centre access (non-superadmin)
     if (user.role !== 'superadmin' && original.centre_id !== user.centre_id) {
       throw new Error('You do not have access to this payment');
     }
 
-    // Check if payment is already a reversal (prevent correcting reversals)
     if (original.is_reversal) {
       throw new Error('Cannot correct a reversal payment');
     }
 
     const groupId = original.correction_group_id || crypto.randomUUID();
 
-    // 2. STAFF CORRECTION LIMIT CHECK (max 2 corrections = original + 2 new = 3 total non-reversal entries)
     if (user.role === 'staff') {
       const countRes = await client.query(
         `SELECT COUNT(*) 
@@ -3506,16 +3515,11 @@ router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
         [groupId]
       );
 
-      const count = parseInt(countRes.rows[0].count);
-      
-      // count includes: original (1) + previous corrections
-      // Allow max 3 total = original + 2 corrections
-      if (count >= 3) {
+      if (parseInt(countRes.rows[0].count) >= 3) {
         throw new Error('Correction limit reached (max 2 corrections allowed). Please contact admin.');
       }
     }
 
-    // Verify new wallet exists and user has access
     const newWalletRes = await client.query(
       `SELECT id, centre_id, name FROM wallets WHERE id = $1`,
       [new_wallet_id]
@@ -3531,137 +3535,67 @@ router.put('/payments/:id/correct', authenticateToken, async (req, res) => {
       throw new Error('You do not have access to the new wallet');
     }
 
-    // 3. CREATE REVERSAL PAYMENT (debit from original wallet)
+    // Create reversal payment
     const reversalPaymentRes = await client.query(
       `INSERT INTO payments (
-        service_entry_id,
-        wallet_id,
-        amount,
-        status,
-        is_reversal,
-        correction_group_id,
-        original_payment_id,
-        edited_by,
-        edited_at,
-        edit_reason,
-        created_at
+        service_entry_id, wallet_id, amount, status, is_reversal,
+        correction_group_id, original_payment_id, edited_by, edited_at, edit_reason, created_at
       ) VALUES ($1, $2, $3, 'received', TRUE, $4, $5, $6, NOW(), $7, NOW())
       RETURNING id`,
-      [
-        original.service_entry_id,
-        original.wallet_id,
-        original.amount,
-        groupId,
-        original.original_payment_id || original.id,
-        user.id,
-        reason
-      ]
+      [original.service_entry_id, original.wallet_id, original.amount, groupId, original.original_payment_id || original.id, user.id, reason]
     );
 
     const reversalPaymentId = reversalPaymentRes.rows[0].id;
 
-    // 4. CREATE REVERSAL WALLET TRANSACTION (debit from original wallet)
+    // Create reversal wallet transaction
     await client.query(
       `INSERT INTO wallet_transactions (
-        wallet_id,
-        staff_id,
-        type,
-        amount,
-        description,
-        category,
-        reference_id,
-        is_reversal,
-        correction_group_id,
-        reference_payment_id,
-        created_at
-      ) VALUES ($1, $2, 'debit', $3, $4, 'Service Payment', $5, TRUE, $6, $7, NOW())`,
-      [
-        original.wallet_id,
-        original.service_staff_id || user.id,
-        original.amount,
-        `Correction reversal: ${reason} (Original: ${original.wallet_name})`,
-        original.service_entry_id,
-        groupId,
-        original.id
-      ]
+        wallet_id, staff_id, type, amount, description, category,
+        reference_id, reference_type, is_reversal, correction_group_id, reference_payment_id, created_at
+      ) VALUES ($1, $2, 'debit', $3, $4, 'Service Payment', $5, 'payment', TRUE, $6, $7, NOW())`,
+      [original.wallet_id, original.service_staff_id || user.id, original.amount, `Correction reversal: ${reason} (Original: ${original.wallet_name})`, original.service_entry_id, groupId, original.id]
     );
 
-    // 5. UPDATE ORIGINAL WALLET BALANCE (debit)
+    // Update original wallet balance
     await client.query(
-      `UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`,
+      `UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2 RETURNING balance`,
       [original.amount, original.wallet_id]
     );
 
-    // 6. CREATE NEW CORRECTED PAYMENT
+    // Create new corrected payment
     const newPaymentRes = await client.query(
       `INSERT INTO payments (
-        service_entry_id,
-        wallet_id,
-        amount,
-        status,
-        correction_group_id,
-        original_payment_id,
-        edited_by,
-        edited_at,
-        edit_reason,
-        created_at
+        service_entry_id, wallet_id, amount, status,
+        correction_group_id, original_payment_id, edited_by, edited_at, edit_reason, created_at
       ) VALUES ($1, $2, $3, 'received', $4, $5, $6, NOW(), $7, NOW())
       RETURNING id`,
-      [
-        original.service_entry_id,
-        new_wallet_id,
-        new_amount,
-        groupId,
-        original.original_payment_id || original.id,
-        user.id,
-        reason
-      ]
+      [original.service_entry_id, new_wallet_id, new_amount, groupId, original.original_payment_id || original.id, user.id, reason]
     );
 
     const newPaymentId = newPaymentRes.rows[0].id;
 
-    // 7. CREATE NEW WALLET TRANSACTION (credit to new wallet)
+    // Create new wallet transaction
     await client.query(
       `INSERT INTO wallet_transactions (
-        wallet_id,
-        staff_id,
-        type,
-        amount,
-        description,
-        category,
-        reference_id,
-        correction_group_id,
-        created_at
-      ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, $6, NOW())`,
-      [
-        new_wallet_id,
-        original.service_staff_id || user.id,
-        new_amount,
-        `Corrected payment: ${reason} (Was: ₹${original.amount} from ${original.wallet_name})`,
-        original.service_entry_id,
-        groupId
-      ]
+        wallet_id, staff_id, type, amount, description, category,
+        reference_id, reference_type, correction_group_id, payment_id, created_at
+      ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())`,
+      [new_wallet_id, original.service_staff_id || user.id, new_amount, `Corrected payment: ${reason} (Was: ₹${original.amount} from ${original.wallet_name})`, original.service_entry_id, groupId, newPaymentId]
     );
 
-    // 8. UPDATE NEW WALLET BALANCE (credit)
+    // Update new wallet balance
     await client.query(
-      `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+      `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2 RETURNING balance`,
       [new_amount, new_wallet_id]
     );
 
-    // 9. Log audit
+    // Log audit
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [
-        'Payment Corrected',
-        user.username,
-        `Corrected payment #${paymentId}: ₹${original.amount} from ${original.wallet_name} → ₹${new_amount} to ${newWallet.name}. Reason: ${reason}`,
-        original.centre_id
-      ]
+      ['Payment Corrected', user.username, `Corrected payment #${paymentId}: ₹${original.amount} from ${original.wallet_name} → ₹${new_amount} to ${newWallet.name}. Reason: ${reason}`, original.centre_id]
     );
 
-    // 10. Log activity
     await logActivity({
       centre_id: original.centre_id,
       related_type: 'payment',
