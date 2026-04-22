@@ -190,10 +190,8 @@ router.post('/services', authenticateToken, async (req, res) => {
 
     const auditDetails = `Created service ${name} by ${req.user.role}`;
     await client.query(
-      `
-      INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      `,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
       ['Service Created', req.user.username, auditDetails, req.user.centre_id]
     );
 
@@ -331,10 +329,8 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
 
     const auditDetails = `Updated service ${name} by ${req.user.role}`;
     await client.query(
-      `
-      INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      `,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
       ['Service Updated', req.user.username, auditDetails, req.user.centre_id]
     );
 
@@ -394,10 +390,8 @@ router.delete('/services/:id', authenticateToken, async (req, res) => {
 
     const auditDetails = `Deleted service ID ${id} by ${req.user.role}`;
     await client.query(
-      `
-      INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      `,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
       ['Service Deleted', req.user.username, auditDetails, req.user.centre_id]
     );
 
@@ -458,10 +452,8 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
 
     const auditDetails = `Added subcategory ${name} to service ID ${id} by ${req.user.role}`;
     await client.query(
-      `
-      INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      `,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
       ['Subcategory Created', req.user.username, auditDetails, req.user.centre_id]
     );
 
@@ -494,10 +486,8 @@ router.delete('/services/:id/subcategories/:subId', authenticateToken, async (re
 
     const auditDetails = `Deleted subcategory ID ${subId} from service ID ${id} by ${req.user.role}`;
     await client.query(
-      `
-      INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      `,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
       ['Subcategory Deleted', req.user.username, auditDetails, req.user.centre_id]
     );
 
@@ -536,51 +526,31 @@ router.get('/wallets', authenticateToken, async (req, res) => {
 router.get('/categories', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    console.log('servicemanagement.js: Fetching categories for user:', JSON.stringify(req.user, null, 2));
-
     const query = `
       SELECT 
-        s.id,
-        s.name,
-        s.description,
-        s.wallet_id,
-        s.website,
-        s.status,
+        s.id, s.name, s.description, s.wallet_id, s.website, s.status,
         COALESCE(s.department_charges, 0) AS department_charges,
         COALESCE(s.service_charges, 0) AS service_charges,
         COALESCE(s.requires_wallet, false) AS requires_wallet,
         COALESCE(s.requires_workflow, false) AS requires_workflow,
         COALESCE(s.has_expiry, false) AS has_expiry,
-        (
-          SELECT COALESCE(json_agg(rd), '[]'::json)
-          FROM required_documents rd
-          WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
-        ) AS required_documents,
-        (
-          SELECT COALESCE(json_agg(sc), '[]'::json)
-          FROM (
-            SELECT 
-              sc.id,
-              sc.name,
-              sc.service_id,
-              COALESCE(sc.department_charges, 0) AS department_charges,
-              COALESCE(sc.service_charges, 0) AS service_charges,
-              COALESCE(sc.requires_wallet, false) AS requires_wallet,
-              (
-                SELECT COALESCE(json_agg(rd2), '[]'::json)
-                FROM required_documents rd2
-                WHERE rd2.sub_category_id = sc.id
-              ) AS required_documents
-            FROM subcategories sc
-            WHERE sc.service_id = s.id
-          ) sc
-        ) AS subcategories
+        (SELECT COALESCE(json_agg(rd), '[]'::json)
+         FROM required_documents rd
+         WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL) AS required_documents,
+        (SELECT COALESCE(json_agg(sc), '[]'::json)
+         FROM (SELECT sc.id, sc.name, sc.service_id,
+                      COALESCE(sc.department_charges, 0) AS department_charges,
+                      COALESCE(sc.service_charges, 0) AS service_charges,
+                      COALESCE(sc.requires_wallet, false) AS requires_wallet,
+                      (SELECT COALESCE(json_agg(rd2), '[]'::json)
+                       FROM required_documents rd2
+                       WHERE rd2.sub_category_id = sc.id) AS required_documents
+               FROM subcategories sc
+               WHERE sc.service_id = s.id) sc) AS subcategories
       FROM services s
       WHERE s.status = 'active'
       ORDER BY s.name ASC
     `;
-
-    console.log('servicemanagement.js: Executing categories query:', query);
 
     const result = await client.query(query);
     const categories = result.rows.map(category => ({
@@ -607,7 +577,6 @@ router.get('/categories', authenticateToken, async (req, res) => {
       }))
     }));
 
-    console.log('servicemanagement.js: Categories fetched:', JSON.stringify(categories, null, 2));
     res.json(categories);
   } catch (err) {
     console.error('servicemanagement.js: Error fetching categories:', err);
@@ -651,28 +620,45 @@ router.get('/entries', authenticateToken, async (req, res) => {
 
     query += ` ORDER BY se.created_at DESC`;
 
-    console.log('servicemanagement.js: Fetching service entries with query:', query, 'values:', values);
-
     const entriesResult = await client.query(query, values);
-
     const entries = [];
+
     for (const entry of entriesResult.rows) {
+      // Fetch payments (latest non-reversal per correction group)
       const paymentsResult = await client.query(`
         SELECT DISTINCT ON (p.correction_group_id)
-          p.id, 
-          p.wallet_id, 
-          p.amount, 
-          p.status, 
-          w.name AS wallet_name, 
-          w.wallet_type,
-          p.correction_group_id,
-          p.is_reversal,
-          p.created_at
+          p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type,
+          p.correction_group_id, p.is_reversal, p.created_at
         FROM payments p
         JOIN wallets w ON p.wallet_id = w.id
-        WHERE p.service_entry_id = $1
-          AND p.is_reversal = FALSE
+        WHERE p.service_entry_id = $1 AND p.is_reversal = FALSE
         ORDER BY p.correction_group_id, p.created_at DESC
+      `, [entry.id]);
+
+      // Fetch department charge transaction (latest non-reversal)
+      const deptTxResult = await client.query(`
+        SELECT DISTINCT ON (wt.correction_group_id)
+          wt.id, wt.amount, wt.wallet_id, w.name AS wallet_name,
+          wt.correction_group_id, wt.is_reversal, wt.created_at
+        FROM wallet_transactions wt
+        JOIN wallets w ON wt.wallet_id = w.id
+        WHERE wt.reference_id = $1
+          AND wt.category = 'Department Payment'
+          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+        ORDER BY wt.correction_group_id, wt.created_at DESC
+      `, [entry.id]);
+
+      // Fetch service charge transaction (if tracked separately)
+      const serviceChargeTxResult = await client.query(`
+        SELECT DISTINCT ON (wt.correction_group_id)
+          wt.id, wt.amount, wt.wallet_id, w.name AS wallet_name,
+          wt.correction_group_id, wt.is_reversal, wt.created_at
+        FROM wallet_transactions wt
+        JOIN wallets w ON wt.wallet_id = w.id
+        WHERE wt.reference_id = $1
+          AND wt.category = 'Service Charge'
+          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+        ORDER BY wt.correction_group_id, wt.created_at DESC
       `, [entry.id]);
 
       entries.push({
@@ -690,15 +676,9 @@ router.get('/entries', authenticateToken, async (req, res) => {
         serviceWalletId: entry.service_wallet_id,
         staffId: parseInt(entry.staff_id),
         created_at: entry.created_at ? entry.created_at.toISOString() : null,
-        paidAmount: paymentsResult.rows
-          .filter(p => p.status === 'received')
-          .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-        pendingAmount: paymentsResult.rows
-          .filter(p => p.status === 'pending')
-          .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-        balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows
-          .filter(p => p.status === 'received')
-          .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+        paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
+        pendingAmount: paymentsResult.rows.filter(p => p.status === 'pending').reduce((sum, p) => sum + parseFloat(p.amount), 0),
+        balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
         expiryDate: entry.expiry_date ? entry.expiry_date.toISOString().split('T')[0] : null,
         status: entry.status,
         payments: paymentsResult.rows.map(p => ({
@@ -708,13 +688,26 @@ router.get('/entries', authenticateToken, async (req, res) => {
           amount: parseFloat(p.amount),
           status: p.status,
           correction_group_id: p.correction_group_id,
-          workSource: entry.work_source,
-          customerServiceId: entry.customer_service_id,  
         })),
+        departmentChargeTransaction: deptTxResult.rows[0] ? {
+          id: deptTxResult.rows[0].id,
+          amount: parseFloat(deptTxResult.rows[0].amount),
+          wallet_id: deptTxResult.rows[0].wallet_id,
+          wallet_name: deptTxResult.rows[0].wallet_name,
+          correction_group_id: deptTxResult.rows[0].correction_group_id,
+        } : null,
+        serviceChargeTransaction: serviceChargeTxResult.rows[0] ? {
+          id: serviceChargeTxResult.rows[0].id,
+          amount: parseFloat(serviceChargeTxResult.rows[0].amount),
+          wallet_id: serviceChargeTxResult.rows[0].wallet_id,
+          wallet_name: serviceChargeTxResult.rows[0].wallet_name,
+          correction_group_id: serviceChargeTxResult.rows[0].correction_group_id,
+        } : null,
+        workSource: entry.work_source,
+        customerServiceId: entry.customer_service_id,
       });
     }
 
-    console.log('servicemanagement.js: Service entries fetched:', JSON.stringify(entries, null, 2));
     res.json(entries);
   } catch (err) {
     console.error('servicemanagement.js: Error fetching service entries:', err);
@@ -745,19 +738,10 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
     
     const paymentsResult = await client.query(`
       SELECT DISTINCT ON (p.correction_group_id)
-        p.id, 
-        p.wallet_id, 
-        p.amount, 
-        p.status, 
-        w.name AS wallet_name, 
-        w.wallet_type,
-        p.correction_group_id,
-        p.is_reversal,
-        p.created_at
+        p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
       FROM payments p
       JOIN wallets w ON p.wallet_id = w.id
-      WHERE p.service_entry_id = $1
-        AND p.is_reversal = FALSE
+      WHERE p.service_entry_id = $1 AND p.is_reversal = FALSE
       ORDER BY p.correction_group_id, p.created_at DESC
     `, [entry.id]);
 
@@ -775,15 +759,9 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
       serviceWalletId: entry.service_wallet_id,
       staffId: parseInt(entry.staff_id),
       created_at: entry.created_at ? entry.created_at.toISOString() : null,
-      paidAmount: paymentsResult.rows
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-      pendingAmount: paymentsResult.rows
-        .filter(p => p.status === 'pending')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-      balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      pendingAmount: paymentsResult.rows.filter(p => p.status === 'pending').reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
       expiryDate: entry.expiry_date ? entry.expiry_date.toISOString().split('T')[0] : null,
       status: entry.status,
       payments: paymentsResult.rows.map(p => ({
@@ -795,7 +773,6 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
       })),
     };
 
-    console.log('servicemanagement.js: Service entry fetched:', JSON.stringify(formattedEntry, null, 2));
     res.json(formattedEntry);
   } catch (err) {
     console.error('servicemanagement.js: Error fetching service entry:', err);
@@ -824,18 +801,9 @@ router.post('/entry', authenticateToken, async (req, res) => {
     customerServiceId
   } = req.body;
 
-  const isQuickEntry =
-    customerName == null &&
-    phone == null &&
-    tokenId == null;
-  
+  const isQuickEntry = customerName == null && phone == null && tokenId == null;
   const isOnlineBooking = !!customerServiceId;
   const workSource = isOnlineBooking ? 'online' : 'offline';
-
-  console.log(
-    'servicemanagement.js: Received payload:',
-    JSON.stringify(req.body, null, 2)
-  );
 
   const client = await pool.connect();
 
@@ -843,49 +811,24 @@ router.post('/entry', authenticateToken, async (req, res) => {
     const errors = [];
 
     if (!isQuickEntry) {
-      if (!customerName || customerName.trim() === '') {
-        errors.push('customerName is required and must be a non-empty string');
-      }
-      if (!phone || phone.trim() === '') {
-        errors.push('phone is required and must be a non-empty string');
-      }
-      if (!categoryId || isNaN(parseInt(categoryId))) {
-        errors.push('categoryId is required and must be a valid integer');
-      }
-      if (!subcategoryId || isNaN(parseInt(subcategoryId))) {
-        errors.push('subcategoryId is required and must be a valid integer');
-      }
+      if (!customerName || customerName.trim() === '') errors.push('customerName is required');
+      if (!phone || phone.trim() === '') errors.push('phone is required');
+      if (!categoryId || isNaN(parseInt(categoryId))) errors.push('categoryId is required');
+      if (!subcategoryId || isNaN(parseInt(subcategoryId))) errors.push('subcategoryId is required');
     }
 
-    if (serviceCharge == null || isNaN(serviceCharge) || serviceCharge < 0) {
-      errors.push('serviceCharge must be a non-negative number');
-    }
+    if (serviceCharge == null || isNaN(serviceCharge) || serviceCharge < 0) errors.push('serviceCharge must be non-negative');
+    if (departmentCharge == null || isNaN(departmentCharge) || departmentCharge < 0) errors.push('departmentCharge must be non-negative');
 
-    if (departmentCharge == null || isNaN(departmentCharge) || departmentCharge < 0) {
-      errors.push('departmentCharge must be a non-negative number');
-    }
+    const calculatedTotal = Number(serviceCharge || 0) + Number(departmentCharge || 0);
+    if (Number(totalCharge) !== calculatedTotal) errors.push('totalCharge must match serviceCharge + departmentCharge');
 
-    const calculatedTotal =
-      Number(serviceCharge || 0) + Number(departmentCharge || 0);
-
-    if (Number(totalCharge) !== calculatedTotal) {
-      errors.push('totalCharge must match serviceCharge + departmentCharge');
-    }
-
-    if (!Array.isArray(payments) || payments.length === 0) {
-      errors.push('payments must be a non-empty array');
-    }
+    if (!Array.isArray(payments) || payments.length === 0) errors.push('payments must be a non-empty array');
 
     for (const [index, payment] of payments.entries()) {
-      if (!payment.wallet || isNaN(parseInt(payment.wallet))) {
-        errors.push(`Payment ${index + 1}: wallet is required`);
-      }
-      if (!payment.amount || isNaN(payment.amount) || payment.amount <= 0) {
-        errors.push(`Payment ${index + 1}: amount must be > 0`);
-      }
-      if (!payment.status || !['received', 'pending', 'not_received'].includes(payment.status)) {
-        errors.push(`Payment ${index + 1}: invalid status`);
-      }
+      if (!payment.wallet || isNaN(parseInt(payment.wallet))) errors.push(`Payment ${index + 1}: wallet is required`);
+      if (!payment.amount || isNaN(payment.amount) || payment.amount <= 0) errors.push(`Payment ${index + 1}: amount must be > 0`);
+      if (!payment.status || !['received', 'pending', 'not_received'].includes(payment.status)) errors.push(`Payment ${index + 1}: invalid status`);
     }
 
     if (errors.length > 0) {
@@ -894,42 +837,29 @@ router.post('/entry', authenticateToken, async (req, res) => {
 
     await client.query('BEGIN');
 
-    let customerAadhaar = null;
-    let customerEmail = null;
-    let customerPhone = null;
-    let finalCustomerName = customerName;
-    let finalCategoryId = categoryId;
-    let finalSubcategoryId = subcategoryId;
-    let finalServiceCharge = serviceCharge;
-    let finalDepartmentCharge = departmentCharge;
-    let finalTotalCharge = totalCharge;
+    let customerAadhaar = null, customerEmail = null, customerPhone = null;
+    let finalCustomerName = customerName, finalCategoryId = categoryId, finalSubcategoryId = subcategoryId;
+    let finalServiceCharge = serviceCharge, finalDepartmentCharge = departmentCharge, finalTotalCharge = totalCharge;
 
     if (isOnlineBooking) {
       const customerServiceResult = await client.query(
         `SELECT cs.*, c.name AS customer_name, c.primary_phone, c.email 
-         FROM customer_services cs
-         JOIN customers c ON cs.customer_id = c.id
-         WHERE cs.id = $1`,
+         FROM customer_services cs JOIN customers c ON cs.customer_id = c.id WHERE cs.id = $1`,
         [customerServiceId]
       );
-      
       if (customerServiceResult.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Customer service not found' });
       }
-      
       const customerData = customerServiceResult.rows[0];
-      
       finalCustomerName = finalCustomerName || customerData.customer_name;
       customerPhone = customerData.primary_phone;
       customerAadhaar = customerData.aadhaar_number;
       customerEmail = customerData.email;
-      
       if (!finalCategoryId) {
         const serviceData = customerData.service_data;
         finalCategoryId = serviceData.category_id || serviceData.service_id;
         finalSubcategoryId = serviceData.subcategory_id;
-        
         if (serviceData.service_charges) finalServiceCharge = serviceData.service_charges;
         if (serviceData.department_charges) finalDepartmentCharge = serviceData.department_charges;
         if (serviceData.total_charges) finalTotalCharge = serviceData.total_charges;
@@ -944,89 +874,49 @@ router.post('/entry', authenticateToken, async (req, res) => {
         'SELECT centre_id, status FROM tokens WHERE token_id = $1',
         [tokenId]
       );
-
       if (tokenResult.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: `Token ${tokenId} not found` });
       }
-
       centreId = tokenResult.rows[0].centre_id;
       tokenCentreId = centreId;
-      
       if (tokenResult.rows[0].status !== 'pending') {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: `Token ${tokenId} is already processed or completed` });
       }
     }
 
-    let serviceName = 'Quick Service';
-    let subcategoryName = null;
-    let resolvedServiceWalletId = null;
+    let serviceName = 'Quick Service', subcategoryName = null, resolvedServiceWalletId = null;
 
     if (!isQuickEntry) {
       const categoryResult = await client.query(
         'SELECT id, wallet_id, name, has_expiry FROM services WHERE id = $1',
         [parseInt(finalCategoryId)]
       );
-
-      if (!categoryResult.rows.length) {
-        throw new Error(`Category ID ${finalCategoryId} not found`);
-      }
-
+      if (!categoryResult.rows.length) throw new Error(`Category ID ${finalCategoryId} not found`);
       const service = categoryResult.rows[0];
       serviceName = service.name;
       resolvedServiceWalletId = service.wallet_id;
-
       if (service.has_expiry && (!expiryDate || isNaN(Date.parse(expiryDate)))) {
         throw new Error('expiryDate required for this service');
       }
-
       const subcategoryResult = await client.query(
         'SELECT name FROM subcategories WHERE id = $1 AND service_id = $2',
         [parseInt(finalSubcategoryId), parseInt(finalCategoryId)]
       );
-
-      if (!subcategoryResult.rows.length) {
-        throw new Error(`Subcategory ID ${finalSubcategoryId} not found`);
-      }
-
+      if (!subcategoryResult.rows.length) throw new Error(`Subcategory ID ${finalSubcategoryId} not found`);
       subcategoryName = subcategoryResult.rows[0].name;
     }
 
     const result = await client.query(
-      `INSERT INTO service_entries (
-        token_id,
-        customer_name,
-        phone,
-        category_id,
-        subcategory_id,
-        service_charges,
-        department_charges,
-        total_charges,
-        status,
-        expiry_date,
-        staff_id,
-        customer_service_id,
-        work_source,
-        created_at
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
-      RETURNING id`,
-      [
-        tokenId || null,
-        finalCustomerName ? finalCustomerName.trim() : null,
-        (customerPhone || phone) ? (customerPhone || phone).trim() : null,
-        finalCategoryId ? parseInt(finalCategoryId) : null,
-        finalSubcategoryId ? parseInt(finalSubcategoryId) : null,
-        finalServiceCharge,
-        finalDepartmentCharge,
-        finalTotalCharge,
-        status || 'completed',
-        expiryDate || null,
-        staffId,
-        customerServiceId || null,
-        workSource,
-      ]
+      `INSERT INTO service_entries (token_id, customer_name, phone, category_id, subcategory_id, service_charges, department_charges, total_charges, status, expiry_date, staff_id, customer_service_id, work_source, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW()) RETURNING id`,
+      [tokenId || null, finalCustomerName ? finalCustomerName.trim() : null,
+       (customerPhone || phone) ? (customerPhone || phone).trim() : null,
+       finalCategoryId ? parseInt(finalCategoryId) : null,
+       finalSubcategoryId ? parseInt(finalSubcategoryId) : null,
+       finalServiceCharge, finalDepartmentCharge, finalTotalCharge,
+       status || 'completed', expiryDate || null, staffId, customerServiceId || null, workSource]
     );
 
     const serviceEntryId = result.rows[0].id;
@@ -1034,27 +924,16 @@ router.post('/entry', authenticateToken, async (req, res) => {
 
     if (isOnlineBooking) {
       await client.query(
-        `UPDATE customer_services 
-        SET payment_status = $1,
-            status = $2,
-            last_updated = NOW() 
-        WHERE id = $3`,
+        `UPDATE customer_services SET payment_status = $1, status = $2, last_updated = NOW() WHERE id = $3`,
         [paymentStatus, 'in_progress', customerServiceId]
       );
     }
 
     if (!isQuickEntry) {
       await client.query(
-        `INSERT INTO service_tracking (
-          service_entry_id, assigned_to, status, current_step, progress, 
-          aadhaar, email, updated_at
-        ) VALUES ($1, $2, 'pending', 'Application Received', 0, $3, $4, NOW())`,
-        [
-          serviceEntryId, 
-          req.user.id,
-          customerAadhaar || null,
-          customerEmail || null
-        ]
+        `INSERT INTO service_tracking (service_entry_id, assigned_to, status, current_step, progress, aadhaar, email, updated_at)
+         VALUES ($1, $2, 'pending', 'Application Received', 0, $3, $4, NOW())`,
+        [serviceEntryId, req.user.id, customerAadhaar || null, customerEmail || null]
       );
     }
 
@@ -1062,135 +941,50 @@ router.post('/entry', authenticateToken, async (req, res) => {
 
     if (debitWalletId && Number(finalDepartmentCharge) > 0) {
       const deptGroupId = crypto.randomUUID();
-      
+      await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2 RETURNING balance', [Number(finalDepartmentCharge), Number(debitWalletId)]);
       await client.query(
-        'UPDATE wallets SET balance = balance - $1 WHERE id = $2 RETURNING balance',
-        [Number(finalDepartmentCharge), Number(debitWalletId)]
-      );
-
-      await client.query(
-        `INSERT INTO wallet_transactions (
-          wallet_id,
-          staff_id,
-          type,
-          amount,
-          description,
-          category,
-          reference_id,
-          reference_type,
-          correction_group_id,
-          created_at
-        ) VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, NOW())`,
-        [
-          Number(debitWalletId),
-          Number(staffId),
-          Number(finalDepartmentCharge),
-          `Department charge for ${serviceName} (#${serviceEntryId})`,
-          serviceEntryId,
-          deptGroupId
-        ]
+        `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, created_at)
+         VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, NOW())`,
+        [Number(debitWalletId), Number(staffId), Number(finalDepartmentCharge), `Department charge for ${serviceName} (#${serviceEntryId})`, serviceEntryId, deptGroupId]
       );
     }
 
     for (const payment of payments) {
       const groupId = crypto.randomUUID();
-      
       const paymentRes = await client.query(
-        `INSERT INTO payments (
-          service_entry_id, wallet_id, amount, status, correction_group_id, original_payment_id, created_at
-        ) VALUES ($1, $2, $3, $4, $5, NULL, NOW())
-        RETURNING id`,
+        `INSERT INTO payments (service_entry_id, wallet_id, amount, status, correction_group_id, original_payment_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, NULL, NOW()) RETURNING id`,
         [serviceEntryId, payment.wallet, payment.amount, payment.status, groupId]
       );
-      
       const paymentId = paymentRes.rows[0].id;
-      
-      await client.query(
-        `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
-        [paymentId]
-      );
+      await client.query(`UPDATE payments SET original_payment_id = $1 WHERE id = $1`, [paymentId]);
 
       if (payment.status === 'received') {
-        const walletRes = await client.query(
-          'SELECT wallet_type FROM wallets WHERE id = $1',
-          [payment.wallet]
-        );
-
+        const walletRes = await client.query('SELECT wallet_type FROM wallets WHERE id = $1', [payment.wallet]);
         const walletType = walletRes.rows[0].wallet_type;
-
+        await client.query('UPDATE wallets SET balance = balance + $1 WHERE id = $2 RETURNING balance', [payment.amount, payment.wallet]);
         await client.query(
-          'UPDATE wallets SET balance = balance + $1 WHERE id = $2 RETURNING balance',
-          [payment.amount, payment.wallet]
-        );
-
-        await client.query(
-          `INSERT INTO wallet_transactions (
-            wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, reference_payment_id, created_at
-          ) VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())`,
-          [
-            payment.wallet,
-            staffId,
-            payment.amount,
-            `${walletType === 'cash' ? 'Cash' : 'Online'} payment for ${serviceName} (#${serviceEntryId})`,
-            serviceEntryId,
-            groupId,
-            paymentId
-          ]
+          `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, reference_payment_id, created_at)
+           VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, NOW())`,
+          [payment.wallet, staffId, payment.amount, `${walletType === 'cash' ? 'Cash' : 'Online'} payment for ${serviceName} (#${serviceEntryId})`, serviceEntryId, groupId, paymentId]
         );
       }
     }
 
     if (tokenId) {
       let tokenStatus = 'pending';
-      if (status === 'completed') {
-        tokenStatus = 'completed';
-      } else if (status === 'not_received') {
-        tokenStatus = 'processed';
-      } else if (status === 'pending') {
-        tokenStatus = 'in-progress';
-      }
+      if (status === 'completed') tokenStatus = 'completed';
+      else if (status === 'not_received') tokenStatus = 'processed';
+      else if (status === 'pending') tokenStatus = 'in-progress';
 
-      await client.query(
-        `
-        UPDATE tokens 
-        SET status = $1,
-            staff_id = $2,
-            updated_at = NOW()
-        WHERE token_id = $3
-        `,
-        [
-          tokenStatus,
-          staffId || req.user.id,
-          tokenId
-        ]
-      );
-
+      await client.query(`UPDATE tokens SET status = $1, staff_id = $2, updated_at = NOW() WHERE token_id = $3`, [tokenStatus, staffId || req.user.id, tokenId]);
       if (tokenCentreId) {
-        io.emit('tokenUpdate', {
-          tokenId: tokenId,
-          status: tokenStatus,
-          message: `Token ${tokenId} status updated to ${tokenStatus}`
-        });
-        
-        io.to(`centre_${tokenCentreId}`).emit(`tokenUpdate:${tokenCentreId}`, {
-          tokenId: tokenId,
-          status: tokenStatus
-        });
-        
-        console.log('servicemanagement.js: Emitted tokenUpdate events:', { 
-          tokenId, 
-          status: tokenStatus, 
-          centreId: tokenCentreId 
-        });
+        io.emit('tokenUpdate', { tokenId, status: tokenStatus, message: `Token ${tokenId} status updated to ${tokenStatus}` });
+        io.to(`centre_${tokenCentreId}`).emit(`tokenUpdate:${tokenCentreId}`, { tokenId, status: tokenStatus });
       }
     }
 
-    io.emit('serviceEntryCreated', {
-      service_entry_id: serviceEntryId,
-      staff_id: staffId,
-      token_id: tokenId,
-      message: `New service entry created for token ${tokenId}`
-    });
+    io.emit('serviceEntryCreated', { service_entry_id: serviceEntryId, staff_id: staffId, token_id: tokenId, message: `New service entry created for token ${tokenId}` });
 
     await client.query('COMMIT');
 
@@ -1206,10 +1000,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
       });
     }
 
-    res.status(201).json({
-      message: 'Service entry created successfully',
-      serviceEntryId,
-    });
+    res.status(201).json({ message: 'Service entry created successfully', serviceEntryId });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('servicemanagement.js error:', err);
@@ -1222,92 +1013,31 @@ router.post('/entry', authenticateToken, async (req, res) => {
 // PUT /api/servicemanagement/entry/:id
 router.put('/entry/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const {
-    customerName,
-    phone,
-    categoryId,
-    subcategoryId,
-    serviceCharge,
-    departmentCharge,
-    totalCharge,
-    status,
-    expiryDate,
-    serviceWalletId,
-    payments,
-    staffId,
-  } = req.body;
-
-  console.log('servicemanagement.js: Received update payload:', JSON.stringify({ id, ...req.body }, null, 2));
+  const { customerName, phone, categoryId, subcategoryId, serviceCharge, departmentCharge, totalCharge, status, expiryDate, serviceWalletId, payments, staffId } = req.body;
 
   const client = await pool.connect();
   try {
     const errors = [];
-    if (customerName && (typeof customerName !== 'string' || customerName.trim() === '')) {
-      errors.push('customerName must be a non-empty string');
-    }
-    if (phone && (typeof phone !== 'string' || phone.trim() === '')) {
-      errors.push('phone must be a non-empty string');
-    }
-    if (categoryId && isNaN(parseInt(categoryId))) {
-      errors.push('categoryId must be a valid integer');
-    }
-    if (subcategoryId && isNaN(parseInt(subcategoryId))) {
-      errors.push('subcategoryId must be a valid integer');
-    }
-    if (serviceCharge !== undefined && (isNaN(parseFloat(serviceCharge)) || parseFloat(serviceCharge) < 0)) {
-      errors.push('serviceCharge must be a non-negative number');
-    }
-    if (departmentCharge !== undefined && (isNaN(parseFloat(departmentCharge)) || parseFloat(departmentCharge) < 0)) {
-      errors.push('departmentCharge must be a non-negative number');
-    }
+    if (customerName && (typeof customerName !== 'string' || customerName.trim() === '')) errors.push('customerName must be non-empty');
+    if (phone && (typeof phone !== 'string' || phone.trim() === '')) errors.push('phone must be non-empty');
+    if (categoryId && isNaN(parseInt(categoryId))) errors.push('categoryId must be valid');
+    if (subcategoryId && isNaN(parseInt(subcategoryId))) errors.push('subcategoryId must be valid');
+    if (serviceCharge !== undefined && (isNaN(parseFloat(serviceCharge)) || parseFloat(serviceCharge) < 0)) errors.push('serviceCharge must be non-negative');
+    if (departmentCharge !== undefined && (isNaN(parseFloat(departmentCharge)) || parseFloat(departmentCharge) < 0)) errors.push('departmentCharge must be non-negative');
     if (totalCharge !== undefined) {
-      const calculatedTotalCharge = parseFloat(serviceCharge || 0) + parseFloat(departmentCharge || 0);
-      if (isNaN(parseFloat(totalCharge)) || parseFloat(totalCharge) !== calculatedTotalCharge) {
-        errors.push('totalCharge must match serviceCharge + departmentCharge');
-      }
+      const calc = parseFloat(serviceCharge || 0) + parseFloat(departmentCharge || 0);
+      if (isNaN(parseFloat(totalCharge)) || parseFloat(totalCharge) !== calc) errors.push('totalCharge must match serviceCharge + departmentCharge');
     }
-    if (status && !['pending', 'completed', 'not_received'].includes(status)) {
-      errors.push('status must be one of: pending, completed, not_received');
-    }
-    if (staffId && isNaN(parseInt(staffId))) {
-      errors.push('staffId must be a valid integer');
-    }
-    if (payments && (!Array.isArray(payments) || payments.length === 0)) {
-      errors.push('payments must be a non-empty array');
-    }
-    if (payments) {
-      for (const [index, payment] of payments.entries()) {
-        if (!payment.wallet || isNaN(parseInt(payment.wallet))) {
-          errors.push(`Payment ${index + 1}: wallet is required and must be a valid integer`);
-        }
-        if (!payment.method || !['cash', 'wallet'].includes(payment.method)) {
-          errors.push(`Payment ${index + 1}: method is required and must be one of: cash, wallet`);
-        }
-        if (!payment.amount || isNaN(parseFloat(payment.amount)) || parseFloat(payment.amount) <= 0) {
-          errors.push(`Payment ${index + 1}: amount is required and must be a positive number`);
-        }
-        if (!payment.status || !['received', 'pending', 'not_received'].includes(payment.status)) {
-          errors.push(`Payment ${index + 1}: status is required and must be one of: received, pending, not_received`);
-        }
-      }
-    }
+    if (status && !['pending', 'completed', 'not_received'].includes(status)) errors.push('status must be pending/completed/not_received');
+    if (staffId && isNaN(parseInt(staffId))) errors.push('staffId must be valid');
     if (req.body.payments && req.body.payments.length > 0) {
-      return res.status(400).json({
-        error: 'Payments cannot be modified during service entry update'
-      });
+      return res.status(400).json({ error: 'Payments cannot be modified during service entry update' });
     }
-
-    if (errors.length > 0) {
-      console.log('servicemanagement.js: Validation errors:', errors);
-      return res.status(400).json({ error: 'Missing or invalid fields', details: errors });
-    }
+    if (errors.length > 0) return res.status(400).json({ error: 'Missing or invalid fields', details: errors });
 
     await client.query('BEGIN');
 
-    const entryResult = await client.query(
-      'SELECT * FROM service_entries WHERE id = $1',
-      [parseInt(id)]
-    );
+    const entryResult = await client.query('SELECT * FROM service_entries WHERE id = $1', [parseInt(id)]);
     if (entryResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: `Service Entry ID ${id} not found` });
@@ -1315,31 +1045,23 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     const existingEntry = entryResult.rows[0];
     const createdDate = new Date(existingEntry.created_at);
     const today = new Date();
-
-    createdDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-
+    createdDate.setHours(0,0,0,0);
+    today.setHours(0,0,0,0);
     if (createdDate.getTime() !== today.getTime()) {
       await client.query('ROLLBACK');
-      return res.status(403).json({
-        error: 'Editing is allowed only for today\'s service entries'
-      });
+      return res.status(403).json({ error: 'Editing allowed only for today\'s entries' });
     }
-
     if (req.user.role === 'staff' && existingEntry.is_edited) {
       await client.query('ROLLBACK');
-      return res.status(403).json({
-        error: 'You have already edited this service entry'
-      });
+      return res.status(403).json({ error: 'You have already edited this entry' });
     }
 
     const existingStaffResult = await client.query('SELECT centre_id FROM staff WHERE id = $1', [existingEntry.staff_id]);
     if (existingStaffResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: `Staff ID ${existingEntry.staff_id} not found for existing service entry` });
+      return res.status(400).json({ error: `Staff ID ${existingEntry.staff_id} not found` });
     }
     const centreId = existingStaffResult.rows[0].centre_id;
-
     if (req.user.role !== 'superadmin' && centreId !== parseInt(req.user.centre_id)) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Unauthorized to update this entry' });
@@ -1348,34 +1070,22 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     let finalCategoryId = existingEntry.category_id;
     let serviceName = null;
     if (categoryId) {
-      const categoryResult = await client.query(
-        'SELECT id, wallet_id, name, requires_wallet, has_expiry FROM services WHERE id = $1',
-        [parseInt(categoryId)]
-      );
+      const categoryResult = await client.query('SELECT id, wallet_id, name, requires_wallet, has_expiry FROM services WHERE id = $1', [parseInt(categoryId)]);
       if (categoryResult.rows.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: `Category ID ${categoryId} not found in services table` });
+        return res.status(400).json({ error: `Category ID ${categoryId} not found` });
       }
       finalCategoryId = parseInt(categoryId);
       serviceName = categoryResult.rows[0].name;
-
-      if (categoryResult.rows[0].has_expiry && (!expiryDate || isNaN(Date.parse(expiryDate)))) {
-        errors.push('expiryDate is required and must be a valid date for services with expiry');
-      } else if (!categoryResult.rows[0].has_expiry && expiryDate) {
-        errors.push('expiryDate should not be provided for services without expiry');
-      }
     }
 
     let finalSubcategoryId = existingEntry.subcategory_id;
     let subcategoryName = null;
     if (subcategoryId) {
-      const subcategoryResult = await client.query(
-        'SELECT id, service_id, name FROM subcategories WHERE id = $1 AND service_id = $2',
-        [parseInt(subcategoryId), parseInt(categoryId || finalCategoryId)]
-      );
+      const subcategoryResult = await client.query('SELECT id, service_id, name FROM subcategories WHERE id = $1 AND service_id = $2', [parseInt(subcategoryId), parseInt(categoryId || finalCategoryId)]);
       if (subcategoryResult.rows.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: `Subcategory ID ${subcategoryId} not found for service ID ${categoryId || finalCategoryId}` });
+        return res.status(400).json({ error: `Subcategory ID ${subcategoryId} not found` });
       }
       finalSubcategoryId = parseInt(subcategoryId);
       subcategoryName = subcategoryResult.rows[0].name;
@@ -1395,142 +1105,21 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       finalStaffId = parseInt(staffId);
     }
 
-    let finalServiceWalletId = existingEntry.service_wallet_id;
-    if (serviceWalletId !== undefined) {
-      const serviceResult = await client.query(
-        'SELECT wallet_id, requires_wallet FROM services WHERE id = $1',
-        [parseInt(categoryId || finalCategoryId)]
-      );
-      if (serviceResult.rows[0].requires_wallet) {
-        if (!serviceWalletId || isNaN(parseInt(serviceWalletId))) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'serviceWalletId is required and must be a valid integer for services that require a wallet' });
-        }
-        if (parseInt(serviceWalletId) !== serviceResult.rows[0].wallet_id) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Service wallet ID ${serviceWalletId} does not match category wallet ID ${serviceResult.rows[0].wallet_id}` });
-        }
-        finalServiceWalletId = parseInt(serviceWalletId);
-      } else if (serviceWalletId && !isNaN(parseInt(serviceWalletId))) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'serviceWalletId should not be provided when the service does not require a wallet' });
-      } else {
-        finalServiceWalletId = null;
-      }
-
-      if (finalServiceWalletId && departmentCharge !== undefined && parseFloat(departmentCharge) > 0) {
-        const serviceWalletResult = await client.query(
-          'SELECT id, balance, wallet_type, status, centre_id FROM wallets WHERE id = $1 AND (is_shared = true OR assigned_staff_id = $2)',
-          [finalServiceWalletId, finalStaffId]
-        );
-        if (serviceWalletResult.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Service wallet ID ${finalServiceWalletId} not found or access denied for staff ${finalStaffId}` });
-        }
-        const serviceWalletData = serviceWalletResult.rows[0];
-        if (req.user.role !== 'superadmin' && serviceWalletData.centre_id !== parseInt(req.user.centre_id)) {
-          await client.query('ROLLBACK');
-          return res.status(403).json({ error: `Service wallet ID ${finalServiceWalletId} does not belong to your centre` });
-        }
-        if (serviceWalletData.status !== 'online') {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Service wallet ID ${finalServiceWalletId} is offline` });
-        }
-        if (parseFloat(serviceWalletData.balance) < parseFloat(departmentCharge)) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Insufficient balance in service wallet ${finalServiceWalletId} (${serviceWalletData.balance} < ${departmentCharge})` });
-        }
-      }
-    }
-
-    let finalTotalCharge = existingEntry.total_charges;
-    if (totalCharge !== undefined) {
-      finalTotalCharge = parseFloat(totalCharge);
-    }
-    if (payments) {
-      const totalReceived = payments
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-      if (totalReceived < finalTotalCharge && status === 'completed') {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: `Total received amount (${totalReceived}) is less than total charge (${finalTotalCharge}) for completed status` });
-      }
-
-      for (const payment of payments) {
-        const walletResult = await client.query(
-          'SELECT id, balance, wallet_type, status, centre_id FROM wallets WHERE id = $1 AND (is_shared = true OR assigned_staff_id = $2)',
-          [parseInt(payment.wallet), finalStaffId]
-        );
-        if (walletResult.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Wallet ID ${payment.wallet} not found or access denied for staff ${finalStaffId}` });
-        }
-        const wallet = walletResult.rows[0];
-        if (req.user.role !== 'superadmin' && wallet.centre_id !== parseInt(req.user.centre_id)) {
-          await client.query('ROLLBACK');
-          return res.status(403).json({ error: `Wallet ID ${payment.wallet} does not belong to your centre` });
-        }
-        if (payment.method === 'cash' && wallet.wallet_type !== 'cash') {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Wallet ID ${payment.wallet} is not a cash wallet` });
-        }
-        if (payment.method === 'wallet' && wallet.status !== 'online') {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Wallet ID ${payment.wallet} is not online` });
-        }
-      }
-    }
-
     const updateFields = [];
     const updateValues = [];
     let paramIndex = 1;
-
-    if (customerName) {
-      updateFields.push(`customer_name = $${paramIndex++}`);
-      updateValues.push(customerName.trim());
-    }
-    if (phone) {
-      updateFields.push(`phone = $${paramIndex++}`);
-      updateValues.push(phone.trim());
-    }
-    if (categoryId) {
-      updateFields.push(`category_id = $${paramIndex++}`);
-      updateValues.push(parseInt(categoryId));
-    }
-    if (subcategoryId) {
-      updateFields.push(`subcategory_id = $${paramIndex++}`);
-      updateValues.push(parseInt(subcategoryId));
-    }
-    if (serviceCharge !== undefined) {
-      updateFields.push(`service_charges = $${paramIndex++}`);
-      updateValues.push(parseFloat(serviceCharge));
-    }
-    if (departmentCharge !== undefined) {
-      updateFields.push(`department_charges = $${paramIndex++}`);
-      updateValues.push(parseFloat(departmentCharge));
-    }
-    if (totalCharge !== undefined) {
-      updateFields.push(`total_charges = $${paramIndex++}`);
-      updateValues.push(parseFloat(totalCharge));
-    }
-    if (status) {
-      updateFields.push(`status = $${paramIndex++}`);
-      updateValues.push(status);
-    }
-    if (expiryDate !== undefined) {
-      updateFields.push(`expiry_date = $${paramIndex++}`);
-      updateValues.push(expiryDate || null);
-    }
-    if (staffId) {
-      updateFields.push(`staff_id = $${paramIndex++}`);
-      updateValues.push(parseInt(staffId));
-    }
+    if (customerName) { updateFields.push(`customer_name = $${paramIndex++}`); updateValues.push(customerName.trim()); }
+    if (phone) { updateFields.push(`phone = $${paramIndex++}`); updateValues.push(phone.trim()); }
+    if (categoryId) { updateFields.push(`category_id = $${paramIndex++}`); updateValues.push(parseInt(categoryId)); }
+    if (subcategoryId) { updateFields.push(`subcategory_id = $${paramIndex++}`); updateValues.push(parseInt(subcategoryId)); }
+    if (serviceCharge !== undefined) { updateFields.push(`service_charges = $${paramIndex++}`); updateValues.push(parseFloat(serviceCharge)); }
+    if (departmentCharge !== undefined) { updateFields.push(`department_charges = $${paramIndex++}`); updateValues.push(parseFloat(departmentCharge)); }
+    if (totalCharge !== undefined) { updateFields.push(`total_charges = $${paramIndex++}`); updateValues.push(parseFloat(totalCharge)); }
+    if (status) { updateFields.push(`status = $${paramIndex++}`); updateValues.push(status); }
+    if (expiryDate !== undefined) { updateFields.push(`expiry_date = $${paramIndex++}`); updateValues.push(expiryDate || null); }
+    if (staffId) { updateFields.push(`staff_id = $${paramIndex++}`); updateValues.push(parseInt(staffId)); }
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-
-    if (req.user.role === 'staff') {
-      updateFields.push(`is_edited = true`);
-    }
-
+    if (req.user.role === 'staff') updateFields.push(`is_edited = true`);
     updateValues.push(parseInt(id));
 
     if (updateFields.length === 1) {
@@ -1538,12 +1127,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    const updateQuery = `
-      UPDATE service_entries
-      SET ${updateFields.join(', ')}
-      WHERE id = $${paramIndex}
-      RETURNING *
-    `;
+    const updateQuery = `UPDATE service_entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
     const result = await client.query(updateQuery, updateValues);
     const updatedEntry = result.rows[0];
 
@@ -1552,93 +1136,26 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       if (status === 'completed') tokenStatus = 'completed';
       else if (status === 'not_received') tokenStatus = 'processed';
       else if (status === 'pending') tokenStatus = 'in-progress';
-      
-      await client.query('UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2', 
-        [tokenStatus, updatedEntry.token_id]);
-      
-      io.emit('tokenUpdate', {
-        tokenId: updatedEntry.token_id,
-        status: tokenStatus,
-        message: `Token ${updatedEntry.token_id} status updated to ${tokenStatus}`
-      });
-      
-      io.to(`centre_${centreId}`).emit(`tokenUpdate:${centreId}`, { 
-        tokenId: updatedEntry.token_id, 
-        status: tokenStatus 
-      });
-      
-      console.log('servicemanagement.js: Emitted tokenUpdate for updated service entry:', 
-        { tokenId: updatedEntry.token_id, status: tokenStatus, centreId });
+      await client.query('UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2', [tokenStatus, updatedEntry.token_id]);
+      io.emit('tokenUpdate', { tokenId: updatedEntry.token_id, status: tokenStatus });
+      io.to(`centre_${centreId}`).emit(`tokenUpdate:${centreId}`, { tokenId: updatedEntry.token_id, status: tokenStatus });
     }
 
     if (status) {
-      const trackingResult = await client.query(
-        'SELECT id, status, application_number FROM service_tracking WHERE service_entry_id = $1',
-        [parseInt(id)]
-      );
+      const trackingResult = await client.query('SELECT id, status, application_number FROM service_tracking WHERE service_entry_id = $1', [parseInt(id)]);
       if (trackingResult.rows.length > 0) {
         const trackingStatus = status === 'completed' ? 'completed' : status === 'not_received' ? 'rejected' : 'pending';
-        await client.query(
-          `UPDATE service_tracking
-           SET status = $1, updated_at = CURRENT_TIMESTAMP
-           WHERE service_entry_id = $2`,
-          [trackingStatus, parseInt(id)]
-        );
-        
-        if (updatedEntry.customer_service_id) {
-          await client.query(
-            `UPDATE service_tracking
-             SET aadhaar = COALESCE((
-               SELECT c.aadhaar_number 
-               FROM customer_services cs 
-               JOIN customers c ON cs.customer_id = c.id 
-               WHERE cs.id = $1
-             ), aadhaar),
-             email = COALESCE((
-               SELECT c.email 
-               FROM customer_services cs 
-               JOIN customers c ON cs.customer_id = c.id 
-               WHERE cs.id = $1
-             ), email)
-             WHERE service_entry_id = $2`,
-            [updatedEntry.customer_service_id, parseInt(id)]
-          );
-        }
-        
-        io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
-          applicationNumber: trackingResult.rows[0].application_number,
-          status: trackingStatus,
-          message: `Service tracking entry for Service Entry #${id} updated to ${trackingStatus}`
-        });
+        await client.query(`UPDATE service_tracking SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE service_entry_id = $2`, [trackingStatus, parseInt(id)]);
+        io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', { applicationNumber: trackingResult.rows[0].application_number, status: trackingStatus });
       }
     }
 
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
-      [
-        'Service Entry Updated',
-        req.user.username,
-        `Updated service entry ID ${id} by ${req.user.role}`,
-        centreId
-      ]
-    );
+    await client.query(`INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`, ['Service Entry Updated', req.user.username, `Updated service entry ID ${id}`, centreId]);
 
     const paymentsResult = await client.query(`
-      SELECT DISTINCT ON (p.correction_group_id)
-        p.id, 
-        p.wallet_id, 
-        p.amount, 
-        p.status, 
-        w.name AS wallet_name, 
-        w.wallet_type,
-        p.correction_group_id,
-        p.is_reversal,
-        p.created_at
-      FROM payments p
-      JOIN wallets w ON p.wallet_id = w.id
-      WHERE p.service_entry_id = $1
-        AND p.is_reversal = FALSE
+      SELECT DISTINCT ON (p.correction_group_id) p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
+      FROM payments p JOIN wallets w ON p.wallet_id = w.id
+      WHERE p.service_entry_id = $1 AND p.is_reversal = FALSE
       ORDER BY p.correction_group_id, p.created_at DESC
     `, [id]);
 
@@ -1646,13 +1163,9 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
 
     if (status === 'completed' && existingEntry.status !== 'completed') {
       await logActivity({
-        centre_id: centreId,
-        related_type: 'service_entry',
-        related_id: id,
-        action: 'Service Completed',
-        description: `Service marked as completed for ${updatedEntry.customer_name}`,
-        performed_by: req.user.id,
-        performed_by_role: req.user.role
+        centre_id: centreId, related_type: 'service_entry', related_id: id,
+        action: 'Service Completed', description: `Service marked as completed for ${updatedEntry.customer_name}`,
+        performed_by: req.user.id, performed_by_role: req.user.role
       });
     }
 
@@ -1670,24 +1183,12 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       serviceWalletId: updatedEntry.service_wallet_id,
       staffId: parseInt(updatedEntry.staff_id),
       created_at: updatedEntry.created_at ? updatedEntry.created_at.toISOString() : null,
-      paidAmount: paymentsResult.rows
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-      pendingAmount: paymentsResult.rows
-        .filter(p => p.status === 'pending')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
-      balanceAmount: parseFloat(updatedEntry.total_charges) - paymentsResult.rows
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      pendingAmount: paymentsResult.rows.filter(p => p.status === 'pending').reduce((sum, p) => sum + parseFloat(p.amount), 0),
+      balanceAmount: parseFloat(updatedEntry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
       expiryDate: updatedEntry.expiry_date ? updatedEntry.expiry_date.toISOString().split('T')[0] : null,
       status: updatedEntry.status,
-      payments: paymentsResult.rows.map(p => ({
-        id: p.id,
-        wallet: p.wallet_id,
-        method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
-        amount: parseFloat(p.amount),
-        status: p.status,
-      })),
+      payments: paymentsResult.rows.map(p => ({ id: p.id, wallet: p.wallet_id, method: p.wallet_type === 'cash' ? 'cash' : 'wallet', amount: parseFloat(p.amount), status: p.status })),
       customerServiceId: updatedEntry.customer_service_id,
     };
 
@@ -1707,82 +1208,36 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
 router.get('/transactions/:id/correction-status', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
-  
   try {
     const txRes = await client.query(
       `SELECT correction_group_id, category, type, is_reversal, reference_id
-       FROM wallet_transactions 
-       WHERE id = $1`,
+       FROM wallet_transactions WHERE id = $1`,
       [id]
     );
-    
-    if (txRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Transaction not found' });
-    }
-    
+    if (txRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
     const tx = txRes.rows[0];
     
     if (tx.is_reversal) {
-      return res.json({
-        transaction_id: parseInt(id),
-        can_correct: false,
-        reason: 'Cannot correct a reversal transaction',
-        corrections_used: 0,
-        max_corrections_staff: 2,
-        role: req.user.role
-      });
+      return res.json({ transaction_id: parseInt(id), can_correct: false, reason: 'Cannot correct a reversal transaction', corrections_used: 0, max_corrections_staff: 2, role: req.user.role });
     }
-    
     if (tx.category === 'Transfer') {
-      return res.json({
-        transaction_id: parseInt(id),
-        can_correct: false,
-        reason: 'Transfers must be reversed manually',
-        corrections_used: 0,
-        max_corrections_staff: 2,
-        role: req.user.role
-      });
+      return res.json({ transaction_id: parseInt(id), can_correct: false, reason: 'Transfers must be reversed manually', corrections_used: 0, max_corrections_staff: 2, role: req.user.role });
     }
     
     const groupId = tx.correction_group_id;
-    
     if (!groupId) {
-      return res.json({
-        transaction_id: parseInt(id),
-        can_correct: true,
-        corrections_used: 0,
-        max_corrections_staff: 2,
-        role: req.user.role,
-        category: tx.category,
-        type: tx.type,
-        reference_id: tx.reference_id
-      });
+      return res.json({ transaction_id: parseInt(id), can_correct: true, corrections_used: 0, max_corrections_staff: 2, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
     }
     
     const countRes = await client.query(
-      `SELECT COUNT(*) as correction_count
-       FROM wallet_transactions 
-       WHERE correction_group_id = $1 
-       AND (is_reversal IS NULL OR is_reversal = FALSE)`,
+      `SELECT COUNT(*) as correction_count FROM wallet_transactions WHERE correction_group_id = $1 AND (is_reversal IS NULL OR is_reversal = FALSE)`,
       [groupId]
     );
-    
     const correctionCount = parseInt(countRes.rows[0].correction_count);
     const correctionsUsed = correctionCount - 1;
     const canCorrect = req.user.role === 'staff' ? correctionsUsed < 2 : true;
     
-    res.json({
-      transaction_id: parseInt(id),
-      correction_group_id: groupId,
-      total_entries: correctionCount,
-      corrections_used: correctionsUsed,
-      max_corrections_staff: 2,
-      can_correct: canCorrect,
-      role: req.user.role,
-      category: tx.category,
-      type: tx.type,
-      reference_id: tx.reference_id
-    });
+    res.json({ transaction_id: parseInt(id), correction_group_id: groupId, total_entries: correctionCount, corrections_used: correctionsUsed, max_corrections_staff: 2, can_correct: canCorrect, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
   } catch (err) {
     console.error('Error checking correction status:', err);
     res.status(500).json({ error: 'Failed to check correction status' });
@@ -1795,87 +1250,33 @@ router.get('/transactions/:id/correction-status', authenticateToken, async (req,
 router.get('/transactions/:id/history', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
-  
   try {
     const txRes = await client.query(
-      `SELECT 
-        wt.id, 
-        wt.correction_group_id,
-        wt.amount,
-        wt.type,
-        wt.category,
-        wt.is_reversal,
-        wt.created_at,
-        wt.description,
-        w.name AS wallet_name
-       FROM wallet_transactions wt
-       JOIN wallets w ON wt.wallet_id = w.id
-       WHERE wt.id = $1`,
+      `SELECT wt.id, wt.correction_group_id, wt.amount, wt.type, wt.category, wt.is_reversal, wt.created_at, wt.description, w.name AS wallet_name
+       FROM wallet_transactions wt JOIN wallets w ON wt.wallet_id = w.id WHERE wt.id = $1`,
       [id]
     );
-    
-    if (txRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Transaction not found' });
-    }
+    if (txRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
     
     const groupId = txRes.rows[0].correction_group_id;
-    
     if (!groupId) {
       const tx = txRes.rows[0];
-      return res.json([{
-        id: tx.id,
-        amount: parseFloat(tx.amount),
-        type: tx.type,
-        category: tx.category,
-        wallet_name: tx.wallet_name,
-        is_reversal: tx.is_reversal || false,
-        created_at: tx.created_at,
-        description: tx.description,
-        entry_type: 'Original'
-      }]);
+      return res.json([{ id: tx.id, amount: parseFloat(tx.amount), type: tx.type, category: tx.category, wallet_name: tx.wallet_name, is_reversal: tx.is_reversal || false, created_at: tx.created_at, description: tx.description, entry_type: 'Original' }]);
     }
 
     const result = await client.query(
-      `SELECT 
-        wt.id,
-        wt.amount,
-        wt.type,
-        wt.category,
-        wt.is_reversal,
-        wt.created_at,
-        wt.description,
-        w.name AS wallet_name,
-        s.name AS staff_name
-      FROM wallet_transactions wt
-      JOIN wallets w ON wt.wallet_id = w.id
-      LEFT JOIN staff s ON wt.staff_id = s.id
-      WHERE wt.correction_group_id = $1
-      ORDER BY wt.created_at ASC`,
+      `SELECT wt.id, wt.amount, wt.type, wt.category, wt.is_reversal, wt.created_at, wt.description, w.name AS wallet_name, s.name AS staff_name
+       FROM wallet_transactions wt JOIN wallets w ON wt.wallet_id = w.id LEFT JOIN staff s ON wt.staff_id = s.id
+       WHERE wt.correction_group_id = $1 ORDER BY wt.created_at ASC`,
       [groupId]
     );
 
     const history = result.rows.map(row => {
       let entryType = 'Correction';
-      if (row.is_reversal) {
-        entryType = 'Reversal';
-      } else if (row.id === parseInt(id)) {
-        entryType = 'Original';
-      }
-      
-      return {
-        id: row.id,
-        amount: parseFloat(row.amount),
-        type: row.type,
-        category: row.category,
-        wallet_name: row.wallet_name,
-        is_reversal: row.is_reversal || false,
-        created_at: row.created_at,
-        description: row.description,
-        staff_name: row.staff_name,
-        entry_type: entryType
-      };
+      if (row.is_reversal) entryType = 'Reversal';
+      else if (row.id === parseInt(id)) entryType = 'Original';
+      return { id: row.id, amount: parseFloat(row.amount), type: row.type, category: row.category, wallet_name: row.wallet_name, is_reversal: row.is_reversal || false, created_at: row.created_at, description: row.description, staff_name: row.staff_name, entry_type: entryType };
     });
-
     res.json(history);
   } catch (err) {
     console.error('Error fetching transaction history:', err);
@@ -1888,7 +1289,6 @@ router.get('/transactions/:id/history', authenticateToken, async (req, res) => {
 // PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine
 router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
   const client = await pool.connect();
-  
   try {
     const transactionId = parseInt(req.params.id);
     const { new_amount, new_wallet_id, reason } = req.body;
@@ -1904,16 +1304,8 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const txRes = await client.query(
-      `SELECT 
-        wt.*, 
-        w.centre_id, 
-        w.name as wallet_name,
-        w.balance as wallet_balance,
-        se.id as service_entry_id,
-        se.service_charges,
-        se.department_charges,
-        se.total_charges,
-        p.id as payment_id
+      `SELECT wt.*, w.centre_id, w.name as wallet_name, w.balance as wallet_balance,
+              se.id as service_entry_id, se.service_charges, se.department_charges, se.total_charges, p.id as payment_id
        FROM wallet_transactions wt
        JOIN wallets w ON wt.wallet_id = w.id
        LEFT JOIN service_entries se ON wt.reference_id = se.id
@@ -1922,59 +1314,31 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       [transactionId]
     );
 
-    if (txRes.rows.length === 0) {
-      throw new Error('Transaction not found');
-    }
-
+    if (txRes.rows.length === 0) throw new Error('Transaction not found');
     const original = txRes.rows[0];
     
-    if (user.role !== 'superadmin' && original.centre_id !== user.centre_id) {
-      throw new Error('You do not have access to this transaction');
-    }
-
-    if (original.is_reversal) {
-      throw new Error('Cannot correct a reversal transaction');
-    }
-
-    if (original.category === 'Transfer') {
-      throw new Error('Transfers cannot be corrected through this endpoint');
-    }
+    if (user.role !== 'superadmin' && original.centre_id !== user.centre_id) throw new Error('You do not have access to this transaction');
+    if (original.is_reversal) throw new Error('Cannot correct a reversal transaction');
+    if (original.category === 'Transfer') throw new Error('Transfers cannot be corrected through this endpoint');
 
     const groupId = original.correction_group_id || crypto.randomUUID();
 
     if (user.role === 'staff') {
       const countRes = await client.query(
-        `SELECT COUNT(*) 
-         FROM wallet_transactions 
-         WHERE correction_group_id = $1 
-         AND (is_reversal IS NULL OR is_reversal = FALSE)`,
+        `SELECT COUNT(*) FROM wallet_transactions WHERE correction_group_id = $1 AND (is_reversal IS NULL OR is_reversal = FALSE)`,
         [groupId]
       );
-
-      if (parseInt(countRes.rows[0].count) >= 3) {
-        throw new Error('Correction limit reached (max 2 corrections allowed). Please contact admin.');
-      }
+      if (parseInt(countRes.rows[0].count) >= 3) throw new Error('Correction limit reached (max 2 corrections allowed). Please contact admin.');
     }
 
     const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
     const finalAmount = new_amount !== undefined ? parseFloat(new_amount) : parseFloat(original.amount);
     
     if (new_wallet_id !== undefined) {
-      const newWalletRes = await client.query(
-        `SELECT id, centre_id, name, balance FROM wallets WHERE id = $1`,
-        [finalWalletId]
-      );
-      
-      if (newWalletRes.rows.length === 0) {
-        throw new Error('New wallet not found');
-      }
-      
+      const newWalletRes = await client.query(`SELECT id, centre_id, name, balance FROM wallets WHERE id = $1`, [finalWalletId]);
+      if (newWalletRes.rows.length === 0) throw new Error('New wallet not found');
       const newWallet = newWalletRes.rows[0];
-      
-      if (user.role !== 'superadmin' && newWallet.centre_id !== user.centre_id) {
-        throw new Error('You do not have access to the new wallet');
-      }
-      
+      if (user.role !== 'superadmin' && newWallet.centre_id !== user.centre_id) throw new Error('You do not have access to the new wallet');
       if (original.type === 'debit' && parseFloat(newWallet.balance) < finalAmount) {
         throw new Error(`Insufficient balance in ${newWallet.name}. Available: ₹${newWallet.balance}`);
       }
@@ -1983,166 +1347,74 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     const reverseType = original.type === 'credit' ? 'debit' : 'credit';
     
     await client.query(
-      `INSERT INTO wallet_transactions (
-        wallet_id,
-        staff_id,
-        type,
-        amount,
-        description,
-        category,
-        reference_id,
-        reference_type,
-        is_reversal,
-        correction_group_id,
-        reference_payment_id,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, NOW())`,
-      [
-        original.wallet_id,
-        user.id,
-        reverseType,
-        original.amount,
-        `Correction reversal: ${reason} (Original: ${original.description || `Txn #${original.id}`})`,
-        original.category,
-        original.reference_id,
-        original.reference_type || 'transaction',
-        groupId,
-        original.reference_payment_id
-      ]
+      `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, is_reversal, correction_group_id, reference_payment_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, NOW())`,
+      [original.wallet_id, user.id, reverseType, original.amount,
+       `Correction reversal: ${reason} (Original: ${original.description || `Txn #${original.id}`})`,
+       original.category, original.reference_id, original.reference_type || 'transaction', groupId, original.reference_payment_id]
     );
 
     if (original.type === 'credit') {
-      await client.query(
-        `UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`,
-        [original.amount, original.wallet_id]
-      );
+      await client.query(`UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`, [original.amount, original.wallet_id]);
     } else {
-      await client.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [original.amount, original.wallet_id]
-      );
+      await client.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [original.amount, original.wallet_id]);
     }
 
     const newTxRes = await client.query(
-      `INSERT INTO wallet_transactions (
-        wallet_id,
-        staff_id,
-        type,
-        amount,
-        description,
-        category,
-        reference_id,
-        reference_type,
-        correction_group_id,
-        reference_payment_id,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-      RETURNING id`,
-      [
-        finalWalletId,
-        user.id,
-        original.type,
-        finalAmount,
-        `Corrected: ${reason} (Was: ₹${original.amount} from ${original.wallet_name})`,
-        original.category,
-        original.reference_id,
-        original.reference_type || 'transaction',
-        groupId,
-        original.reference_payment_id
-      ]
+      `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, reference_payment_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) RETURNING id`,
+      [finalWalletId, user.id, original.type, finalAmount,
+       `Corrected: ${reason} (Was: ₹${original.amount} from ${original.wallet_name})`,
+       original.category, original.reference_id, original.reference_type || 'transaction', groupId, original.reference_payment_id]
     );
-
     const newTransactionId = newTxRes.rows[0].id;
 
     if (original.type === 'credit') {
-      await client.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [finalAmount, finalWalletId]
-      );
+      await client.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [finalAmount, finalWalletId]);
     } else {
-      await client.query(
-        `UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`,
-        [finalAmount, finalWalletId]
-      );
+      await client.query(`UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`, [finalAmount, finalWalletId]);
     }
 
     if (original.reference_id && original.category) {
       if (original.category === 'Department Payment') {
-        await client.query(
-          `UPDATE service_entries 
-           SET department_charges = $1, updated_at = NOW() 
-           WHERE id = $2`,
-          [finalAmount, original.reference_id]
-        );
+        await client.query(`UPDATE service_entries SET department_charges = $1, updated_at = NOW() WHERE id = $2`, [finalAmount, original.reference_id]);
       } else if (original.category === 'Service Charge') {
-        await client.query(
-          `UPDATE service_entries 
-           SET service_charges = $1, updated_at = NOW() 
-           WHERE id = $2`,
-          [finalAmount, original.reference_id]
-        );
+        await client.query(`UPDATE service_entries SET service_charges = $1, updated_at = NOW() WHERE id = $2`, [finalAmount, original.reference_id]);
       }
-      
       if (original.category === 'Department Payment' || original.category === 'Service Charge') {
-        await client.query(
-          `UPDATE service_entries 
-           SET total_charges = service_charges + department_charges,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [original.reference_id]
-        );
+        await client.query(`UPDATE service_entries SET total_charges = service_charges + department_charges, updated_at = NOW() WHERE id = $1`, [original.reference_id]);
       }
     }
 
     await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
-      [
-        'Transaction Corrected',
-        user.username,
-        `Corrected transaction #${transactionId} (${original.category}): ₹${original.amount} → ₹${finalAmount} (Wallet: ${original.wallet_id} → ${finalWalletId}). Reason: ${reason}`,
-        original.centre_id
-      ]
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+      ['Transaction Corrected', user.username,
+       `Corrected transaction #${transactionId} (${original.category}): ₹${original.amount} → ₹${finalAmount} (Wallet: ${original.wallet_id} → ${finalWalletId}). Reason: ${reason}`,
+       original.centre_id]
     );
 
     await logActivity({
-      centre_id: original.centre_id,
-      related_type: 'transaction',
-      related_id: transactionId,
+      centre_id: original.centre_id, related_type: 'transaction', related_id: transactionId,
       action: 'Transaction Corrected',
       description: `Corrected ${original.category}: ₹${original.amount} → ₹${finalAmount}. Reason: ${reason}`,
-      performed_by: user.id,
-      performed_by_role: user.role
+      performed_by: user.id, performed_by_role: user.role
     });
 
     await client.query('COMMIT');
 
     res.json({
-      success: true,
-      message: 'Transaction corrected successfully',
+      success: true, message: 'Transaction corrected successfully',
       correction: {
-        original_transaction_id: transactionId,
-        new_transaction_id: newTransactionId,
-        correction_group_id: groupId,
-        original_amount: parseFloat(original.amount),
-        new_amount: finalAmount,
-        original_wallet_id: original.wallet_id,
-        original_wallet_name: original.wallet_name,
-        new_wallet_id: finalWalletId,
-        transaction_type: original.type,
-        category: original.category
+        original_transaction_id: transactionId, new_transaction_id: newTransactionId, correction_group_id: groupId,
+        original_amount: parseFloat(original.amount), new_amount: finalAmount,
+        original_wallet_id: original.wallet_id, original_wallet_name: original.wallet_name,
+        new_wallet_id: finalWalletId, transaction_type: original.type, category: original.category
       }
     });
-
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Transaction correction error:', err);
-    
-    const statusCode = 
-      err.message.includes('not found') ? 404 :
-      err.message.includes('access') ? 403 :
-      err.message.includes('limit') ? 400 : 400;
-    
+    const statusCode = err.message.includes('not found') ? 404 : err.message.includes('access') ? 403 : err.message.includes('limit') ? 400 : 400;
     res.status(statusCode).json({ error: err.message });
   } finally {
     client.release();
