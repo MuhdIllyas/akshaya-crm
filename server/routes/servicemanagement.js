@@ -1294,10 +1294,21 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     const { new_amount, new_wallet_id, reason } = req.body;
     const user = req.user;
 
-    // Validation
-    if (new_amount !== undefined && (new_amount <= 0 || isNaN(new_amount))) {
-      return res.status(400).json({ error: 'new_amount must be a positive number' });
+    // 🔥 FIX: Validation - only validate if provided
+    if (new_amount !== undefined) {
+      const parsedAmount = parseFloat(new_amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: 'new_amount must be a positive number' });
+      }
     }
+    
+    if (new_wallet_id !== undefined) {
+      const parsedWalletId = parseInt(new_wallet_id);
+      if (isNaN(parsedWalletId) || parsedWalletId <= 0) {
+        return res.status(400).json({ error: 'new_wallet_id must be a valid wallet ID' });
+      }
+    }
+    
     if (!reason || reason.trim().length < 5) {
       return res.status(400).json({ error: 'reason is required for correction (min 5 characters)' });
     }
@@ -1307,7 +1318,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     
     await client.query('BEGIN');
 
-    // 🔥 FIX 3: Row locking - prevent concurrent corrections
+    // 🔥 Row locking - prevent concurrent corrections
     const txRes = await client.query(
       `SELECT 
         wt.*, 
@@ -1334,7 +1345,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
     const original = txRes.rows[0];
     
-    // 🔥 FIX 6: Category validation
+    // Category validation
     if (!allowedCategories.includes(original.category)) {
       throw new Error(`Cannot correct ${original.category} transactions. Allowed: ${allowedCategories.join(', ')}`);
     }
@@ -1356,7 +1367,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
     const groupId = original.correction_group_id || crypto.randomUUID();
 
-    // Staff correction limit (max 2 corrections = original + 2 new = 3 total non-reversal entries)
+    // Staff correction limit
     if (user.role === 'staff') {
       const countRes = await client.query(
         `SELECT COUNT(*) 
@@ -1370,10 +1381,11 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       }
     }
 
+    // 🔥 FIX: Use original values if not provided
     const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
     const finalAmount = new_amount !== undefined ? parseFloat(new_amount) : parseFloat(original.amount);
     
-    // Verify new wallet exists and user has access
+    // Verify new wallet exists and user has access (only if wallet changed)
     if (new_wallet_id !== undefined) {
       const newWalletRes = await client.query(
         `SELECT id, centre_id, name, balance FROM wallets WHERE id = $1 FOR UPDATE`,
@@ -1386,7 +1398,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       }
     }
 
-    // 🔥 FIX 2: Balance check for reversal step
+    // Balance check for reversal step
     const reverseType = original.type === 'credit' ? 'debit' : 'credit';
     
     if (original.type === 'credit' && parseFloat(original.wallet_balance) < parseFloat(original.amount)) {
@@ -1422,30 +1434,27 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         original.reference_id,
         original.reference_type || 'transaction',
         groupId,
-        original.reference_payment_id  // ✅ Keep reference to original payment for reversal
+        original.reference_payment_id
       ]
     );
 
     // Update original wallet balance
     if (original.type === 'credit') {
-      // Reversal is debit
       await client.query(
         `UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`,
         [original.amount, original.wallet_id]
       );
     } else {
-      // Reversal is credit
       await client.query(
         `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
         [original.amount, original.wallet_id]
       );
     }
 
-    // 🔥 FIX 1: Handle payment creation for corrected Service Payment
+    // Handle payment creation for corrected Service Payment
     let newPaymentId = null;
     
     if (original.category === 'Service Payment' && original.reference_id) {
-      // Create new payment record for the corrected payment
       const paymentGroupId = crypto.randomUUID();
       const paymentRes = await client.query(
         `INSERT INTO payments (
@@ -1457,7 +1466,6 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       );
       newPaymentId = paymentRes.rows[0].id;
       
-      // Set self-reference for original_payment_id
       await client.query(
         `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
         [newPaymentId]
@@ -1481,7 +1489,6 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         original.reference_id,
         original.reference_type || 'transaction',
         groupId,
-        // 🔥 FIX 1: Use new payment ID for Service Payment, NULL otherwise
         original.category === 'Service Payment' ? newPaymentId : null
       ]
     );
@@ -1500,8 +1507,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       );
     }
 
-    // 🔥 FIX 4: Update service_entries only for department/service charges
-    // (Service Payment amounts are tracked via payments table, not directly here)
+    // Update service_entries for department/service charges
     if (original.reference_id && original.category) {
       if (original.category === 'Department Payment') {
         await client.query(
@@ -1519,7 +1525,6 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         );
       }
       
-      // Recalculate total_charges for charge updates
       if (original.category === 'Department Payment' || original.category === 'Service Charge') {
         await client.query(
           `UPDATE service_entries 
@@ -1531,7 +1536,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       }
     }
 
-    // 🔥 FIX 5: Improved audit logging
+    // Audit logging
     const auditDetails = `Corrected txn #${original.id} (${original.category}): ₹${parseFloat(original.amount).toFixed(2)} → ₹${finalAmount.toFixed(2)} | Wallet: ${original.wallet_id} (${original.wallet_name}) → ${finalWalletId} | Reason: ${reason}`;
     
     await client.query(
