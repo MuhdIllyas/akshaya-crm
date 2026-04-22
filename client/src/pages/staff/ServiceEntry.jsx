@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { 
   FiUser, FiPhone, FiCreditCard, FiDollarSign, FiCheck, FiX, FiCheckCircle, 
   FiChevronDown, FiPlus, FiTrash2, FiCalendar, FiClock, FiEye, FiLink, 
-  FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory 
+  FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
+  FiTrendingDown
 } from 'react-icons/fi';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -16,21 +17,25 @@ const ServiceEntry = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // ========== STATE FOR PAYMENT CORRECTION ==========
+  // ========== STATE FOR TRANSACTION CORRECTION (UNIFIED) ==========
   const [correctionModal, setCorrectionModal] = useState({
     isOpen: false,
-    payment: null,
+    transaction: null,  // Can be payment OR charge transaction
     loading: false,
     newAmount: '',
     newWalletId: '',
-    reason: ''
+    reason: '',
+    transactionType: '' // 'payment', 'department_charge', 'service_charge'
   });
-  const [paymentHistoryModal, setPaymentHistoryModal] = useState({
+  
+  const [historyModal, setHistoryModal] = useState({
     isOpen: false,
-    paymentId: null,
+    transactionId: null,
     history: [],
-    loading: false
+    loading: false,
+    transactionType: ''
   });
+  
   const [correctionStatus, setCorrectionStatus] = useState({});
   
   const [formData, setFormData] = useState({
@@ -68,6 +73,9 @@ const ServiceEntry = () => {
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const isEditMode = Boolean(editingEntryId);
+  
+  // Store charge transaction IDs for correction
+  const [chargeTransactions, setChargeTransactions] = useState({});
   
   // Get user role for correction limits
   const userRole = localStorage.getItem('role') || 'staff';
@@ -110,17 +118,17 @@ const ServiceEntry = () => {
     return d.getTime() === t.getTime();
   };
 
-  // ========== PAYMENT CORRECTION FUNCTIONS ==========
+  // ========== UNIFIED TRANSACTION CORRECTION FUNCTIONS ==========
   
   /**
-   * Check correction status for a payment
+   * Check correction status for any transaction
    */
-  const checkCorrectionStatus = async (paymentId) => {
+  const checkCorrectionStatus = async (transactionId) => {
     try {
-      const response = await api.get(`/payments/${paymentId}/correction-status`);
+      const response = await api.get(`/transactions/${transactionId}/correction-status`);
       setCorrectionStatus(prev => ({
         ...prev,
-        [paymentId]: response.data
+        [transactionId]: response.data
       }));
       return response.data;
     } catch (err) {
@@ -130,11 +138,10 @@ const ServiceEntry = () => {
   };
 
   /**
-   * Open correction modal
+   * Open correction modal for a transaction (payment or charge)
    */
-  const openCorrectionModal = async (payment, entry) => {
-    // Check correction status first
-    const status = await checkCorrectionStatus(payment.id);
+  const openCorrectionModal = async (transaction, entry, type) => {
+    const status = await checkCorrectionStatus(transaction.id);
     
     if (!status) {
       toast.error('Unable to check correction status');
@@ -148,23 +155,24 @@ const ServiceEntry = () => {
     
     setCorrectionModal({
       isOpen: true,
-      payment: {
-        ...payment,
+      transaction: {
+        ...transaction,
         serviceEntryId: entry.id,
-        originalAmount: payment.amount
+        originalAmount: transaction.amount
       },
       loading: false,
-      newAmount: payment.amount,
-      newWalletId: payment.wallet,
-      reason: ''
+      newAmount: transaction.amount,
+      newWalletId: transaction.wallet_id || transaction.wallet,
+      reason: '',
+      transactionType: type // 'payment', 'department_charge', or 'service_charge'
     });
   };
 
   /**
-   * Submit payment correction
+   * Submit transaction correction (unified)
    */
   const submitCorrection = async () => {
-    const { payment, newAmount, newWalletId, reason } = correctionModal;
+    const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
     
     if (!newAmount || newAmount <= 0) {
       toast.error('Please enter a valid amount');
@@ -184,13 +192,13 @@ const ServiceEntry = () => {
     setCorrectionModal(prev => ({ ...prev, loading: true }));
     
     try {
-      const response = await api.put(`/payments/${payment.id}/correct`, {
+      const response = await api.put(`/transactions/${transaction.id}/correct`, {
         new_amount: parseFloat(newAmount),
         new_wallet_id: parseInt(newWalletId),
         reason: reason.trim()
       });
       
-      toast.success('Payment corrected successfully!');
+      toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
       
       // Refresh service entries to show updated data
       const entriesRes = await getServiceEntries(true);
@@ -199,30 +207,43 @@ const ServiceEntry = () => {
       // Clear correction status cache
       setCorrectionStatus(prev => {
         const updated = { ...prev };
-        delete updated[payment.id];
+        delete updated[transaction.id];
         return updated;
       });
       
-      setCorrectionModal({ isOpen: false, payment: null, loading: false, newAmount: '', newWalletId: '', reason: '' });
+      setCorrectionModal({ 
+        isOpen: false, 
+        transaction: null, 
+        loading: false, 
+        newAmount: '', 
+        newWalletId: '', 
+        reason: '',
+        transactionType: '' 
+      });
     } catch (err) {
       console.error('Correction error:', err);
-      toast.error(err.response?.data?.error || 'Failed to correct payment');
+      toast.error(err.response?.data?.error || 'Failed to correct transaction');
     } finally {
       setCorrectionModal(prev => ({ ...prev, loading: false }));
     }
   };
 
   /**
-   * View payment correction history
+   * View transaction correction history (unified)
    */
-  const viewPaymentHistory = async (paymentId) => {
-    setPaymentHistoryModal({ isOpen: true, paymentId, history: [], loading: true });
+  const viewTransactionHistory = async (transactionId, type) => {
+    setHistoryModal({ 
+      isOpen: true, 
+      transactionId, 
+      history: [], 
+      loading: true,
+      transactionType: type 
+    });
     
     try {
-      const response = await api.get(`/payments/${paymentId}/history`);
-      console.log('Payment history response:', response.data);
+      const response = await api.get(`/transactions/${transactionId}/history`);
+      console.log('Transaction history response:', response.data);
       
-      // Ensure history is always an array
       let historyData = [];
       if (Array.isArray(response.data)) {
         historyData = response.data;
@@ -230,25 +251,22 @@ const ServiceEntry = () => {
         historyData = [response.data];
       }
       
-      setPaymentHistoryModal(prev => ({
+      setHistoryModal(prev => ({
         ...prev,
         history: historyData,
         loading: false
       }));
     } catch (err) {
-      console.error('Error fetching payment history:', err);
-      toast.error('Failed to load payment history');
-      setPaymentHistoryModal(prev => ({ ...prev, history: [], loading: false }));
+      console.error('Error fetching transaction history:', err);
+      toast.error('Failed to load transaction history');
+      setHistoryModal(prev => ({ ...prev, history: [], loading: false }));
     }
   };
 
   /**
-   * Check if user can correct payments
+   * Check if user can correct a transaction
    */
-  const canCorrectPayment = (payment, entry) => {
-    // Only for received payments
-    if (payment.status !== 'received') return false;
-    
+  const canCorrectTransaction = (transaction, entry, type) => {
     // Staff can only correct today's entries
     if (userRole === 'staff') {
       return isToday(entry.created_at);
@@ -256,6 +274,24 @@ const ServiceEntry = () => {
     
     // Admin/Superadmin can correct any
     return userRole === 'admin' || userRole === 'superadmin';
+  };
+
+  const getTransactionTypeLabel = (type) => {
+    switch (type) {
+      case 'payment': return 'Payment';
+      case 'department_charge': return 'Department Charge';
+      case 'service_charge': return 'Service Charge';
+      default: return 'Transaction';
+    }
+  };
+
+  const getTransactionTypeIcon = (type) => {
+    switch (type) {
+      case 'payment': return FiDollarSign;
+      case 'department_charge': return FiTrendingDown;
+      case 'service_charge': return FiTrendingDown;
+      default: return FiCreditCard;
+    }
   };
 
   // Helper function for safe date formatting
@@ -282,7 +318,7 @@ const ServiceEntry = () => {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
-  // ========== EXISTING useEffect HOOKS ==========
+  // ========== EXISTING useEffect HOOKS (UNCHANGED) ==========
   
   useEffect(() => {
     const fetchData = async () => {
@@ -1595,7 +1631,16 @@ const ServiceEntry = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {serviceEntries.map(entry => (
+                {serviceEntries.map(entry => {
+                  // Mock charge transactions for demo - in production, fetch from backend
+                  const chargeTransaction = {
+                    id: `dept-${entry.id}`,
+                    amount: entry.departmentCharge,
+                    wallet_id: entry.serviceWalletId,
+                    type: 'department_charge'
+                  };
+                  
+                  return (
                   <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
@@ -1610,7 +1655,44 @@ const ServiceEntry = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₹{entry.totalCharge.toFixed(2)}</td>
                     <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
-                      <div className="space-y-1">
+                      <div className="space-y-2">
+                        {/* Department Charge Row */}
+                        {entry.departmentCharge > 0 && (
+                          <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-rose-600">
+                                <FiTrendingDown className="inline h-3 w-3 mr-1" />
+                                Dept: ₹{Number(entry.departmentCharge).toFixed(2)}
+                              </span>
+                              {correctionStatus[chargeTransaction.id]?.corrections_used > 0 && (
+                                <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
+                                  <FiRotateCcw className="h-3 w-3" />
+                                  Edited
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => viewTransactionHistory(chargeTransaction.id, 'department_charge')}
+                                className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                title="View correction history"
+                              >
+                                <FiHistory className="h-3.5 w-3.5" />
+                              </button>
+                              {canCorrectTransaction(chargeTransaction, entry, 'department_charge') && (
+                                <button
+                                  onClick={() => openCorrectionModal(chargeTransaction, entry, 'department_charge')}
+                                  className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
+                                  title="Correct department charge"
+                                >
+                                  <FiEdit3 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Payment Rows */}
                         {entry.payments.map((payment, idx) => {
                           const status = correctionStatus[payment.id];
                           const hasBeenCorrected = status?.corrections_used > 0;
@@ -1633,19 +1715,17 @@ const ServiceEntry = () => {
                                 )}
                               </div>
                               <div className="flex items-center gap-1">
-                                {/* History button */}
                                 <button
-                                  onClick={() => viewPaymentHistory(payment.id)}
+                                  onClick={() => viewTransactionHistory(payment.id, 'payment')}
                                   className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
                                   title="View correction history"
                                 >
                                   <FiHistory className="h-3.5 w-3.5" />
                                 </button>
                                 
-                                {/* Correct button - only show for received payments */}
-                                {canCorrectPayment(payment, entry) && payment.status === 'received' && (
+                                {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
                                   <button
-                                    onClick={() => openCorrectionModal(payment, entry)}
+                                    onClick={() => openCorrectionModal(payment, entry, 'payment')}
                                     className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
                                     title="Correct this payment"
                                   >
@@ -1696,7 +1776,7 @@ const ServiceEntry = () => {
                       )}
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>
@@ -1786,17 +1866,17 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== PAYMENT CORRECTION MODAL ========== */}
-      {correctionModal.isOpen && correctionModal.payment && (
+      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL ========== */}
+      {correctionModal.isOpen && correctionModal.transaction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <FiRotateCcw className="h-5 w-5 text-amber-600" />
-                Correct Payment
+                Correct {getTransactionTypeLabel(correctionModal.transactionType)}
               </h2>
               <button 
-                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false, newAmount: '', newWalletId: '', reason: '' })}
+                onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FiX className="h-6 w-6" />
@@ -1804,23 +1884,28 @@ const ServiceEntry = () => {
             </div>
             
             <div className="space-y-4">
-              {/* Original payment info */}
+              {/* Original transaction info */}
               <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                <p className="text-sm text-amber-800 font-medium mb-2">Original Payment</p>
-                <p className="text-gray-700">
-                  <strong>Amount:</strong> ₹{formatAmount(correctionModal.payment.amount)}
+                <p className="text-sm text-amber-800 font-medium mb-2">
+                  Original {getTransactionTypeLabel(correctionModal.transactionType)}
                 </p>
                 <p className="text-gray-700">
-                  <strong>Wallet:</strong> {getWalletName(correctionModal.payment.wallet)}
+                  <strong>Amount:</strong> ₹{formatAmount(correctionModal.transaction.amount)}
+                </p>
+                <p className="text-gray-700">
+                  <strong>Wallet:</strong> {getWalletName(correctionModal.transaction.wallet_id || correctionModal.transaction.wallet)}
+                </p>
+                <p className="text-gray-700 text-xs mt-1">
+                  <strong>Type:</strong> {correctionModal.transactionType === 'payment' ? 'Credit (Money In)' : 'Debit (Money Out)'}
                 </p>
               </div>
               
               {/* Correction limit warning for staff */}
-              {userRole === 'staff' && correctionStatus[correctionModal.payment.id] && (
+              {userRole === 'staff' && correctionStatus[correctionModal.transaction.id] && (
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-800">
                     <FiAlertCircle className="inline mr-1" />
-                    Corrections used: {correctionStatus[correctionModal.payment.id].corrections_used} of 2
+                    Corrections used: {correctionStatus[correctionModal.transaction.id].corrections_used} of 2
                   </p>
                 </div>
               )}
@@ -1879,7 +1964,7 @@ const ServiceEntry = () => {
                   onChange={(e) => setCorrectionModal(prev => ({ ...prev, reason: e.target.value }))}
                   rows={3}
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Explain why this payment needs correction..."
+                  placeholder="Explain why this transaction needs correction..."
                 />
                 <p className="text-xs text-gray-500 mt-1">Minimum 5 characters</p>
               </div>
@@ -1888,7 +1973,7 @@ const ServiceEntry = () => {
               <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
                 <p className="text-xs text-gray-600">
                   <FiAlertCircle className="inline mr-1 text-amber-600" />
-                  <strong>Note:</strong> This will reverse the original payment and create a new corrected payment. 
+                  <strong>Note:</strong> This will reverse the original transaction and create a new corrected one. 
                   All changes are logged for audit purposes.
                 </p>
               </div>
@@ -1896,7 +1981,7 @@ const ServiceEntry = () => {
             
             <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() => setCorrectionModal({ isOpen: false, payment: null, loading: false, newAmount: '', newWalletId: '', reason: '' })}
+                onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Cancel
@@ -1923,39 +2008,37 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== PAYMENT HISTORY MODAL ========== */}
-      {paymentHistoryModal.isOpen && (
+      {/* ========== UNIFIED TRANSACTION HISTORY MODAL ========== */}
+      {historyModal.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <FiHistory className="h-5 w-5 text-indigo-600" />
-                Payment Correction History
+                {getTransactionTypeLabel(historyModal.transactionType)} Correction History
               </h2>
               <button 
-                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [], loading: false })}
+                onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FiX className="h-6 w-6" />
               </button>
             </div>
             
-            {paymentHistoryModal.loading ? (
+            {historyModal.loading ? (
               <div className="flex justify-center py-8">
                 <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
-            ) : !Array.isArray(paymentHistoryModal.history) || paymentHistoryModal.history.length === 0 ? (
+            ) : !Array.isArray(historyModal.history) || historyModal.history.length === 0 ? (
               <p className="text-gray-500 text-center py-8">No correction history found</p>
             ) : (
               <div className="space-y-4">
-                {/* Timeline header */}
                 <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
                   <span>Showing all versions (oldest first)</span>
                   <span className="flex-1 h-px bg-gray-200"></span>
                 </div>
                 
-                {paymentHistoryModal.history.map((entry, idx) => {
-                  // Determine colors and icons based on entry type
+                {historyModal.history.map((entry, idx) => {
                   const getEntryStyles = (type) => {
                     switch (type) {
                       case 'Original':
@@ -1990,17 +2073,15 @@ const ServiceEntry = () => {
                   };
                   
                   const styles = getEntryStyles(entry.entry_type);
-                  const isLatest = idx === paymentHistoryModal.history.length - 1;
+                  const isLatest = idx === historyModal.history.length - 1;
                   
                   return (
                     <div key={idx} className="relative">
-                      {/* Timeline connector */}
-                      {idx < paymentHistoryModal.history.length - 1 && (
+                      {idx < historyModal.history.length - 1 && (
                         <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-gray-300 -mb-4"></div>
                       )}
                       
                       <div className={`p-4 rounded-lg border ${styles.bg} ${styles.border} relative ml-2`}>
-                        {/* Timeline dot */}
                         <div className={`absolute -left-[13px] top-5 w-3 h-3 rounded-full ${entry.entry_type === 'Original' ? 'bg-blue-500' : entry.entry_type === 'Reversal' ? 'bg-rose-500' : 'bg-emerald-500'} border-2 border-white`}></div>
                         
                         <div className="flex justify-between items-start mb-2">
@@ -2025,17 +2106,22 @@ const ServiceEntry = () => {
                             <span className="text-gray-500 mx-2">→</span>
                             <span className="font-medium">{entry.wallet_name || 'Unknown Wallet'}</span>
                           </p>
+                          <p className="text-xs text-gray-500">
+                            Type: <span className={entry.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}>
+                              {entry.type === 'credit' ? 'Credit (Money In)' : 'Debit (Money Out)'}
+                            </span>
+                          </p>
                           
-                          {entry.edit_reason && (
+                          {entry.description && entry.description.includes('Reason:') && (
                             <p className="text-sm text-gray-600 bg-white/50 p-2 rounded">
-                              <strong>Reason:</strong> {entry.edit_reason}
+                              <strong>Reason:</strong> {entry.description.split('Reason:')[1]?.split('(Was:')[0]?.trim() || entry.description}
                             </p>
                           )}
                           
-                          {entry.edited_by_name && (
+                          {entry.staff_name && (
                             <p className="text-xs text-gray-500 flex items-center gap-1">
                               <FiUser className="h-3 w-3" />
-                              Corrected by: {entry.edited_by_name}
+                              Corrected by: {entry.staff_name}
                             </p>
                           )}
                         </div>
@@ -2048,7 +2134,7 @@ const ServiceEntry = () => {
             
             <div className="flex justify-end mt-6 pt-3 border-t border-gray-200">
               <button
-                onClick={() => setPaymentHistoryModal({ isOpen: false, paymentId: null, history: [], loading: false })}
+                onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close
