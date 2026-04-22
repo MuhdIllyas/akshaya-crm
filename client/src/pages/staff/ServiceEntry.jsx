@@ -159,15 +159,20 @@ const ServiceEntry = () => {
     });
   };
 
+  // 🔥 FIXED: Only send changed fields
   const submitCorrection = async () => {
     const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
     
-    if (!newAmount || newAmount <= 0) {
+    // Validate amount
+    const parsedAmount = parseFloat(newAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
     
-    if (!newWalletId) {
+    // Validate wallet
+    const parsedWalletId = parseInt(newWalletId);
+    if (!parsedWalletId || isNaN(parsedWalletId)) {
       toast.error('Please select a wallet');
       return;
     }
@@ -180,11 +185,26 @@ const ServiceEntry = () => {
     setCorrectionModal(prev => ({ ...prev, loading: true }));
     
     try {
-      await api.put(`/transactions/${transaction.id}/correct`, {
-        new_amount: parseFloat(newAmount),
-        new_wallet_id: parseInt(newWalletId),
+      // 🔥 FIX: Only send changed fields
+      const payload = {
         reason: reason.trim()
-      });
+      };
+      
+      // Only include amount if it changed (with small tolerance for floating point)
+      const originalAmount = parseFloat(transaction.originalAmount);
+      if (Math.abs(parsedAmount - originalAmount) > 0.001) {
+        payload.new_amount = parsedAmount;
+      }
+      
+      // Only include wallet if it changed
+      const originalWalletId = transaction.wallet_id || transaction.wallet;
+      if (parsedWalletId !== parseInt(originalWalletId)) {
+        payload.new_wallet_id = parsedWalletId;
+      }
+      
+      console.log('Correction payload:', payload);
+      
+      await api.put(`/transactions/${transaction.id}/correct`, payload);
       
       toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
       
