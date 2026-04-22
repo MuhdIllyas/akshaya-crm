@@ -1286,7 +1286,7 @@ router.get('/transactions/:id/history', authenticateToken, async (req, res) => {
   }
 });
 
-// PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine
+// 🔥 PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine (PRODUCTION SAFE)
 router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -1294,7 +1294,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     const { new_amount, new_wallet_id, reason } = req.body;
     const user = req.user;
 
-    // 🔥 FIX: Validation - only validate if provided
+    // Validation - only validate if provided
     if (new_amount !== undefined) {
       const parsedAmount = parseFloat(new_amount);
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -1318,22 +1318,15 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     
     await client.query('BEGIN');
 
-    // 🔥 Row locking - prevent concurrent corrections
+    // 🔥 FIXED: Lock only wallet_transactions and wallets (no LEFT JOINs in FOR UPDATE)
     const txRes = await client.query(
       `SELECT 
         wt.*, 
         w.centre_id, 
         w.name as wallet_name,
-        w.balance as wallet_balance,
-        se.id as service_entry_id,
-        se.service_charges,
-        se.department_charges,
-        se.total_charges,
-        p.id as payment_id
+        w.balance as wallet_balance
        FROM wallet_transactions wt
        JOIN wallets w ON wt.wallet_id = w.id
-       LEFT JOIN service_entries se ON wt.reference_id = se.id
-       LEFT JOIN payments p ON wt.reference_payment_id = p.id
        WHERE wt.id = $1
        FOR UPDATE`,
       [transactionId]
@@ -1344,6 +1337,27 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     }
 
     const original = txRes.rows[0];
+    
+    // 🔥 Fetch additional data separately (safe, no locking needed for reference data)
+    let serviceEntry = null;
+    if (original.reference_id) {
+      const seRes = await client.query(
+        `SELECT id, service_charges, department_charges, total_charges 
+         FROM service_entries 
+         WHERE id = $1`,
+        [original.reference_id]
+      );
+      serviceEntry = seRes.rows[0];
+    }
+
+    let payment = null;
+    if (original.reference_payment_id) {
+      const pRes = await client.query(
+        `SELECT id FROM payments WHERE id = $1`,
+        [original.reference_payment_id]
+      );
+      payment = pRes.rows[0];
+    }
     
     // Category validation
     if (!allowedCategories.includes(original.category)) {
@@ -1381,7 +1395,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       }
     }
 
-    // 🔥 FIX: Use original values if not provided
+    // Use original values if not provided
     const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
     const finalAmount = new_amount !== undefined ? parseFloat(new_amount) : parseFloat(original.amount);
     
