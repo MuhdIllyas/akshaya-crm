@@ -20,12 +20,12 @@ const ServiceEntry = () => {
   // ========== STATE FOR TRANSACTION CORRECTION (UNIFIED) ==========
   const [correctionModal, setCorrectionModal] = useState({
     isOpen: false,
-    transaction: null,  // Can be payment OR charge transaction
+    transaction: null,
     loading: false,
     newAmount: '',
     newWalletId: '',
     reason: '',
-    transactionType: '' // 'payment', 'department_charge', 'service_charge'
+    transactionType: ''
   });
   
   const [historyModal, setHistoryModal] = useState({
@@ -74,10 +74,6 @@ const ServiceEntry = () => {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const isEditMode = Boolean(editingEntryId);
   
-  // Store charge transaction IDs for correction
-  const [chargeTransactions, setChargeTransactions] = useState({});
-  
-  // Get user role for correction limits
   const userRole = localStorage.getItem('role') || 'staff';
   const userId = localStorage.getItem('id');
 
@@ -120,9 +116,6 @@ const ServiceEntry = () => {
 
   // ========== UNIFIED TRANSACTION CORRECTION FUNCTIONS ==========
   
-  /**
-   * Check correction status for any transaction
-   */
   const checkCorrectionStatus = async (transactionId) => {
     try {
       const response = await api.get(`/transactions/${transactionId}/correction-status`);
@@ -137,9 +130,6 @@ const ServiceEntry = () => {
     }
   };
 
-  /**
-   * Open correction modal for a transaction (payment or charge)
-   */
   const openCorrectionModal = async (transaction, entry, type) => {
     const status = await checkCorrectionStatus(transaction.id);
     
@@ -158,19 +148,17 @@ const ServiceEntry = () => {
       transaction: {
         ...transaction,
         serviceEntryId: entry.id,
-        originalAmount: transaction.amount
+        originalAmount: transaction.amount,
+        wallet_id: transaction.wallet || transaction.wallet_id
       },
       loading: false,
       newAmount: transaction.amount,
-      newWalletId: transaction.wallet_id || transaction.wallet,
+      newWalletId: transaction.wallet || transaction.wallet_id,
       reason: '',
-      transactionType: type // 'payment', 'department_charge', or 'service_charge'
+      transactionType: type
     });
   };
 
-  /**
-   * Submit transaction correction (unified)
-   */
   const submitCorrection = async () => {
     const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
     
@@ -192,7 +180,7 @@ const ServiceEntry = () => {
     setCorrectionModal(prev => ({ ...prev, loading: true }));
     
     try {
-      const response = await api.put(`/transactions/${transaction.id}/correct`, {
+      await api.put(`/transactions/${transaction.id}/correct`, {
         new_amount: parseFloat(newAmount),
         new_wallet_id: parseInt(newWalletId),
         reason: reason.trim()
@@ -200,11 +188,9 @@ const ServiceEntry = () => {
       
       toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
       
-      // Refresh service entries to show updated data
       const entriesRes = await getServiceEntries(true);
       setServiceEntries(entriesRes.data);
       
-      // Clear correction status cache
       setCorrectionStatus(prev => {
         const updated = { ...prev };
         delete updated[transaction.id];
@@ -228,9 +214,6 @@ const ServiceEntry = () => {
     }
   };
 
-  /**
-   * View transaction correction history (unified)
-   */
   const viewTransactionHistory = async (transactionId, type) => {
     setHistoryModal({ 
       isOpen: true, 
@@ -263,16 +246,10 @@ const ServiceEntry = () => {
     }
   };
 
-  /**
-   * Check if user can correct a transaction
-   */
   const canCorrectTransaction = (transaction, entry, type) => {
-    // Staff can only correct today's entries
     if (userRole === 'staff') {
       return isToday(entry.created_at);
     }
-    
-    // Admin/Superadmin can correct any
     return userRole === 'admin' || userRole === 'superadmin';
   };
 
@@ -285,16 +262,6 @@ const ServiceEntry = () => {
     }
   };
 
-  const getTransactionTypeIcon = (type) => {
-    switch (type) {
-      case 'payment': return FiDollarSign;
-      case 'department_charge': return FiTrendingDown;
-      case 'service_charge': return FiTrendingDown;
-      default: return FiCreditCard;
-    }
-  };
-
-  // Helper function for safe date formatting
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
     try {
@@ -312,13 +279,12 @@ const ServiceEntry = () => {
     }
   };
 
-  // Helper function for safe amount formatting
   const formatAmount = (amount) => {
     const num = parseFloat(amount);
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
-  // ========== EXISTING useEffect HOOKS (UNCHANGED) ==========
+  // ========== useEffect HOOKS ==========
   
   useEffect(() => {
     const fetchData = async () => {
@@ -333,7 +299,6 @@ const ServiceEntry = () => {
           return;
         }
 
-        // Fetch categories
         let categoriesData = [];
         try {
           const categoriesRes = await getCategories();
@@ -345,7 +310,6 @@ const ServiceEntry = () => {
           toast.error(`Failed to fetch categories: ${err.response?.data?.error || err.message}`);
         }
 
-        // Fetch wallets
         try {
           const walletsRes = await getWallets();
           console.log('ServiceEntry.jsx: Wallets response:', JSON.stringify(walletsRes.data, null, 2));
@@ -359,7 +323,6 @@ const ServiceEntry = () => {
           toast.error(`Failed to fetch wallets: ${err.response?.data?.error || err.message}`);
         }
 
-        // Fetch today's service entries
         try {
           const entriesRes = await getServiceEntries(true);
           console.log('ServiceEntry.jsx: Today\'s service entries response:', JSON.stringify(entriesRes.data, null, 2));
@@ -369,7 +332,6 @@ const ServiceEntry = () => {
           toast.error(`Failed to fetch today\'s service entries: ${err.response?.data?.error || err.message}`);
         }
 
-        // Fetch token data if tokenId is provided
         if (tokenId) {
           try {
             const tokenRes = await getTokenById(tokenId);
@@ -430,7 +392,7 @@ const ServiceEntry = () => {
             toast.error(`Failed to load token data: ${err.response?.data?.error || err.message}`);
           }
         }
-        // Fetch ONLINE BOOKING data if customerServiceId exists
+
         if (customerServiceId) {
           try {
             const bookingRes = await api.get(`/customer-services/${customerServiceId}`);
@@ -1624,7 +1586,7 @@ const ServiceEntry = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payments</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1632,83 +1594,37 @@ const ServiceEntry = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {serviceEntries.map(entry => {
-                  // Mock charge transactions for demo - in production, fetch from backend
-                  const chargeTransaction = {
-                    id: `dept-${entry.id}`,
-                    amount: entry.departmentCharge,
-                    wallet_id: entry.serviceWalletId,
-                    type: 'department_charge'
-                  };
+                  const deptTx = entry.departmentChargeTransaction;
+                  const serviceTx = entry.serviceChargeTransaction;
                   
                   return (
-                  <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="font-medium">{entry.customerName}</div>
-                      <div className="text-gray-500">{entry.phone}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="font-medium">{getCategoryName(entry.category)}</div>
-                      <div className="text-gray-500">{getSubcategoryName(entry.category, entry.subcategory)}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₹{entry.totalCharge.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
-                      <div className="space-y-2">
-                        {/* Department Charge Row */}
-                        {entry.departmentCharge > 0 && (
-                          <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-rose-600">
-                                <FiTrendingDown className="inline h-3 w-3 mr-1" />
-                                Dept: ₹{Number(entry.departmentCharge).toFixed(2)}
-                              </span>
-                              {correctionStatus[chargeTransaction.id]?.corrections_used > 0 && (
-                                <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
-                                  <FiRotateCcw className="h-3 w-3" />
-                                  Edited
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => viewTransactionHistory(chargeTransaction.id, 'department_charge')}
-                                className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
-                                title="View correction history"
-                              >
-                                <FiHistory className="h-3.5 w-3.5" />
-                              </button>
-                              {canCorrectTransaction(chargeTransaction, entry, 'department_charge') && (
-                                <button
-                                  onClick={() => openCorrectionModal(chargeTransaction, entry, 'department_charge')}
-                                  className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
-                                  title="Correct department charge"
-                                >
-                                  <FiEdit3 className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Payment Rows */}
-                        {entry.payments.map((payment, idx) => {
-                          const status = correctionStatus[payment.id];
-                          const hasBeenCorrected = status?.corrections_used > 0;
-                          
-                          return (
-                            <div key={idx} className="flex items-center justify-between gap-2">
+                    <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div className="font-medium">{entry.customerName}</div>
+                        <div className="text-gray-500">{entry.phone}</div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        <div className="font-medium">{getCategoryName(entry.category)}</div>
+                        <div className="text-gray-500">{getSubcategoryName(entry.category, entry.subcategory)}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ₹{entry.totalCharge.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                        <div className="space-y-2">
+                          {/* Department Charge Row */}
+                          {deptTx && deptTx.id && (
+                            <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span>
-                                  {getWalletName(payment.wallet)}: ₹{Number(payment.amount).toFixed(2)} 
-                                  ({payment.status})
+                                <span className="text-rose-600">
+                                  <FiTrendingDown className="inline h-3 w-3 mr-1" />
+                                  Dept: ₹{Number(deptTx.amount).toFixed(2)}
                                 </span>
-                                {hasBeenCorrected && (
-                                  <span 
-                                    className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5"
-                                    title={`Corrected ${status.corrections_used} time(s)`}
-                                  >
+                                {correctionStatus[deptTx.id]?.corrections_used > 0 && (
+                                  <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
                                     <FiRotateCcw className="h-3 w-3" />
                                     Edited
                                   </span>
@@ -1716,67 +1632,135 @@ const ServiceEntry = () => {
                               </div>
                               <div className="flex items-center gap-1">
                                 <button
-                                  onClick={() => viewTransactionHistory(payment.id, 'payment')}
+                                  onClick={() => viewTransactionHistory(deptTx.id, 'department_charge')}
                                   className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
                                   title="View correction history"
                                 >
                                   <FiHistory className="h-3.5 w-3.5" />
                                 </button>
-                                
-                                {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
+                                {canCorrectTransaction({ id: deptTx.id, amount: deptTx.amount, wallet: deptTx.wallet_id }, entry, 'department_charge') && (
                                   <button
-                                    onClick={() => openCorrectionModal(payment, entry, 'payment')}
+                                    onClick={() => openCorrectionModal({ id: deptTx.id, amount: deptTx.amount, wallet: deptTx.wallet_id, wallet_name: deptTx.wallet_name }, entry, 'department_charge')}
                                     className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
-                                    title="Correct this payment"
+                                    title="Correct department charge"
                                   >
                                     <FiEdit3 className="h-3.5 w-3.5" />
                                   </button>
                                 )}
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                          paymentStatusOptions.find(opt => opt.id === entry.status)?.color || 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {paymentStatusOptions.find(opt => opt.id === entry.status)?.name || entry.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{entry.expiryDate || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-2">
-                      <button
-                        onClick={() => setSelectedEntry(entry)}
-                        className="text-indigo-600 hover:text-indigo-900 p-1.5 rounded-lg hover:bg-indigo-50"
-                        title="View details"
-                      >
-                        <FiEye className="h-5 w-5" />
-                      </button>
+                          )}
 
-                      {isToday(entry.created_at) && !entry.is_edited && (
-                        <button
-                          onClick={() => handleEditEntry(entry)}
-                          className="text-emerald-600 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50"
-                          title="Edit this entry (once only)"
-                        >
-                          ✏️
-                        </button>
-                      )}
-                      {isToday(entry.created_at) && entry.is_edited && (
-                        <span
-                          className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700"
-                          title="This entry has already been edited"
-                        >
-                          Edited
+                          {/* Service Charge Row */}
+                          {serviceTx && serviceTx.id && (
+                            <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-rose-600">
+                                  <FiTrendingDown className="inline h-3 w-3 mr-1" />
+                                  Service: ₹{Number(serviceTx.amount).toFixed(2)}
+                                </span>
+                                {correctionStatus[serviceTx.id]?.corrections_used > 0 && (
+                                  <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
+                                    <FiRotateCcw className="h-3 w-3" />
+                                    Edited
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => viewTransactionHistory(serviceTx.id, 'service_charge')}
+                                  className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                  title="View correction history"
+                                >
+                                  <FiHistory className="h-3.5 w-3.5" />
+                                </button>
+                                {canCorrectTransaction({ id: serviceTx.id, amount: serviceTx.amount, wallet: serviceTx.wallet_id }, entry, 'service_charge') && (
+                                  <button
+                                    onClick={() => openCorrectionModal({ id: serviceTx.id, amount: serviceTx.amount, wallet: serviceTx.wallet_id, wallet_name: serviceTx.wallet_name }, entry, 'service_charge')}
+                                    className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
+                                    title="Correct service charge"
+                                  >
+                                    <FiEdit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Payment Rows */}
+                          {entry.payments.map((payment, idx) => {
+                            const status = correctionStatus[payment.id];
+                            const hasBeenCorrected = status?.corrections_used > 0;
+                            return (
+                              <div key={idx} className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span>
+                                    {getWalletName(payment.wallet)}: ₹{Number(payment.amount).toFixed(2)} ({payment.status})
+                                  </span>
+                                  {hasBeenCorrected && (
+                                    <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
+                                      <FiRotateCcw className="h-3 w-3" />
+                                      Edited
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => viewTransactionHistory(payment.id, 'payment')}
+                                    className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                    title="View correction history"
+                                  >
+                                    <FiHistory className="h-3.5 w-3.5" />
+                                  </button>
+                                  {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
+                                    <button
+                                      onClick={() => openCorrectionModal(payment, entry, 'payment')}
+                                      className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
+                                      title="Correct this payment"
+                                    >
+                                      <FiEdit3 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                          paymentStatusOptions.find(opt => opt.id === entry.status)?.color || 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {paymentStatusOptions.find(opt => opt.id === entry.status)?.name || entry.status}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                )})}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{entry.expiryDate || 'N/A'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-2">
+                        <button
+                          onClick={() => setSelectedEntry(entry)}
+                          className="text-indigo-600 hover:text-indigo-900 p-1.5 rounded-lg hover:bg-indigo-50"
+                          title="View details"
+                        >
+                          <FiEye className="h-5 w-5" />
+                        </button>
+                        {isToday(entry.created_at) && !entry.is_edited && (
+                          <button
+                            onClick={() => handleEditEntry(entry)}
+                            className="text-emerald-600 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50"
+                            title="Edit this entry (once only)"
+                          >
+                            ✏️
+                          </button>
+                        )}
+                        {isToday(entry.created_at) && entry.is_edited && (
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700">
+                            Edited
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1812,55 +1796,6 @@ const ServiceEntry = () => {
                   ))}
                 </ul>
               </div>
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold mb-3">Service Information</h3>
-                {(() => {
-                  const cat = categories.find(c => c.id === parseInt(selectedEntry.category));
-                  if (!cat) return <p>No service details available</p>;
-                  const sub = cat.subcategories ? cat.subcategories.find(s => s.id === parseInt(selectedEntry.subcategory)) : null;
-                  return (
-                    <>
-                      {cat.website ? (
-                        <div className="mb-4">
-                          <h4 className="font-medium mb-2 flex items-center gap-2"><FiLink /> Website</h4>
-                          <a href={cat.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{cat.website}</a>
-                        </div>
-                      ) : (
-                        <div className="mb-4">
-                          <h4 className="font-medium mb-2 flex items-center gap-2"><FiLink /> Website</h4>
-                          <p className="text-sm text-gray-600">No website available for this service.</p>
-                        </div>
-                      )}
-                      <div className="mb-4">
-                        <h4 className="font-medium mb-2 flex items-center gap-2"><FiFileText /> Required Documents (Service)</h4>
-                        {cat.required_documents && cat.required_documents.length > 0 ? (
-                          <ul className="list-disc pl-5 space-y-1">
-                            {cat.required_documents.map((doc, i) => (
-                              <li key={i}>{doc.document_name}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-sm text-gray-600">No documents required for this service.</p>
-                        )}
-                      </div>
-                      {sub && (
-                        <div>
-                          <h4 className="font-medium mb-2 flex items-center gap-2"><FiFileText /> Required Documents (Subcategory)</h4>
-                          {sub.required_documents && sub.required_documents.length > 0 ? (
-                            <ul className="list-disc pl-5 space-y-1">
-                              {sub.required_documents.map((doc, i) => (
-                                <li key={i}>{doc.document_name}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-gray-600">No documents required for this subcategory.</p>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
             </div>
           </div>
         </div>
@@ -1884,7 +1819,6 @@ const ServiceEntry = () => {
             </div>
             
             <div className="space-y-4">
-              {/* Original transaction info */}
               <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
                 <p className="text-sm text-amber-800 font-medium mb-2">
                   Original {getTransactionTypeLabel(correctionModal.transactionType)}
@@ -1900,7 +1834,6 @@ const ServiceEntry = () => {
                 </p>
               </div>
               
-              {/* Correction limit warning for staff */}
               {userRole === 'staff' && correctionStatus[correctionModal.transaction.id] && (
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-800">
@@ -1910,7 +1843,6 @@ const ServiceEntry = () => {
                 </div>
               )}
               
-              {/* New amount */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   New Amount (₹) <span className="text-rose-500">*</span>
@@ -1926,7 +1858,6 @@ const ServiceEntry = () => {
                 />
               </div>
               
-              {/* New wallet */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   New Wallet <span className="text-rose-500">*</span>
@@ -1954,7 +1885,6 @@ const ServiceEntry = () => {
                 </select>
               </div>
               
-              {/* Reason */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Correction Reason <span className="text-rose-500">*</span>
@@ -1969,7 +1899,6 @@ const ServiceEntry = () => {
                 <p className="text-xs text-gray-500 mt-1">Minimum 5 characters</p>
               </div>
               
-              {/* Important note */}
               <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
                 <p className="text-xs text-gray-600">
                   <FiAlertCircle className="inline mr-1 text-amber-600" />
@@ -2042,33 +1971,13 @@ const ServiceEntry = () => {
                   const getEntryStyles = (type) => {
                     switch (type) {
                       case 'Original':
-                        return {
-                          bg: 'bg-blue-50',
-                          border: 'border-blue-200',
-                          badge: 'bg-blue-200 text-blue-700',
-                          icon: '💳'
-                        };
+                        return { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-200 text-blue-700', icon: '💳' };
                       case 'Reversal':
-                        return {
-                          bg: 'bg-rose-50',
-                          border: 'border-rose-200',
-                          badge: 'bg-rose-200 text-rose-700',
-                          icon: '↩️'
-                        };
+                        return { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-200 text-rose-700', icon: '↩️' };
                       case 'Correction':
-                        return {
-                          bg: 'bg-emerald-50',
-                          border: 'border-emerald-200',
-                          badge: 'bg-emerald-200 text-emerald-700',
-                          icon: '✅'
-                        };
+                        return { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-200 text-emerald-700', icon: '✅' };
                       default:
-                        return {
-                          bg: 'bg-gray-50',
-                          border: 'border-gray-200',
-                          badge: 'bg-gray-200 text-gray-700',
-                          icon: '📝'
-                        };
+                        return { bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-200 text-gray-700', icon: '📝' };
                     }
                   };
                   
@@ -2095,9 +2004,7 @@ const ServiceEntry = () => {
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-gray-500">
-                            {formatDate(entry.created_at)}
-                          </span>
+                          <span className="text-xs text-gray-500">{formatDate(entry.created_at)}</span>
                         </div>
                         
                         <div className="ml-1 space-y-1.5">
