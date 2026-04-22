@@ -1287,6 +1287,7 @@ router.get('/transactions/:id/history', authenticateToken, async (req, res) => {
 });
 
 // 🔥 PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine (PRODUCTION SAFE)
+// 🔥 PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine (OPTIMIZED)
 router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -1318,7 +1319,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     
     await client.query('BEGIN');
 
-    // 🔥 FIXED: Lock only wallet_transactions and wallets (no LEFT JOINs in FOR UPDATE)
+    // 🔥 OPTIMIZED: Lock wallet_transactions with wallet info (single lock for original wallet)
     const txRes = await client.query(
       `SELECT 
         wt.*, 
@@ -1328,7 +1329,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
        FROM wallet_transactions wt
        JOIN wallets w ON wt.wallet_id = w.id
        WHERE wt.id = $1
-       FOR UPDATE`,
+       FOR UPDATE OF wt`,
       [transactionId]
     );
 
@@ -1338,7 +1339,26 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
     const original = txRes.rows[0];
     
-    // 🔥 Fetch additional data separately (safe, no locking needed for reference data)
+    // Determine if wallet is changing
+    const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
+    const finalAmount = new_amount !== undefined ? parseFloat(new_amount) : parseFloat(original.amount);
+    const isWalletChanging = finalWalletId !== original.wallet_id;
+    
+    // 🔥 OPTIMIZED: Only lock new wallet if it's different from original
+    // (original wallet is already locked via the JOIN above)
+    if (isWalletChanging) {
+      const newWalletRes = await client.query(
+        `SELECT id, centre_id, name, balance FROM wallets WHERE id = $1 FOR UPDATE`,
+        [finalWalletId]
+      );
+      if (newWalletRes.rows.length === 0) throw new Error('New wallet not found');
+      const newWallet = newWalletRes.rows[0];
+      if (user.role !== 'superadmin' && newWallet.centre_id !== user.centre_id) {
+        throw new Error('You do not have access to the new wallet');
+      }
+    }
+    
+    // 🔥 Fetch reference data separately (no locking needed)
     let serviceEntry = null;
     if (original.reference_id) {
       const seRes = await client.query(
@@ -1395,39 +1415,36 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       }
     }
 
-    // Use original values if not provided
-    const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
-    const finalAmount = new_amount !== undefined ? parseFloat(new_amount) : parseFloat(original.amount);
-    
-    // Verify new wallet exists and user has access (only if wallet changed)
-    if (new_wallet_id !== undefined) {
-      const newWalletRes = await client.query(
-        `SELECT id, centre_id, name, balance FROM wallets WHERE id = $1 FOR UPDATE`,
-        [finalWalletId]
-      );
-      if (newWalletRes.rows.length === 0) throw new Error('New wallet not found');
-      const newWallet = newWalletRes.rows[0];
-      if (user.role !== 'superadmin' && newWallet.centre_id !== user.centre_id) {
-        throw new Error('You do not have access to the new wallet');
-      }
-    }
-
-    // Balance check for reversal step
+    // 🔥 BALANCE CHECKS (optimized - only check what's needed)
     const reverseType = original.type === 'credit' ? 'debit' : 'credit';
     
+    // Check original wallet balance for reversal
     if (original.type === 'credit' && parseFloat(original.wallet_balance) < parseFloat(original.amount)) {
       throw new Error(`Insufficient balance in ${original.wallet_name} to reverse this transaction. Available: ₹${original.wallet_balance}, Required: ₹${original.amount}`);
     }
 
-    // Also check final wallet balance for new debit transactions
+    // Check final wallet balance for new debit transactions
+    // 🔥 OPTIMIZED: If wallet is same, we already have the balance from original.wallet_balance
     if (original.type === 'debit') {
-      const finalWalletRes = await client.query(
-        `SELECT balance, name FROM wallets WHERE id = $1 FOR UPDATE`,
-        [finalWalletId]
-      );
-      const finalWallet = finalWalletRes.rows[0];
-      if (parseFloat(finalWallet.balance) < finalAmount) {
-        throw new Error(`Insufficient balance in ${finalWallet.name}. Available: ₹${finalWallet.balance}, Required: ₹${finalAmount}`);
+      let finalWalletBalance;
+      let finalWalletName;
+      
+      if (isWalletChanging) {
+        // Wallet is different - balance already fetched with FOR UPDATE above
+        const finalWalletRes = await client.query(
+          `SELECT balance, name FROM wallets WHERE id = $1`,
+          [finalWalletId]
+        );
+        finalWalletBalance = finalWalletRes.rows[0].balance;
+        finalWalletName = finalWalletRes.rows[0].name;
+      } else {
+        // Same wallet - use already locked wallet balance
+        finalWalletBalance = original.wallet_balance;
+        finalWalletName = original.wallet_name;
+      }
+      
+      if (parseFloat(finalWalletBalance) < finalAmount) {
+        throw new Error(`Insufficient balance in ${finalWalletName}. Available: ₹${finalWalletBalance}, Required: ₹${finalAmount}`);
       }
     }
 
