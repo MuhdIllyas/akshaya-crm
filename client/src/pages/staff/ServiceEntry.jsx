@@ -153,6 +153,15 @@ const ServiceEntry = () => {
 
   // 🔥 FIXED: Accept full transaction object, not just ID
   const openCorrectionModal = async (transaction, entry, type) => {
+    console.log("🔍 Opening correction modal for:", {
+      id: transaction.id,
+      type: type,
+      amount: transaction.amount,
+      is_reversal: transaction.is_reversal,
+      wallet_id: transaction.wallet || transaction.wallet_id,
+      correction_group_id: transaction.correction_group_id
+    });
+    
     // 🔥 SAFETY: Block if transaction is a reversal
     if (transaction.is_reversal) {
       toast.error('Cannot correct a reversal transaction');
@@ -191,6 +200,17 @@ const ServiceEntry = () => {
   // 🔥 FIXED: Only send changed fields, with safety verification
   const submitCorrection = async () => {
     const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
+    
+    // 🔥 CRITICAL DEBUG: Log what we're about to correct
+    console.log("🚀 Submitting correction for:", {
+      id: transaction.id,
+      type: transactionType,
+      originalAmount: transaction.originalAmount,
+      newAmount: newAmount,
+      is_reversal: transaction.is_reversal,
+      correction_group_id: transaction.correction_group_id,
+      wallet_id: transaction.wallet_id
+    });
     
     // Validate amount
     const parsedAmount = parseFloat(newAmount);
@@ -236,9 +256,10 @@ const ServiceEntry = () => {
         payload.correction_group_id = transaction.correction_group_id;
       }
       
-      console.log('Correction payload:', payload);
+      console.log('📤 Correction API Payload:', payload);
+      console.log('📤 Correcting Transaction ID:', transaction.id);
       
-      // 🔥 tx.id is always the latest valid transaction ID
+      // 🔥 This is the API call - using wallet_transactions.id
       await api.put(`/transactions/${transaction.id}/correct`, payload);
       
       toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
@@ -262,7 +283,9 @@ const ServiceEntry = () => {
         transactionType: '' 
       });
     } catch (err) {
-      console.error('Correction error:', err);
+      console.error('❌ Correction error:', err);
+      console.error('❌ Error response:', err.response?.data);
+      console.error('❌ Transaction ID used:', transaction.id);
       toast.error(err.response?.data?.error || 'Failed to correct transaction');
     } finally {
       setCorrectionModal(prev => ({ ...prev, loading: false }));
@@ -270,6 +293,8 @@ const ServiceEntry = () => {
   };
 
   const viewTransactionHistory = async (transactionId, type) => {
+    console.log("📜 Fetching transaction history for ID:", transactionId);
+    
     setHistoryModal({ 
       isOpen: true, 
       transactionId, 
@@ -1702,7 +1727,6 @@ const ServiceEntry = () => {
                                 >
                                   <FiHistory className="h-3.5 w-3.5" />
                                 </button>
-                                {/* 🔥 FIXED: Pass full transaction object, not just ID */}
                                 {canCorrectTransaction(deptTx, entry, 'department_charge') && (
                                   <button
                                     onClick={() => openCorrectionModal(deptTx, entry, 'department_charge')}
@@ -1779,10 +1803,16 @@ const ServiceEntry = () => {
                                   >
                                     <FiHistory className="h-3.5 w-3.5" />
                                   </button>
-                                  {/* 🔥 FIXED: Pass full payment object */}
+                                  {/* 🔥 CRITICAL FIX: Using wallet_transactions.id via safePayments filtering */}
                                   {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
                                     <button
-                                      onClick={() => openCorrectionModal(payment, entry, 'payment')}
+                                      onClick={() => {
+                                        console.log("🔍 Correcting Payment - TX ID:", payment.id, 
+                                          "| Amount:", payment.amount, 
+                                          "| Wallet:", payment.wallet,
+                                          "| is_reversal:", payment.is_reversal);
+                                        openCorrectionModal(payment, entry, 'payment');
+                                      }}
                                       className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
                                       title="Correct this payment"
                                       disabled={payment.is_reversal}
