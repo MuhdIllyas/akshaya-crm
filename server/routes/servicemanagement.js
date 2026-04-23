@@ -1287,174 +1287,138 @@ router.get('/transactions/:id/history', authenticateToken, async (req, res) => {
 });
 
 // 🔥 PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine (PRODUCTION SAFE)
-// 🔥 PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine (OPTIMIZED)
 router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
   const client = await pool.connect();
+
   try {
     const transactionId = parseInt(req.params.id);
     const { new_amount, new_wallet_id, reason } = req.body;
     const user = req.user;
 
-    // Validation - only validate if provided
-    if (new_amount !== undefined) {
-      const parsedAmount = parseFloat(new_amount);
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        return res.status(400).json({ error: 'new_amount must be a positive number' });
-      }
-    }
-    
-    if (new_wallet_id !== undefined) {
-      const parsedWalletId = parseInt(new_wallet_id);
-      if (isNaN(parsedWalletId) || parsedWalletId <= 0) {
-        return res.status(400).json({ error: 'new_wallet_id must be a valid wallet ID' });
-      }
-    }
-    
     if (!reason || reason.trim().length < 5) {
-      return res.status(400).json({ error: 'reason is required for correction (min 5 characters)' });
+      return res.status(400).json({ error: 'Reason is required (min 5 chars)' });
     }
 
-    // Allowed transaction categories
-    const allowedCategories = ['Service Payment', 'Department Payment', 'Service Charge'];
-    
     await client.query('BEGIN');
 
-    // 🔥 OPTIMIZED: Lock wallet_transactions with wallet info (single lock for original wallet)
-    const txRes = await client.query(
-      `SELECT 
-        wt.*, 
-        w.centre_id, 
-        w.name as wallet_name,
-        w.balance as wallet_balance
-       FROM wallet_transactions wt
-       JOIN wallets w ON wt.wallet_id = w.id
-       WHERE wt.id = $1
-       FOR UPDATE OF wt`,
+    // 🔥 STEP 1: FIND CORRECTION GROUP
+    const baseRes = await client.query(
+      `SELECT correction_group_id 
+       FROM wallet_transactions 
+       WHERE id = $1`,
       [transactionId]
     );
 
-    if (txRes.rows.length === 0) {
+    if (baseRes.rows.length === 0) {
       throw new Error('Transaction not found');
     }
 
-    const original = txRes.rows[0];
-    
-    // Determine if wallet is changing
-    const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
+    const groupId = baseRes.rows[0].correction_group_id;
+
+    // 🔥 STEP 2: GET LATEST VALID TRANSACTION (CRITICAL FIX)
+    let latestTxRes;
+
+    if (groupId) {
+      latestTxRes = await client.query(
+        `SELECT wt.*, w.name as wallet_name, w.balance, w.centre_id
+         FROM wallet_transactions wt
+         JOIN wallets w ON wt.wallet_id = w.id
+         WHERE wt.correction_group_id = $1
+         AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+         ORDER BY wt.created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [groupId]
+      );
+    } else {
+      // fallback (old records)
+      latestTxRes = await client.query(
+        `SELECT wt.*, w.name as wallet_name, w.balance, w.centre_id
+         FROM wallet_transactions wt
+         JOIN wallets w ON wt.wallet_id = w.id
+         WHERE wt.id = $1
+         FOR UPDATE`,
+        [transactionId]
+      );
+    }
+
+    if (latestTxRes.rows.length === 0) {
+      throw new Error('Valid transaction not found');
+    }
+
+    const original = latestTxRes.rows[0];
+
+    // 🔥 VALIDATIONS
+    if (original.is_reversal) {
+      throw new Error('Cannot correct reversal transaction');
+    }
+
+    const allowedCategories = ['Service Payment', 'Department Payment', 'Service Charge'];
+    if (!allowedCategories.includes(original.category)) {
+      throw new Error(`Cannot correct ${original.category}`);
+    }
+
+    if (user.role !== 'superadmin' && original.centre_id !== user.centre_id) {
+      throw new Error('Unauthorized access');
+    }
+
+    // FINAL VALUES
     const finalAmount = new_amount !== undefined ? parseFloat(new_amount) : parseFloat(original.amount);
-    const isWalletChanging = finalWalletId !== original.wallet_id;
-    
-    // 🔥 OPTIMIZED: Only lock new wallet if it's different from original
-    // (original wallet is already locked via the JOIN above)
-    if (isWalletChanging) {
+    const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
+
+    if (isNaN(finalAmount) || finalAmount <= 0) {
+      throw new Error('Invalid amount');
+    }
+
+    // 🔥 LOCK NEW WALLET IF CHANGED
+    if (finalWalletId !== original.wallet_id) {
       const newWalletRes = await client.query(
-        `SELECT id, centre_id, name, balance FROM wallets WHERE id = $1 FOR UPDATE`,
+        `SELECT * FROM wallets WHERE id = $1 FOR UPDATE`,
         [finalWalletId]
       );
       if (newWalletRes.rows.length === 0) throw new Error('New wallet not found');
-      const newWallet = newWalletRes.rows[0];
-      if (user.role !== 'superadmin' && newWallet.centre_id !== user.centre_id) {
-        throw new Error('You do not have access to the new wallet');
+    }
+
+    // 🔥 BALANCE CHECK
+    const reverseType = original.type === 'credit' ? 'debit' : 'credit';
+
+    if (original.type === 'credit' && parseFloat(original.balance) < parseFloat(original.amount)) {
+      throw new Error(`Insufficient balance to reverse`);
+    }
+
+    if (original.type === 'debit') {
+      const walletRes = await client.query(
+        `SELECT balance FROM wallets WHERE id = $1`,
+        [finalWalletId]
+      );
+      if (parseFloat(walletRes.rows[0].balance) < finalAmount) {
+        throw new Error(`Insufficient balance in wallet`);
       }
     }
-    
-    // 🔥 Fetch reference data separately (no locking needed)
-    let serviceEntry = null;
-    if (original.reference_id) {
-      const seRes = await client.query(
-        `SELECT id, service_charges, department_charges, total_charges 
-         FROM service_entries 
-         WHERE id = $1`,
-        [original.reference_id]
-      );
-      serviceEntry = seRes.rows[0];
-    }
 
-    let payment = null;
-    if (original.reference_payment_id) {
-      const pRes = await client.query(
-        `SELECT id FROM payments WHERE id = $1`,
-        [original.reference_payment_id]
-      );
-      payment = pRes.rows[0];
-    }
-    
-    // Category validation
-    if (!allowedCategories.includes(original.category)) {
-      throw new Error(`Cannot correct ${original.category} transactions. Allowed: ${allowedCategories.join(', ')}`);
-    }
-    
-    // Access control
-    if (user.role !== 'superadmin' && original.centre_id !== user.centre_id) {
-      throw new Error('You do not have access to this transaction');
-    }
+    const correctionGroupId = original.correction_group_id || crypto.randomUUID();
 
-    // Prevent correcting reversals
-    if (original.is_reversal) {
-      throw new Error('Cannot correct a reversal transaction');
-    }
-
-    // Prevent correcting transfers
-    if (original.category === 'Transfer') {
-      throw new Error('Transfers cannot be corrected through this endpoint');
-    }
-
-    const groupId = original.correction_group_id || crypto.randomUUID();
-
-    // Staff correction limit
+    // 🔥 STAFF LIMIT
     if (user.role === 'staff') {
       const countRes = await client.query(
-        `SELECT COUNT(*) 
-         FROM wallet_transactions 
+        `SELECT COUNT(*) FROM wallet_transactions 
          WHERE correction_group_id = $1 
          AND (is_reversal IS NULL OR is_reversal = FALSE)`,
-        [groupId]
+        [correctionGroupId]
       );
+
       if (parseInt(countRes.rows[0].count) >= 3) {
-        throw new Error('Correction limit reached (max 2 corrections allowed). Please contact admin.');
+        throw new Error('Max 2 corrections allowed');
       }
     }
 
-    // 🔥 BALANCE CHECKS (optimized - only check what's needed)
-    const reverseType = original.type === 'credit' ? 'debit' : 'credit';
-    
-    // Check original wallet balance for reversal
-    if (original.type === 'credit' && parseFloat(original.wallet_balance) < parseFloat(original.amount)) {
-      throw new Error(`Insufficient balance in ${original.wallet_name} to reverse this transaction. Available: ₹${original.wallet_balance}, Required: ₹${original.amount}`);
-    }
-
-    // Check final wallet balance for new debit transactions
-    // 🔥 OPTIMIZED: If wallet is same, we already have the balance from original.wallet_balance
-    if (original.type === 'debit') {
-      let finalWalletBalance;
-      let finalWalletName;
-      
-      if (isWalletChanging) {
-        // Wallet is different - balance already fetched with FOR UPDATE above
-        const finalWalletRes = await client.query(
-          `SELECT balance, name FROM wallets WHERE id = $1`,
-          [finalWalletId]
-        );
-        finalWalletBalance = finalWalletRes.rows[0].balance;
-        finalWalletName = finalWalletRes.rows[0].name;
-      } else {
-        // Same wallet - use already locked wallet balance
-        finalWalletBalance = original.wallet_balance;
-        finalWalletName = original.wallet_name;
-      }
-      
-      if (parseFloat(finalWalletBalance) < finalAmount) {
-        throw new Error(`Insufficient balance in ${finalWalletName}. Available: ₹${finalWalletBalance}, Required: ₹${finalAmount}`);
-      }
-    }
-
-    // 🔥 STEP 1: Create reversal transaction
+    // 🔥 STEP 3: REVERSAL
     await client.query(
       `INSERT INTO wallet_transactions (
         wallet_id, staff_id, type, amount, description, category,
         reference_id, reference_type, is_reversal, correction_group_id,
         reference_payment_id, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, NOW())`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,NOW())`,
       [
         original.wallet_id,
         user.id,
@@ -1464,52 +1428,48 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         original.category,
         original.reference_id,
         original.reference_type || 'transaction',
-        groupId,
+        correctionGroupId,
         original.reference_payment_id
       ]
     );
 
-    // Update original wallet balance
+    // UPDATE ORIGINAL WALLET
     if (original.type === 'credit') {
-      await client.query(
-        `UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`,
-        [original.amount, original.wallet_id]
-      );
+      await client.query(`UPDATE wallets SET balance = balance - $1 WHERE id = $2`,
+        [original.amount, original.wallet_id]);
     } else {
-      await client.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [original.amount, original.wallet_id]
-      );
+      await client.query(`UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
+        [original.amount, original.wallet_id]);
     }
 
-    // Handle payment creation for corrected Service Payment
+    // 🔥 STEP 4: CREATE NEW CORRECTED TRANSACTION
     let newPaymentId = null;
-    
+
     if (original.category === 'Service Payment' && original.reference_id) {
       const paymentGroupId = crypto.randomUUID();
+
       const paymentRes = await client.query(
         `INSERT INTO payments (
           service_entry_id, wallet_id, amount, status,
           correction_group_id, original_payment_id, created_at
-        ) VALUES ($1, $2, $3, 'received', $4, NULL, NOW())
-        RETURNING id`,
+        ) VALUES ($1,$2,$3,'received',$4,NULL,NOW()) RETURNING id`,
         [original.reference_id, finalWalletId, finalAmount, paymentGroupId]
       );
+
       newPaymentId = paymentRes.rows[0].id;
-      
+
       await client.query(
         `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
         [newPaymentId]
       );
     }
 
-    // 🔥 STEP 2: Create new corrected transaction
-    const newTxRes = await client.query(
+    const newTx = await client.query(
       `INSERT INTO wallet_transactions (
         wallet_id, staff_id, type, amount, description, category,
-        reference_id, reference_type, correction_group_id, reference_payment_id, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-      RETURNING id`,
+        reference_id, reference_type, correction_group_id,
+        reference_payment_id, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING id`,
       [
         finalWalletId,
         user.id,
@@ -1519,103 +1479,57 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         original.category,
         original.reference_id,
         original.reference_type || 'transaction',
-        groupId,
-        original.category === 'Service Payment' ? newPaymentId : null
+        correctionGroupId,
+        newPaymentId
       ]
     );
-    const newTransactionId = newTxRes.rows[0].id;
 
-    // Update new wallet balance
+    // UPDATE NEW WALLET
     if (original.type === 'credit') {
-      await client.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [finalAmount, finalWalletId]
-      );
+      await client.query(`UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
+        [finalAmount, finalWalletId]);
     } else {
-      await client.query(
-        `UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`,
-        [finalAmount, finalWalletId]
-      );
+      await client.query(`UPDATE wallets SET balance = balance - $1 WHERE id = $2`,
+        [finalAmount, finalWalletId]);
     }
 
-    // Update service_entries for department/service charges
-    if (original.reference_id && original.category) {
+    // 🔥 UPDATE SERVICE ENTRY (IMPORTANT)
+    if (original.reference_id) {
       if (original.category === 'Department Payment') {
         await client.query(
-          `UPDATE service_entries 
-           SET department_charges = $1, updated_at = NOW() 
-           WHERE id = $2`,
-          [finalAmount, original.reference_id]
-        );
-      } else if (original.category === 'Service Charge') {
-        await client.query(
-          `UPDATE service_entries 
-           SET service_charges = $1, updated_at = NOW() 
-           WHERE id = $2`,
+          `UPDATE service_entries SET department_charges = $1 WHERE id = $2`,
           [finalAmount, original.reference_id]
         );
       }
-      
-      if (original.category === 'Department Payment' || original.category === 'Service Charge') {
+
+      if (original.category === 'Service Charge') {
         await client.query(
-          `UPDATE service_entries 
-           SET total_charges = service_charges + department_charges,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [original.reference_id]
+          `UPDATE service_entries SET service_charges = $1 WHERE id = $2`,
+          [finalAmount, original.reference_id]
         );
       }
+
+      await client.query(
+        `UPDATE service_entries 
+         SET total_charges = service_charges + department_charges 
+         WHERE id = $1`,
+        [original.reference_id]
+      );
     }
-
-    // Audit logging
-    const auditDetails = `Corrected txn #${original.id} (${original.category}): ₹${parseFloat(original.amount).toFixed(2)} → ₹${finalAmount.toFixed(2)} | Wallet: ${original.wallet_id} (${original.wallet_name}) → ${finalWalletId} | Reason: ${reason}`;
-    
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) 
-       VALUES ($1, $2, $3, $4, NOW())`,
-      ['Transaction Corrected', user.username, auditDetails, original.centre_id]
-    );
-
-    await logActivity({
-      centre_id: original.centre_id,
-      related_type: 'transaction',
-      related_id: transactionId,
-      action: 'Transaction Corrected',
-      description: auditDetails,
-      performed_by: user.id,
-      performed_by_role: user.role
-    });
 
     await client.query('COMMIT');
 
     res.json({
       success: true,
       message: 'Transaction corrected successfully',
-      correction: {
-        original_transaction_id: transactionId,
-        new_transaction_id: newTransactionId,
-        correction_group_id: groupId,
-        original_amount: parseFloat(original.amount),
-        new_amount: finalAmount,
-        original_wallet_id: original.wallet_id,
-        original_wallet_name: original.wallet_name,
-        new_wallet_id: finalWalletId,
-        transaction_type: original.type,
-        category: original.category,
-        new_payment_id: newPaymentId
-      }
+      new_transaction_id: newTx.rows[0].id,
+      correction_group_id: correctionGroupId
     });
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Transaction correction error:', err);
-    
-    const statusCode = 
-      err.message.includes('not found') ? 404 :
-      err.message.includes('access') ? 403 :
-      err.message.includes('limit') ? 400 : 400;
-    
-    res.status(statusCode).json({ error: err.message });
+    console.error('Correction error:', err);
+    res.status(400).json({ error: err.message });
   } finally {
     client.release();
   }
