@@ -1599,7 +1599,7 @@ const ServiceEntry = () => {
           <div className="flex justify-end mt-2 gap-4">
             <button
               type="button"
-              onClick={() => navigate('/staff/token')}
+              onClick={() => navigate('/dashboard/staff')}
               className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2"
             >
               <FiX className="h-5 w-5" />
