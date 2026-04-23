@@ -184,32 +184,31 @@ const PendingPaymentDetailModal = ({ isOpen, onClose, serviceEntry }) => {
 
               {/* Payment History & Documents */}
               <div className="space-y-6">
-                {/* Payment History */}
+                {/* Latest Payment (formerly Payment History) */}
                 <div className="bg-gray-50 rounded-lg p-6">
                   <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <FiCreditCard className="h-4 w-4" />
-                    Payment History
+                    Latest Payment
                   </h4>
                   <div className="space-y-3">
                     {serviceEntry.paymentHistory?.length > 0 ? (
-                      serviceEntry.paymentHistory.map((payment, index) => (
-                        <div key={index} className="border-b border-gray-200 pb-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span className="text-sm font-medium">{payment.date}</span>
-                              <p className="text-xs text-gray-500">{payment.method}</p>
-                            </div>
-                            <span className="text-sm font-bold text-emerald-600">
-                              ₹{payment.amount.toLocaleString('en-IN')}
-                            </span>
+                      // Since backend returns only the latest payment per chain, we show the first (and only) entry.
+                      <div className="border-b border-gray-200 pb-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-sm font-medium">{serviceEntry.paymentHistory[0].date}</span>
+                            <p className="text-xs text-gray-500">{serviceEntry.paymentHistory[0].method}</p>
                           </div>
-                          {payment.remarks && (
-                            <p className="text-xs text-gray-600 mt-1">{payment.remarks}</p>
-                          )}
+                          <span className="text-sm font-bold text-emerald-600">
+                            ₹{serviceEntry.paymentHistory[0].amount.toLocaleString('en-IN')}
+                          </span>
                         </div>
-                      ))
+                        {serviceEntry.paymentHistory[0].remarks && (
+                          <p className="text-xs text-gray-600 mt-1">{serviceEntry.paymentHistory[0].remarks}</p>
+                        )}
+                      </div>
                     ) : (
-                      <p className="text-sm text-gray-500">No payment history</p>
+                      <p className="text-sm text-gray-500">No payment recorded yet</p>
                     )}
                   </div>
                 </div>
@@ -553,7 +552,7 @@ const PendingPayments = () => {
     collectionRate: 0
   });
 
-  // Filtered payments - MUST BE DECLARED BEFORE useEffects that use it
+  // Filtered payments - now includes sorting by due descending
   const filteredPayments = useMemo(() => {
     let filtered = [...pendingPayments];
 
@@ -564,7 +563,7 @@ const PendingPayments = () => {
         payment.customer.name.toLowerCase().includes(query) ||
         payment.customer.phone.includes(query) ||
         payment.service.type.toLowerCase().includes(query) ||
-        payment.id.includes(query)
+        String(payment.id).includes(query)  // Fixed: convert id to string
       );
     }
 
@@ -598,6 +597,10 @@ const PendingPayments = () => {
     } else if (filter === 'partially_paid') {
       filtered = filtered.filter(payment => payment.paid > 0 && payment.due > 0);
     }
+
+    // Sort by due amount descending (highest pending first)
+    filtered.sort((a, b) => b.due - a.due);
+
     return filtered;
   }, [pendingPayments, searchQuery, filter, fromDate, toDate]);
 
@@ -694,7 +697,7 @@ const fetchPendingPayments = async () => {
   }
 };
 
-  // Fetch pending payments on mount
+  // Fetch pending payments on mount or filter change
   useEffect(() => {
     fetchPendingPayments();
   }, [filter]);
@@ -785,6 +788,7 @@ const normalizePayments = (rows = []) =>
     if (due === 0 && paid >= total) status = "completed";
 
     return {
+      // Use service_entry_id as the primary id
       id: String(r.service_entry_id),
 
       customer: {
@@ -804,6 +808,7 @@ const normalizePayments = (rows = []) =>
       createdAt: r.created_at,
       status,
 
+      // Payment history (now an array, but usually contains latest)
       paymentHistory: Array.isArray(r.payment_history)
         ? r.payment_history.map(p => ({
             id: p.id,
@@ -957,7 +962,7 @@ const normalizePayments = (rows = []) =>
                     <option value="history">Cleared Pending History</option>
                   </select>
                 </div>
-                {/* Date Filter - Matching UI */}
+                {/* Date Filter */}
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
                     <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -1067,7 +1072,6 @@ const normalizePayments = (rows = []) =>
                               className="text-left hover:text-indigo-600 transition-colors group"
                             >
                               <div className="flex items-center space-x-3">
-                                {/* Changed from gradient to dark navy blue */}
                                 <div className="w-8 h-8 bg-blue-900 rounded-full flex items-center justify-center">
                                   <span className="text-white font-bold text-xs">
                                     {(payment.customer.name || "U")
@@ -1346,7 +1350,7 @@ const normalizePayments = (rows = []) =>
           }}
           onSuccess={handlePaymentSuccess}
           payment={selectedPayment}
-          wallets={wallets}   // ✅ PASS REAL WALLETS
+          wallets={wallets}
         />
       </div>
     </ErrorBoundary>
