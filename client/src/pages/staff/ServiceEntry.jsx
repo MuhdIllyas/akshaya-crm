@@ -151,10 +151,15 @@ const ServiceEntry = () => {
     }
   };
 
-  // 🔥 FIXED: Accept full transaction object, not just ID
+  // 🔥 FIXED: Use transaction_id (wallet_transactions.id) for correction
   const openCorrectionModal = async (transaction, entry, type) => {
+    // Determine the correct ID: use transaction_id if available, else fallback to id
+    const correctionId = transaction.transaction_id || transaction.id;
+    
     console.log("🔍 Opening correction modal for:", {
-      id: transaction.id,
+      providedId: transaction.id,
+      transactionId: transaction.transaction_id,
+      correctionId,
       type: type,
       amount: transaction.amount,
       is_reversal: transaction.is_reversal,
@@ -168,7 +173,7 @@ const ServiceEntry = () => {
       return;
     }
     
-    const status = await checkCorrectionStatus(transaction.id);
+    const status = await checkCorrectionStatus(correctionId);
     
     if (!status) {
       toast.error('Unable to check correction status');
@@ -184,10 +189,11 @@ const ServiceEntry = () => {
       isOpen: true,
       transaction: {
         ...transaction,
+        id: correctionId, // CRUCIAL: Override with wallet_transactions.id
         serviceEntryId: entry.id,
         originalAmount: transaction.amount,
         wallet_id: transaction.wallet || transaction.wallet_id,
-        correction_group_id: transaction.correction_group_id // 🔥 Pass group ID for verification
+        correction_group_id: transaction.correction_group_id
       },
       loading: false,
       newAmount: transaction.amount,
@@ -203,7 +209,7 @@ const ServiceEntry = () => {
     
     // 🔥 CRITICAL DEBUG: Log what we're about to correct
     console.log("🚀 Submitting correction for:", {
-      id: transaction.id,
+      id: transaction.id, // Now wallet_transactions.id
       type: transactionType,
       originalAmount: transaction.originalAmount,
       newAmount: newAmount,
@@ -251,7 +257,7 @@ const ServiceEntry = () => {
         payload.new_wallet_id = parsedWalletId;
       }
       
-      // 🔥 SAFETY: Send correction_group_id for backend verification (optional but recommended)
+      // 🔥 SAFETY: Send correction_group_id for backend verification
       if (transaction.correction_group_id) {
         payload.correction_group_id = transaction.correction_group_id;
       }
@@ -259,7 +265,7 @@ const ServiceEntry = () => {
       console.log('📤 Correction API Payload:', payload);
       console.log('📤 Correcting Transaction ID:', transaction.id);
       
-      // 🔥 This is the API call - using wallet_transactions.id
+      // 🔥 API call uses wallet_transactions.id
       await api.put(`/transactions/${transaction.id}/correct`, payload);
       
       toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
@@ -326,7 +332,7 @@ const ServiceEntry = () => {
     }
   };
 
-  // 🔥 FIXED: Check if transaction can be corrected
+  // 🔥 Check if transaction can be corrected
   const canCorrectTransaction = (transaction, entry, type) => {
     // 🔥 SAFETY: Never allow correcting reversal transactions
     if (transaction.is_reversal) return false;
@@ -1780,8 +1786,9 @@ const ServiceEntry = () => {
 
                           {/* 🔥 SAFETY: Use filtered payments (latest non-reversal only) */}
                           {safePayments.map((payment, idx) => {
-                            const status = correctionStatus[payment.id];
+                            const status = correctionStatus[payment.transaction_id || payment.id];
                             const hasBeenCorrected = status?.corrections_used > 0;
+                            const correctionId = payment.transaction_id || payment.id;
                             return (
                               <div key={idx} className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1797,17 +1804,17 @@ const ServiceEntry = () => {
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <button
-                                    onClick={() => viewTransactionHistory(payment.id, 'payment')}
+                                    onClick={() => viewTransactionHistory(correctionId, 'payment')}
                                     className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
                                     title="View correction history"
                                   >
                                     <FiHistory className="h-3.5 w-3.5" />
                                   </button>
-                                  {/* 🔥 CRITICAL FIX: Using wallet_transactions.id via safePayments filtering */}
+                                  {/* 🔥 CRITICAL FIX: Using wallet_transactions.id */}
                                   {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
                                     <button
                                       onClick={() => {
-                                        console.log("🔍 Correcting Payment - TX ID:", payment.id, 
+                                        console.log("🔍 Correcting Payment - TX ID:", correctionId, 
                                           "| Amount:", payment.amount, 
                                           "| Wallet:", payment.wallet,
                                           "| is_reversal:", payment.is_reversal);
