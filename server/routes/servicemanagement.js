@@ -586,19 +586,23 @@ router.get('/categories', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔥 GET /api/servicemanagement/entries - FIXED: Show only latest valid transactions
+// 🔥 GET /api/servicemanagement/entries - FINAL CLEAN VERSION
 router.get('/entries', authenticateToken, async (req, res) => {
   const { today } = req.query;
   const client = await pool.connect();
+
   try {
     let query = `
       SELECT se.*, se.is_edited, se.customer_service_id, se.work_source,
-      sc.name AS subcategory_name, s.wallet_id AS service_wallet_id, s.name AS service_name
+             sc.name AS subcategory_name,
+             s.wallet_id AS service_wallet_id,
+             s.name AS service_name
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
       JOIN staff st ON se.staff_id = st.id
     `;
+
     let values = [];
     let conditions = [];
 
@@ -624,75 +628,45 @@ router.get('/entries', authenticateToken, async (req, res) => {
     const entries = [];
 
     for (const entry of entriesResult.rows) {
-      // 🔥 FIXED: Get ONLY the latest payment per "payment chain"
-      // A payment chain starts with original_payment_id IS NULL, then corrections follow
+
+      // 🔥 ✅ ONLY LATEST PAYMENT (NO CHAINS, NO DUPLICATES)
       const paymentsResult = await client.query(`
-        WITH payment_chains AS (
-          -- Find the root payment for each chain (original_payment_id points to itself)
-          SELECT 
-            p.id,
-            p.wallet_id,
-            p.amount,
-            p.status,
-            p.correction_group_id,
-            p.original_payment_id,
-            p.is_reversal,
-            p.created_at,
-            -- Find the root of this payment chain
-            COALESCE(
-              (SELECT p2.id FROM payments p2 
-               WHERE p2.id = p.original_payment_id 
-                 AND p2.original_payment_id = p2.id
-                 AND p2.is_reversal = FALSE),
-              CASE WHEN p.original_payment_id = p.id THEN p.id ELSE NULL END
-            ) AS chain_root
-          FROM payments p
-          WHERE p.service_entry_id = $1 
-            AND p.is_reversal = FALSE
-        ),
-        latest_in_chain AS (
-          -- Get the latest payment in each chain
-          SELECT DISTINCT ON (chain_root)
-            id,
-            wallet_id,
-            amount,
-            status,
-            correction_group_id,
-            created_at
-          FROM payment_chains
-          WHERE chain_root IS NOT NULL
-          ORDER BY chain_root, created_at DESC
-        )
-        SELECT 
-          lc.id,
-          lc.wallet_id,
-          lc.amount,
-          lc.status,
-          lc.correction_group_id,
-          lc.created_at,
+        SELECT DISTINCT ON (p.service_entry_id)
+          p.id,
+          p.wallet_id,
+          p.amount,
+          p.status,
+          p.correction_group_id,
+          p.created_at,
           w.name AS wallet_name,
           w.wallet_type,
-          -- 🔥 Get the wallet_transactions.id for correction
+
           (
-            SELECT wt.id 
-            FROM wallet_transactions wt 
-            WHERE wt.reference_payment_id = lc.id 
+            SELECT wt.id
+            FROM wallet_transactions wt
+            WHERE wt.reference_payment_id = p.id
               AND wt.category = 'Service Payment'
               AND wt.type = 'credit'
               AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-            ORDER BY wt.created_at DESC 
+            ORDER BY wt.created_at DESC
             LIMIT 1
           ) AS transaction_id
-        FROM latest_in_chain lc
-        JOIN wallets w ON lc.wallet_id = w.id
-        ORDER BY lc.created_at DESC
+
+        FROM payments p
+        JOIN wallets w ON p.wallet_id = w.id
+
+        WHERE p.service_entry_id = $1
+          AND p.is_reversal = FALSE
+
+        ORDER BY p.service_entry_id, p.created_at DESC
       `, [entry.id]);
 
-      // Fetch department charge transaction (ONLY latest non-reversal)
+      // 🔥 Department Charge (latest only)
       const deptTxResult = await client.query(`
         SELECT DISTINCT ON (wt.correction_group_id)
-          wt.id, wt.amount, wt.wallet_id, w.name AS wallet_name,
-          wt.correction_group_id, wt.is_reversal, wt.created_at
+          wt.id, wt.amount, wt.wallet_id,
+          w.name AS wallet_name,
+          wt.correction_group_id
         FROM wallet_transactions wt
         JOIN wallets w ON wt.wallet_id = w.id
         WHERE wt.reference_id = $1
@@ -701,11 +675,12 @@ router.get('/entries', authenticateToken, async (req, res) => {
         ORDER BY wt.correction_group_id, wt.created_at DESC
       `, [entry.id]);
 
-      // Fetch service charge transaction (ONLY latest non-reversal)
+      // 🔥 Service Charge (latest only)
       const serviceChargeTxResult = await client.query(`
         SELECT DISTINCT ON (wt.correction_group_id)
-          wt.id, wt.amount, wt.wallet_id, w.name AS wallet_name,
-          wt.correction_group_id, wt.is_reversal, wt.created_at
+          wt.id, wt.amount, wt.wallet_id,
+          w.name AS wallet_name,
+          wt.correction_group_id
         FROM wallet_transactions wt
         JOIN wallets w ON wt.wallet_id = w.id
         WHERE wt.reference_id = $1
@@ -713,6 +688,16 @@ router.get('/entries', authenticateToken, async (req, res) => {
           AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
         ORDER BY wt.correction_group_id, wt.created_at DESC
       `, [entry.id]);
+
+      const latestPayments = paymentsResult.rows;
+
+      const paidAmount = latestPayments
+        .filter(p => p.status === 'received')
+        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+
+      const pendingAmount = latestPayments
+        .filter(p => p.status === 'pending')
+        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 
       entries.push({
         id: entry.id,
@@ -722,29 +707,41 @@ router.get('/entries', authenticateToken, async (req, res) => {
         category: entry.category_id,
         subcategory: entry.subcategory_id,
         subcategoryName: entry.subcategory_name,
+
         is_edited: Boolean(entry.is_edited),
+
         serviceCharge: parseFloat(entry.service_charges),
         departmentCharge: parseFloat(entry.department_charges),
         totalCharge: parseFloat(entry.total_charges),
+
         serviceWalletId: entry.service_wallet_id,
         staffId: parseInt(entry.staff_id),
-        created_at: entry.created_at ? entry.created_at.toISOString() : null,
-        paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
-        pendingAmount: paymentsResult.rows.filter(p => p.status === 'pending').reduce((sum, p) => sum + parseFloat(p.amount), 0),
-        balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
-        expiryDate: entry.expiry_date ? entry.expiry_date.toISOString().split('T')[0] : null,
+
+        created_at: entry.created_at
+          ? entry.created_at.toISOString()
+          : null,
+
+        paidAmount,
+        pendingAmount,
+        balanceAmount: parseFloat(entry.total_charges) - paidAmount,
+
+        expiryDate: entry.expiry_date
+          ? entry.expiry_date.toISOString().split('T')[0]
+          : null,
+
         status: entry.status,
-        // 🔥 Only latest payments per chain
-        payments: paymentsResult.rows.map(p => ({
+
+        // 🔥 ONLY ONE PAYMENT NOW
+        payments: latestPayments.map(p => ({
           id: p.id,
-          transaction_id: p.transaction_id,   // wallet_transactions.id for correction
+          transaction_id: p.transaction_id,
           wallet: p.wallet_id,
           method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
           amount: parseFloat(p.amount),
           status: p.status,
           correction_group_id: p.correction_group_id,
-          is_reversal: false,
         })),
+
         departmentChargeTransaction: deptTxResult.rows[0] ? {
           id: deptTxResult.rows[0].id,
           amount: parseFloat(deptTxResult.rows[0].amount),
@@ -752,6 +749,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
           wallet_name: deptTxResult.rows[0].wallet_name,
           correction_group_id: deptTxResult.rows[0].correction_group_id,
         } : null,
+
         serviceChargeTransaction: serviceChargeTxResult.rows[0] ? {
           id: serviceChargeTxResult.rows[0].id,
           amount: parseFloat(serviceChargeTxResult.rows[0].amount),
@@ -759,15 +757,19 @@ router.get('/entries', authenticateToken, async (req, res) => {
           wallet_name: serviceChargeTxResult.rows[0].wallet_name,
           correction_group_id: serviceChargeTxResult.rows[0].correction_group_id,
         } : null,
+
         workSource: entry.work_source,
         customerServiceId: entry.customer_service_id,
       });
     }
 
     res.json(entries);
+
   } catch (err) {
-    console.error('servicemanagement.js: Error fetching service entries:', err);
-    res.status(500).json({ error: 'Failed to fetch service entries: ' + err.message });
+    console.error('❌ servicemanagement.js: Error fetching service entries:', err);
+    res.status(500).json({
+      error: 'Failed to fetch service entries: ' + err.message
+    });
   } finally {
     client.release();
   }
