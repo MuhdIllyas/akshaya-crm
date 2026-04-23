@@ -2566,10 +2566,12 @@ router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
 router.get("/pending-payments", authenticateToken, async (req, res) => {
   const { from, to } = req.query;
   const client = await pool.connect();
+
   try {
     const { role, id: userId, centre_id } = req.user;
     const { centreId: queryCentreId } = req.query;
-    let CentreId = req.user.centre_id;
+
+    let CentreId = centre_id;
 
     if (role === "superadmin" && queryCentreId) {
       CentreId = Number(queryCentreId);
@@ -2614,22 +2616,21 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
         se.phone AS customer_phone,
         se.total_charges,
         se.created_at,
-        se.staff_id,
         st.name AS staff_name,
         s.name AS service_name,
         sc.name AS subcategory_name,
-        
+
         COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         ) AS paid_amount,
-        
+
         se.total_charges -
         COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         ) AS pending_amount,
-        
+
         COALESCE(
           json_agg(
             json_build_object(
@@ -2640,7 +2641,7 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
               'status', p.status,
               'created_at', p.created_at
             )
-            ORDER BY p.created_at
+            ORDER BY p.created_at NULLS LAST
           ) FILTER (WHERE p.id IS NOT NULL),
           '[]'
         ) AS payment_history
@@ -2649,9 +2650,9 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
       JOIN staff st ON st.id = se.staff_id
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
-      
+
       LEFT JOIN (
-        SELECT DISTINCT ON (correction_group_id)
+        SELECT DISTINCT ON (service_entry_id)
           id,
           service_entry_id,
           wallet_id,
@@ -2662,7 +2663,7 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
         FROM payments
         JOIN wallets w ON wallet_id = w.id
         WHERE is_reversal = FALSE
-        ORDER BY correction_group_id, created_at DESC
+        ORDER BY service_entry_id, created_at DESC
       ) p ON p.service_entry_id = se.id
 
       ${whereClause}
@@ -2673,7 +2674,6 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
         se.phone,
         se.total_charges,
         se.created_at,
-        se.staff_id,
         st.name,
         s.name,
         sc.name
@@ -2687,12 +2687,13 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
 
       ORDER BY pending_amount DESC
     `;
-    
+
     const { rows } = await client.query(query, values);
     res.json(rows);
+
   } catch (err) {
-    console.error("Pending payments error:", err);
-    res.status(500).json({ error: "Failed to fetch pending payments" });
+    console.error("❌ Pending payments error:", err);
+    res.status(500).json({ error: err.message || "Failed to fetch pending payments" });
   } finally {
     client.release();
   }
@@ -2701,6 +2702,7 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
 // Receive pending payment (CREDIT ONLY)
 router.post("/pending-payments/:id/receive-payment", authenticateToken, async (req, res) => {
   const client = await pool.connect();
+
   try {
     const serviceEntryId = req.params.id;
     const { wallet_id, amount } = req.body;
@@ -2723,7 +2725,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
     }
 
     const groupId = crypto.randomUUID();
-    
+
     const paymentRes = await client.query(
       `
       INSERT INTO payments (
@@ -2740,21 +2742,16 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
       `,
       [serviceEntryId, wallet_id, amount, groupId]
     );
-    
+
     const paymentId = paymentRes.rows[0].id;
-    
+
     await client.query(
       `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
       [paymentId]
     );
 
     await client.query(
-      `
-      UPDATE wallets
-      SET balance = balance + $1
-      WHERE id = $2
-      RETURNING balance
-      `,
+      `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
       [amount, wallet_id]
     );
 
@@ -2786,41 +2783,6 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
       ]
     );
 
-    const totalsRes = await client.query(
-      `
-      SELECT
-        se.total_charges,
-        COALESCE(SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END), 0) AS received
-      FROM service_entries se
-      LEFT JOIN (
-        SELECT DISTINCT ON (correction_group_id)
-          service_entry_id,
-          amount,
-          status
-        FROM payments
-        WHERE is_reversal = FALSE
-        ORDER BY correction_group_id, created_at DESC
-      ) p ON p.service_entry_id = se.id
-      WHERE se.id = $1
-      GROUP BY se.total_charges
-      `,
-      [serviceEntryId]
-    );
-
-    const { total_charges, received } = totalsRes.rows[0];
-
-    if (Number(received) >= Number(total_charges)) {
-      await client.query(
-        `
-        UPDATE service_entries
-        SET status = 'completed',
-            updated_at = NOW()
-        WHERE id = $1
-        `,
-        [serviceEntryId]
-      );
-    }
-
     await client.query("COMMIT");
 
     res.json({
@@ -2830,7 +2792,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("Receive payment error:", err);
+    console.error("❌ Receive payment error:", err);
     res.status(500).json({
       error: err.message || "Failed to receive payment"
     });
@@ -2842,6 +2804,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 // GET /api/servicemanagement/pending-payments/history
 router.get("/pending-payments/history", authenticateToken, async (req, res) => {
   const client = await pool.connect();
+
   try {
     const { role, id: userId, centre_id: userCentreId } = req.user;
     const { centreId: queryCentreId, from, to } = req.query;
@@ -2883,6 +2846,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       conditions.push(`se.created_at::date >= $${idx++}`);
       values.push(from);
     }
+
     if (to) {
       conditions.push(`se.created_at::date <= $${idx++}`);
       values.push(to);
@@ -2902,18 +2866,18 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         se.updated_at,
         s.name AS service_name,
         sc.name AS subcategory_name,
-        
+
         COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         ) AS paid_amount,
-        
+
         se.total_charges -
         COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         ) AS pending_amount,
-        
+
         COALESCE(
           json_agg(
             json_build_object(
@@ -2923,7 +2887,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
               'status', p.status,
               'created_at', p.created_at
             )
-            ORDER BY p.created_at
+            ORDER BY p.created_at NULLS LAST
           ) FILTER (WHERE p.id IS NOT NULL),
           '[]'::json
         ) AS payment_history
@@ -2932,9 +2896,10 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       JOIN staff st ON st.id = se.staff_id
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
-      
+
+      -- 🔥 FIXED JOIN (NO correction_group_id)
       LEFT JOIN (
-        SELECT DISTINCT ON (correction_group_id)
+        SELECT DISTINCT ON (service_entry_id)
           id,
           service_entry_id,
           amount,
@@ -2944,7 +2909,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         FROM payments
         JOIN wallets w ON wallet_id = w.id
         WHERE is_reversal = FALSE
-        ORDER BY correction_group_id, created_at DESC
+        ORDER BY service_entry_id, created_at DESC
       ) p ON p.service_entry_id = se.id
 
       ${whereClause}
@@ -2964,7 +2929,6 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         )
-        AND COUNT(p.id) > 1
 
       ORDER BY se.updated_at DESC
     `;
@@ -2973,8 +2937,10 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
     res.json(rows);
 
   } catch (err) {
-    console.error("Pending payments history error:", err);
-    res.status(500).json({ error: "Failed to fetch pending payments history" });
+    console.error("❌ Pending payments history error:", err);
+    res.status(500).json({
+      error: err.message || "Failed to fetch pending payments history"
+    });
   } finally {
     client.release();
   }
