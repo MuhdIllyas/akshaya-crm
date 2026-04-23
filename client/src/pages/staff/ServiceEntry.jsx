@@ -12,6 +12,27 @@ import 'react-toastify/dist/ReactToastify.css';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry } from '/src/services/serviceService';
 import api from '@/services/serviceService';
 
+// 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
+const getLatestTransactions = (transactions) => {
+  if (!Array.isArray(transactions)) return [];
+  
+  const map = new Map();
+  
+  transactions.forEach(tx => {
+    // Skip reversal transactions entirely
+    if (tx.is_reversal) return;
+    
+    const groupId = tx.correction_group_id || `direct-${tx.id}`;
+    const existing = map.get(groupId);
+    
+    if (!existing || new Date(tx.created_at) > new Date(existing.created_at)) {
+      map.set(groupId, tx);
+    }
+  });
+  
+  return Array.from(map.values());
+};
+
 const ServiceEntry = () => {
   const { tokenId, customerServiceId } = useParams();
   const navigate = useNavigate();
@@ -130,7 +151,14 @@ const ServiceEntry = () => {
     }
   };
 
+  // 🔥 FIXED: Accept full transaction object, not just ID
   const openCorrectionModal = async (transaction, entry, type) => {
+    // 🔥 SAFETY: Block if transaction is a reversal
+    if (transaction.is_reversal) {
+      toast.error('Cannot correct a reversal transaction');
+      return;
+    }
+    
     const status = await checkCorrectionStatus(transaction.id);
     
     if (!status) {
@@ -149,7 +177,8 @@ const ServiceEntry = () => {
         ...transaction,
         serviceEntryId: entry.id,
         originalAmount: transaction.amount,
-        wallet_id: transaction.wallet || transaction.wallet_id
+        wallet_id: transaction.wallet || transaction.wallet_id,
+        correction_group_id: transaction.correction_group_id // 🔥 Pass group ID for verification
       },
       loading: false,
       newAmount: transaction.amount,
@@ -159,7 +188,7 @@ const ServiceEntry = () => {
     });
   };
 
-  // 🔥 FIXED: Only send changed fields
+  // 🔥 FIXED: Only send changed fields, with safety verification
   const submitCorrection = async () => {
     const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
     
@@ -202,8 +231,14 @@ const ServiceEntry = () => {
         payload.new_wallet_id = parsedWalletId;
       }
       
+      // 🔥 SAFETY: Send correction_group_id for backend verification (optional but recommended)
+      if (transaction.correction_group_id) {
+        payload.correction_group_id = transaction.correction_group_id;
+      }
+      
       console.log('Correction payload:', payload);
       
+      // 🔥 tx.id is always the latest valid transaction ID
       await api.put(`/transactions/${transaction.id}/correct`, payload);
       
       toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
@@ -266,10 +301,16 @@ const ServiceEntry = () => {
     }
   };
 
+  // 🔥 FIXED: Check if transaction can be corrected
   const canCorrectTransaction = (transaction, entry, type) => {
+    // 🔥 SAFETY: Never allow correcting reversal transactions
+    if (transaction.is_reversal) return false;
+    
+    // Staff can only correct today's entries
     if (userRole === 'staff') {
       return isToday(entry.created_at);
     }
+    
     return userRole === 'admin' || userRole === 'superadmin';
   };
 
@@ -1617,6 +1658,9 @@ const ServiceEntry = () => {
                   const deptTx = entry.departmentChargeTransaction;
                   const serviceTx = entry.serviceChargeTransaction;
                   
+                  // 🔥 SAFETY: Filter payments to only show latest non-reversal versions
+                  const safePayments = getLatestTransactions(entry.payments || []);
+                  
                   return (
                     <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -1636,7 +1680,7 @@ const ServiceEntry = () => {
                       <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
                         <div className="space-y-2">
                           {/* Department Charge Row */}
-                          {deptTx && deptTx.id && (
+                          {deptTx && deptTx.id && !deptTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-rose-600">
@@ -1658,11 +1702,13 @@ const ServiceEntry = () => {
                                 >
                                   <FiHistory className="h-3.5 w-3.5" />
                                 </button>
-                                {canCorrectTransaction({ id: deptTx.id, amount: deptTx.amount, wallet: deptTx.wallet_id }, entry, 'department_charge') && (
+                                {/* 🔥 FIXED: Pass full transaction object, not just ID */}
+                                {canCorrectTransaction(deptTx, entry, 'department_charge') && (
                                   <button
-                                    onClick={() => openCorrectionModal({ id: deptTx.id, amount: deptTx.amount, wallet: deptTx.wallet_id, wallet_name: deptTx.wallet_name }, entry, 'department_charge')}
+                                    onClick={() => openCorrectionModal(deptTx, entry, 'department_charge')}
                                     className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
                                     title="Correct department charge"
+                                    disabled={deptTx.is_reversal}
                                   >
                                     <FiEdit3 className="h-3.5 w-3.5" />
                                   </button>
@@ -1672,7 +1718,7 @@ const ServiceEntry = () => {
                           )}
 
                           {/* Service Charge Row */}
-                          {serviceTx && serviceTx.id && (
+                          {serviceTx && serviceTx.id && !serviceTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-rose-600">
@@ -1694,11 +1740,12 @@ const ServiceEntry = () => {
                                 >
                                   <FiHistory className="h-3.5 w-3.5" />
                                 </button>
-                                {canCorrectTransaction({ id: serviceTx.id, amount: serviceTx.amount, wallet: serviceTx.wallet_id }, entry, 'service_charge') && (
+                                {canCorrectTransaction(serviceTx, entry, 'service_charge') && (
                                   <button
-                                    onClick={() => openCorrectionModal({ id: serviceTx.id, amount: serviceTx.amount, wallet: serviceTx.wallet_id, wallet_name: serviceTx.wallet_name }, entry, 'service_charge')}
+                                    onClick={() => openCorrectionModal(serviceTx, entry, 'service_charge')}
                                     className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
                                     title="Correct service charge"
+                                    disabled={serviceTx.is_reversal}
                                   >
                                     <FiEdit3 className="h-3.5 w-3.5" />
                                   </button>
@@ -1707,8 +1754,8 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* Payment Rows */}
-                          {entry.payments.map((payment, idx) => {
+                          {/* 🔥 SAFETY: Use filtered payments (latest non-reversal only) */}
+                          {safePayments.map((payment, idx) => {
                             const status = correctionStatus[payment.id];
                             const hasBeenCorrected = status?.corrections_used > 0;
                             return (
@@ -1732,11 +1779,13 @@ const ServiceEntry = () => {
                                   >
                                     <FiHistory className="h-3.5 w-3.5" />
                                   </button>
+                                  {/* 🔥 FIXED: Pass full payment object */}
                                   {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
                                     <button
                                       onClick={() => openCorrectionModal(payment, entry, 'payment')}
                                       className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
                                       title="Correct this payment"
+                                      disabled={payment.is_reversal}
                                     >
                                       <FiEdit3 className="h-3.5 w-3.5" />
                                     </button>
@@ -1811,7 +1860,7 @@ const ServiceEntry = () => {
               <div>
                 <strong>Payments:</strong>
                 <ul className="list-disc pl-5">
-                  {selectedEntry.payments.map((p, i) => (
+                  {getLatestTransactions(selectedEntry.payments || []).map((p, i) => (
                     <li key={i}>{formatPayments([p])}</li>
                   ))}
                 </ul>
