@@ -586,7 +586,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/servicemanagement/entries
+// 🔥 GET /api/servicemanagement/entries - UPDATED with transaction_id
 router.get('/entries', authenticateToken, async (req, res) => {
   const { today } = req.query;
   const client = await pool.connect();
@@ -624,11 +624,29 @@ router.get('/entries', authenticateToken, async (req, res) => {
     const entries = [];
 
     for (const entry of entriesResult.rows) {
-      // Fetch payments (latest non-reversal per correction group)
+      // 🔥 UPDATED: Fetch payments with transaction_id (wallet_transactions.id)
       const paymentsResult = await client.query(`
         SELECT DISTINCT ON (p.correction_group_id)
-          p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type,
-          p.correction_group_id, p.is_reversal, p.created_at
+          p.id, 
+          p.wallet_id, 
+          p.amount, 
+          p.status, 
+          w.name AS wallet_name, 
+          w.wallet_type,
+          p.correction_group_id,
+          p.is_reversal,
+          p.created_at,
+          -- 🔥 CRITICAL: Get the wallet_transactions.id for correction
+          (
+            SELECT wt.id 
+            FROM wallet_transactions wt 
+            WHERE wt.reference_payment_id = p.id 
+              AND wt.category = 'Service Payment'
+              AND wt.type = 'credit'
+              AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+            ORDER BY wt.created_at DESC 
+            LIMIT 1
+          ) AS transaction_id
         FROM payments p
         JOIN wallets w ON p.wallet_id = w.id
         WHERE p.service_entry_id = $1 AND p.is_reversal = FALSE
@@ -681,13 +699,16 @@ router.get('/entries', authenticateToken, async (req, res) => {
         balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
         expiryDate: entry.expiry_date ? entry.expiry_date.toISOString().split('T')[0] : null,
         status: entry.status,
+        // 🔥 UPDATED: Include transaction_id in payment objects
         payments: paymentsResult.rows.map(p => ({
-          id: p.id,
+          id: p.id,                           // payment ID (for reference)
+          transaction_id: p.transaction_id,   // 🔥 wallet_transactions.id (for correction!)
           wallet: p.wallet_id,
           method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
           amount: parseFloat(p.amount),
           status: p.status,
           correction_group_id: p.correction_group_id,
+          is_reversal: p.is_reversal,
         })),
         departmentChargeTransaction: deptTxResult.rows[0] ? {
           id: deptTxResult.rows[0].id,
@@ -1204,17 +1225,29 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
 
 // ========== UNIFIED TRANSACTION CORRECTION ENGINE ==========
 
-// GET /api/servicemanagement/transactions/:id/correction-status
+// 🔥 UPDATED: GET /api/servicemanagement/transactions/:id/correction-status
+// Now accepts either wallet_transactions.id OR reference_payment_id
 router.get('/transactions/:id/correction-status', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
   try {
+    // 🔥 FIXED: Try to find by id OR by reference_payment_id
     const txRes = await client.query(
       `SELECT correction_group_id, category, type, is_reversal, reference_id
-       FROM wallet_transactions WHERE id = $1`,
+       FROM wallet_transactions 
+       WHERE id = $1 
+          OR reference_payment_id = $1
+       LIMIT 1`,
       [id]
     );
-    if (txRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
+    
+    if (txRes.rows.length === 0) {
+      return res.status(404).json({ 
+        error: 'Transaction not found',
+        hint: 'Ensure you are passing a valid wallet_transactions.id or payment reference'
+      });
+    }
+    
     const tx = txRes.rows[0];
     
     if (tx.is_reversal) {
@@ -1286,7 +1319,7 @@ router.get('/transactions/:id/history', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔥 PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine (PRODUCTION SAFE)
+// 🔥 PUT /api/servicemanagement/transactions/:id/correct - Unified Correction Engine
 router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
   const client = await pool.connect();
 
@@ -1315,7 +1348,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
     const groupId = baseRes.rows[0].correction_group_id;
 
-    // 🔥 STEP 2: GET LATEST VALID TRANSACTION (CRITICAL FIX)
+    // 🔥 STEP 2: GET LATEST VALID TRANSACTION
     let latestTxRes;
 
     if (groupId) {
@@ -1331,7 +1364,6 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         [groupId]
       );
     } else {
-      // fallback (old records)
       latestTxRes = await client.query(
         `SELECT wt.*, w.name as wallet_name, w.balance, w.centre_id
          FROM wallet_transactions wt
@@ -1493,7 +1525,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         [finalAmount, finalWalletId]);
     }
 
-    // 🔥 UPDATE SERVICE ENTRY (IMPORTANT)
+    // 🔥 UPDATE SERVICE ENTRY
     if (original.reference_id) {
       if (original.category === 'Department Payment') {
         await client.query(
@@ -1516,6 +1548,25 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         [original.reference_id]
       );
     }
+
+    // Audit logging
+    const auditDetails = `Corrected txn #${original.id} (${original.category}): ₹${parseFloat(original.amount).toFixed(2)} → ₹${finalAmount.toFixed(2)} | Wallet: ${original.wallet_id} → ${finalWalletId} | Reason: ${reason}`;
+    
+    await client.query(
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) 
+       VALUES ($1, $2, $3, $4, NOW())`,
+      ['Transaction Corrected', user.username, auditDetails, original.centre_id]
+    );
+
+    await logActivity({
+      centre_id: original.centre_id,
+      related_type: 'transaction',
+      related_id: transactionId,
+      action: 'Transaction Corrected',
+      description: auditDetails,
+      performed_by: user.id,
+      performed_by_role: user.role
+    });
 
     await client.query('COMMIT');
 
