@@ -1231,35 +1231,40 @@ router.get('/transactions/:id/correction-status', authenticateToken, async (req,
   const { id } = req.params;
   const client = await pool.connect();
   try {
+    console.log(`🔍 Checking correction status for ID: ${id}`);
+    
     // 🔥 FIXED: Try to find by id OR by reference_payment_id
     const txRes = await client.query(
-      `SELECT correction_group_id, category, type, is_reversal, reference_id
-       FROM wallet_transactions 
-       WHERE id = $1 
-          OR reference_payment_id = $1
+      `SELECT wt.id, wt.correction_group_id, wt.category, wt.type, wt.is_reversal, wt.reference_id
+       FROM wallet_transactions wt
+       WHERE wt.id = $1 
+          OR wt.reference_payment_id = $1
        LIMIT 1`,
       [id]
     );
     
     if (txRes.rows.length === 0) {
+      console.log(`❌ Transaction not found for ID: ${id}`);
       return res.status(404).json({ 
         error: 'Transaction not found',
-        hint: 'Ensure you are passing a valid wallet_transactions.id or payment reference'
+        hint: 'Ensure you are passing a valid wallet_transactions.id or payment reference',
+        searched_id: id
       });
     }
     
     const tx = txRes.rows[0];
+    console.log(`✅ Found transaction:`, { id: tx.id, category: tx.category, type: tx.type, is_reversal: tx.is_reversal });
     
     if (tx.is_reversal) {
-      return res.json({ transaction_id: parseInt(id), can_correct: false, reason: 'Cannot correct a reversal transaction', corrections_used: 0, max_corrections_staff: 2, role: req.user.role });
+      return res.json({ transaction_id: tx.id, can_correct: false, reason: 'Cannot correct a reversal transaction', corrections_used: 0, max_corrections_staff: 2, role: req.user.role });
     }
     if (tx.category === 'Transfer') {
-      return res.json({ transaction_id: parseInt(id), can_correct: false, reason: 'Transfers must be reversed manually', corrections_used: 0, max_corrections_staff: 2, role: req.user.role });
+      return res.json({ transaction_id: tx.id, can_correct: false, reason: 'Transfers must be reversed manually', corrections_used: 0, max_corrections_staff: 2, role: req.user.role });
     }
     
     const groupId = tx.correction_group_id;
     if (!groupId) {
-      return res.json({ transaction_id: parseInt(id), can_correct: true, corrections_used: 0, max_corrections_staff: 2, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
+      return res.json({ transaction_id: tx.id, can_correct: true, corrections_used: 0, max_corrections_staff: 2, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
     }
     
     const countRes = await client.query(
@@ -1270,7 +1275,7 @@ router.get('/transactions/:id/correction-status', authenticateToken, async (req,
     const correctionsUsed = correctionCount - 1;
     const canCorrect = req.user.role === 'staff' ? correctionsUsed < 2 : true;
     
-    res.json({ transaction_id: parseInt(id), correction_group_id: groupId, total_entries: correctionCount, corrections_used: correctionsUsed, max_corrections_staff: 2, can_correct: canCorrect, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
+    res.json({ transaction_id: tx.id, correction_group_id: groupId, total_entries: correctionCount, corrections_used: correctionsUsed, max_corrections_staff: 2, can_correct: canCorrect, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
   } catch (err) {
     console.error('Error checking correction status:', err);
     res.status(500).json({ error: 'Failed to check correction status' });
@@ -1328,27 +1333,36 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     const { new_amount, new_wallet_id, reason } = req.body;
     const user = req.user;
 
+    console.log(`🔧 Correction request for ID: ${transactionId}`, { new_amount, new_wallet_id, reason });
+
     if (!reason || reason.trim().length < 5) {
       return res.status(400).json({ error: 'Reason is required (min 5 chars)' });
     }
 
     await client.query('BEGIN');
 
-    // 🔥 STEP 1: FIND CORRECTION GROUP
+    // 🔥 STEP 1: FIND TRANSACTION - Try by id OR by reference_payment_id
     const baseRes = await client.query(
-      `SELECT correction_group_id 
-       FROM wallet_transactions 
-       WHERE id = $1`,
+      `SELECT wt.*, w.name as wallet_name, w.balance, w.centre_id
+       FROM wallet_transactions wt
+       JOIN wallets w ON wt.wallet_id = w.id
+       WHERE wt.id = $1 
+          OR wt.reference_payment_id = $1
+       LIMIT 1`,
       [transactionId]
     );
 
     if (baseRes.rows.length === 0) {
+      console.log(`❌ No transaction found for ID: ${transactionId}`);
       throw new Error('Transaction not found');
     }
 
-    const groupId = baseRes.rows[0].correction_group_id;
+    const foundTx = baseRes.rows[0];
+    console.log(`✅ Found transaction:`, { id: foundTx.id, category: foundTx.category, type: foundTx.type, is_reversal: foundTx.is_reversal });
 
-    // 🔥 STEP 2: GET LATEST VALID TRANSACTION
+    const groupId = foundTx.correction_group_id;
+
+    // 🔥 STEP 2: GET LATEST VALID TRANSACTION IN CORRECTION GROUP
     let latestTxRes;
 
     if (groupId) {
@@ -1370,7 +1384,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
          JOIN wallets w ON wt.wallet_id = w.id
          WHERE wt.id = $1
          FOR UPDATE`,
-        [transactionId]
+        [foundTx.id]
       );
     }
 
@@ -1379,6 +1393,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     }
 
     const original = latestTxRes.rows[0];
+    console.log(`✅ Latest valid transaction:`, { id: original.id, amount: original.amount, type: original.type });
 
     // 🔥 VALIDATIONS
     if (original.is_reversal) {
@@ -1570,6 +1585,8 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT');
 
+    console.log(`✅ Correction successful. New transaction ID: ${newTx.rows[0].id}`);
+
     res.json({
       success: true,
       message: 'Transaction corrected successfully',
@@ -1579,7 +1596,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Correction error:', err);
+    console.error('❌ Correction error:', err);
     res.status(400).json({ error: err.message });
   } finally {
     client.release();
