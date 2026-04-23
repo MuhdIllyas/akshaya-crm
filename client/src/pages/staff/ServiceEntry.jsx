@@ -2073,75 +2073,95 @@ const ServiceEntry = () => {
                   <span className="flex-1 h-px bg-gray-200"></span>
                 </div>
                 
-                {historyModal.history.map((entry, idx) => {
-                  const getEntryStyles = (type) => {
-                    switch (type) {
-                      case 'Original':
-                        return { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-200 text-blue-700', icon: '💳' };
-                      case 'Reversal':
-                        return { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-200 text-rose-700', icon: '↩️' };
-                      case 'Correction':
-                        return { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-200 text-emerald-700', icon: '✅' };
-                      default:
-                        return { bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-200 text-gray-700', icon: '📝' };
-                    }
-                  };
-                  
-                  const styles = getEntryStyles(entry.entry_type);
-                  const isLatest = idx === historyModal.history.length - 1;
-                  
-                  return (
-                    <div key={idx} className="relative">
-                      {idx < historyModal.history.length - 1 && (
-                        <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-gray-300 -mb-4"></div>
-                      )}
-                      
-                      <div className={`p-4 rounded-lg border ${styles.bg} ${styles.border} relative ml-2`}>
-                        <div className={`absolute -left-[13px] top-5 w-3 h-3 rounded-full ${entry.entry_type === 'Original' ? 'bg-blue-500' : entry.entry_type === 'Reversal' ? 'bg-rose-500' : 'bg-emerald-500'} border-2 border-white`}></div>
-                        
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${styles.badge}`}>
-                              {styles.icon} {entry.entry_type}
-                            </span>
-                            {isLatest && entry.entry_type !== 'Original' && (
-                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                                Current
+                {[...historyModal.history]
+                  .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)) // ✅ FIX ORDER
+                  .map((entry, idx, arr) => {
+                
+                    // 🔥 FIX LABELING LOGIC (IGNORE backend entry_type)
+                    const nonReversal = arr.filter(t => !t.is_reversal);
+                    const oldest = nonReversal[0];
+                
+                    let type = "correction";
+                    if (entry.id === oldest?.id) type = "original";
+                    else if (entry.is_reversal) type = "reversal";
+                
+                    const getEntryStyles = (type) => {
+                      switch (type) {
+                        case 'original':
+                          return { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-200 text-blue-700', icon: '💳', label: 'Original' };
+                        case 'reversal':
+                          return { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-200 text-rose-700', icon: '↩️', label: 'Reversal' };
+                        default:
+                          return { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-200 text-emerald-700', icon: '✅', label: 'Correction' };
+                      }
+                    };
+                
+                    const styles = getEntryStyles(type);
+                
+                    // ✅ FIX CURRENT BADGE (latest non-reversal)
+                    const latestNonReversal = [...nonReversal].pop();
+                    const isLatest = entry.id === latestNonReversal?.id;
+                
+                    return (
+                      <div key={idx} className="relative">
+                        {idx < arr.length - 1 && (
+                          <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-gray-300 -mb-4"></div>
+                        )}
+                
+                        <div className={`p-4 rounded-lg border ${styles.bg} ${styles.border} relative ml-2`}>
+                          <div className={`absolute -left-[13px] top-5 w-3 h-3 rounded-full ${
+                            type === 'original' ? 'bg-blue-500' :
+                            type === 'reversal' ? 'bg-rose-500' : 'bg-emerald-500'
+                          } border-2 border-white`}></div>
+                
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${styles.badge}`}>
+                                {styles.icon} {styles.label}
                               </span>
+                
+                              {isLatest && type !== 'original' && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                  Current
+                                </span>
+                              )}
+                            </div>
+                
+                            <span className="text-xs text-gray-500">
+                              {formatDate(entry.created_at)}
+                            </span>
+                          </div>
+                
+                          <div className="ml-1 space-y-1.5">
+                            <p className="text-sm font-medium">
+                              Amount: <span className="font-semibold">₹{formatAmount(entry.amount)}</span>
+                              <span className="text-gray-500 mx-2">→</span>
+                              <span className="font-medium">{entry.wallet_name || 'Unknown Wallet'}</span>
+                            </p>
+                
+                            <p className="text-xs text-gray-500">
+                              Type: <span className={entry.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}>
+                                {entry.type === 'credit' ? 'Credit (Money In)' : 'Debit (Money Out)'}
+                              </span>
+                            </p>
+                
+                            {entry.description && entry.description.includes('Reason:') && (
+                              <p className="text-sm text-gray-600 bg-white/50 p-2 rounded">
+                                <strong>Reason:</strong> {entry.description.split('Reason:')[1]?.split('(Was:')[0]?.trim()}
+                              </p>
+                            )}
+                
+                            {entry.staff_name && (
+                              <p className="text-xs text-gray-500 flex items-center gap-1">
+                                <FiUser className="h-3 w-3" />
+                                Corrected by: {entry.staff_name}
+                              </p>
                             )}
                           </div>
-                          <span className="text-xs text-gray-500">{formatDate(entry.created_at)}</span>
-                        </div>
-                        
-                        <div className="ml-1 space-y-1.5">
-                          <p className="text-sm font-medium">
-                            Amount: <span className="font-semibold">₹{formatAmount(entry.amount)}</span>
-                            <span className="text-gray-500 mx-2">→</span>
-                            <span className="font-medium">{entry.wallet_name || 'Unknown Wallet'}</span>
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Type: <span className={entry.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}>
-                              {entry.type === 'credit' ? 'Credit (Money In)' : 'Debit (Money Out)'}
-                            </span>
-                          </p>
-                          
-                          {entry.description && entry.description.includes('Reason:') && (
-                            <p className="text-sm text-gray-600 bg-white/50 p-2 rounded">
-                              <strong>Reason:</strong> {entry.description.split('Reason:')[1]?.split('(Was:')[0]?.trim() || entry.description}
-                            </p>
-                          )}
-                          
-                          {entry.staff_name && (
-                            <p className="text-xs text-gray-500 flex items-center gap-1">
-                              <FiUser className="h-3 w-3" />
-                              Corrected by: {entry.staff_name}
-                            </p>
-                          )}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             )}
             
