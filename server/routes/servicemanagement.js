@@ -2652,18 +2652,18 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
 
       LEFT JOIN (
-        SELECT DISTINCT ON (service_entry_id)
-          id,
-          service_entry_id,
-          wallet_id,
-          amount,
-          status,
-          created_at,
+        SELECT DISTINCT ON (p.service_entry_id)
+          p.id,
+          p.service_entry_id,
+          p.wallet_id,
+          p.amount,
+          p.status,
+          p.created_at,
           w.name AS wallet_name
-        FROM payments
-        JOIN wallets w ON wallet_id = w.id
-        WHERE is_reversal = FALSE
-        ORDER BY service_entry_id, created_at DESC
+        FROM payments p
+        JOIN wallets w ON p.wallet_id = w.id
+        WHERE p.is_reversal = FALSE
+        ORDER BY p.service_entry_id, p.created_at DESC
       ) p ON p.service_entry_id = se.id
 
       ${whereClause}
@@ -2899,17 +2899,17 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
 
       -- 🔥 FIXED JOIN (NO correction_group_id)
       LEFT JOIN (
-        SELECT DISTINCT ON (service_entry_id)
-          id,
-          service_entry_id,
-          amount,
-          status,
-          created_at,
+        SELECT DISTINCT ON (p.service_entry_id)
+          p.id,
+          p.service_entry_id,
+          p.amount,
+          p.status,
+          p.created_at,
           w.name AS wallet_name
-        FROM payments
-        JOIN wallets w ON wallet_id = w.id
-        WHERE is_reversal = FALSE
-        ORDER BY service_entry_id, created_at DESC
+        FROM payments p
+        JOIN wallets w ON p.wallet_id = w.id
+        WHERE p.is_reversal = FALSE
+        ORDER BY p.service_entry_id, p.created_at DESC
       ) p ON p.service_entry_id = se.id
 
       ${whereClause}
