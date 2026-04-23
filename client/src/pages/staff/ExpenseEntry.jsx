@@ -911,7 +911,7 @@ const handleAddExpense = async (e) => {
         </div>
       </div>
 
-      {/* Add Expense Modal - SCROLLBAR HIDDEN BUT SCROLLING KEPT */}
+      {/* Add Expense Modal - HEADER MATCHES MAIN PAGE */}
       <AnimatePresence>
         {showAddModal && (
           <motion.div
@@ -926,9 +926,9 @@ const handleAddExpense = async (e) => {
               exit={{ scale: 0.95, y: 20 }}
               className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
             >
-              <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6">
-                <h2 className="text-xl font-bold text-white">New Expense Entry</h2>
-                <p className="text-sm text-blue-100 mt-1">
+              <div className="bg-white border-b border-gray-200 p-6">
+                <h2 className="text-xl font-bold text-gray-900">New Expense Entry</h2>
+                <p className="text-sm text-gray-500 mt-1">
                   Select wallet from which money will be debited
                 </p>
               </div>
@@ -1267,7 +1267,7 @@ const handleAddExpense = async (e) => {
         )}
       </AnimatePresence>
 
-      {/* Edit Expense Modal - SCROLLBAR HIDDEN BUT SCROLLING KEPT */}
+      {/* Edit Expense Modal - HEADER MATCHES MAIN PAGE */}
       <AnimatePresence>
         {showEditModal && editingExpense && (
           <motion.div
@@ -1282,9 +1282,9 @@ const handleAddExpense = async (e) => {
               exit={{ scale: 0.95, y: 20 }}
               className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
             >
-              <div className="bg-gradient-to-r from-green-600 to-blue-600 p-6">
-                <h2 className="text-xl font-bold text-white">Edit Expense Entry</h2>
-                <p className="text-sm text-blue-100 mt-1">
+              <div className="bg-white border-b border-gray-200 p-6">
+                <h2 className="text-xl font-bold text-gray-900">Edit Expense Entry</h2>
+                <p className="text-sm text-gray-500 mt-1">
                   Status: {statuses.find(s => s.id === editingExpense.status)?.name}
                 </p>
               </div>
