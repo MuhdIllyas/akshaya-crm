@@ -2636,7 +2636,7 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
             json_build_object(
               'id', p.id,
               'wallet_id', p.wallet_id,
-              'wallet_name', p.wallet_name,
+              'wallet_name', w.name,
               'amount', p.amount,
               'status', p.status,
               'created_at', p.created_at
@@ -2651,20 +2651,12 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
 
-      LEFT JOIN (
-        SELECT DISTINCT ON (p.service_entry_id)
-          p.id,
-          p.service_entry_id,
-          p.wallet_id,
-          p.amount,
-          p.status,
-          p.created_at,
-          w.name AS wallet_name
-        FROM payments p
-        JOIN wallets w ON p.wallet_id = w.id
-        WHERE p.is_reversal = FALSE
-        ORDER BY p.service_entry_id, p.created_at DESC
-      ) p ON p.service_entry_id = se.id
+      LEFT JOIN payments p 
+        ON p.service_entry_id = se.id
+        AND p.is_reversal = FALSE
+
+      LEFT JOIN wallets w 
+        ON w.id = p.wallet_id
 
       ${whereClause}
 
@@ -2816,14 +2808,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         return res.status(400).json({ error: "centreId is required for superadmin" });
       }
       CentreId = Number(queryCentreId);
-      if (isNaN(CentreId)) {
-        return res.status(400).json({ error: "Invalid centreId format" });
-      }
     } else if (role === "admin") {
       CentreId = userCentreId;
-      if (!CentreId) {
-        return res.status(500).json({ error: "Admin has no assigned centre" });
-      }
     } else {
       CentreId = null;
     }
@@ -2882,14 +2868,14 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
           json_agg(
             json_build_object(
               'id', p.id,
-              'wallet_name', p.wallet_name,
+              'wallet_name', w.name,
               'amount', p.amount,
               'status', p.status,
               'created_at', p.created_at
             )
             ORDER BY p.created_at NULLS LAST
           ) FILTER (WHERE p.id IS NOT NULL),
-          '[]'::json
+          '[]'
         ) AS payment_history
 
       FROM service_entries se
@@ -2897,20 +2883,12 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
 
-      -- 🔥 FIXED JOIN (NO correction_group_id)
-      LEFT JOIN (
-        SELECT DISTINCT ON (p.service_entry_id)
-          p.id,
-          p.service_entry_id,
-          p.amount,
-          p.status,
-          p.created_at,
-          w.name AS wallet_name
-        FROM payments p
-        JOIN wallets w ON p.wallet_id = w.id
-        WHERE p.is_reversal = FALSE
-        ORDER BY p.service_entry_id, p.created_at DESC
-      ) p ON p.service_entry_id = se.id
+      LEFT JOIN payments p 
+        ON p.service_entry_id = se.id
+        AND p.is_reversal = FALSE
+
+      LEFT JOIN wallets w 
+        ON w.id = p.wallet_id
 
       ${whereClause}
 
