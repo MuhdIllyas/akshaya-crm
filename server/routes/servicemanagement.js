@@ -2864,6 +2864,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
           0
         ) AS pending_amount,
 
+        COUNT(p.id) AS payment_count,
+
         COALESCE(
           json_agg(
             json_build_object(
@@ -2903,10 +2905,13 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         sc.name
 
       HAVING
+        -- fully paid
         se.total_charges <= COALESCE(
           SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
           0
         )
+        -- AND had multiple payments (was pending before)
+        AND COUNT(p.id) > 1
 
       ORDER BY se.updated_at DESC
     `;
