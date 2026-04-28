@@ -17,6 +17,7 @@ import ServiceManagement from "./pages/admin/service/ServiceManagement";
 import ServiceLogs from "./pages/admin/ServiceLogs";
 import AdminTokenManagement from "./pages/admin/AdminTokenManagement";
 import AdminAttendance from './pages/admin/AdminAttendance';
+import AdminExpenseManagement "./pages/admin/AdminExpenseManagement";
 import AdminReports from './pages/reports/AdminReports';
 import CentreManagement from "./pages/superadmin/CentreManagement";
 import SuperadminStaffManagement from './pages/superadmin/SuperadminStaffManagement';
@@ -264,6 +265,10 @@ const App = () => {
             <Route
               path="admin/attendancemanagement"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminAttendance /></ProtectedRoute>}
+            />
+            <Route
+              path="admin/expensemanagement"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminExpenseManagement /></ProtectedRoute>}
             />
             <Route
               path="admin/teams"
