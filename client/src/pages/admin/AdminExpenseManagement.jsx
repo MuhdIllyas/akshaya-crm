@@ -33,7 +33,7 @@ import {
   createExpense,
 } from "@/services/expenseService";
 import { getWalletsForCentre } from "@/services/walletService";
-import AdminExpenseEntry from "./AdminExpenseEntry";
+import AdminExpenseEntry from "@/pages/reports/components/AdminExpenseEntry";
 
 // Recharts components
 import {
