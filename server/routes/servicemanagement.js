@@ -2620,16 +2620,9 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
         s.name AS service_name,
         sc.name AS subcategory_name,
 
-        COALESCE(
-          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-          0
-        ) AS paid_amount,
+        COALESCE(SUM(p.amount), 0) AS paid_amount,
 
-        se.total_charges -
-        COALESCE(
-          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-          0
-        ) AS pending_amount,
+        se.total_charges - COALESCE(SUM(p.amount), 0) AS pending_amount,
 
         COALESCE(
           json_agg(
@@ -2638,7 +2631,6 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
               'wallet_id', p.wallet_id,
               'wallet_name', w.name,
               'amount', p.amount,
-              'status', p.status,
               'created_at', p.created_at
             )
             ORDER BY p.created_at NULLS LAST
@@ -2651,31 +2643,25 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
 
-      LEFT JOIN payments p 
-        ON p.service_entry_id = se.id
-        AND p.is_reversal = FALSE
+      -- 🔥 FIX: ONLY LATEST PAYMENT PER CORRECTION GROUP
+      LEFT JOIN (
+        SELECT DISTINCT ON (p.correction_group_id)
+          p.*
+        FROM payments p
+        WHERE p.is_reversal = FALSE
+        ORDER BY p.correction_group_id, p.created_at DESC
+      ) p ON p.service_entry_id = se.id
 
-      LEFT JOIN wallets w 
-        ON w.id = p.wallet_id
+      LEFT JOIN wallets w ON w.id = p.wallet_id
 
       ${whereClause}
 
       GROUP BY
-        se.id,
-        se.customer_name,
-        se.phone,
-        se.total_charges,
-        se.created_at,
-        st.name,
-        s.name,
-        sc.name
+        se.id, se.customer_name, se.phone,
+        se.total_charges, se.created_at,
+        st.name, s.name, sc.name
 
-      HAVING
-        se.total_charges >
-        COALESCE(
-          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-          0
-        )
+      HAVING se.total_charges > COALESCE(SUM(p.amount), 0)
 
       ORDER BY pending_amount DESC
     `;
@@ -2685,7 +2671,7 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
 
   } catch (err) {
     console.error("❌ Pending payments error:", err);
-    res.status(500).json({ error: err.message || "Failed to fetch pending payments" });
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -2805,13 +2791,11 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
 
     if (role === "superadmin") {
       if (!queryCentreId) {
-        return res.status(400).json({ error: "centreId is required for superadmin" });
+        return res.status(400).json({ error: "centreId is required" });
       }
       CentreId = Number(queryCentreId);
     } else if (role === "admin") {
       CentreId = userCentreId;
-    } else {
-      CentreId = null;
     }
 
     let conditions = [];
@@ -2823,7 +2807,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       values.push(userId);
     }
 
-    if (role === "admin" || role === "superadmin") {
+    if (role !== "staff") {
       conditions.push(`st.centre_id = $${idx++}`);
       values.push(CentreId);
     }
@@ -2853,16 +2837,9 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         s.name AS service_name,
         sc.name AS subcategory_name,
 
-        COALESCE(
-          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-          0
-        ) AS paid_amount,
+        COALESCE(SUM(p.amount), 0) AS paid_amount,
 
-        se.total_charges -
-        COALESCE(
-          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-          0
-        ) AS pending_amount,
+        se.total_charges - COALESCE(SUM(p.amount), 0) AS pending_amount,
 
         COUNT(p.id) AS payment_count,
 
@@ -2872,7 +2849,6 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
               'id', p.id,
               'wallet_name', w.name,
               'amount', p.amount,
-              'status', p.status,
               'created_at', p.created_at
             )
             ORDER BY p.created_at NULLS LAST
@@ -2885,32 +2861,26 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
 
-      LEFT JOIN payments p 
-        ON p.service_entry_id = se.id
-        AND p.is_reversal = FALSE
+      -- 🔥 SAME FIX HERE
+      LEFT JOIN (
+        SELECT DISTINCT ON (p.correction_group_id)
+          p.*
+        FROM payments p
+        WHERE p.is_reversal = FALSE
+        ORDER BY p.correction_group_id, p.created_at DESC
+      ) p ON p.service_entry_id = se.id
 
-      LEFT JOIN wallets w 
-        ON w.id = p.wallet_id
+      LEFT JOIN wallets w ON w.id = p.wallet_id
 
       ${whereClause}
 
       GROUP BY
-        se.id,
-        se.customer_name,
-        se.phone,
-        se.total_charges,
-        se.created_at,
-        se.updated_at,
-        s.name,
-        sc.name
+        se.id, se.customer_name, se.phone,
+        se.total_charges, se.created_at, se.updated_at,
+        s.name, sc.name
 
       HAVING
-        -- fully paid
-        se.total_charges <= COALESCE(
-          SUM(CASE WHEN p.status = 'received' THEN p.amount ELSE 0 END),
-          0
-        )
-        -- AND had multiple payments (was pending before)
+        se.total_charges <= COALESCE(SUM(p.amount), 0)
         AND COUNT(p.id) > 1
 
       ORDER BY se.updated_at DESC
@@ -2921,9 +2891,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
 
   } catch (err) {
     console.error("❌ Pending payments history error:", err);
-    res.status(500).json({
-      error: err.message || "Failed to fetch pending payments history"
-    });
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
