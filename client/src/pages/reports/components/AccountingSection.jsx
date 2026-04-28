@@ -3184,15 +3184,781 @@ const AccountingSection = ({
               />
             )}
 
-            {/* Reports */}
+{/* Reports */}
             {activeAccountingTab === 'reports' && (
               <div className="space-y-6">
-                <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                  <FiFileText className="h-5 w-5 mr-2 text-indigo-600" />
-                  Financial Reports & Analytics
-                </h2>
-                <p className="text-gray-600 text-sm mt-1">Comprehensive financial insights and analysis</p>
-                {/* Keep all original reports content here – unchanged from original file */}
+                {/* Report Header with Export Options */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center">
+                      <FiFileText className="h-5 w-5 mr-2 text-indigo-600" />
+                      Financial Reports & Analytics
+                    </h2>
+                    <p className="text-gray-600 text-sm mt-1">Comprehensive financial insights and analysis</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-600">Period:</span>
+                      <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option>Today</option>
+                        <option>This Week</option>
+                        <option>This Month</option>
+                        <option>This Quarter</option>
+                        <option>This Year</option>
+                        <option>Custom Range</option>
+                      </select>
+                    </div>
+                    <button className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm">
+                      <FiDownload className="h-4 w-4" />
+                      <span>Export Report</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Key Performance Indicators */}
+                <div className="grid grid-cols-4 gap-4">
+                  {/* Revenue KPI */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-2 bg-emerald-100 rounded-lg">
+                        <FiTrendingUp className="h-5 w-5 text-emerald-600" />
+                      </div>
+                      <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">+12.5%</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Total Revenue</p>
+                    <p className="text-2xl font-bold text-gray-900">₹{totalRevenue.toLocaleString()}</p>
+                    <div className="mt-2 flex items-center text-xs text-gray-500">
+                      <span>Services: {(accountingData.income?.rows?.length || 0)}</span>
+                      <div className="w-1 h-1 mx-2 bg-gray-300 rounded-full"></div>
+                      <span>Avg: ₹{(totalRevenue/(accountingData.income?.rows?.length || 1)).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Expenses KPI */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-2 bg-rose-100 rounded-lg">
+                        <FiTrendingDown className="h-5 w-5 text-rose-600" />
+                      </div>
+                      <span className="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">-8.2%</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Total Expenses</p>
+                    <p className="text-2xl font-bold text-gray-900">₹{todayExpenses.toLocaleString()}</p>
+                    <div className="mt-2 flex items-center text-xs text-gray-500">
+                      <span>Approved: {expensesForCurrentDate.filter(e => e.status === 'approved').length}</span>
+                      <div className="w-1 h-1 mx-2 bg-gray-300 rounded-full"></div>
+                      <span>Pending: {pendingApprovals}</span>
+                    </div>
+                  </div>
+
+                  {/* Profit KPI */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-2 bg-indigo-100 rounded-lg">
+                        <FiDollarSign className="h-5 w-5 text-indigo-600" />
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full ${todayProfit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {todayProfit >= 0 ? '+' : ''}{totalServiceCharges > 0 ? ((todayProfit/totalServiceCharges)*100).toFixed(1) : '0'}%
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">Net Profit</p>
+                    <p className="text-2xl font-bold text-gray-900">₹{totalServiceCharges.toLocaleString()}</p>
+                    <div className="mt-2 text-xs text-gray-500">
+                      Service Charges • {(accountingData.income?.rows?.length || 0)} services
+                    </div>
+                  </div>
+
+                  {/* Cash Flow KPI */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <FiActivity className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Real-time</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Cash in Hand</p>
+                    <p className="text-2xl font-bold text-gray-900">₹{calculateCashInHand().toLocaleString()}</p>
+                    <div className="mt-2 text-xs text-gray-500">
+                      From {derivedWallets.filter(w => w.type?.toLowerCase() === 'cash').length} cash wallets
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detailed Reports Grid */}
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Income Breakdown */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                        <FiTrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
+                        Income Breakdown
+                      </h3>
+                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                        <FiEye className="h-3 w-3 mr-1" />
+                        View Details
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {/* Service Charges vs Department Charges */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                            <div>
+                              <span className="text-xs font-medium text-gray-900">Service Charges (Profit)</span>
+                              <p className="text-xs text-gray-500">Our earnings from services</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-gray-900">
+                              ₹{totalServiceCharges.toLocaleString()}
+                            </p>
+                            <p className="text-xs text-emerald-600 font-medium">
+                              {totalRevenue > 0 ? 
+                                `${((totalServiceCharges/totalRevenue)*100).toFixed(1)}% of revenue` : 
+                                '0%'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                            <div>
+                              <span className="text-xs font-medium text-gray-900">Department Charge (Cost)</span>
+                              <p className="text-xs text-gray-500">Payable to departments</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-gray-900">
+                              ₹{(accountingData.income?.rows?.reduce((sum, row) => {
+                                const received = Number(row.received_amount || 0);
+                                const serviceCharge = Number(row.service_charges || 0);
+                                const departmentCharge = Number(row.department_charges || 0);
+                                const totalBilled = serviceCharge + departmentCharge;
+                                
+                                if (totalBilled > 0 && received > 0) {
+                                  const paymentRatio = received / totalBilled;
+                                  return sum + (departmentCharge * paymentRatio);
+                                }
+                                return sum;
+                              }, 0) || 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-blue-600">
+                              {totalRevenue > 0 ? 
+                                `${((accountingData.income?.rows?.reduce((sum, row) => {
+                                  const received = Number(row.received_amount || 0);
+                                  const serviceCharge = Number(row.service_charges || 0);
+                                  const departmentCharge = Number(row.department_charges || 0);
+                                  const totalBilled = serviceCharge + departmentCharge;
+                                  
+                                  if (totalBilled > 0 && received > 0) {
+                                    const paymentRatio = received / totalBilled;
+                                    return sum + (departmentCharge * paymentRatio);
+                                  }
+                                  return sum;
+                                }, 0) / totalRevenue) * 100).toFixed(1)}% of revenue` : 
+                                '0%'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="pt-2">
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-emerald-500"
+                            style={{ width: `${totalRevenue > 0 ? 
+                              (totalServiceCharges/totalRevenue) * 100 : 0}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                          <span>Our Profit (Service Charges)</span>
+                          <span>Cost (Department Charges)</span>
+                        </div>
+                      </div>
+
+                      {/* Top Services by Profit */}
+                      <div className="pt-4 border-t border-gray-100">
+                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Top 5 Services by Profit</h4>
+                        <div className="space-y-2">
+                          {(() => {
+                            const serviceProfit = accountingData.income?.rows?.reduce((acc, row) => {
+                              const service = row.service_name || 'Unknown';
+                              if (!acc[service]) acc[service] = { name: service, profit: 0, department: 0, total: 0 };
+                              
+                              const received = Number(row.received_amount || 0);
+                              const serviceCharge = Number(row.service_charges || 0);
+                              const departmentCharge = Number(row.department_charges || 0);
+                              const totalBilled = serviceCharge + departmentCharge;
+                              
+                              if (totalBilled > 0 && received > 0) {
+                                const paymentRatio = received / totalBilled;
+                                acc[service].profit += serviceCharge * paymentRatio;
+                                acc[service].department += departmentCharge * paymentRatio;
+                              } else if (received > 0 && totalBilled === 0) {
+                                acc[service].profit += received;
+                              }
+                              
+                              acc[service].total += Number(row.received_amount || 0);
+                              return acc;
+                            }, {}) || {};
+                            
+                            const topServices = Object.values(serviceProfit)
+                              .sort((a, b) => b.profit - a.profit)
+                              .slice(0, 5);
+                            
+                            if (topServices.length === 0) {
+                              return <p className="text-xs text-gray-500 text-center py-2">No service data</p>;
+                            }
+                            
+                            const totalProfit = topServices.reduce((sum, s) => sum + s.profit, 0);
+                            
+                            return topServices.map((service, index) => (
+                              <div key={service.name} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded">
+                                <div className="flex items-center space-x-3">
+                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold ${
+                                    index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                                    index === 1 ? 'bg-gray-100 text-gray-700' :
+                                    index === 2 ? 'bg-amber-100 text-amber-700' :
+                                    'bg-indigo-100 text-indigo-700'
+                                  }`}>
+                                    {index + 1}
+                                  </div>
+                                  <div className="max-w-[140px]">
+                                    <span className="text-xs font-medium text-gray-900 truncate block">
+                                      {service.name}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      Total: ₹{service.total.toLocaleString()}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-bold text-emerald-600">₹{Math.round(service.profit).toLocaleString()}</p>
+                                  <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                    <span>Dept: ₹{Math.round(service.department).toLocaleString()}</span>
+                                    <span>•</span>
+                                    <span>{totalProfit > 0 ? `${((service.profit/totalProfit)*100).toFixed(1)}%` : '0%'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expense Analysis */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                        <FiTrendingDown className="h-4 w-4 mr-2 text-rose-600" />
+                        Expense Analysis
+                      </h3>
+                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                        <FiEye className="h-3 w-3 mr-1" />
+                        View Details
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {/* Expense Status */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-emerald-700 mb-1">Approved</p>
+                          <p className="font-bold text-emerald-900 text-sm">
+                            ₹{expensesForCurrentDate
+                              .filter(e => e.status === 'approved')
+                              .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+                              .toLocaleString()}
+                          </p>
+                          <p className="text-xs text-emerald-600 mt-1">
+                            {expensesForCurrentDate.filter(e => e.status === 'approved').length} items
+                          </p>
+                        </div>
+                        
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-yellow-700 mb-1">Pending</p>
+                          <p className="font-bold text-yellow-900 text-sm">
+                            ₹{expensesForCurrentDate
+                              .filter(e => e.status === 'pending')
+                              .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+                              .toLocaleString()}
+                          </p>
+                          <p className="text-xs text-yellow-600 mt-1">
+                            {pendingApprovals} items
+                          </p>
+                        </div>
+                        
+                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-rose-700 mb-1">Rejected</p>
+                          <p className="font-bold text-rose-900 text-sm">
+                            ₹{expensesForCurrentDate
+                              .filter(e => e.status === 'rejected')
+                              .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+                              .toLocaleString()}
+                          </p>
+                          <p className="text-xs text-rose-600 mt-1">
+                            {expensesForCurrentDate.filter(e => e.status === 'rejected').length} items
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Expense Categories */}
+                      <div className="pt-4">
+                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Expense by Category</h4>
+                        <div className="space-y-2">
+                          {(() => {
+                            const categoryTotals = expensesForCurrentDate.reduce((acc, expense) => {
+                              const category = expense.category || 'Uncategorized';
+                              if (!acc[category]) acc[category] = 0;
+                              if (expense.status !== 'rejected') {
+                                acc[category] += Number(expense.amount || 0);
+                              }
+                              return acc;
+                            }, {});
+                            
+                            const totalExpenses = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0);
+                            const sortedCategories = Object.entries(categoryTotals)
+                              .sort(([,a], [,b]) => b - a);
+                            
+                            if (sortedCategories.length === 0) {
+                              return <p className="text-xs text-gray-500 text-center py-2">No expense data for this date</p>;
+                            }
+                            
+                            return sortedCategories.map(([category, amount]) => (
+                              <div key={category} className="space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-medium text-gray-700 capitalize">{category}</span>
+                                    <span className="text-gray-400">•</span>
+                                    <span className="text-gray-500">
+                                      {expensesForCurrentDate.filter(e => e.category === category && e.status !== 'rejected').length} items
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-bold text-gray-900">
+                                      ₹{amount.toLocaleString()}
+                                    </span>
+                                    {totalExpenses > 0 && (
+                                      <span className="text-gray-500 ml-1">
+                                        ({((amount/totalExpenses)*100).toFixed(1)}%)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${
+                                      category.includes('Salary') ? 'bg-purple-500' :
+                                      category.includes('Operational') ? 'bg-blue-500' :
+                                      category.includes('Office') ? 'bg-emerald-500' :
+                                      category.includes('Utility') ? 'bg-amber-500' :
+                                      category.includes('Maintenance') ? 'bg-rose-500' :
+                                      'bg-gray-500'
+                                    }`}
+                                    style={{ width: `${totalExpenses > 0 ? (amount/totalExpenses)*100 : 0}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Payment Methods */}
+                      <div className="pt-4 border-t border-gray-100">
+                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Payment Methods</h4>
+                        <div className="grid grid-cols-3 gap-3">
+                          {(() => {
+                            const paymentMethods = expensesForCurrentDate.reduce((acc, expense) => {
+                              const method = expense.payment_method || 'cash';
+                              if (!acc[method]) acc[method] = 0;
+                              if (expense.status !== 'rejected') {
+                                acc[method] += Number(expense.amount || 0);
+                              }
+                              return acc;
+                            }, {});
+                            
+                            const methods = Object.entries(paymentMethods);
+                            
+                            if (methods.length === 0) {
+                              return <p className="text-xs text-gray-500 col-span-3 text-center py-2">No payment data for this date</p>;
+                            }
+                            
+                            return methods.map(([method, amount]) => (
+                              <div key={method} className="text-center p-2 border border-gray-200 rounded-lg">
+                                <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full mb-1 ${
+                                  method === 'cash' ? 'bg-emerald-100 text-emerald-600' :
+                                  method === 'bank' ? 'bg-blue-100 text-blue-600' :
+                                  method === 'upi' ? 'bg-purple-100 text-purple-600' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {method === 'cash' ? <FiDollarSign className="h-4 w-4" /> :
+                                  method === 'bank' ? <FiCreditCard className="h-4 w-4" /> :
+                                  <FiSmartphone className="h-4 w-4" />}
+                                </div>
+                                <p className="text-xs font-medium text-gray-900 capitalize">{method}</p>
+                                <p className="text-xs font-bold text-gray-800">₹{amount.toLocaleString()}</p>
+                                <p className="text-xs text-gray-500">
+                                  {expensesForCurrentDate.filter(e => e.payment_method === method && e.status !== 'rejected').length} txn
+                                </p>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Performance Metrics */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                        <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
+                        Performance Metrics
+                      </h3>
+                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                        <FiRefreshCw className="h-3 w-3 mr-1" />
+                        Refresh
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {/* Efficiency Metrics */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-indigo-700">Profit Margin</span>
+                            <span className={`text-xs font-bold ${todayProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {totalRevenue > 0 ? ((todayProfit/totalRevenue)*100).toFixed(1) : '0'}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-indigo-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${todayProfit >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                              style={{ width: `${Math.min(Math.abs((todayProfit/totalRevenue)*100), 100)}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Net Profit: ₹{todayProfit.toLocaleString()}
+                          </p>
+                        </div>
+                        
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-blue-700">Expense Ratio</span>
+                            <span className="text-xs font-bold text-blue-600">
+                              {totalRevenue > 0 ? ((todayExpenses/totalRevenue)*100).toFixed(1) : '0'}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-500"
+                              style={{ width: `${Math.min((todayExpenses/totalRevenue)*100, 100)}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Expenses: ₹{todayExpenses.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Staff Performance */}
+                      <div className="pt-4">
+                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Top Staff by Service Profit</h4>
+                        <div className="space-y-2">
+                          {(() => {
+                            const staffPerformance = accountingData.income?.rows?.reduce((acc, row) => {
+                              const staff = row.staff_name || 'Unknown';
+                              if (!acc[staff]) {
+                                acc[staff] = { 
+                                  name: staff, 
+                                  profit: 0,
+                                  department: 0,
+                                  count: 0,
+                                  avg: 0 
+                                };
+                              }
+                              
+                              const received = Number(row.received_amount || 0);
+                              const serviceCharge = Number(row.service_charges || 0);
+                              const departmentCharge = Number(row.department_charges || 0);
+                              const totalBilled = serviceCharge + departmentCharge;
+                              
+                              if (totalBilled > 0 && received > 0) {
+                                const paymentRatio = received / totalBilled;
+                                acc[staff].profit += serviceCharge * paymentRatio;
+                                acc[staff].department += departmentCharge * paymentRatio;
+                              } else if (received > 0 && totalBilled === 0) {
+                                acc[staff].profit += received;
+                              }
+                              
+                              acc[staff].count += 1;
+                              acc[staff].avg = acc[staff].profit / acc[staff].count;
+                              return acc;
+                            }, {}) || {};
+                            
+                            const topStaff = Object.values(staffPerformance)
+                              .sort((a, b) => b.profit - a.profit)
+                              .slice(0, 5);
+                            
+                            if (topStaff.length === 0) {
+                              return <p className="text-xs text-gray-500 text-center py-2">No staff performance data</p>;
+                            }
+                            
+                            return topStaff.map((staff, index) => (
+                              <div key={staff.name} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded border border-gray-100">
+                                <div className="flex items-center space-x-3">
+                                  <div className="relative">
+                                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600 border border-indigo-200">
+                                      {staff.name.charAt(0)}
+                                    </div>
+                                    {index === 0 && (
+                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center border border-white">
+                                        <FiStar className="h-2 w-2 text-white" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-gray-900 truncate max-w-[120px]">{staff.name}</p>
+                                    <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                      <span>{staff.count} services</span>
+                                      <span>•</span>
+                                      <span>Dept: ₹{Math.round(staff.department).toLocaleString()}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-bold text-emerald-600">₹{Math.round(staff.profit).toLocaleString()}</p>
+                                  <p className="text-xs text-gray-500">Avg: ₹{Math.round(staff.avg).toFixed(0)}</p>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Transaction Stats */}
+                      <div className="pt-4 border-t border-gray-100">
+                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Transaction Statistics</h4>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                            <p className="text-lg font-bold text-gray-900">{accountingData.income?.rows?.length || 0}</p>
+                            <p className="text-xs text-gray-600">Services</p>
+                            <p className="text-xs text-emerald-600 font-medium mt-1">
+                              Profit: ₹{totalServiceCharges.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                            <p className="text-lg font-bold text-gray-900">{expensesForCurrentDate.length}</p>
+                            <p className="text-xs text-gray-600">Expenses</p>
+                            <p className="text-xs text-rose-600 font-medium mt-1">
+                              Cost: ₹{todayExpenses.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                            <p className="text-lg font-bold text-gray-900">{accountingData.ledger?.rows?.length || 0}</p>
+                            <p className="text-xs text-gray-600">Ledger Entries</p>
+                            <p className="text-xs text-blue-600 font-medium mt-1">
+                              Total: ₹{totalRevenue.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cash Flow & Wallet Summary */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                        <FiSmartphone className="h-4 w-4 mr-2 text-purple-600" />
+                        Wallet Balances
+                      </h3>
+                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                        <FiEye className="h-3 w-3 mr-1" />
+                        Details
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {/* Wallet Summary Cards */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mr-2">
+                                <FiDollarSign className="h-4 w-4 text-emerald-600" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-emerald-700">Cash in Hand</p>
+                                <p className="text-lg font-bold text-emerald-900">
+                                  ₹{calculateCashInHand().toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-xs text-emerald-600">
+                            {derivedWallets.filter(w => w.type?.toLowerCase() === 'cash').length} cash wallets
+                          </p>
+                        </div>
+                        
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2">
+                                <FiCreditCard className="h-4 w-4 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-blue-700">Bank Balance</p>
+                                <p className="text-lg font-bold text-blue-900">
+                                  ₹{calculateBankBalance().toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-xs text-blue-600">
+                            {derivedWallets.filter(w => w.type?.toLowerCase() === 'bank').length} bank accounts
+                          </p>
+                        </div>
+                        
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-2">
+                                <FiSmartphone className="h-4 w-4 text-purple-600" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-purple-700">Digital Balance</p>
+                                <p className="text-lg font-bold text-purple-900">
+                                  ₹{calculateDigitalBalance().toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-xs text-purple-600">
+                            {derivedWallets.filter(w => w.type?.toLowerCase() === 'digital').length} digital wallets
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Wallet Distribution */}
+                      <div className="pt-4">
+                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Wallet Distribution</h4>
+                        <div className="space-y-2">
+                          {derivedWallets.map((wallet, index) => {
+                            const isCash = wallet.type?.toLowerCase() === 'cash';
+                            const isBank = wallet.type?.toLowerCase() === 'bank';
+                            const isDigital = wallet.type?.toLowerCase() === 'digital';
+                            
+                            return (
+                              <div key={wallet.id} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded border border-gray-100">
+                                <div className="flex items-center space-x-3">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
+                                    isCash ? 'border-emerald-200 bg-emerald-50 text-emerald-600' :
+                                    isBank ? 'border-blue-200 bg-blue-50 text-blue-600' :
+                                    'border-purple-200 bg-purple-50 text-purple-600'
+                                  }`}>
+                                    {isCash ? <FiDollarSign className="h-4 w-4" /> :
+                                    isBank ? <FiCreditCard className="h-4 w-4" /> :
+                                    <FiSmartphone className="h-4 w-4" />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-gray-900 truncate max-w-[120px]">{wallet.name}</p>
+                                    <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                      <span className="capitalize">{wallet.type}</span>
+                                      <span>•</span>
+                                      <span>Book: ₹{(wallet.book_balance || 0).toLocaleString()}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-bold text-gray-900">
+                                    ₹{(wallet.currentBalance || 0).toLocaleString()}
+                                  </p>
+                                  <p className={`text-xs ${Math.abs((wallet.book_balance || 0) - (wallet.currentBalance || 0)) <= 10 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {Math.abs((wallet.book_balance || 0) - (wallet.currentBalance || 0)) <= 10 ? '✓ Reconciled' : 'Reconcile'}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Quick Stats */}
+                      <div className="pt-4 border-t border-gray-100">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-1">
+                              <FiCheckCircle className="h-4 w-4 text-emerald-600" />
+                            </div>
+                            <p className="text-xs font-bold text-gray-900">
+                              {derivedWallets.filter(w => Math.abs((w.book_balance || 0) - (w.currentBalance || 0)) <= 10).length}
+                            </p>
+                            <p className="text-xs text-gray-600">Reconciled Wallets</p>
+                          </div>
+                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                            <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-1">
+                              <FiAlertCircle className="h-4 w-4 text-rose-600" />
+                            </div>
+                            <p className="text-xs font-bold text-gray-900">
+                              {derivedWallets.filter(w => Math.abs((w.book_balance || 0) - (w.currentBalance || 0)) > 10).length}
+                            </p>
+                            <p className="text-xs text-gray-600">Pending Reconciliation</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Report Summary & Notes */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <h3 className="font-bold text-gray-900 text-sm flex items-center mb-3">
+                    <FiMessageSquare className="h-4 w-4 mr-2 text-gray-600" />
+                    Report Summary & Notes
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-2">
+                      <textarea
+                        className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                        placeholder="Add your observations, insights, or notes about this financial period..."
+                        defaultValue={accountingData.nightlyAccounting?.[date]?.notes || ''}
+                      ></textarea>
+                      <div className="flex justify-end mt-2">
+                        <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+                          Save Notes
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
+                        <span className="text-gray-600">Report Date:</span>
+                        <span className="font-medium text-gray-900">{date}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
+                        <span className="text-gray-600">Generated:</span>
+                        <span className="font-medium text-gray-900">{new Date().toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
+                        <span className="text-gray-600">Status:</span>
+                        <span className="font-medium text-emerald-600">Complete</span>
+                      </div>
+                      <div className="pt-2">
+                        <button className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm">
+                          <FiDownload className="h-4 w-4" />
+                          <span>Generate Full Report (PDF)</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
