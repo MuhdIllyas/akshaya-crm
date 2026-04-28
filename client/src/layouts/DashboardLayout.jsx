@@ -164,7 +164,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin/servicemanagement", label: "Service Management", icon: ServicesIcon },
       { path: "/dashboard/superadmin/servicelogs", label: "Service Logs", icon: ServiceLogsIcon },
       { path: "/dashboard/superadmin/attendance", label: "Salary Calculations", icon: SalaryIcon },
-      { path: "/dashboard/superadmin/expensemanagement", label: "Salary Calculations", icon: ExpenseManagementIcon },
+      { path: "/dashboard/superadmin/expensemanagement", label: "Expense Management", icon: ExpenseManagementIcon },
       { path: "/dashboard/superadmin/teams", label: "Teams", icon: TeamIcon },
       { path: "/dashboard/superadmin/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/superadmin/campaigns", label: "Campaigns", icon: CampaignIcon },
