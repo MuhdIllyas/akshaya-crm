@@ -20,13 +20,10 @@ import {
   FiDatabase,
   FiBarChart2,
   FiPieChart,
-  FiActivity,
-  FiTarget,
-  FiStar,
-  FiUsers,
   FiHome,
+  FiUsers,
 } from "react-icons/fi";
-import AdminExpenseEntry from "@/pages/reports/components/AdminExpenseEntry";
+import AdminExpenseEntry from "./AdminExpenseEntry";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -74,7 +71,7 @@ const COLORS = [
   "#6B7280", "#1E3A5F",
 ];
 
-/* ========== CHART COMPONENTS (unchanged) ========== */
+/* ========== CHART COMPONENTS ========== */
 const StatusDistributionChart = ({ expenses }) => {
   const statusCounts = useMemo(() => {
     const counts = { approved: 0, pending: 0, rejected: 0, paid: 0 };
@@ -287,7 +284,7 @@ const AdminExpenseManagement = () => {
   const user = getUserFromToken();
   const isSuperAdmin = user?.role === "superadmin";
   const defaultCentreId = user?.centre_id ? Number(user.centre_id) : null;
-  
+
   const [centres, setCentres] = useState([]);
   const [selectedCentreId, setSelectedCentreId] = useState(defaultCentreId);
 
@@ -350,10 +347,27 @@ const AdminExpenseManagement = () => {
     savings: { label: "Savings", icon: "🏧", color: "text-teal-600", bg: "bg-teal-50" },
   };
 
+  // Safe wallet metadata getter – prevents crash when wallet is undefined
   const getWalletMeta = (wallet) => {
-    const type = wallet.type || wallet.wallet_type;
-    return WALLET_TYPE_META[type] || { label: "Wallet", icon: "💼", color: "text-gray-600", bg: "bg-gray-50" };
+    if (!wallet) {
+      return {
+        label: "Unknown",
+        icon: "💼",
+        color: "text-gray-600",
+        bg: "bg-gray-50",
+      };
+    }
+    const type = wallet.type || wallet.wallet_type || "unknown";
+    return (
+      WALLET_TYPE_META[type] || {
+        label: "Wallet",
+        icon: "💼",
+        color: "text-gray-600",
+        bg: "bg-gray-50",
+      }
+    );
   };
+
   const getCategoryById = (id) => categories.find(c => c.id === id);
 
   // ---- Fetch Centres (superadmin only) ----
@@ -366,7 +380,6 @@ const AdminExpenseManagement = () => {
           });
           const data = await res.json();
           setCentres(data);
-          // If no centre selected yet, auto-select first
           if (!selectedCentreId && data.length > 0) {
             setSelectedCentreId(data[0].id);
           }
@@ -406,14 +419,26 @@ const AdminExpenseManagement = () => {
         toast.error("Failed to load expenses");
       }
 
-      // Fetch wallets
+      // Fetch wallets using the working book-balances endpoint
+      const walletParams = new URLSearchParams();
+      if (isSuperAdmin && selectedCentreId) {
+        walletParams.append("centreId", selectedCentreId);
+      }
       const walletRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/wallets?${buildQueryString()}`,
+        `${import.meta.env.VITE_API_URL}/api/accounting/wallet-book-balances?${walletParams.toString()}`,
         { headers }
       );
       if (walletRes.ok) {
-        const walletData = await walletRes.json();
-        setWallets(walletData);
+        const data = await walletRes.json();
+        const merged = data.map((item) => ({
+          id: item.id,
+          name: item.name,
+          type: item.wallet_type || item.type || "unknown",
+          wallet_type: item.wallet_type || item.type || "unknown",
+          currentBalance: Number(item.book_balance || 0),
+          balance: Number(item.book_balance || 0),
+        }));
+        setWallets(merged);
       } else {
         toast.error("Failed to load wallets");
       }
@@ -426,7 +451,7 @@ const AdminExpenseManagement = () => {
 
   useEffect(() => {
     loadAllData();
-  }, [selectedCentreId]); // reload when centre changes
+  }, [selectedCentreId]);
 
   // ---- Filtering ----
   const filteredExpenses = useMemo(() => {
