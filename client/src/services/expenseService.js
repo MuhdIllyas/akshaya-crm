@@ -55,7 +55,7 @@ export const deleteExpense = async (expenseId) => {
  * Update expenses
  */
 export const correctExpense = async (expenseId) => {
-  const response = await api.put(`/${expenseId}`);
+  const response = await api.put(`/${expenseId}/correct`);
   return response.data;
 };
 
