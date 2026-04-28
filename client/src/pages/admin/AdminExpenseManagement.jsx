@@ -1,3 +1,4 @@
+//Used by both admin and superadmin
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ToastContainer, toast } from "react-toastify";
@@ -426,7 +427,11 @@ const AdminExpenseManagement = () => {
       }
       const walletRes = await fetch(
         `${import.meta.env.VITE_API_URL}/api/accounting/wallet-book-balances?${walletParams.toString()}`,
-        { headers }
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
       );
       if (walletRes.ok) {
         const data = await walletRes.json();
