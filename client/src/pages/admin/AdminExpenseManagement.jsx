@@ -15,7 +15,6 @@ import {
   FiRefreshCw,
   FiTrash2,
   FiTrendingUp,
-  FiTrendingDown,
   FiAlertCircle,
   FiPackage,
   FiDatabase,
@@ -23,6 +22,8 @@ import {
   FiPieChart,
   FiActivity,
   FiTarget,
+  FiStar,
+  FiUsers,
 } from "react-icons/fi";
 import {
   getCentreExpenses,
@@ -35,17 +36,269 @@ import {
 import { getWalletsForCentre } from "@/services/walletService";
 import AdminExpenseEntry from "@/pages/reports/components/AdminExpenseEntry";
 
-// Recharts components
+// Chart.js imports
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell
-} from 'recharts';
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
+import { Bar, Line, Pie, Doughnut } from "react-chartjs-2";
 
-// Color palette for charts
-const COLORS = ['#3B82F6', '#10B981', '#EF4444', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#84CC16', '#6B7280', '#1E3A5F'];
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
+// Color palette
+const COLORS = [
+  '#3B82F6', '#10B981', '#EF4444', '#F59E0B',
+  '#8B5CF6', '#EC4899', '#14B8A6', '#84CC16',
+  '#6B7280', '#1E3A5F',
+];
+
+/* ========== CHART COMPONENTS ========== */
+const StatusDistributionChart = ({ expenses }) => {
+  const statusCounts = useMemo(() => {
+    const counts = { approved: 0, pending: 0, rejected: 0, paid: 0 };
+    expenses.forEach(e => {
+      if (e.status === 'approved' || e.status === 'auto_approved') counts.approved += Number(e.amount);
+      else if (e.status === 'pending') counts.pending += Number(e.amount);
+      else if (e.status === 'rejected') counts.rejected += Number(e.amount);
+      else if (e.status === 'paid') counts.paid += Number(e.amount);
+    });
+    return counts;
+  }, [expenses]);
+
+  const data = {
+    labels: ['Approved/Auto', 'Pending', 'Rejected', 'Paid'],
+    datasets: [{
+      data: Object.values(statusCounts),
+      backgroundColor: [
+        'rgba(16,185,129,0.8)',
+        'rgba(245,158,11,0.8)',
+        'rgba(239,68,68,0.8)',
+        'rgba(59,130,246,0.8)',
+      ],
+      borderColor: [
+        'rgb(16,185,129)',
+        'rgb(245,158,11)',
+        'rgb(239,68,68)',
+        'rgb(59,130,246)',
+      ],
+      borderWidth: 2,
+    }],
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 12, padding: 15, font: { size: 12 } } },
+      tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ₹${ctx.raw.toLocaleString()}` } },
+      title: { display: true, text: 'Expense Status Distribution (by Amount)', position: 'top' },
+    },
+    cutout: '50%',
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">Status Overview</h3>
+        <FiPieChart className="h-5 w-5 text-indigo-600" />
+      </div>
+      <div className="h-64"><Doughnut data={data} options={options} /></div>
+    </div>
+  );
+};
+
+const MonthlyExpenseTrendChart = ({ expenses }) => {
+  const monthly = useMemo(() => {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const currentYear = new Date().getFullYear();
+    const arr = new Array(12).fill(0);
+    expenses.forEach(e => {
+      const d = new Date(e.expense_date);
+      if (d.getFullYear() === currentYear) arr[d.getMonth()] += Number(e.amount);
+    });
+    return { labels: months, data: arr };
+  }, [expenses]);
+
+  const data = {
+    labels: monthly.labels,
+    datasets: [{
+      label: 'Total Expense (₹)',
+      data: monthly.data,
+      borderColor: 'rgb(99,102,241)',
+      backgroundColor: 'rgba(99,102,241,0.1)',
+      tension: 0.4,
+      fill: true,
+    }],
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">Monthly Trend</h3>
+        <FiTrendingUp className="h-5 w-5 text-indigo-600" />
+      </div>
+      <div className="h-64"><Line data={data} options={{ responsive: true, plugins: { title: { display: true, text: 'Monthly Expense Trend' } } }} /></div>
+    </div>
+  );
+};
+
+const CategoryDistributionChart = ({ expenses }) => {
+  const catMap = useMemo(() => {
+    const map = {};
+    expenses.forEach(e => {
+      const cat = e.category || 'Other';
+      map[cat] = (map[cat] || 0) + Number(e.amount);
+    });
+    const sorted = Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+    return { labels: sorted.map(x => x[0]), data: sorted.map(x => x[1]) };
+  }, [expenses]);
+
+  const data = {
+    labels: catMap.labels,
+    datasets: [{
+      label: 'Amount (₹)',
+      data: catMap.data,
+      backgroundColor: COLORS.slice(0, 6).map(c => c + '99'),
+      borderColor: COLORS.slice(0, 6),
+      borderWidth: 2,
+    }],
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">By Category</h3>
+        <FiBarChart2 className="h-5 w-5 text-indigo-600" />
+      </div>
+      <div className="h-64"><Bar data={data} options={{ responsive: true, plugins: { title: { display: true, text: 'Top 6 Categories' } } }} /></div>
+    </div>
+  );
+};
+
+const WalletDistributionChart = ({ expenses }) => {
+  const walletData = useMemo(() => {
+    const map = {};
+    expenses.forEach(e => {
+      const w = e.wallet_name || 'Unknown';
+      map[w] = (map[w] || 0) + Number(e.amount);
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  }, [expenses]);
+
+  const data = {
+    labels: walletData.map(d => d.name),
+    datasets: [{
+      data: walletData.map(d => d.value),
+      backgroundColor: COLORS,
+      borderWidth: 1,
+    }],
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">By Wallet</h3>
+        <FiPieChart className="h-5 w-5 text-indigo-600" />
+      </div>
+      <div className="h-64">
+        <Doughnut data={data} options={{ plugins: { legend: { position: 'right' }, title: { display: true, text: 'Wallet‑wise Expenses' } } }} />
+      </div>
+    </div>
+  );
+};
+
+const StaffWorkloadChart = ({ expenses }) => {
+  const staffMap = useMemo(() => {
+    const map = {};
+    expenses.forEach(e => {
+      const staff = e.staff_name || 'Unknown';
+      if (!map[staff]) map[staff] = 0;
+      map[staff] += Number(e.amount);
+    });
+    const sorted = Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+    return { labels: sorted.map(x => x[0]), data: sorted.map(x => x[1]) };
+  }, [expenses]);
+
+  const data = {
+    labels: staffMap.labels,
+    datasets: [{
+      label: 'Total Expense (₹)',
+      data: staffMap.data,
+      backgroundColor: 'rgba(139,92,246,0.8)',
+      borderColor: 'rgb(139,92,246)',
+      borderWidth: 2,
+    }],
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">Staff Expense Volume</h3>
+        <FiUsers className="h-5 w-5 text-indigo-600" />
+      </div>
+      <div className="h-64"><Bar data={data} options={{ responsive: true, plugins: { title: { display: true, text: 'Expenses by Staff' } } }} /></div>
+    </div>
+  );
+};
+
+const ApprovalTypeChart = ({ expenses }) => {
+  const { require, auto } = useMemo(() => {
+    let require = 0, auto = 0;
+    expenses.forEach(e => {
+      if (e.requires_approval) require += Number(e.amount);
+      else auto += Number(e.amount);
+    });
+    return { require, auto };
+  }, [expenses]);
+
+  const data = {
+    labels: ['Requires Approval', 'Auto‑Approved'],
+    datasets: [{
+      data: [require, auto],
+      backgroundColor: ['rgba(245,158,11,0.8)', 'rgba(16,185,129,0.8)'],
+      borderColor: ['rgb(245,158,11)', 'rgb(16,185,129)'],
+      borderWidth: 2,
+    }],
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">Approval Type</h3>
+        <FiAlertCircle className="h-5 w-5 text-indigo-600" />
+      </div>
+      <div className="h-64"><Pie data={data} options={{ plugins: { legend: { position: 'right' }, title: { display: true, text: 'Requires Approval vs Auto' } } }} /></div>
+    </div>
+  );
+};
+
+/* ========== MAIN COMPONENT ========== */
 const AdminExpenseManagement = () => {
-  // -------------------- State --------------------
+  // State
   const [expenses, setExpenses] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -72,7 +325,7 @@ const AdminExpenseManagement = () => {
   const [showFutureAnalysis, setShowFutureAnalysis] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
 
-  // -------------------- Categories & Statuses --------------------
+  // Categories (same as before)
   const categories = [
     { id: 1, name: "Salary Advance", color: "#3B82F6", icon: "💰", requires_approval: true },
     { id: 2, name: "Rent Payment", color: "#10B981", icon: "🏠", requires_approval: true },
@@ -96,13 +349,6 @@ const AdminExpenseManagement = () => {
     { id: "auto_approved", name: "Auto Approved", color: "bg-purple-100 text-purple-800" },
   ];
 
-  const paymentMethods = [
-    { id: "cash", name: "Cash", icon: "💰" },
-    { id: "bank_transfer", name: "Bank Transfer", icon: "🏦" },
-    { id: "cheque", name: "Cheque", icon: "📝" },
-    { id: "online", name: "Online Payment", icon: "💳" },
-  ];
-
   const WALLET_TYPE_META = {
     bank: { label: "Bank Account", icon: "🏦", color: "text-blue-600", bg: "bg-blue-50" },
     cash: { label: "Cash", icon: "💰", color: "text-green-600", bg: "bg-green-50" },
@@ -119,7 +365,7 @@ const AdminExpenseManagement = () => {
   };
   const getCategoryById = (id) => categories.find((c) => c.id === id);
 
-  // -------------------- Data loading --------------------
+  // Data loading
   useEffect(() => {
     loadAllData();
   }, []);
@@ -140,7 +386,7 @@ const AdminExpenseManagement = () => {
     }
   };
 
-  // -------------------- Filtering --------------------
+  // Filtering
   const filteredExpenses = useMemo(() => {
     return expenses.filter((expense) => {
       if (searchQuery) {
@@ -169,7 +415,7 @@ const AdminExpenseManagement = () => {
     });
   }, [expenses, searchQuery, selectedCategory, selectedStatus, selectedWallet, selectedMonth, selectedYear]);
 
-  // -------------------- Stats --------------------
+  // Statistics
   const stats = useMemo(() => {
     const totalAmount = filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
     const pendingCount = filteredExpenses.filter((e) => e.status === "pending").length;
@@ -179,80 +425,25 @@ const AdminExpenseManagement = () => {
     const rejectedCount = filteredExpenses.filter((e) => e.status === "rejected").length;
     const avgAmount = filteredExpenses.length > 0 ? totalAmount / filteredExpenses.length : 0;
     const largest = filteredExpenses.reduce((max, e) => Math.max(max, Number(e.amount || 0)), 0);
-    return { totalAmount, pendingCount, approvedCount, rejectedCount, totalCount: filteredExpenses.length, avgAmount, largest };
+    const pendingAmount = filteredExpenses.filter(e => e.status === "pending").reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    let busiestStaff = 'None';
+    const staffCounts = {};
+    filteredExpenses.forEach(e => {
+      const s = e.staff_name || 'Unknown';
+      staffCounts[s] = (staffCounts[s] || 0) + 1;
+    });
+    const sortedStaff = Object.entries(staffCounts).sort((a, b) => b[1] - a[1]);
+    if (sortedStaff.length) busiestStaff = sortedStaff[0][0];
+
+    return {
+      totalAmount, pendingCount, approvedCount, rejectedCount,
+      totalCount: filteredExpenses.length, avgAmount, largest,
+      pendingAmount, busiestStaff,
+    };
   }, [filteredExpenses]);
 
-  // -------------------- Chart Data --------------------
-  // Monthly trend (last 6 months based on selected year)
-  const monthlyTrend = useMemo(() => {
-    const months = [];
-    const now = new Date(selectedYear, selectedMonth - 1);
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push({
-        month: d.toLocaleString('default', { month: 'short', year: 'numeric' }),
-        amount: 0
-      });
-    }
-    filteredExpenses.forEach(e => {
-      const d = new Date(e.expense_date);
-      if (d.getFullYear() === selectedYear && d.getMonth() + 1 <= selectedMonth) {
-        const idx = months.findIndex(m => m.month === d.toLocaleString('default', { month: 'short', year: 'numeric' }));
-        if (idx !== -1) months[idx].amount += Number(e.amount || 0);
-      }
-    });
-    return months;
-  }, [filteredExpenses, selectedMonth, selectedYear]);
-
-  // Category breakdown
-  const categoryBreakdown = useMemo(() => {
-    const map = {};
-    filteredExpenses.forEach(e => {
-      const cat = e.category || 'Uncategorized';
-      map[cat] = (map[cat] || 0) + Number(e.amount || 0);
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
-  }, [filteredExpenses]);
-
-  // Wallet breakdown
-  const walletBreakdown = useMemo(() => {
-    const map = {};
-    filteredExpenses.forEach(e => {
-      const wallet = e.wallet_name || 'Unknown';
-      map[wallet] = (map[wallet] || 0) + Number(e.amount || 0);
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
-  }, [filteredExpenses]);
-
-  // Daily trend for selected month
-  const dailyTrend = useMemo(() => {
-    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
-    const days = Array.from({ length: daysInMonth }, (_, i) => {
-      const day = i + 1;
-      return { day: `${day}`, amount: 0 };
-    });
-    filteredExpenses.forEach(e => {
-      const d = new Date(e.expense_date);
-      if (d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear) {
-        const day = d.getDate();
-        if (days[day - 1]) days[day - 1].amount += Number(e.amount || 0);
-      }
-    });
-    return days;
-  }, [filteredExpenses, selectedMonth, selectedYear]);
-
-  // Most used wallet
-  const walletUsage = useMemo(() => {
-    const counts = {};
-    filteredExpenses.forEach(e => {
-      const wallet = e.wallet_name || 'Unknown';
-      counts[wallet] = (counts[wallet] || 0) + 1;
-    });
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    return sorted.length > 0 ? sorted[0][0] : 'None';
-  }, [filteredExpenses]);
-
-  // -------------------- Future Payments Prediction --------------------
+  // Future payments prediction
   const futureProjections = useMemo(() => {
     const recurringExpenses = expenses.filter((e) => e.is_recurring && e.recurrence_type !== "none");
     const now = new Date();
@@ -287,7 +478,24 @@ const AdminExpenseManagement = () => {
 
   const futureTotal = futureProjections.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-  // -------------------- Actions --------------------
+  // Quick Insights
+  const insights = useMemo(() => {
+    if (!filteredExpenses.length) return null;
+    const catTotals = {};
+    filteredExpenses.forEach(e => {
+      const c = e.category || 'Other';
+      catTotals[c] = (catTotals[c] || 0) + Number(e.amount);
+    });
+    const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
+    return {
+      topCategory: topCat,
+      approvalRate: ((stats.approvedCount / (stats.totalCount || 1)) * 100).toFixed(1),
+      pendingAmount: stats.pendingAmount,
+      busiestStaff: stats.busiestStaff,
+    };
+  }, [filteredExpenses, stats]);
+
+  // Actions
   const handleApprove = async (id) => {
     try {
       await approveExpense(id);
@@ -352,7 +560,7 @@ const AdminExpenseManagement = () => {
   const handleAddExpenseSubmit = async (payload) => {
     try {
       await createExpense(payload);
-      toast.success("Expense created");
+      toast.success("Expense created and auto‑approved");
       setShowAddModal(false);
       loadAllData();
     } catch (err) {
@@ -360,10 +568,31 @@ const AdminExpenseManagement = () => {
     }
   };
 
-  // -------------------- Export CSV --------------------
-  const exportToCSV = () => { /* unchanged */ };
+  const exportToCSV = () => {
+    const csvContent = [
+      ["Date", "Category", "Description", "Amount", "Wallet", "Status", "Receipt", "Remarks"],
+      ...filteredExpenses.map((e) => [
+        e.expense_date,
+        e.category,
+        e.description,
+        e.amount,
+        e.wallet_name,
+        e.status,
+        e.receipt_number,
+        e.remarks,
+      ]),
+    ]
+      .map((row) => row.join(","))
+      .join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `expenses_${selectedMonth}_${selectedYear}.csv`;
+    a.click();
+    toast.success("Expenses exported");
+  };
 
-  // -------------------- Formatters --------------------
   const formatCurrency = (amount) =>
     new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -406,220 +635,182 @@ const AdminExpenseManagement = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
           <div className="rounded-2xl shadow-lg p-5 border border-blue-200 bg-gradient-to-br from-blue-100 to-blue-50">
-            <div className="flex items-center">
-              <FiDollarSign className="text-3xl text-blue-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Total Expenses</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalAmount)}</p>
-                <p className="text-xs text-gray-500">{stats.totalCount} entries</p>
-              </div>
-            </div>
+            <FiDollarSign className="text-3xl text-blue-600 mb-2" />
+            <p className="text-sm text-gray-600">Total Expenses</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalAmount)}</p>
+            <p className="text-xs text-gray-500">{stats.totalCount} entries</p>
           </div>
-
           <div className="rounded-2xl shadow-lg p-5 border border-yellow-200 bg-gradient-to-br from-yellow-100 to-yellow-50">
-            <div className="flex items-center">
-              <FiClock className="text-3xl text-yellow-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Pending Approval</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.pendingCount}</p>
-              </div>
-            </div>
+            <FiClock className="text-3xl text-yellow-600 mb-2" />
+            <p className="text-sm text-gray-600">Pending Approval</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.pendingCount}</p>
+            <p className="text-xs text-gray-500">{formatCurrency(stats.pendingAmount)} pending</p>
           </div>
-
           <div className="rounded-2xl shadow-lg p-5 border border-green-200 bg-gradient-to-br from-green-100 to-green-50">
-            <div className="flex items-center">
-              <FiCheck className="text-3xl text-green-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Approved / Auto</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.approvedCount}</p>
-              </div>
-            </div>
+            <FiCheck className="text-3xl text-green-600 mb-2" />
+            <p className="text-sm text-gray-600">Approved / Auto</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.approvedCount}</p>
           </div>
-
           <div className="rounded-2xl shadow-lg p-5 border border-indigo-200 bg-gradient-to-br from-indigo-100 to-indigo-50">
-            <div className="flex items-center">
-              <FiTrendingUp className="text-3xl text-indigo-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Future Recurring</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(futureTotal)}</p>
-                <button onClick={() => setShowFutureAnalysis(!showFutureAnalysis)} className="text-xs text-indigo-600 underline hover:text-indigo-800">
-                  {showFutureAnalysis ? "Hide" : "View"}
-                </button>
+            <FiTrendingUp className="text-3xl text-indigo-600 mb-2" />
+            <p className="text-sm text-gray-600">Future Recurring</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(futureTotal)}</p>
+            <button
+              onClick={() => setShowFutureAnalysis(!showFutureAnalysis)}
+              className="text-xs text-indigo-600 underline hover:text-indigo-800"
+            >
+              {showFutureAnalysis ? "Hide" : "View"}
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Insights (new) */}
+        {insights && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
+            <h3 className="font-semibold text-gray-900 mb-4">Quick Insights</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-blue-50 rounded-lg p-3 flex justify-between">
+                <span className="text-sm text-blue-700">Top Category</span>
+                <span className="font-semibold text-blue-900">{insights.topCategory}</span>
+              </div>
+              <div className="bg-emerald-50 rounded-lg p-3 flex justify-between">
+                <span className="text-sm text-emerald-700">Approval Rate</span>
+                <span className="font-semibold text-emerald-900">{insights.approvalRate}%</span>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-3 flex justify-between">
+                <span className="text-sm text-amber-700">Pending Amount</span>
+                <span className="font-semibold text-amber-900">{formatCurrency(insights.pendingAmount)}</span>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-3 flex justify-between">
+                <span className="text-sm text-purple-700">Busiest Staff</span>
+                <span className="font-semibold text-purple-900">{insights.busiestStaff}</span>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Charts Toggle */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => setShowCharts(!showCharts)}
+            className="flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
+          >
+            <FiBarChart2 className="mr-2 h-4 w-4" />
+            {showCharts ? "Hide Charts" : "Show Charts"}
+          </button>
         </div>
 
-        {/* Advanced stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
-            <p className="text-xs text-gray-500">Average Expense</p>
-            <p className="text-lg font-bold text-gray-800">{formatCurrency(stats.avgAmount)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
-            <p className="text-xs text-gray-500">Largest Expense</p>
-            <p className="text-lg font-bold text-gray-800">{formatCurrency(stats.largest)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
-            <p className="text-xs text-gray-500">Most Used Wallet</p>
-            <p className="text-lg font-bold text-gray-800">{walletUsage}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
-            <p className="text-xs text-gray-500">Recurring Expenses</p>
-            <p className="text-lg font-bold text-gray-800">{expenses.filter(e => e.is_recurring).length}</p>
-          </div>
-        </div>
-
-        {/* Charts Section */}
-        <button
-          onClick={() => setShowCharts(!showCharts)}
-          className="mb-4 flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
-        >
-          <FiBarChart2 className="mr-2 h-4 w-4" />
-          {showCharts ? "Hide Charts" : "Show Charts & Analytics"}
-        </button>
-
+        {/* Charts Section (Chart.js) */}
         <AnimatePresence>
           {showCharts && (
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              className="mb-8"
             >
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                {/* Monthly Trend */}
-                <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Expense Trend</h3>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={monthlyTrend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                      <Bar dataKey="amount" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Daily Trend for selected month */}
-                <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Daily Expenses ({months[selectedMonth-1]})</h3>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <LineChart data={dailyTrend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="day" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                      <Line type="monotone" dataKey="amount" stroke="#10B981" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Category Breakdown */}
-                <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">By Category</h3>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                      <Pie
-                        data={categoryBreakdown}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {categoryBreakdown.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Wallet Distribution */}
-                <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">By Wallet</h3>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                      <Pie
-                        data={walletBreakdown}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {walletBreakdown.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <StatusDistributionChart expenses={filteredExpenses} />
+                <MonthlyExpenseTrendChart expenses={filteredExpenses} />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <CategoryDistributionChart expenses={filteredExpenses} />
+                <WalletDistributionChart expenses={filteredExpenses} />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <StaffWorkloadChart expenses={filteredExpenses} />
+                <ApprovalTypeChart expenses={filteredExpenses} />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Filters */}
+        {/* Filters (unchanged) */}
         <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-              <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {months.map((m, idx) => (<option key={idx} value={idx+1}>{m}</option>))}
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {months.map((m, idx) => (
+                  <option key={idx} value={idx + 1}>{m}</option>
+                ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-              <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {years.map((y) => (<option key={y} value={y}>{y}</option>))}
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-              <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
                 <option value="all">All Categories</option>
-                {categories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Wallet</label>
-              <select value={selectedWallet} onChange={(e) => setSelectedWallet(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select
+                value={selectedWallet}
+                onChange={(e) => setSelectedWallet(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
                 <option value="all">All Wallets</option>
-                {wallets.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
+                {wallets.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
                 <option value="all">All Status</option>
-                {statuses.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                {statuses.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
               </select>
             </div>
           </div>
           <div className="mt-4 flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1">
-              <input type="text" placeholder="Search by description, receipt, remarks..."
-                value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input
+                type="text"
+                placeholder="Search by description, receipt, remarks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
               <svg className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }} onClick={exportToCSV}
-              className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium flex items-center">
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={exportToCSV}
+              className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium flex items-center"
+            >
               <FiDownload className="mr-2" /> Export CSV
             </motion.button>
           </div>
@@ -673,17 +864,20 @@ const AdminExpenseManagement = () => {
           )}
         </AnimatePresence>
 
-        {/* Expenses Table (as before) */}
+        {/* Expenses Table */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
             <h2 className="text-lg font-semibold text-gray-800">Expense Entries</h2>
-            <span className="text-sm text-gray-600">Showing {filteredExpenses.length} of {expenses.length} total entries</span>
+            <span className="text-sm text-gray-600">
+              Showing {filteredExpenses.length} of {expenses.length} total entries
+            </span>
           </div>
 
           {filteredExpenses.length === 0 ? (
             <div className="text-center py-12">
               <FiFileText className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-4 text-lg font-medium text-gray-900">No expenses found</h3>
+              <p className="mt-2 text-gray-600">Try adjusting your filters or add a new expense.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -716,8 +910,10 @@ const AdminExpenseManagement = () => {
                               <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
                                 <FiCalendar className="h-4 w-4" />
                                 {formatDate(expense.expense_date)}
-                                <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-                                  style={{ backgroundColor: category?.color + "20", color: category?.color }}>
+                                <span
+                                  className="px-2 py-0.5 rounded-full text-xs font-medium"
+                                  style={{ backgroundColor: category?.color + "20", color: category?.color }}
+                                >
                                   {expense.category}
                                 </span>
                               </div>
@@ -812,33 +1008,75 @@ const AdminExpenseManagement = () => {
               <form onSubmit={handleCorrectExpense} className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">New Amount (₹) *</label>
-                  <input type="number" value={correctionForm.amount} onChange={(e) => setCorrectionForm(p => ({...p, amount: e.target.value}))} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required min="0" step="0.01" />
+                  <input
+                    type="number"
+                    value={correctionForm.amount}
+                    onChange={(e) => setCorrectionForm((p) => ({ ...p, amount: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                    min="0"
+                    step="0.01"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">New Wallet *</label>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {wallets.map((wallet) => (
-                      <label key={wallet.id} className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer ${correctionForm.wallet_id === wallet.id.toString() ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                      <label
+                        key={wallet.id}
+                        className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer ${
+                          correctionForm.wallet_id === wallet.id.toString()
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-gray-200"
+                        }`}
+                      >
                         <div className="flex items-center gap-2">
-                          <input type="radio" name="correction_wallet" value={wallet.id.toString()} checked={correctionForm.wallet_id === wallet.id.toString()} onChange={(e) => setCorrectionForm(p => ({...p, wallet_id: e.target.value}))} className="sr-only" required />
+                          <input
+                            type="radio"
+                            name="correction_wallet"
+                            value={wallet.id.toString()}
+                            checked={correctionForm.wallet_id === wallet.id.toString()}
+                            onChange={(e) =>
+                              setCorrectionForm((p) => ({ ...p, wallet_id: e.target.value }))
+                            }
+                            className="sr-only"
+                            required
+                          />
                           <span className="text-xl">{getWalletMeta(wallet).icon}</span>
                           <div>
                             <p className="font-medium text-gray-900 text-sm">{wallet.name}</p>
                             <p className="text-xs text-gray-500">{getWalletMeta(wallet).label}</p>
                           </div>
                         </div>
-                        <span className="text-sm font-semibold text-gray-700">{formatCurrency(wallet.currentBalance ?? wallet.balance)}</span>
+                        <span className="text-sm font-semibold text-gray-700">
+                          {formatCurrency(wallet.currentBalance ?? wallet.balance)}
+                        </span>
                       </label>
                     ))}
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Correction</label>
-                  <textarea value={correctionForm.reason} onChange={(e) => setCorrectionForm(p => ({...p, reason: e.target.value}))} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" rows="3" placeholder="Explain why..." />
+                  <textarea
+                    value={correctionForm.reason}
+                    onChange={(e) => setCorrectionForm((p) => ({ ...p, reason: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                    placeholder="Explain why..."
+                  />
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button type="button" onClick={() => setShowCorrectModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCorrectModal(false)}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  >
                     <FiRefreshCw className="h-4 w-4" /> Submit Correction
                   </button>
                 </div>
