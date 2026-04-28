@@ -179,7 +179,14 @@ router.get("/", async (req, res) => {
   if (!["admin", "superadmin"].includes(req.user.role)) {
     return res.status(403).json({ error: "Access denied" });
   }
+  
   try {
+    // ✅ Use requested centreId for SuperAdmins, otherwise use the user's own centre_id
+    let targetCentreId = req.user.centre_id;
+    if (req.user.role === "superadmin" && req.query.centreId) {
+      targetCentreId = req.query.centreId;
+    }
+
     const result = await req.db.query(
       `SELECT e.*,
               TO_CHAR(e.expense_date, 'YYYY-MM-DD') AS expense_date,
@@ -191,7 +198,7 @@ router.get("/", async (req, res) => {
        WHERE e.centre_id = $1
          AND COALESCE(e.is_reversal, FALSE) = FALSE
        ORDER BY e.expense_date DESC`,
-      [req.user.centre_id]
+      [targetCentreId] // ✅ Replaced req.user.centre_id with targetCentreId
     );
     res.json(result.rows);
   } catch (err) {
