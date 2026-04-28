@@ -44,7 +44,7 @@ const AdminExpenseEntry = ({
     { id: "online", name: "Online Payment", icon: "💳" }
   ];
 
-  // Wallet type metadata
+  // Wallet type metadata (same as staff)
   const WALLET_TYPE_META = {
     bank: { label: "Bank Account", icon: "🏦", color: "text-blue-600", bg: "bg-blue-50" },
     cash: { label: "Cash", icon: "💰", color: "text-green-600", bg: "bg-green-50" },
@@ -130,7 +130,7 @@ const AdminExpenseEntry = ({
     }).format(amount || 0);
   };
 
-  // Calculate wallet balances (simplified - in real app, this would come from API)
+  // Calculate wallet balances from current wallet list
   const walletBalances = wallets.reduce((acc, w) => {
     acc[w.id] = Number(w.balance) || 0;
     return acc;
@@ -138,10 +138,10 @@ const AdminExpenseEntry = ({
 
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6">
-        <h2 className="text-xl font-bold text-white">{title}</h2>
-        <p className="text-sm text-blue-100 mt-1">
+      {/* ✅ PLAIN HEADER (matching staff design) */}
+      <div className="bg-white border-b border-gray-200 p-6">
+        <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+        <p className="text-sm text-gray-500 mt-1">
           Select wallet from which money will be debited
         </p>
       </div>
@@ -519,6 +519,8 @@ export const ExpenseFormModal = ({ isOpen, onClose, ...props }) => {
         exit={{ scale: 0.95, y: 20 }}
         className="w-full max-w-2xl max-h-[90vh] overflow-hidden"
       >
+        {/* Pass all props to the form */}
+        <AdminExpenseEntry {...props} />
       </motion.div>
     </div>
   );
