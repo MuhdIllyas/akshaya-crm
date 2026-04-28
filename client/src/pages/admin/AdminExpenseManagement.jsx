@@ -24,19 +24,9 @@ import {
   FiTarget,
   FiStar,
   FiUsers,
+  FiHome,
 } from "react-icons/fi";
-import {
-  getCentreExpenses,
-  approveExpense,
-  rejectExpense,
-  correctExpense,
-  deleteExpense,
-  createExpense,
-} from "@/services/expenseService";
-import { getWalletsForCentre } from "@/services/walletService";
-import AdminExpenseEntry from "@/pages/reports/components/AdminExpenseEntry";
-
-// Chart.js imports
+import AdminExpenseEntry from "./AdminExpenseEntry";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -65,55 +55,52 @@ ChartJS.register(
   Filler
 );
 
-// Color palette
+/* ---------- Helper: decode JWT ---------- */
+const getUserFromToken = () => {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload;
+  } catch {
+    return null;
+  }
+};
+
+/* ---------- Colour Palette ---------- */
 const COLORS = [
-  '#3B82F6', '#10B981', '#EF4444', '#F59E0B',
-  '#8B5CF6', '#EC4899', '#14B8A6', '#84CC16',
-  '#6B7280', '#1E3A5F',
+  "#3B82F6", "#10B981", "#EF4444", "#F59E0B",
+  "#8B5CF6", "#EC4899", "#14B8A6", "#84CC16",
+  "#6B7280", "#1E3A5F",
 ];
 
-/* ========== CHART COMPONENTS ========== */
+/* ========== CHART COMPONENTS (unchanged) ========== */
 const StatusDistributionChart = ({ expenses }) => {
   const statusCounts = useMemo(() => {
     const counts = { approved: 0, pending: 0, rejected: 0, paid: 0 };
     expenses.forEach(e => {
-      if (e.status === 'approved' || e.status === 'auto_approved') counts.approved += Number(e.amount);
-      else if (e.status === 'pending') counts.pending += Number(e.amount);
-      else if (e.status === 'rejected') counts.rejected += Number(e.amount);
-      else if (e.status === 'paid') counts.paid += Number(e.amount);
+      const amt = Number(e.amount || 0);
+      if (e.status === "approved" || e.status === "auto_approved") counts.approved += amt;
+      else if (e.status === "pending") counts.pending += amt;
+      else if (e.status === "rejected") counts.rejected += amt;
+      else if (e.status === "paid") counts.paid += amt;
     });
     return counts;
   }, [expenses]);
 
   const data = {
-    labels: ['Approved/Auto', 'Pending', 'Rejected', 'Paid'],
+    labels: ["Approved/Auto", "Pending", "Rejected", "Paid"],
     datasets: [{
       data: Object.values(statusCounts),
       backgroundColor: [
-        'rgba(16,185,129,0.8)',
-        'rgba(245,158,11,0.8)',
-        'rgba(239,68,68,0.8)',
-        'rgba(59,130,246,0.8)',
+        "rgba(16,185,129,0.8)",
+        "rgba(245,158,11,0.8)",
+        "rgba(239,68,68,0.8)",
+        "rgba(59,130,246,0.8)",
       ],
-      borderColor: [
-        'rgb(16,185,129)',
-        'rgb(245,158,11)',
-        'rgb(239,68,68)',
-        'rgb(59,130,246)',
-      ],
+      borderColor: ["rgb(16,185,129)", "rgb(245,158,11)", "rgb(239,68,68)", "rgb(59,130,246)"],
       borderWidth: 2,
     }],
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'right', labels: { boxWidth: 12, padding: 15, font: { size: 12 } } },
-      tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ₹${ctx.raw.toLocaleString()}` } },
-      title: { display: true, text: 'Expense Status Distribution (by Amount)', position: 'top' },
-    },
-    cutout: '50%',
   };
 
   return (
@@ -122,34 +109,27 @@ const StatusDistributionChart = ({ expenses }) => {
         <h3 className="font-semibold text-gray-900">Status Overview</h3>
         <FiPieChart className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64"><Doughnut data={data} options={options} /></div>
+      <div className="h-64">
+        <Doughnut data={data} options={{
+          plugins: { legend: { position: "right" }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ₹${ctx.raw.toLocaleString()}` } } },
+          cutout: "50%",
+        }} />
+      </div>
     </div>
   );
 };
 
 const MonthlyExpenseTrendChart = ({ expenses }) => {
   const monthly = useMemo(() => {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const currentYear = new Date().getFullYear();
     const arr = new Array(12).fill(0);
     expenses.forEach(e => {
       const d = new Date(e.expense_date);
-      if (d.getFullYear() === currentYear) arr[d.getMonth()] += Number(e.amount);
+      if (d.getFullYear() === currentYear) arr[d.getMonth()] += Number(e.amount || 0);
     });
     return { labels: months, data: arr };
   }, [expenses]);
-
-  const data = {
-    labels: monthly.labels,
-    datasets: [{
-      label: 'Total Expense (₹)',
-      data: monthly.data,
-      borderColor: 'rgb(99,102,241)',
-      backgroundColor: 'rgba(99,102,241,0.1)',
-      tension: 0.4,
-      fill: true,
-    }],
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -157,7 +137,19 @@ const MonthlyExpenseTrendChart = ({ expenses }) => {
         <h3 className="font-semibold text-gray-900">Monthly Trend</h3>
         <FiTrendingUp className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64"><Line data={data} options={{ responsive: true, plugins: { title: { display: true, text: 'Monthly Expense Trend' } } }} /></div>
+      <div className="h-64">
+        <Line data={{
+          labels: monthly.labels,
+          datasets: [{
+            label: "Total Expense (₹)",
+            data: monthly.data,
+            borderColor: "rgb(99,102,241)",
+            backgroundColor: "rgba(99,102,241,0.1)",
+            tension: 0.4,
+            fill: true,
+          }],
+        }} options={{ responsive: true }} />
+      </div>
     </div>
   );
 };
@@ -166,25 +158,12 @@ const CategoryDistributionChart = ({ expenses }) => {
   const catMap = useMemo(() => {
     const map = {};
     expenses.forEach(e => {
-      const cat = e.category || 'Other';
-      map[cat] = (map[cat] || 0) + Number(e.amount);
+      const cat = e.category || "Other";
+      map[cat] = (map[cat] || 0) + Number(e.amount || 0);
     });
-    const sorted = Object.entries(map)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
-    return { labels: sorted.map(x => x[0]), data: sorted.map(x => x[1]) };
+    const sorted = Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0,6);
+    return { labels: sorted.map(x=>x[0]), data: sorted.map(x=>x[1]) };
   }, [expenses]);
-
-  const data = {
-    labels: catMap.labels,
-    datasets: [{
-      label: 'Amount (₹)',
-      data: catMap.data,
-      backgroundColor: COLORS.slice(0, 6).map(c => c + '99'),
-      borderColor: COLORS.slice(0, 6),
-      borderWidth: 2,
-    }],
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -192,7 +171,18 @@ const CategoryDistributionChart = ({ expenses }) => {
         <h3 className="font-semibold text-gray-900">By Category</h3>
         <FiBarChart2 className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64"><Bar data={data} options={{ responsive: true, plugins: { title: { display: true, text: 'Top 6 Categories' } } }} /></div>
+      <div className="h-64">
+        <Bar data={{
+          labels: catMap.labels,
+          datasets: [{
+            label: "Amount (₹)",
+            data: catMap.data,
+            backgroundColor: COLORS.slice(0,6).map(c=>c+"99"),
+            borderColor: COLORS.slice(0,6),
+            borderWidth: 2,
+          }],
+        }} options={{ responsive: true }} />
+      </div>
     </div>
   );
 };
@@ -201,20 +191,11 @@ const WalletDistributionChart = ({ expenses }) => {
   const walletData = useMemo(() => {
     const map = {};
     expenses.forEach(e => {
-      const w = e.wallet_name || 'Unknown';
-      map[w] = (map[w] || 0) + Number(e.amount);
+      const w = e.wallet_name || "Unknown";
+      map[w] = (map[w] || 0) + Number(e.amount || 0);
     });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
+    return Object.entries(map).map(([name,value]) => ({ name, value }));
   }, [expenses]);
-
-  const data = {
-    labels: walletData.map(d => d.name),
-    datasets: [{
-      data: walletData.map(d => d.value),
-      backgroundColor: COLORS,
-      borderWidth: 1,
-    }],
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -223,7 +204,14 @@ const WalletDistributionChart = ({ expenses }) => {
         <FiPieChart className="h-5 w-5 text-indigo-600" />
       </div>
       <div className="h-64">
-        <Doughnut data={data} options={{ plugins: { legend: { position: 'right' }, title: { display: true, text: 'Wallet‑wise Expenses' } } }} />
+        <Doughnut data={{
+          labels: walletData.map(d=>d.name),
+          datasets: [{
+            data: walletData.map(d=>d.value),
+            backgroundColor: COLORS,
+            borderWidth: 1,
+          }],
+        }} options={{ plugins: { legend: { position: "right" } } }} />
       </div>
     </div>
   );
@@ -233,26 +221,12 @@ const StaffWorkloadChart = ({ expenses }) => {
   const staffMap = useMemo(() => {
     const map = {};
     expenses.forEach(e => {
-      const staff = e.staff_name || 'Unknown';
-      if (!map[staff]) map[staff] = 0;
-      map[staff] += Number(e.amount);
+      const staff = e.staff_name || "Unknown";
+      map[staff] = (map[staff] || 0) + Number(e.amount || 0);
     });
-    const sorted = Object.entries(map)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
-    return { labels: sorted.map(x => x[0]), data: sorted.map(x => x[1]) };
+    const sorted = Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0,8);
+    return { labels: sorted.map(x=>x[0]), data: sorted.map(x=>x[1]) };
   }, [expenses]);
-
-  const data = {
-    labels: staffMap.labels,
-    datasets: [{
-      label: 'Total Expense (₹)',
-      data: staffMap.data,
-      backgroundColor: 'rgba(139,92,246,0.8)',
-      borderColor: 'rgb(139,92,246)',
-      borderWidth: 2,
-    }],
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -260,7 +234,18 @@ const StaffWorkloadChart = ({ expenses }) => {
         <h3 className="font-semibold text-gray-900">Staff Expense Volume</h3>
         <FiUsers className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64"><Bar data={data} options={{ responsive: true, plugins: { title: { display: true, text: 'Expenses by Staff' } } }} /></div>
+      <div className="h-64">
+        <Bar data={{
+          labels: staffMap.labels,
+          datasets: [{
+            label: "Total Expense (₹)",
+            data: staffMap.data,
+            backgroundColor: "rgba(139,92,246,0.8)",
+            borderColor: "rgb(139,92,246)",
+            borderWidth: 2,
+          }],
+        }} options={{ responsive: true }} />
+      </div>
     </div>
   );
 };
@@ -269,21 +254,11 @@ const ApprovalTypeChart = ({ expenses }) => {
   const { require, auto } = useMemo(() => {
     let require = 0, auto = 0;
     expenses.forEach(e => {
-      if (e.requires_approval) require += Number(e.amount);
-      else auto += Number(e.amount);
+      if (e.requires_approval) require += Number(e.amount || 0);
+      else auto += Number(e.amount || 0);
     });
     return { require, auto };
   }, [expenses]);
-
-  const data = {
-    labels: ['Requires Approval', 'Auto‑Approved'],
-    datasets: [{
-      data: [require, auto],
-      backgroundColor: ['rgba(245,158,11,0.8)', 'rgba(16,185,129,0.8)'],
-      borderColor: ['rgb(245,158,11)', 'rgb(16,185,129)'],
-      borderWidth: 2,
-    }],
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -291,14 +266,32 @@ const ApprovalTypeChart = ({ expenses }) => {
         <h3 className="font-semibold text-gray-900">Approval Type</h3>
         <FiAlertCircle className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64"><Pie data={data} options={{ plugins: { legend: { position: 'right' }, title: { display: true, text: 'Requires Approval vs Auto' } } }} /></div>
+      <div className="h-64">
+        <Pie data={{
+          labels: ["Requires Approval", "Auto‑Approved"],
+          datasets: [{
+            data: [require, auto],
+            backgroundColor: ["rgba(245,158,11,0.8)", "rgba(16,185,129,0.8)"],
+            borderColor: ["rgb(245,158,11)", "rgb(16,185,129)"],
+            borderWidth: 2,
+          }],
+        }} options={{ plugins: { legend: { position: "right" } } }} />
+      </div>
     </div>
   );
 };
 
 /* ========== MAIN COMPONENT ========== */
 const AdminExpenseManagement = () => {
-  // State
+  // ---- Auth & Centre ----
+  const user = getUserFromToken();
+  const isSuperAdmin = user?.role === "superadmin";
+  const defaultCentreId = user?.centre_id ? Number(user.centre_id) : null;
+  
+  const [centres, setCentres] = useState([]);
+  const [selectedCentreId, setSelectedCentreId] = useState(defaultCentreId);
+
+  // ---- Data State ----
   const [expenses, setExpenses] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -306,7 +299,7 @@ const AdminExpenseManagement = () => {
   const [showCorrectModal, setShowCorrectModal] = useState(false);
   const [correctingExpense, setCorrectingExpense] = useState(null);
 
-  // Filters
+  // ---- Filters ----
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -314,18 +307,18 @@ const AdminExpenseManagement = () => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedWallet, setSelectedWallet] = useState("all");
 
-  // Correction form
+  // ---- Correction Form ----
   const [correctionForm, setCorrectionForm] = useState({
     amount: "",
     wallet_id: "",
     reason: "",
   });
 
-  // View toggles
+  // ---- View Toggles ----
   const [showFutureAnalysis, setShowFutureAnalysis] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
 
-  // Categories (same as before)
+  // ---- Metadata ----
   const categories = [
     { id: 1, name: "Salary Advance", color: "#3B82F6", icon: "💰", requires_approval: true },
     { id: 2, name: "Rent Payment", color: "#10B981", icon: "🏠", requires_approval: true },
@@ -359,36 +352,85 @@ const AdminExpenseManagement = () => {
 
   const getWalletMeta = (wallet) => {
     const type = wallet.type || wallet.wallet_type;
-    return WALLET_TYPE_META[type] || {
-      label: "Wallet", icon: "💼", color: "text-gray-600", bg: "bg-gray-50",
-    };
+    return WALLET_TYPE_META[type] || { label: "Wallet", icon: "💼", color: "text-gray-600", bg: "bg-gray-50" };
   };
-  const getCategoryById = (id) => categories.find((c) => c.id === id);
+  const getCategoryById = (id) => categories.find(c => c.id === id);
 
-  // Data loading
+  // ---- Fetch Centres (superadmin only) ----
   useEffect(() => {
-    loadAllData();
-  }, []);
+    if (isSuperAdmin) {
+      const fetchCentres = async () => {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/api/centres`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          });
+          const data = await res.json();
+          setCentres(data);
+          // If no centre selected yet, auto-select first
+          if (!selectedCentreId && data.length > 0) {
+            setSelectedCentreId(data[0].id);
+          }
+        } catch (err) {
+          toast.error("Failed to load centres");
+        }
+      };
+      fetchCentres();
+    }
+  }, [isSuperAdmin]);
+
+  // ---- Data Loading (with centre support) ----
+  const buildQueryString = (params = {}) => {
+    const allParams = { ...params };
+    if (isSuperAdmin && selectedCentreId) {
+      allParams.centreId = selectedCentreId;
+    }
+    return new URLSearchParams(allParams).toString();
+  };
 
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [expenseData, walletData] = await Promise.all([
-        getCentreExpenses(),
-        getWalletsForCentre(),
-      ]);
-      setExpenses(expenseData);
-      setWallets(walletData);
+      const headers = {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      };
+
+      // Fetch expenses
+      const expenseRes = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`,
+        { headers }
+      );
+      if (expenseRes.ok) {
+        const expenseData = await expenseRes.json();
+        setExpenses(expenseData);
+      } else {
+        toast.error("Failed to load expenses");
+      }
+
+      // Fetch wallets
+      const walletRes = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/wallets?${buildQueryString()}`,
+        { headers }
+      );
+      if (walletRes.ok) {
+        const walletData = await walletRes.json();
+        setWallets(walletData);
+      } else {
+        toast.error("Failed to load wallets");
+      }
     } catch (err) {
-      toast.error("Failed to load expenses or wallets");
+      toast.error("Network error while loading data");
     } finally {
       setLoading(false);
     }
   };
 
-  // Filtering
+  useEffect(() => {
+    loadAllData();
+  }, [selectedCentreId]); // reload when centre changes
+
+  // ---- Filtering ----
   const filteredExpenses = useMemo(() => {
-    return expenses.filter((expense) => {
+    return expenses.filter(expense => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         if (
@@ -397,58 +439,47 @@ const AdminExpenseManagement = () => {
           !expense.category?.toLowerCase().includes(q) &&
           !expense.remarks?.toLowerCase().includes(q) &&
           !expense.wallet_name?.toLowerCase().includes(q)
-        )
-          return false;
+        ) return false;
       }
-      if (selectedCategory !== "all" && expense.category_id !== parseInt(selectedCategory))
-        return false;
-      if (selectedStatus !== "all" && expense.status !== selectedStatus)
-        return false;
-      if (selectedWallet !== "all" && expense.wallet_id !== parseInt(selectedWallet))
-        return false;
+      if (selectedCategory !== "all" && expense.category_id !== parseInt(selectedCategory)) return false;
+      if (selectedStatus !== "all" && expense.status !== selectedStatus) return false;
+      if (selectedWallet !== "all" && expense.wallet_id !== parseInt(selectedWallet)) return false;
       if (selectedMonth && selectedYear) {
         const expDate = new Date(expense.expense_date);
-        if (expDate.getMonth() + 1 !== selectedMonth || expDate.getFullYear() !== selectedYear)
-          return false;
+        if (expDate.getMonth() + 1 !== selectedMonth || expDate.getFullYear() !== selectedYear) return false;
       }
       return true;
     });
   }, [expenses, searchQuery, selectedCategory, selectedStatus, selectedWallet, selectedMonth, selectedYear]);
 
-  // Statistics
+  // ---- Statistics ----
   const stats = useMemo(() => {
     const totalAmount = filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-    const pendingCount = filteredExpenses.filter((e) => e.status === "pending").length;
-    const approvedCount = filteredExpenses.filter(
-      (e) => e.status === "approved" || e.status === "auto_approved"
-    ).length;
-    const rejectedCount = filteredExpenses.filter((e) => e.status === "rejected").length;
-    const avgAmount = filteredExpenses.length > 0 ? totalAmount / filteredExpenses.length : 0;
+    const pendingCount = filteredExpenses.filter(e => e.status === "pending").length;
+    const approvedCount = filteredExpenses.filter(e => e.status === "approved" || e.status === "auto_approved").length;
+    const rejectedCount = filteredExpenses.filter(e => e.status === "rejected").length;
+    const avgAmount = filteredExpenses.length ? totalAmount / filteredExpenses.length : 0;
     const largest = filteredExpenses.reduce((max, e) => Math.max(max, Number(e.amount || 0)), 0);
     const pendingAmount = filteredExpenses.filter(e => e.status === "pending").reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-    let busiestStaff = 'None';
+    let busiestStaff = "None";
     const staffCounts = {};
     filteredExpenses.forEach(e => {
-      const s = e.staff_name || 'Unknown';
+      const s = e.staff_name || "Unknown";
       staffCounts[s] = (staffCounts[s] || 0) + 1;
     });
     const sortedStaff = Object.entries(staffCounts).sort((a, b) => b[1] - a[1]);
     if (sortedStaff.length) busiestStaff = sortedStaff[0][0];
 
-    return {
-      totalAmount, pendingCount, approvedCount, rejectedCount,
-      totalCount: filteredExpenses.length, avgAmount, largest,
-      pendingAmount, busiestStaff,
-    };
+    return { totalAmount, pendingCount, approvedCount, rejectedCount, totalCount: filteredExpenses.length, avgAmount, largest, pendingAmount, busiestStaff };
   }, [filteredExpenses]);
 
-  // Future payments prediction
+  // ---- Future Payments Prediction ----
   const futureProjections = useMemo(() => {
-    const recurringExpenses = expenses.filter((e) => e.is_recurring && e.recurrence_type !== "none");
+    const recurring = expenses.filter(e => e.is_recurring && e.recurrence_type !== "none");
     const now = new Date();
     const projections = [];
-    recurringExpenses.forEach((exp) => {
+    recurring.forEach(exp => {
       const lastDate = new Date(exp.expense_date);
       const interval = exp.recurrence_type;
       let nextDate = new Date(lastDate);
@@ -478,15 +509,15 @@ const AdminExpenseManagement = () => {
 
   const futureTotal = futureProjections.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-  // Quick Insights
+  // ---- Quick Insights ----
   const insights = useMemo(() => {
     if (!filteredExpenses.length) return null;
     const catTotals = {};
     filteredExpenses.forEach(e => {
-      const c = e.category || 'Other';
-      catTotals[c] = (catTotals[c] || 0) + Number(e.amount);
+      const c = e.category || "Other";
+      catTotals[c] = (catTotals[c] || 0) + Number(e.amount || 0);
     });
-    const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
+    const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || "None";
     return {
       topCategory: topCat,
       approvalRate: ((stats.approvedCount / (stats.totalCount || 1)) * 100).toFixed(1),
@@ -495,45 +526,44 @@ const AdminExpenseManagement = () => {
     };
   }, [filteredExpenses, stats]);
 
-  // Actions
+  // ---- Action Handlers ----
   const handleApprove = async (id) => {
     try {
-      await approveExpense(id);
+      await fetch(`${import.meta.env.VITE_API_URL}/api/expense/${id}/approve`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
       toast.success("Expense approved");
       loadAllData();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Approval failed");
-    }
+    } catch (err) { toast.error("Approval failed"); }
   };
 
   const handleReject = async (id) => {
     try {
-      await rejectExpense(id);
+      await fetch(`${import.meta.env.VITE_API_URL}/api/expense/${id}/reject`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
       toast.success("Expense rejected");
       loadAllData();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Rejection failed");
-    }
+    } catch (err) { toast.error("Rejection failed"); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this expense? Only pending expenses can be deleted.")) return;
     try {
-      await deleteExpense(id);
+      await fetch(`${import.meta.env.VITE_API_URL}/api/expense/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
       toast.success("Expense deleted");
       loadAllData();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Delete failed");
-    }
+    } catch (err) { toast.error("Delete failed"); }
   };
 
   const openCorrectModal = (expense) => {
     setCorrectingExpense(expense);
-    setCorrectionForm({
-      amount: expense.amount.toString(),
-      wallet_id: expense.wallet_id.toString(),
-      reason: "",
-    });
+    setCorrectionForm({ amount: expense.amount.toString(), wallet_id: expense.wallet_id.toString(), reason: "" });
     setShowCorrectModal(true);
   };
 
@@ -544,61 +574,59 @@ const AdminExpenseManagement = () => {
       return;
     }
     try {
-      await correctExpense(correctingExpense.id, {
-        amount: Number(correctionForm.amount),
-        wallet_id: Number(correctionForm.wallet_id),
-        reason: correctionForm.reason || "Admin correction",
+      await fetch(`${import.meta.env.VITE_API_URL}/api/expense/${correctingExpense.id}/correct`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          amount: Number(correctionForm.amount),
+          wallet_id: Number(correctionForm.wallet_id),
+          reason: correctionForm.reason || "Admin correction",
+        }),
       });
-      toast.success("Expense corrected successfully");
+      toast.success("Expense corrected");
       setShowCorrectModal(false);
       loadAllData();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Correction failed");
-    }
+    } catch (err) { toast.error("Correction failed"); }
   };
 
   const handleAddExpenseSubmit = async (payload) => {
     try {
-      await createExpense(payload);
-      toast.success("Expense created and auto‑approved");
+      await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      toast.success("Expense created");
       setShowAddModal(false);
       loadAllData();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Creation failed");
-    }
+    } catch (err) { toast.error("Creation failed"); }
   };
 
   const exportToCSV = () => {
     const csvContent = [
-      ["Date", "Category", "Description", "Amount", "Wallet", "Status", "Receipt", "Remarks"],
-      ...filteredExpenses.map((e) => [
-        e.expense_date,
-        e.category,
-        e.description,
-        e.amount,
-        e.wallet_name,
-        e.status,
-        e.receipt_number,
-        e.remarks,
+      ["Date","Category","Description","Amount","Wallet","Status","Receipt","Remarks"],
+      ...filteredExpenses.map(e => [
+        e.expense_date, e.category, e.description, e.amount,
+        e.wallet_name, e.status, e.receipt_number, e.remarks,
       ]),
-    ]
-      .map((row) => row.join(","))
-      .join("\n");
+    ].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `expenses_${selectedMonth}_${selectedYear}.csv`;
     a.click();
-    toast.success("Expenses exported");
+    toast.success("Exported");
   };
 
   const formatCurrency = (amount) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 0,
-    }).format(amount || 0);
+    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(amount || 0);
 
   const formatDate = (dateString) => {
     if (!dateString) return "-";
@@ -606,10 +634,7 @@ const AdminExpenseManagement = () => {
     return isNaN(d) ? "-" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
   return (
@@ -626,11 +651,28 @@ const AdminExpenseManagement = () => {
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowAddModal(true)}
-            className="mt-4 md:mt-0 bg-[#1e3a5f] hover:bg-[#172a45] text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 shadow-md hover:shadow-lg"
+            className="mt-4 md:mt-0 bg-[#1e3a5f] hover:bg-[#172a45] text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all shadow-md hover:shadow-lg"
           >
             <FiPlus className="mr-2" /> Add Expense
           </motion.button>
         </div>
+
+        {/* Centre Selector (superadmin only) */}
+        {isSuperAdmin && (
+          <div className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-6 flex items-center">
+            <FiHome className="h-5 w-5 text-indigo-600 mr-2" />
+            <span className="text-sm font-medium text-gray-700 mr-3">Centre:</span>
+            <select
+              value={selectedCentreId || ""}
+              onChange={(e) => setSelectedCentreId(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+            >
+              {centres.map(centre => (
+                <option key={centre.id} value={centre.id}>{centre.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
@@ -655,16 +697,11 @@ const AdminExpenseManagement = () => {
             <FiTrendingUp className="text-3xl text-indigo-600 mb-2" />
             <p className="text-sm text-gray-600">Future Recurring</p>
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(futureTotal)}</p>
-            <button
-              onClick={() => setShowFutureAnalysis(!showFutureAnalysis)}
-              className="text-xs text-indigo-600 underline hover:text-indigo-800"
-            >
-              {showFutureAnalysis ? "Hide" : "View"}
-            </button>
+            <button onClick={() => setShowFutureAnalysis(!showFutureAnalysis)} className="text-xs text-indigo-600 underline">View</button>
           </div>
         </div>
 
-        {/* Quick Insights (new) */}
+        {/* Quick Insights */}
         {insights && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
             <h3 className="font-semibold text-gray-900 mb-4">Quick Insights</h3>
@@ -691,24 +728,15 @@ const AdminExpenseManagement = () => {
 
         {/* Charts Toggle */}
         <div className="flex justify-end mb-4">
-          <button
-            onClick={() => setShowCharts(!showCharts)}
-            className="flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
-          >
-            <FiBarChart2 className="mr-2 h-4 w-4" />
-            {showCharts ? "Hide Charts" : "Show Charts"}
+          <button onClick={() => setShowCharts(!showCharts)} className="flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800">
+            <FiBarChart2 className="mr-2 h-4 w-4" /> {showCharts ? "Hide Charts" : "Show Charts"}
           </button>
         </div>
 
-        {/* Charts Section (Chart.js) */}
+        {/* Charts Section */}
         <AnimatePresence>
           {showCharts && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="mb-8"
-            >
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="mb-8">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <StatusDistributionChart expenses={filteredExpenses} />
                 <MonthlyExpenseTrendChart expenses={filteredExpenses} />
@@ -725,92 +753,59 @@ const AdminExpenseManagement = () => {
           )}
         </AnimatePresence>
 
-        {/* Filters (unchanged) */}
+        {/* Filters */}
         <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {months.map((m, idx) => (
-                  <option key={idx} value={idx + 1}>{m}</option>
-                ))}
+              <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {months.map((m, idx) => (<option key={idx} value={idx + 1}>{m}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {years.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
+              <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {years.map(y => (<option key={y} value={y}>{y}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                {categories.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Wallet</label>
-              <select
-                value={selectedWallet}
-                onChange={(e) => setSelectedWallet(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={selectedWallet} onChange={(e) => setSelectedWallet(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">All Wallets</option>
-                {wallets.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
+                {wallets.map(w => (<option key={w.id} value={w.id}>{w.name}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+              <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">All Status</option>
-                {statuses.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
+                {statuses.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
               </select>
             </div>
           </div>
           <div className="mt-4 flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1">
-              <input
-                type="text"
-                placeholder="Search by description, receipt, remarks..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="text" placeholder="Search by description, receipt, remarks..."
+                value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <svg className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={exportToCSV}
-              className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium flex items-center"
-            >
+            <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }} onClick={exportToCSV}
+              className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium flex items-center">
               <FiDownload className="mr-2" /> Export CSV
             </motion.button>
           </div>
@@ -819,12 +814,8 @@ const AdminExpenseManagement = () => {
         {/* Future Payments Analysis */}
         <AnimatePresence>
           {showFutureAnalysis && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8"
-            >
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                 <FiTrendingUp className="mr-2 h-5 w-5 text-indigo-600" />
                 Projected Recurring Payments (Next 6 Months)
@@ -892,10 +883,10 @@ const AdminExpenseManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredExpenses.map((expense) => {
+                  {filteredExpenses.map(expense => {
                     const category = getCategoryById(expense.category_id);
-                    const wallet = wallets.find((w) => w.id === expense.wallet_id);
-                    const statusObj = statuses.find((s) => s.id === expense.status);
+                    const wallet = wallets.find(w => w.id === expense.wallet_id);
+                    const statusObj = statuses.find(s => s.id === expense.status);
                     const canApprove = expense.status === "pending";
                     const canCorrect = expense.status !== "pending";
                     const canDelete = expense.status === "pending";
@@ -908,12 +899,9 @@ const AdminExpenseManagement = () => {
                             <div>
                               <p className="font-medium text-gray-900">{expense.description}</p>
                               <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                                <FiCalendar className="h-4 w-4" />
-                                {formatDate(expense.expense_date)}
-                                <span
-                                  className="px-2 py-0.5 rounded-full text-xs font-medium"
-                                  style={{ backgroundColor: category?.color + "20", color: category?.color }}
-                                >
+                                <FiCalendar className="h-4 w-4" /> {formatDate(expense.expense_date)}
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                                  style={{ backgroundColor: category?.color + "20", color: category?.color }}>
                                   {expense.category}
                                 </span>
                               </div>
@@ -1008,75 +996,36 @@ const AdminExpenseManagement = () => {
               <form onSubmit={handleCorrectExpense} className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">New Amount (₹) *</label>
-                  <input
-                    type="number"
-                    value={correctionForm.amount}
-                    onChange={(e) => setCorrectionForm((p) => ({ ...p, amount: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                    min="0"
-                    step="0.01"
-                  />
+                  <input type="number" value={correctionForm.amount} onChange={(e) => setCorrectionForm(p => ({ ...p, amount: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required min="0" step="0.01" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">New Wallet *</label>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {wallets.map((wallet) => (
-                      <label
-                        key={wallet.id}
-                        className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer ${
-                          correctionForm.wallet_id === wallet.id.toString()
-                            ? "border-blue-500 bg-blue-50"
-                            : "border-gray-200"
-                        }`}
-                      >
+                    {wallets.map(wallet => (
+                      <label key={wallet.id} className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer ${correctionForm.wallet_id === wallet.id.toString() ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
                         <div className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="correction_wallet"
-                            value={wallet.id.toString()}
-                            checked={correctionForm.wallet_id === wallet.id.toString()}
-                            onChange={(e) =>
-                              setCorrectionForm((p) => ({ ...p, wallet_id: e.target.value }))
-                            }
-                            className="sr-only"
-                            required
-                          />
+                          <input type="radio" name="correction_wallet" value={wallet.id.toString()} checked={correctionForm.wallet_id === wallet.id.toString()}
+                            onChange={(e) => setCorrectionForm(p => ({ ...p, wallet_id: e.target.value }))} className="sr-only" required />
                           <span className="text-xl">{getWalletMeta(wallet).icon}</span>
                           <div>
                             <p className="font-medium text-gray-900 text-sm">{wallet.name}</p>
                             <p className="text-xs text-gray-500">{getWalletMeta(wallet).label}</p>
                           </div>
                         </div>
-                        <span className="text-sm font-semibold text-gray-700">
-                          {formatCurrency(wallet.currentBalance ?? wallet.balance)}
-                        </span>
+                        <span className="text-sm font-semibold text-gray-700">{formatCurrency(wallet.currentBalance ?? wallet.balance)}</span>
                       </label>
                     ))}
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Correction</label>
-                  <textarea
-                    value={correctionForm.reason}
-                    onChange={(e) => setCorrectionForm((p) => ({ ...p, reason: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    rows="3"
-                    placeholder="Explain why..."
-                  />
+                  <textarea value={correctionForm.reason} onChange={(e) => setCorrectionForm(p => ({ ...p, reason: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" rows="3" placeholder="Explain why..." />
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => setShowCorrectModal(false)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                  >
+                  <button type="button" onClick={() => setShowCorrectModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
                     <FiRefreshCw className="h-4 w-4" /> Submit Correction
                   </button>
                 </div>
