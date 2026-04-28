@@ -656,10 +656,10 @@ router.get('/entries', authenticateToken, async (req, res) => {
         JOIN wallets w ON p.wallet_id = w.id
 
         WHERE p.service_entry_id = $1
-          AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+          AND COALESCE(p.is_reversal, FALSE) = FALSE
           AND NOT EXISTS (
             SELECT 1 FROM wallet_transactions wt 
-            WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+            WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
           )
 
         ORDER BY p.service_entry_id, p.created_at DESC
@@ -804,10 +804,10 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
       FROM payments p
       JOIN wallets w ON p.wallet_id = w.id
       WHERE p.service_entry_id = $1 
-        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND COALESCE(p.is_reversal, FALSE) = FALSE
         AND NOT EXISTS (
           SELECT 1 FROM wallet_transactions wt 
-          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+          WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
         )
       ORDER BY p.correction_group_id, p.created_at DESC
     `, [entry.id]);
@@ -1223,10 +1223,10 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       SELECT DISTINCT ON (p.correction_group_id) p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
       FROM payments p JOIN wallets w ON p.wallet_id = w.id
       WHERE p.service_entry_id = $1 
-        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND COALESCE(p.is_reversal, FALSE) = FALSE
         AND NOT EXISTS (
           SELECT 1 FROM wallet_transactions wt 
-          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+          WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
         )
       ORDER BY p.correction_group_id, p.created_at DESC
     `, [id]);
@@ -2675,10 +2675,10 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
 
       LEFT JOIN payments p 
         ON p.service_entry_id = se.id
-        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND COALESCE(p.is_reversal, FALSE) = FALSE
         AND NOT EXISTS (
           SELECT 1 FROM wallet_transactions wt 
-          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+          WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
         )
 
       LEFT JOIN wallets w 
@@ -2913,10 +2913,10 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
 
       LEFT JOIN payments p 
         ON p.service_entry_id = se.id
-        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND COALESCE(p.is_reversal, FALSE) = FALSE
         AND NOT EXISTS (
           SELECT 1 FROM wallet_transactions wt 
-          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+          WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
         )
 
       LEFT JOIN wallets w 
