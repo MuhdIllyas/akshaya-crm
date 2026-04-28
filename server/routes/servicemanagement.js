@@ -656,7 +656,11 @@ router.get('/entries', authenticateToken, async (req, res) => {
         JOIN wallets w ON p.wallet_id = w.id
 
         WHERE p.service_entry_id = $1
-          AND p.is_reversal = FALSE
+          AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+          AND NOT EXISTS (
+            SELECT 1 FROM wallet_transactions wt 
+            WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+          )
 
         ORDER BY p.service_entry_id, p.created_at DESC
       `, [entry.id]);
@@ -799,7 +803,12 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
         p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
       FROM payments p
       JOIN wallets w ON p.wallet_id = w.id
-      WHERE p.service_entry_id = $1 AND p.is_reversal = FALSE
+      WHERE p.service_entry_id = $1 
+        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND NOT EXISTS (
+          SELECT 1 FROM wallet_transactions wt 
+          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+        )
       ORDER BY p.correction_group_id, p.created_at DESC
     `, [entry.id]);
 
@@ -1213,7 +1222,12 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     const paymentsResult = await client.query(`
       SELECT DISTINCT ON (p.correction_group_id) p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
       FROM payments p JOIN wallets w ON p.wallet_id = w.id
-      WHERE p.service_entry_id = $1 AND p.is_reversal = FALSE
+      WHERE p.service_entry_id = $1 
+        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND NOT EXISTS (
+          SELECT 1 FROM wallet_transactions wt 
+          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+        )
       ORDER BY p.correction_group_id, p.created_at DESC
     `, [id]);
 
@@ -1516,6 +1530,14 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         original.reference_payment_id
       ]
     );
+
+    // 🔥 FIX: Actively flag the original payment row as a reversal
+    if (original.category === 'Service Payment' && original.reference_payment_id) {
+      await client.query(
+        `UPDATE payments SET is_reversal = TRUE WHERE id = $1`,
+        [original.reference_payment_id]
+      );
+    }
 
     // UPDATE ORIGINAL WALLET
     if (original.type === 'credit') {
@@ -2653,7 +2675,11 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
 
       LEFT JOIN payments p 
         ON p.service_entry_id = se.id
-        AND p.is_reversal = FALSE
+        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND NOT EXISTS (
+          SELECT 1 FROM wallet_transactions wt 
+          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+        )
 
       LEFT JOIN wallets w 
         ON w.id = p.wallet_id
@@ -2887,7 +2913,11 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
 
       LEFT JOIN payments p 
         ON p.service_entry_id = se.id
-        AND p.is_reversal = FALSE
+        AND (p.is_reversal IS NULL OR p.is_reversal = FALSE)
+        AND NOT EXISTS (
+          SELECT 1 FROM wallet_transactions wt 
+          WHERE wt.reference_payment_id = p.id AND wt.is_reversal = TRUE
+        )
 
       LEFT JOIN wallets w 
         ON w.id = p.wallet_id
