@@ -1,4 +1,3 @@
-//Used by both admin and superadmin
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ToastContainer, toast } from "react-toastify";
@@ -24,7 +23,7 @@ import {
   FiHome,
   FiUsers,
 } from "react-icons/fi";
-import AdminExpenseEntry from "@/pages/reports/components/AdminExpenseEntry";
+import AdminExpenseEntry from "./AdminExpenseEntry";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -39,6 +38,7 @@ import {
   Filler,
 } from "chart.js";
 import { Bar, Line, Pie, Doughnut } from "react-chartjs-2";
+import { getWalletsForCentre, getWalletsByCentre } from "@/services/walletService";
 
 ChartJS.register(
   CategoryScale,
@@ -316,7 +316,7 @@ const AdminExpenseManagement = () => {
   const [showFutureAnalysis, setShowFutureAnalysis] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
 
-  // ---- Metadata ----
+  // ---- Metadata (same as staff) ----
   const categories = [
     { id: 1, name: "Salary Advance", color: "#3B82F6", icon: "💰", requires_approval: true },
     { id: 2, name: "Rent Payment", color: "#10B981", icon: "🏠", requires_approval: true },
@@ -348,25 +348,14 @@ const AdminExpenseManagement = () => {
     savings: { label: "Savings", icon: "🏧", color: "text-teal-600", bg: "bg-teal-50" },
   };
 
-  // Safe wallet metadata getter – prevents crash when wallet is undefined
   const getWalletMeta = (wallet) => {
     if (!wallet) {
-      return {
-        label: "Unknown",
-        icon: "💼",
-        color: "text-gray-600",
-        bg: "bg-gray-50",
-      };
+      return { label: "Unknown", icon: "💼", color: "text-gray-600", bg: "bg-gray-50" };
     }
     const type = wallet.type || wallet.wallet_type || "unknown";
-    return (
-      WALLET_TYPE_META[type] || {
-        label: "Wallet",
-        icon: "💼",
-        color: "text-gray-600",
-        bg: "bg-gray-50",
-      }
-    );
+    return WALLET_TYPE_META[type] || {
+      label: "Wallet", icon: "💼", color: "text-gray-600", bg: "bg-gray-50",
+    };
   };
 
   const getCategoryById = (id) => categories.find(c => c.id === id);
@@ -420,31 +409,16 @@ const AdminExpenseManagement = () => {
         toast.error("Failed to load expenses");
       }
 
-      // Fetch wallets using the working book-balances endpoint
-      const walletParams = new URLSearchParams();
-      if (isSuperAdmin && selectedCentreId) {
-        walletParams.append("centreId", selectedCentreId);
-      }
-      const walletRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/accounting/wallet-book-balances?${walletParams.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          }
+      // Fetch wallets – correct functions per role
+      try {
+        if (isSuperAdmin && selectedCentreId) {
+          const walletsData = await getWalletsByCentre(selectedCentreId);
+          setWallets(walletsData);
+        } else {
+          const walletsData = await getWalletsForCentre();
+          setWallets(walletsData);
         }
-      );
-      if (walletRes.ok) {
-        const data = await walletRes.json();
-        const merged = data.map((item) => ({
-          id: item.id,
-          name: item.name,
-          type: item.wallet_type || item.type || "unknown",
-          wallet_type: item.wallet_type || item.type || "unknown",
-          currentBalance: Number(item.book_balance || 0),
-          balance: Number(item.book_balance || 0),
-        }));
-        setWallets(merged);
-      } else {
+      } catch (walletErr) {
         toast.error("Failed to load wallets");
       }
     } catch (err) {
@@ -458,7 +432,7 @@ const AdminExpenseManagement = () => {
     loadAllData();
   }, [selectedCentreId]);
 
-  // ---- Filtering ----
+  // ---- Filtering (identical to staff) ----
   const filteredExpenses = useMemo(() => {
     return expenses.filter(expense => {
       if (searchQuery) {
@@ -555,6 +529,12 @@ const AdminExpenseManagement = () => {
       busiestStaff: stats.busiestStaff,
     };
   }, [filteredExpenses, stats]);
+
+  // ---- Wallet Balances (same as staff: use `b.balance`) ----
+  const walletBalances = wallets.reduce((acc, w) => {
+    acc[w.id] = Number(w.balance);
+    return acc;
+  }, {});
 
   // ---- Action Handlers ----
   const handleApprove = async (id) => {
@@ -667,6 +647,7 @@ const AdminExpenseManagement = () => {
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
+  // ========== RENDER ==========
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 sm:p-6">
       <ToastContainer />
@@ -678,8 +659,7 @@ const AdminExpenseManagement = () => {
             <p className="text-gray-600 mt-1">Full oversight, correction, analytics & future payments</p>
           </div>
           <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
             onClick={() => setShowAddModal(true)}
             className="mt-4 md:mt-0 bg-[#1e3a5f] hover:bg-[#172a45] text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all shadow-md hover:shadow-lg"
           >
@@ -697,12 +677,28 @@ const AdminExpenseManagement = () => {
               onChange={(e) => setSelectedCentreId(Number(e.target.value))}
               className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
             >
-              {centres.map(centre => (
-                <option key={centre.id} value={centre.id}>{centre.name}</option>
-              ))}
+              {centres.map(centre => (<option key={centre.id} value={centre.id}>{centre.name}</option>))}
             </select>
           </div>
         )}
+
+        {/* Wallet Balances (exactly like staff) */}
+        <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Wallet Balances</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {wallets.map(wallet => (
+              <div key={wallet.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50">
+                <div className="flex items-center mb-2">
+                  <span className="text-xl mr-2">{getWalletMeta(wallet).icon}</span>
+                  <span className="font-medium text-gray-900">{wallet.name}</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-1">{getWalletMeta(wallet).label}</div>
+                <div className="text-sm text-gray-600">Balance:</div>
+                <div className="text-lg font-bold text-gray-900">{formatCurrency(walletBalances[wallet.id])}</div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
@@ -1043,7 +1039,7 @@ const AdminExpenseManagement = () => {
                             <p className="text-xs text-gray-500">{getWalletMeta(wallet).label}</p>
                           </div>
                         </div>
-                        <span className="text-sm font-semibold text-gray-700">{formatCurrency(wallet.currentBalance ?? wallet.balance)}</span>
+                        <span className="text-sm font-semibold text-gray-700">{formatCurrency(walletBalances[wallet.id])}</span>
                       </label>
                     ))}
                   </div>
