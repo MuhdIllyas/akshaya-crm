@@ -23,7 +23,7 @@ import {
   FiHome,
   FiUsers,
 } from "react-icons/fi";
-import AdminExpenseEntry from "./AdminExpenseEntry";
+import AdminExpenseEntry from "@/pages/reports/components/AdminExpenseEntry";
 import {
   Chart as ChartJS,
   CategoryScale,
