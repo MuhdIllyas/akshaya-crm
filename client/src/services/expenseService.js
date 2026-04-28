@@ -51,6 +51,14 @@ export const deleteExpense = async (expenseId) => {
   return response.data;
 };
 
+/**
+ * Update expenses
+ */
+export const correctExpense = async (expenseId) => {
+  const response = await api.put(`/${expenseId}`);
+  return response.data;
+};
+
 /* =====================================================
    ADMIN APIs
 ===================================================== */
