@@ -493,7 +493,7 @@ const StaffDashboard = () => {
                   <span>Online</span>
                 </div>
                 <button
-                  onClick={() => navigate('/dashboard/profile')}
+                  onClick={() => navigate('/dashboard/my-profile')}
                   className="underline hover:text-white/80"
                 >
                   View Profile
