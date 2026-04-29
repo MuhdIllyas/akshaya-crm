@@ -2796,12 +2796,33 @@ const AccountingSection = ({
     }
   };
 
-  const handleUpdateDailySummary = (summary) => {
-    onUpdateAccounting('dailySummary', {
-      ...accountingData.dailySummary,
-      ...summary
-    });
-  };
+  const handleUpdateDailySummary = async (summary) => {
+      // 1. Update UI instantly
+      onUpdateAccounting('dailySummary', {
+        ...accountingData.dailySummary,
+        ...summary
+      });
+
+      // 2. 🔥 Send the new value to our newly created backend route
+      if (summary.actualCashInHand !== undefined) {
+        try {
+          await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/daily-summary/actual-cash`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+              date: date,
+              actual_cash: summary.actualCashInHand
+            })
+          });
+        } catch (error) {
+          console.error('Failed to save actual cash in hand:', error);
+          toast.error('Failed to save Actual Cash to the database.');
+        }
+      }
+    };
 
   const handleCompleteNightlyAccounting = async (payload) => {
     try {

@@ -113,6 +113,12 @@ router.get('/daily-summary', async (req, res) => {
 
     await client.query('COMMIT');
 
+    const closureRes = await client.query(
+      `SELECT actual_cash FROM daily_accounting_closure WHERE centre_id = $1 AND accounting_date = $2`,
+      [centreId, date]
+    );
+    const actualCashInHand = closureRes.rows.length > 0 ? Number(closureRes.rows[0].actual_cash) : 0;
+
     res.json({
       date,
       derived: {
@@ -126,13 +132,42 @@ router.get('/daily-summary', async (req, res) => {
         digitalOutflow,
         bankOutflow
       },
-      actualCashInHand: 0
+      actualCashInHand: actualCashInHand
     });
 
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Daily summary error:', err);
     res.status(500).json({ error: 'Failed to load daily summary' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== SAVE ACTUAL CASH (DAILY SUMMARY) ==========
+router.post('/daily-summary/actual-cash', async (req, res) => {
+  const client = await req.db.connect();
+  try {
+    const { date, actual_cash } = req.body;
+    const centreId = req.user.centre_id;
+    const userId = req.user.id;
+
+    // Upsert the actual cash into the closure table
+    await client.query(
+      `INSERT INTO daily_accounting_closure 
+        (centre_id, accounting_date, opening_balance, closing_balance, actual_cash, cash_variance, closed_by)
+       VALUES ($1, $2, 0, 0, $3, 0, $4)
+       ON CONFLICT (centre_id, accounting_date) 
+       DO UPDATE SET 
+        actual_cash = EXCLUDED.actual_cash,
+        closed_by = EXCLUDED.closed_by`,
+      [centreId, date, actual_cash, userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Actual cash save error:', err);
+    res.status(500).json({ error: 'Failed to save actual cash' });
   } finally {
     client.release();
   }
