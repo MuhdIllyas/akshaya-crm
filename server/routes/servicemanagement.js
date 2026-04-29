@@ -1944,9 +1944,6 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
   if (!staffId || isNaN(parseInt(staffId))) {
     errors.push('Valid staff ID is required');
   }
-  if (userRole !== 'admin' && userRole !== 'superadmin') {
-    errors.push('Only admins or superadmins can assign staff');
-  }
 
   if (errors.length > 0) {
     console.log('servicemanagement.js: Validation errors:', errors);
@@ -1968,6 +1965,12 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
     }
 
     const token = tokenResult.rows[0];
+
+    // NEW: Ensure staff can only assign tokens from their own centre
+    if (userRole === 'staff' && token.centre_id !== req.user.centre_id) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'You can only assign tokens within your own centre' });
+    }
     
     if (token.status !== 'pending') {
       await client.query('ROLLBACK');
