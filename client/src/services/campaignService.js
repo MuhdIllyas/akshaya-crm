@@ -98,4 +98,16 @@ export const updateTokenStatus = async (tokenId, status) => {
   return await api.put(`/token/${tokenId}/status`, { status }); 
 };
 
+// Get staff members for assignment
+export const getStaff = async (centreId = '') => {
+  console.log('campaignService.js: Fetching staff');
+  return await api.get('/staff', { params: { centre_id: centreId } });
+};
+
+// Assign a token to a staff member
+export const assignToken = async (tokenId, staffId) => {
+  console.log('campaignService.js: Assigning token:', { tokenId, staffId });
+  return await api.put(`/token/${tokenId}/assign`, { staffId });
+};
+
 export default api;
