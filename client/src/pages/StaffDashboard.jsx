@@ -1027,29 +1027,7 @@ const StaffDashboard = () => {
                   )}
                 </div>
               </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => navigate('/staff/token/create')} className="p-3 border border-gray-300 rounded-lg hover:border-gray-400 text-left transition-colors">
-                    <FiPlus className="h-5 w-5 text-gray-600 mb-2" />
-                    <span className="text-sm font-medium text-gray-900">New Token</span>
-                  </button>
-                  <button onClick={() => navigate('/staff/reports')} className="p-3 border border-gray-300 rounded-lg hover:border-gray-400 text-left transition-colors">
-                    <FiBarChart2 className="h-5 w-5 text-gray-600 mb-2" />
-                    <span className="text-sm font-medium text-gray-900">Reports</span>
-                  </button>
-                  <button onClick={() => navigate('/staff/customers')} className="p-3 border border-gray-300 rounded-lg hover:border-gray-400 text-left transition-colors">
-                    <FiUsers className="h-5 w-5 text-gray-600 mb-2" />
-                    <span className="text-sm font-medium text-gray-900">Customers</span>
-                  </button>
-                  <button onClick={refreshTokens} className="p-3 border border-gray-300 rounded-lg hover:border-gray-400 text-left transition-colors">
-                    <FiRefreshCw className="h-5 w-5 text-gray-600 mb-2" />
-                    <span className="text-sm font-medium text-gray-900">Refresh</span>
-                  </button>
-                </div>
-              </div>
+              
             </div>
           </div>
         </motion.div>
