@@ -95,7 +95,7 @@ export const getTokens = async (centreId = null) => {
 
 export const updateTokenStatus = async (tokenId, status) => {
   console.log('campaignService.js: Updating token status:', { tokenId, status });
-  return await api.put(`/token/${tokenId}`, { status });
+  return await api.put(`/token/${tokenId}/status`, { status }); 
 };
 
 export default api;
