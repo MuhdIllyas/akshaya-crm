@@ -313,24 +313,38 @@ router.get("/transactions", async (req, res) => {
       limit: Number(limit),
       total,
       totalPages: Math.ceil(total / limit),
-      transactions: rows.map(r => ({
-        id: r.id,
-        transactionType: r.transaction_type,
-        amount: Number(r.amount),
-        status: r.status,
-        category: r.category,
-        fromWalletId: r.from_wallet_id,
-        fromWalletName: r.from_wallet_name,
-        toWalletId: r.to_wallet_id,
-        toWalletName: r.to_wallet_name,
-        staffId: r.staff_id,
-        staffName: r.staff_name,
-        customerName: r.customer_name || null,
-        description: r.description,
-        referenceId: r.reference_id,
-        date: r.created_at ? r.created_at.toISOString().split("T")[0] : null,
-        time: r.created_at ? r.created_at.toISOString().split("T")[1].slice(0, 5) : null
-      }))
+      transactions: rows.map(r => {
+        // Convert to IST explicitly to fix the timezone offset
+        let localDate = null;
+        let localTime = null;
+        
+        if (r.created_at) {
+          const dateObj = new Date(r.created_at);
+          // en-CA natively formats to YYYY-MM-DD
+          localDate = dateObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+          // en-GB natively formats to 24-hour HH:mm
+          localTime = dateObj.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+        }
+
+        return {
+          id: r.id,
+          transactionType: r.transaction_type,
+          amount: Number(r.amount),
+          status: r.status,
+          category: r.category,
+          fromWalletId: r.from_wallet_id,
+          fromWalletName: r.from_wallet_name,
+          toWalletId: r.to_wallet_id,
+          toWalletName: r.to_wallet_name,
+          staffId: r.staff_id,
+          staffName: r.staff_name,
+          customerName: r.customer_name || null,
+          description: r.description,
+          referenceId: r.reference_id,
+          date: localDate,
+          time: localTime
+        };
+      })
     });
   } catch (err) {
     console.error("Transaction report error:", err);
