@@ -467,66 +467,76 @@ const StaffDashboard = () => {
     <div className="min-h-screen bg-gray-50">
       <ToastContainer position="top-right" autoClose={4000} />
 
-      {/* ===== WELCOME BANNER ===== */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-4">
-          {/* Left: Avatar + greeting */}
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center font-bold text-xl">
-              {staffInitials}
+      {/* ===== NEW WELCOME BANNER (matches Capture.PNG) ===== */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            {/* Left side: Avatar + greeting + status */}
+            <div className="flex-1">
+              <div className="flex items-start gap-4 mb-3">
+                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
+                  {staffInitials}
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {getGreeting()}, {staffName}!
+                  </h2>
+                  <p className="text-white/80 text-lg mt-0.5">
+                    Welcome back to your workspace.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 text-sm text-white/90 mt-2 mb-6">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 bg-green-400 rounded-full"></span>
+                  <span>Online</span>
+                </div>
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="underline hover:text-white/80"
+                >
+                  View Profile
+                </button>
+              </div>
+
+              {/* Quick Actions */}
+              <div>
+                <p className="text-xs uppercase tracking-wider text-white/70 mb-2 font-semibold">Quick Actions</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => navigate('/staff/token/create')}
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                  >
+                    New Token
+                  </button>
+                  <button
+                    onClick={() => setShowQuickService(true)}
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                  >
+                    Quick Service
+                  </button>
+                  <button
+                    onClick={() => navigate('/staff/reports')}
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                  >
+                    View Reports
+                  </button>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-lg">
-                {getGreeting()}, {staffName}!
-              </p>
-              <p className="text-white/80 text-sm">Welcome back to your dashboard.</p>
+
+            {/* Right side: Date & Time */}
+            <div className="md:text-right">
+              <p className="text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
+              <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
             </div>
           </div>
 
-          {/* Right: status + time */}
-          <div className="flex items-center gap-6 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 bg-green-400 rounded-full"></span>
-              <span className="text-sm">Online</span>
-            </div>
-            <button
-              onClick={() => navigate('/profile')}
-              className="text-sm underline hover:text-white/80"
-            >
-              View Profile
-            </button>
-            <div className="text-right">
-              <p className="text-lg font-semibold">{formatCurrentTime(currentTime)}</p>
-              <p className="text-sm text-white/80">{formatCurrentDate(currentTime)}</p>
-            </div>
+          {/* Announcement */}
+          <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
+            Exciting updates coming soon! Check back frequently — new features will be announced here.
           </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="max-w-7xl mx-auto mt-3 flex gap-3 flex-wrap">
-          <button
-            onClick={() => navigate('/staff/token/create')}
-            className="px-4 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition"
-          >
-            New Token
-          </button>
-          <button
-            onClick={() => setShowQuickService(true)}
-            className="px-4 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition"
-          >
-            Quick Service
-          </button>
-          <button
-            onClick={() => navigate('/staff/reports')}
-            className="px-4 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition"
-          >
-            View Reports
-          </button>
-        </div>
-
-        {/* Announcement */}
-        <div className="max-w-7xl mx-auto mt-2 text-xs text-white/70 italic">
-          Exciting updates coming soon! Check back frequently — new features will be announced here.
         </div>
       </div>
       
