@@ -467,8 +467,8 @@ const StaffDashboard = () => {
     <div className="min-h-screen bg-gray-50">
       <ToastContainer position="top-right" autoClose={4000} />
 
-      {/* ===== NEW WELCOME BANNER (matches Capture.PNG) ===== */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-6">
+      {/* ===== DARK BLUE WELCOME BANNER ===== */}
+      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             {/* Left side: Avatar + greeting + status */}
