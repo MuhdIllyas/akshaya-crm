@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown } from 'react-icons/fi';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { getServices, createToken, getTokens, getCampaigns } from '/src/services/campaignService';
+import { getServices, createToken, getTokens, getCampaigns, getStaff, assignToken } from '/src/services/campaignService';
 
 const TokenGenerator = () => {
   const [formData, setFormData] = useState({
@@ -14,11 +14,14 @@ const TokenGenerator = () => {
     campaign: '',
     centreId: localStorage.getItem('centre_id') || '',
   });
+  
   const [categories, setCategories] = useState([]);
   const [filteredSubcategories, setFilteredSubcategories] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [tokens, setTokens] = useState([]);
+  const [staffList, setStaffList] = useState([]); // State for staff dropdown
   const [error, setError] = useState(null);
+  
   const userRole = localStorage.getItem('role');
   const userId = localStorage.getItem('id');
 
@@ -27,15 +30,16 @@ const TokenGenerator = () => {
       try {
         const categoriesRes = await getServices();
         setCategories(categoriesRes.data);
-        console.log('TokenGenerator.jsx: Fetched categories:', JSON.stringify(categoriesRes.data, null, 2));
 
         const campaignsRes = await getCampaigns();
         setCampaigns(campaignsRes.data);
-        console.log('TokenGenerator.jsx: Fetched campaigns:', JSON.stringify(campaignsRes.data, null, 2));
 
         const tokensRes = await getTokens();
         setTokens(tokensRes.data);
-        console.log('TokenGenerator.jsx: Fetched tokens:', JSON.stringify(tokensRes.data, null, 2));
+
+        // Fetch staff list for the current centre to populate the assignment dropdown
+        const staffRes = await getStaff(formData.centreId);
+        setStaffList(staffRes.data);
       } catch (err) {
         console.error('TokenGenerator.jsx: Error fetching data:', err.response?.data || err.message);
         setError('Failed to load data.');
@@ -43,13 +47,12 @@ const TokenGenerator = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [formData.centreId]);
 
   useEffect(() => {
     if (formData.category && categories.length > 0) {
       const category = categories.find(cat => cat.id === parseInt(formData.category));
       setFilteredSubcategories(category?.subcategories || []);
-      console.log('TokenGenerator.jsx: Filtered subcategories:', category?.subcategories || []);
     } else {
       setFilteredSubcategories([]);
     }
@@ -58,12 +61,10 @@ const TokenGenerator = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    console.log('TokenGenerator.jsx: Input changed:', { [name]: value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('TokenGenerator.jsx: Submitting form:', JSON.stringify(formData, null, 2));
 
     const errors = [];
     if (!formData.customerName || formData.customerName.trim().length < 2) {
@@ -86,25 +87,22 @@ const TokenGenerator = () => {
     }
 
     if (errors.length > 0) {
-      console.warn('TokenGenerator.jsx: Validation errors:', errors);
       errors.forEach(error => toast.error(error));
       return;
     }
 
     try {
       const submissionData = {
-            customerName: formData.customerName.trim(),
-            phone: formData.phone.trim(),
-            categoryId: formData.category ? parseInt(formData.category) : null,
-            subcategoryId: formData.subcategory ? parseInt(formData.subcategory) : null,
-            campaignId: formData.campaign ? parseInt(formData.campaign) : null,
-            centreId: parseInt(formData.centreId) || null,
-            type: formData.campaign ? 'campaign' : 'normal'
-          };
+        customerName: formData.customerName.trim(),
+        phone: formData.phone.trim(),
+        categoryId: formData.category ? parseInt(formData.category) : null,
+        subcategoryId: formData.subcategory ? parseInt(formData.subcategory) : null,
+        campaignId: formData.campaign ? parseInt(formData.campaign) : null,
+        centreId: parseInt(formData.centreId) || null,
+        type: formData.campaign ? 'campaign' : 'normal'
+      };
 
-      console.log('TokenGenerator.jsx: Submitting token:', JSON.stringify(submissionData, null, 2));
-      const response = await createToken(submissionData);
-      console.log('TokenGenerator.jsx: Token creation response:', JSON.stringify(response.data, null, 2));
+      await createToken(submissionData);
       toast.success('Token created successfully!');
 
       setFormData({
@@ -120,12 +118,26 @@ const TokenGenerator = () => {
       const tokensRes = await getTokens();
       setTokens(tokensRes.data);
     } catch (err) {
-      console.error('TokenGenerator.jsx: Error creating token:', err.response?.data || err.message);
       if (err.response?.data?.details) {
         err.response.data.details.forEach(detail => toast.error(detail));
       } else {
         toast.error(err.response?.data?.error || 'Failed to create token.');
       }
+    }
+  };
+
+  // Handler for assigning token to staff
+  const handleAssignToken = async (tokenId, staffId) => {
+    if (!staffId) return;
+    try {
+      await assignToken(tokenId, staffId);
+      toast.success('Token reassigned successfully!');
+      
+      // Refresh tokens to update the UI
+      const tokensRes = await getTokens();
+      setTokens(tokensRes.data);
+    } catch (err) {
+      toast.error('Failed to assign token: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -198,7 +210,7 @@ const TokenGenerator = () => {
                 name="centreId"
                 value={formData.centreId}
                 onChange={handleInputChange}
-                className="px-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`px-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 ${userRole !== 'superadmin' ? 'bg-gray-50' : ''}`}
                 placeholder="Enter centre ID"
                 disabled={userRole !== 'superadmin'}
               />
@@ -287,6 +299,7 @@ const TokenGenerator = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Campaign</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
                 </tr>
               </thead>
@@ -315,6 +328,30 @@ const TokenGenerator = () => {
                         {token.status}
                       </span>
                     </td>
+                    
+                    {/* Assigned To Column */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {token.status === 'pending' ? (
+                        <div className="relative">
+                          <select
+                            value={token.staffId || ''}
+                            onChange={(e) => handleAssignToken(token.tokenId, e.target.value)}
+                            className="w-full border border-gray-300 rounded-md py-1.5 pl-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-white cursor-pointer"
+                          >
+                            <option value="" disabled>Unassigned</option>
+                            {staffList.map(staff => (
+                              <option key={staff.id} value={staff.id}>{staff.name}</option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                            <FiChevronDown className="h-4 w-4" />
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-600 font-medium">{token.staffName || 'Unassigned'}</span>
+                      )}
+                    </td>
+
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(token.createdAt).toLocaleDateString()}
                     </td>
