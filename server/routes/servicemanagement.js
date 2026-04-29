@@ -1666,6 +1666,90 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
 // ========== CAMPAIGN AND TOKEN ROUTES ==========
 
+// Get Campaign Token History (includes expired campaigns)
+router.get('/tokens/history', authenticateToken, async (req, res) => {
+  const { centreId } = req.query;
+  const userRole = req.user.role;
+  const userId = req.user.id;
+
+  const client = await pool.connect();
+  try {
+    let query = `
+      SELECT t.id, t.token_id, t.centre_id, t.customer_name, t.phone, t.category_id, 
+             t.subcategory_id, t.campaign_id, t.status, t.staff_id, t.created_by, t.type, 
+             t.created_at, c.name AS centre_name, s.name AS service_name, 
+             sc.name AS subcategory_name, cmp.name AS campaign_name, 
+             cmp.start_date AS campaign_start_date, cmp.end_date AS campaign_end_date,
+             st.name AS staff_name, st2.name AS created_by_name
+      FROM tokens t
+      JOIN centres c ON t.centre_id = c.id
+      LEFT JOIN services s ON t.category_id = s.id
+      LEFT JOIN subcategories sc ON t.subcategory_id = sc.id
+      LEFT JOIN campaigns cmp ON t.campaign_id = cmp.id
+      LEFT JOIN staff st ON t.staff_id::integer = st.id
+      LEFT JOIN staff st2 ON t.created_by::integer = st2.id
+      WHERE t.type = 'campaign'
+    `;
+    const queryParams = [];
+
+    if (userRole !== 'superadmin') {
+      query += ` AND t.centre_id IN (
+        SELECT c.id 
+        FROM centres c
+        LEFT JOIN staff s ON s.centre_id = c.id
+        WHERE c.admin_id = $${queryParams.length + 1} OR s.id = $${queryParams.length + 1}
+      )`;
+      queryParams.push(parseInt(userId));
+      
+      if (centreId) {
+        query += ` AND t.centre_id = $${queryParams.length + 1}`;
+        queryParams.push(parseInt(centreId));
+      }
+    } else {
+      if (centreId) {
+        query += ` AND t.centre_id = $${queryParams.length + 1}`;
+        queryParams.push(parseInt(centreId));
+      }
+    }
+
+    query += ` ORDER BY t.created_at DESC`;
+
+    console.log('servicemanagement.js: Fetching campaign history with query:', query, 'params:', queryParams);
+    const result = await client.query(query, queryParams);
+    const tokens = result.rows.map(row => ({
+      id: row.id,
+      tokenId: row.token_id,
+      centreId: row.centre_id,
+      centreName: row.centre_name,
+      customerName: row.customer_name,
+      phone: row.phone,
+      categoryId: row.category_id,
+      serviceName: row.service_name,
+      subcategoryId: row.subcategory_id,
+      subcategoryName: row.subcategory_name,
+      campaignId: row.campaign_id,
+      campaignName: row.campaign_name,
+      campaignStartDate: row.campaign_start_date,
+      campaignEndDate: row.campaign_end_date,
+      status: row.status,
+      staffId: row.staff_id,
+      staffName: row.staff_name,
+      createdBy: row.created_by,
+      createdByName: row.created_by_name,
+      type: row.type,
+      createdAt: row.created_at.toISOString(),
+    }));
+
+    console.log('servicemanagement.js: Fetched campaign history:', JSON.stringify(tokens, null, 2));
+    res.json(tokens);
+  } catch (err) {
+    console.error('servicemanagement.js: Error fetching campaign history:', err);
+    res.status(500).json({ error: 'Failed to fetch campaign history: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/servicemanagement/tokens/:tokenId
 router.get('/tokens/:tokenId', authenticateToken, async (req, res) => {
   const { tokenId } = req.params;
@@ -2460,90 +2544,6 @@ router.delete('/campaigns/:id', authenticateToken, async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Error deleting campaign:', err);
     res.status(500).json({ error: 'Failed to delete campaign: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// Get Campaign Token History (includes expired campaigns)
-router.get('/tokens/history', authenticateToken, async (req, res) => {
-  const { centreId } = req.query;
-  const userRole = req.user.role;
-  const userId = req.user.id;
-
-  const client = await pool.connect();
-  try {
-    let query = `
-      SELECT t.id, t.token_id, t.centre_id, t.customer_name, t.phone, t.category_id, 
-             t.subcategory_id, t.campaign_id, t.status, t.staff_id, t.created_by, t.type, 
-             t.created_at, c.name AS centre_name, s.name AS service_name, 
-             sc.name AS subcategory_name, cmp.name AS campaign_name, 
-             cmp.start_date AS campaign_start_date, cmp.end_date AS campaign_end_date,
-             st.name AS staff_name, st2.name AS created_by_name
-      FROM tokens t
-      JOIN centres c ON t.centre_id = c.id
-      LEFT JOIN services s ON t.category_id = s.id
-      LEFT JOIN subcategories sc ON t.subcategory_id = sc.id
-      LEFT JOIN campaigns cmp ON t.campaign_id = cmp.id
-      LEFT JOIN staff st ON t.staff_id::integer = st.id
-      LEFT JOIN staff st2 ON t.created_by::integer = st2.id
-      WHERE t.type = 'campaign'
-    `;
-    const queryParams = [];
-
-    if (userRole !== 'superadmin') {
-      query += ` AND t.centre_id IN (
-        SELECT c.id 
-        FROM centres c
-        LEFT JOIN staff s ON s.centre_id = c.id
-        WHERE c.admin_id = $${queryParams.length + 1} OR s.id = $${queryParams.length + 1}
-      )`;
-      queryParams.push(parseInt(userId));
-      
-      if (centreId) {
-        query += ` AND t.centre_id = $${queryParams.length + 1}`;
-        queryParams.push(parseInt(centreId));
-      }
-    } else {
-      if (centreId) {
-        query += ` AND t.centre_id = $${queryParams.length + 1}`;
-        queryParams.push(parseInt(centreId));
-      }
-    }
-
-    query += ` ORDER BY t.created_at DESC`;
-
-    console.log('servicemanagement.js: Fetching campaign history with query:', query, 'params:', queryParams);
-    const result = await client.query(query, queryParams);
-    const tokens = result.rows.map(row => ({
-      id: row.id,
-      tokenId: row.token_id,
-      centreId: row.centre_id,
-      centreName: row.centre_name,
-      customerName: row.customer_name,
-      phone: row.phone,
-      categoryId: row.category_id,
-      serviceName: row.service_name,
-      subcategoryId: row.subcategory_id,
-      subcategoryName: row.subcategory_name,
-      campaignId: row.campaign_id,
-      campaignName: row.campaign_name,
-      campaignStartDate: row.campaign_start_date,
-      campaignEndDate: row.campaign_end_date,
-      status: row.status,
-      staffId: row.staff_id,
-      staffName: row.staff_name,
-      createdBy: row.created_by,
-      createdByName: row.created_by_name,
-      type: row.type,
-      createdAt: row.created_at.toISOString(),
-    }));
-
-    console.log('servicemanagement.js: Fetched campaign history:', JSON.stringify(tokens, null, 2));
-    res.json(tokens);
-  } catch (err) {
-    console.error('servicemanagement.js: Error fetching campaign history:', err);
-    res.status(500).json({ error: 'Failed to fetch campaign history: ' + err.message });
   } finally {
     client.release();
   }
