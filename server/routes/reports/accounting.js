@@ -139,6 +139,7 @@ router.get('/daily-summary', async (req, res) => {
 });
 
 // ========== LEDGER (FIXED - Shows only latest non-reversal transactions) ==========
+// ========== LEDGER (FIXED - Shows only latest non-reversal transactions AND chronologically sorted) ==========
 router.get('/ledger', async (req, res) => {
   const client = await req.db.connect();
 
@@ -235,9 +236,10 @@ router.get('/ledger', async (req, res) => {
         LEFT JOIN staff s
           ON s.id = wt.staff_id
 
+        -- 🔥 CRITICAL FIX: Removed reference_type entirely and allowed Department Payment category
         LEFT JOIN service_entries se
           ON se.id = wt.reference_id
-          AND (wt.reference_type = 'payment' OR wt.category = 'Department Payment')
+          AND wt.category IN ('Service Payment', 'Department Payment', 'Service Charge')
 
         LEFT JOIN services sv
           ON sv.id = se.category_id
