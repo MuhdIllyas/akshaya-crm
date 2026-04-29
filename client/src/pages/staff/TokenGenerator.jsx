@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown, FiClock, FiAward, FiSearch } from 'react-icons/fi';
+import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown, FiClock, FiAward, FiSearch, FiFileText } from 'react-icons/fi';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getServices, createToken, getTokens, getCampaigns, getStaff, assignToken } from '/src/services/campaignService';
@@ -19,10 +19,11 @@ const TokenGenerator = () => {
   const [filteredSubcategories, setFilteredSubcategories] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [tokens, setTokens] = useState([]);
-  const [staffList, setStaffList] = useState([]); // State for staff dropdown
+  const [staffList, setStaffList] = useState([]);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [tokenView, setTokenView] = useState('active'); // 'active' or 'campaign'
   
   const userRole = localStorage.getItem('role');
   const userId = localStorage.getItem('id');
@@ -39,7 +40,6 @@ const TokenGenerator = () => {
         const tokensRes = await getTokens();
         setTokens(tokensRes.data);
 
-        // Fetch staff list for the current centre to populate the assignment dropdown
         const staffRes = await getStaff(formData.centreId);
         setStaffList(staffRes.data);
       } catch (err) {
@@ -128,14 +128,12 @@ const TokenGenerator = () => {
     }
   };
 
-  // Handler for assigning token to staff
   const handleAssignToken = async (tokenId, staffId) => {
     if (!staffId) return;
     try {
       await assignToken(tokenId, staffId);
       toast.success('Token reassigned successfully!');
       
-      // Refresh tokens to update the UI
       const tokensRes = await getTokens();
       setTokens(tokensRes.data);
     } catch (err) {
@@ -159,7 +157,6 @@ const TokenGenerator = () => {
     return campaign ? campaign.name : 'N/A';
   };
 
-  // Status and type styles (matching admin design)
   const statusStyles = {
     pending: 'bg-yellow-100 text-yellow-800',
     processed: 'bg-green-100 text-green-800',
@@ -172,14 +169,23 @@ const TokenGenerator = () => {
     campaign: 'bg-purple-100 text-purple-800'
   };
 
-  // Filter tokens based on active tab and search term
-  const filteredTokens = tokens.filter(token => {
-    if (activeTab === 'all') return true;
-    return token.status === activeTab;
-  }).filter(token => {
-    return token.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           token.tokenId?.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  // Filter tokens based on view, active status tab, and search
+  const filteredTokens = tokens
+    .filter(token => {
+      // First filter by token view (active or campaign)
+      if (tokenView === 'campaign') {
+        return token.type === 'campaign';
+      }
+      return true; // 'active' shows all
+    })
+    .filter(token => {
+      if (activeTab === 'all') return true;
+      return token.status === activeTab;
+    })
+    .filter(token => {
+      return token.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             token.tokenId?.toLowerCase().includes(searchTerm.toLowerCase());
+    });
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -369,6 +375,46 @@ const TokenGenerator = () => {
           </form>
         </motion.div>
 
+        {/* Token View Tabs (same as AdminTokenManagement) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
+          <div className="flex flex-wrap gap-2">
+            <button
+              className={`px-6 py-2 rounded-xl text-sm font-medium transition-all ${
+                tokenView === 'active' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              onClick={() => { setTokenView('active'); setActiveTab('all'); }}
+            >
+              <div className="flex items-center gap-2">
+                <FiHash className="h-4 w-4" />
+                Active Tokens
+              </div>
+            </button>
+            <button
+              className={`px-6 py-2 rounded-xl text-sm font-medium transition-all ${
+                tokenView === 'campaign' 
+                  ? 'bg-purple-600 text-white shadow-md' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              onClick={() => { setTokenView('campaign'); setActiveTab('all'); }}
+            >
+              <div className="flex items-center gap-2">
+                <FiFileText className="h-4 w-4" />
+                Campaign Tokens
+              </div>
+            </button>
+          </div>
+          {tokenView === 'campaign' && (
+            <div className="mt-4 bg-purple-50 p-3 rounded-xl">
+              <p className="text-sm text-purple-700 flex items-center">
+                <FiAward className="mr-2" />
+                Showing only campaign tokens (all statuses)
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Token List Controls */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -377,7 +423,7 @@ const TokenGenerator = () => {
                 className={`px-4 py-2 rounded-xl text-sm font-medium ${activeTab === 'all' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 onClick={() => setActiveTab('all')}
               >
-                All Tokens
+                All {tokenView === 'campaign' ? 'Campaign' : 'Active'} Tokens
               </button>
               <button 
                 className={`px-4 py-2 rounded-xl text-sm font-medium ${activeTab === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
@@ -517,7 +563,11 @@ const TokenGenerator = () => {
             <div className="text-center py-12">
               <FiHash className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No tokens found</h3>
-              <p className="mt-1 text-sm text-gray-500">Create a new token to get started.</p>
+              <p className="mt-1 text-sm text-gray-500">
+                {tokenView === 'campaign' 
+                  ? 'No campaign tokens available.'
+                  : 'No active tokens available. Create a new token to get started.'}
+              </p>
             </div>
           )}
         </div>
