@@ -138,7 +138,7 @@ router.get("/transactions", async (req, res) => {
           COALESCE(se.status, 'Completed')::TEXT AS status,
           wt.reference_id::INTEGER,
           wt.description::TEXT,
-          wt.created_at::TIMESTAMP,
+          wt.created_at::TIMESTAMPTZ, -- 🔥 CHANGED TO TIMESTAMPTZ
           wt.staff_id::INTEGER,
           se.customer_name::TEXT
         FROM (
@@ -164,7 +164,7 @@ router.get("/transactions", async (req, res) => {
           MAX(CASE WHEN wt.type = 'debit'  THEN wt.wallet_id END)::INTEGER AS from_wallet_id,
           MAX(CASE WHEN wt.type = 'credit' THEN wt.wallet_id END)::INTEGER AS to_wallet_id,
           MAX(wt.amount)::NUMERIC     AS amount,
-          MAX(wt.created_at)::TIMESTAMP AS created_at,
+          MAX(wt.created_at)::TIMESTAMPTZ AS created_at, -- 🔥 CHANGED TO TIMESTAMPTZ
           MAX(wt.staff_id)::INTEGER   AS staff_id,
           'transfer'::TEXT            AS transaction_type,
           'Transfer'::TEXT            AS category,
@@ -249,7 +249,7 @@ router.get("/transactions", async (req, res) => {
           COALESCE(se.status, 'Completed')::TEXT AS status,
           wt.reference_id::INTEGER,
           wt.description::TEXT,
-          wt.created_at::TIMESTAMP,
+          wt.created_at::TIMESTAMPTZ, -- 🔥 CHANGED TO TIMESTAMPTZ
           wt.staff_id::INTEGER,
           se.customer_name::TEXT
         FROM (
@@ -274,7 +274,7 @@ router.get("/transactions", async (req, res) => {
           MAX(CASE WHEN wt.type = 'debit'  THEN wt.wallet_id END)::INTEGER AS from_wallet_id,
           MAX(CASE WHEN wt.type = 'credit' THEN wt.wallet_id END)::INTEGER AS to_wallet_id,
           MAX(wt.amount)::NUMERIC     AS amount,
-          MAX(wt.created_at)::TIMESTAMP AS created_at,
+          MAX(wt.created_at)::TIMESTAMPTZ AS created_at, -- 🔥 CHANGED TO TIMESTAMPTZ
           MAX(wt.staff_id)::INTEGER   AS staff_id,
           'transfer'::TEXT            AS transaction_type,
           'Transfer'::TEXT            AS category,
