@@ -937,20 +937,22 @@ router.post('/entry', authenticateToken, async (req, res) => {
     let tokenCentreId = null;
 
     if (tokenId) {
-      const tokenResult = await client.query(
-        'SELECT centre_id, status FROM tokens WHERE token_id = $1',
-        [tokenId]
-      );
-      if (tokenResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: `Token ${tokenId} not found` });
-      }
-      centreId = tokenResult.rows[0].centre_id;
-      tokenCentreId = centreId;
-      if (tokenResult.rows[0].status !== 'pending') {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: `Token ${tokenId} is already processed or completed` });
-      }
+          const tokenResult = await client.query(
+            'SELECT centre_id, status FROM tokens WHERE token_id = $1',
+            [tokenId]
+          );
+          if (tokenResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: `Token ${tokenId} not found` });
+          }
+          centreId = tokenResult.rows[0].centre_id;
+          tokenCentreId = centreId;
+          
+          // ALLOW BOTH pending AND in-progress:
+          if (!['pending', 'in-progress'].includes(tokenResult.rows[0].status)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: `Token ${tokenId} is already processed or completed` });
+          }
     }
 
     let serviceName = 'Quick Service', subcategoryName = null, resolvedServiceWalletId = null;
