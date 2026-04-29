@@ -93,13 +93,14 @@ const TokenGenerator = () => {
 
     try {
       const submissionData = {
-        customerName: formData.customerName.trim(),
-        phone: formData.phone.trim(),
-        categoryId: formData.category ? parseInt(formData.category) : null,
-        subcategoryId: formData.subcategory ? parseInt(formData.subcategory) : null,
-        campaignId: formData.campaign ? parseInt(formData.campaign) : null,
-        centreId: parseInt(formData.centreId),
-      };
+            customerName: formData.customerName.trim(),
+            phone: formData.phone.trim(),
+            categoryId: formData.category ? parseInt(formData.category) : null,
+            subcategoryId: formData.subcategory ? parseInt(formData.subcategory) : null,
+            campaignId: formData.campaign ? parseInt(formData.campaign) : null,
+            centreId: parseInt(formData.centreId) || null,
+            type: formData.campaign ? 'campaign' : 'normal'
+          };
 
       console.log('TokenGenerator.jsx: Submitting token:', JSON.stringify(submissionData, null, 2));
       const response = await createToken(submissionData);
