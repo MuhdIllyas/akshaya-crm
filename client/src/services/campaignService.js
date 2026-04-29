@@ -85,7 +85,7 @@ export const getAllCentres = async () => {
 //token related
 export const createToken = async (data) => {
   console.log('campaignService.js: Creating token:', JSON.stringify(data, null, 2));
-  return await api.post('/token', data);
+  return await api.post('/tokens', data);
 };
 
 export const getTokens = async (centreId = null) => {
