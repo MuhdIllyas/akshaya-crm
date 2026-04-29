@@ -2032,7 +2032,7 @@ router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const validStatuses = ['pending', 'processed', 'completed'];
+    const validStatuses = ['pending', 'in-progress', 'processed', 'completed'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }

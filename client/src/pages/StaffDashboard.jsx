@@ -333,7 +333,26 @@ const StaffDashboard = () => {
     return cat?.subcategories?.find(s => s.id === subId)?.name || 'N/A';
   };
   const shortenTokenId = (tokenId) => tokenId ? `#${tokenId.split('-').pop()}` : 'N/A';
-  const handleStartService = (tokenId) => navigate(`/dashboard/staff/token/${tokenId}/service`);
+  const handleStartService = async (tokenId, tokenStaffId, tokenStatus) => {
+    try {
+      // 1. If the token is unassigned, assign it to this staff member first to lock it
+      if (!tokenStaffId || tokenStaffId === 'null' || tokenStaffId === '') {
+        await api.put(`/token/${tokenId}/assign`, { staffId });
+      }
+
+      // 2. If the token is still pending, update the status to in-progress
+      if (tokenStatus === 'pending') {
+        await api.put(`/token/${tokenId}/status`, { status: 'in-progress' });
+      }
+
+      // 3. Finally, navigate to the service entry screen
+      navigate(`/dashboard/staff/token/${tokenId}/service`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to start service. Someone else might have already taken it.');
+      // Refresh to get latest state in case of failure
+      refreshTokens(); 
+    }
+  };
   const handleViewDetails = (tokenId) => navigate(`/dashboard/staff/token/${tokenId}/details`);
   const formatTime = (dateString) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatDateUI = (dateString) => {
@@ -345,24 +364,31 @@ const StaffDashboard = () => {
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  // Token filtering (unchanged)
-  const getActiveTokens = () => tokens.filter(t => {
-    const tokenStaff = String(t.staffId || '').trim();
-    const localStaff = String(staffId).trim();
-    const isAssignedToMe = tokenStaff === localStaff;
-    const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-    return (isAssignedToMe || isUnassigned) && t.status !== 'completed';
-  });
-  const getCompletedTokens = () => tokens.filter(t => {
-    const tokenStaff = String(t.staffId || '').trim();
-    const localStaff = String(staffId).trim();
-    return tokenStaff === localStaff && t.status === 'completed';
-  });
-  const getCampaignTokens = () => tokens.filter(t => {
-    const tokenStaff = String(t.staffId || '').trim();
-    const localStaff = String(staffId).trim();
-    return tokenStaff === localStaff && t.type === 'campaign';
-  });
+  // Token filtering
+    const getActiveTokens = () => tokens.filter(t => {
+      const tokenStaff = String(t.staffId || '').trim();
+      const localStaff = String(staffId).trim();
+      const isAssignedToMe = tokenStaff === localStaff;
+      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+      // Exclude campaign tokens from the regular active tab
+      return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.type !== 'campaign';
+    });
+
+    const getCompletedTokens = () => tokens.filter(t => {
+      const tokenStaff = String(t.staffId || '').trim();
+      const localStaff = String(staffId).trim();
+      // Exclude campaign tokens from the regular completed tab
+      return tokenStaff === localStaff && t.status === 'completed' && t.type !== 'campaign';
+    });
+
+    const getCampaignTokens = () => tokens.filter(t => {
+      const tokenStaff = String(t.staffId || '').trim();
+      const localStaff = String(staffId).trim();
+      const isAssignedToMe = tokenStaff === localStaff;
+      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+      // Show both assigned and unassigned campaign tokens here
+      return (isAssignedToMe || isUnassigned) && t.type === 'campaign';
+    });
 
   const activeTokens = getActiveTokens();
   const completedTokens = getCompletedTokens();
@@ -847,13 +873,19 @@ const StaffDashboard = () => {
                                     </div>
                                   </div>
                                   <div>
-                                    {activeView === 'active' && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
-                                      <button onClick={() => handleStartService(token.tokenId)} className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 flex items-center gap-2">
+                                    {/* Show Start/Continue for pending/in-progress tokens in BOTH Active and Campaign tabs */}
+                                    {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
+                                      <button 
+                                        onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
+                                        className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 flex items-center gap-2"
+                                      >
                                         <FiPlayCircle className="h-4 w-4" />
                                         {token.status === 'pending' ? 'Start' : 'Continue'}
                                       </button>
                                     )}
-                                    {(activeView === 'completed' || activeView === 'campaign') && (
+                                    
+                                    {/* Show Details for completed tokens in BOTH Completed and Campaign tabs */}
+                                    {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
                                       <button onClick={() => handleViewDetails(token.tokenId)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 flex items-center gap-2">
                                         <FiBarChart2 className="h-4 w-4" /> Details
                                       </button>
