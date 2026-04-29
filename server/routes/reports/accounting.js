@@ -237,7 +237,7 @@ router.get('/ledger', async (req, res) => {
 
         LEFT JOIN service_entries se
           ON se.id = wt.reference_id
-          AND wt.reference_type = 'payment'
+          AND (wt.reference_type = 'payment' OR wt.category = 'Department Payment')
 
         LEFT JOIN services sv
           ON sv.id = se.category_id
