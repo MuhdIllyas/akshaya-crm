@@ -138,7 +138,6 @@ router.get('/daily-summary', async (req, res) => {
   }
 });
 
-// ========== LEDGER (FIXED - Shows only latest non-reversal transactions) ==========
 // ========== LEDGER (FIXED - Shows only latest non-reversal transactions AND chronologically sorted) ==========
 router.get('/ledger', async (req, res) => {
   const client = await req.db.connect();

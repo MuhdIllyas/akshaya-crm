@@ -92,11 +92,24 @@ router.post("/", async (req, res) => {
       if (Number(walletRes.rows[0].balance) < Number(amount)) {
         throw new Error("Insufficient wallet balance");
       }
+      
+      // 🔥 FIX: Added reference_id, reference_type, and correction_group_id to link it properly
       await client.query(
-        `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, created_at)
-         VALUES ($1,$2,'debit',$3,$4,'Expense',NOW())`,
-        [wallet_id, staffId, amount, category]
+        `INSERT INTO wallet_transactions (
+          wallet_id, staff_id, type, amount, description, category, 
+          reference_id, reference_type, correction_group_id, created_at
+        )
+         VALUES ($1,$2,'debit',$3,$4,'Expense',$5,'expense',$6,NOW())`,
+        [
+          wallet_id, 
+          staffId, 
+          amount, 
+          description || `${category} Expense`, 
+          expenseRes.rows[0].id, 
+          groupId
+        ]
       );
+      
       await client.query(
         `UPDATE wallets SET balance = balance - $1 WHERE id = $2`,
         [amount, wallet_id]
@@ -136,7 +149,7 @@ router.get("/my", async (req, res) => {
 });
 
 /* ======================================================
-   DELETE EXPENSE (unchanged core)
+   DELETE EXPENSE
 ====================================================== */
 router.delete("/:id", async (req, res) => {
   const client = await req.db.connect();
@@ -181,7 +194,6 @@ router.get("/", async (req, res) => {
   }
   
   try {
-    // ✅ Use requested centreId for SuperAdmins, otherwise use the user's own centre_id
     let targetCentreId = req.user.centre_id;
     if (req.user.role === "superadmin" && req.query.centreId) {
       targetCentreId = req.query.centreId;
@@ -198,7 +210,7 @@ router.get("/", async (req, res) => {
        WHERE e.centre_id = $1
          AND COALESCE(e.is_reversal, FALSE) = FALSE
        ORDER BY e.expense_date DESC`,
-      [targetCentreId] // ✅ Replaced req.user.centre_id with targetCentreId
+      [targetCentreId] 
     );
     res.json(result.rows);
   } catch (err) {
@@ -219,7 +231,6 @@ router.put("/:id/approve", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 🔒 Lock the expense row to prevent double approval
     const expRes = await client.query(
       `SELECT * FROM expenses WHERE id = $1 AND status = 'pending' FOR UPDATE`,
       [req.params.id]
@@ -229,7 +240,6 @@ router.put("/:id/approve", async (req, res) => {
     }
     const exp = expRes.rows[0];
 
-    // 💰 Balance check before deduction
     const walletCheck = await client.query(
       `SELECT balance FROM wallets WHERE id = $1`,
       [exp.wallet_id]
@@ -241,18 +251,28 @@ router.put("/:id/approve", async (req, res) => {
       throw new Error("Insufficient wallet balance");
     }
 
-    // Debit wallet
+    // 🔥 FIX: Added reference_id, reference_type, and correction_group_id to link it properly
     await client.query(
-      `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, created_at)
-       VALUES ($1,$2,'debit',$3,$4,'Expense',NOW())`,
-      [exp.wallet_id, exp.staff_id, exp.amount, exp.category]
+      `INSERT INTO wallet_transactions (
+        wallet_id, staff_id, type, amount, description, category, 
+        reference_id, reference_type, correction_group_id, created_at
+      )
+       VALUES ($1,$2,'debit',$3,$4,'Expense',$5,'expense',$6,NOW())`,
+      [
+        exp.wallet_id, 
+        exp.staff_id, 
+        exp.amount, 
+        exp.description || `${exp.category} Expense`, 
+        exp.id, 
+        exp.correction_group_id
+      ]
     );
+    
     await client.query(
       `UPDATE wallets SET balance = balance - $1 WHERE id = $2`,
       [exp.amount, exp.wallet_id]
     );
 
-    // Mark as approved
     await client.query(
       `UPDATE expenses SET status = 'approved', approved_at = NOW(), approved_by = $1 WHERE id = $2`,
       [req.user.id, req.params.id]
@@ -307,7 +327,6 @@ router.put("/:id/correct", async (req, res) => {
 
     await client.query("BEGIN");
 
-    // 🔒 Lock original expense row to prevent race conditions
     const expRes = await client.query(
       `SELECT * FROM expenses WHERE id = $1 AND is_reversal = FALSE FOR UPDATE`,
       [expenseId]
@@ -317,21 +336,18 @@ router.put("/:id/correct", async (req, res) => {
     }
     const original = expRes.rows[0];
 
-    // 🔒 Permission check
     const isOwner = original.staff_id === req.user.id;
     const isAdmin = ["admin", "superadmin"].includes(req.user.role);
     if (!isOwner && !isAdmin) {
       throw new Error("Access denied");
     }
 
-    // 🚫 Cannot correct a pending expense
     if (original.status === "pending") {
       throw new Error("Cannot correct a pending expense. Delete or reject it first.");
     }
 
     const groupId = original.correction_group_id || crypto.randomUUID();
 
-    // Correction limit (only active versions)
     const countRes = await client.query(
       `SELECT COUNT(*) FROM expenses WHERE correction_group_id = $1 AND is_reversal = FALSE`,
       [groupId]
@@ -341,7 +357,6 @@ router.put("/:id/correct", async (req, res) => {
       throw new Error("Maximum correction limit reached. Please contact an admin.");
     }
 
-    // 🔒 Validate new wallet belongs to same centre
     const walletCheck = await client.query(
       `SELECT id, balance FROM wallets WHERE id = $1 AND centre_id = $2`,
       [wallet_id, original.centre_id]
