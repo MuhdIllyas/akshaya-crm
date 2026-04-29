@@ -176,7 +176,7 @@ const StaffDashboard = () => {
         });
       }
       const sortedEntries = staffEntries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      setRecentServiceEntries(sortedEntries.slice(0, 5));
+      setRecentServiceEntries(sortedEntries.slice(0, 15)); 
       return sortedEntries;
     } catch (err) {
       console.error('Error fetching service entries:', err);
@@ -424,6 +424,13 @@ const StaffDashboard = () => {
       .reduce((acc, [date, arr]) => ({ ...acc, [date]: arr.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)) }), {});
   };
   const groupedTokens = groupTokensByDate(filteredTokens);
+
+  const groupedRecentActivities = recentServiceEntries.reduce((acc, entry) => {
+      const date = new Date(entry.created_at).toDateString();
+      if (!acc[date]) acc[date] = [];
+      acc[date].push(entry);
+      return acc;
+  }, {});
 
   const statusCounts = {
     pending: activeTokens.filter(t => t.status === 'pending').length,
@@ -1026,35 +1033,50 @@ const StaffDashboard = () => {
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                   <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
                 </div>
-                <div className="p-6">
-                  {recentServiceEntries.length > 0 ? (
-                    <div className="space-y-4">
-                      {recentServiceEntries.map(entry => (
-                        <div key={entry.id} className="flex gap-3 pb-4 last:pb-0 border-b last:border-0 border-gray-100">
-                          <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-                            <FiUser className="h-4 w-4 text-gray-600" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex justify-between items-baseline">
-                              <p className="text-sm font-medium text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
-                              <span className="text-xs text-gray-500 ml-2">{formatTime(entry.created_at)}</span>
+                  <div className="p-6 overflow-y-auto max-h-[500px]">
+                    {Object.keys(groupedRecentActivities).length > 0 ? (
+                      <div className="space-y-6">
+                        {Object.entries(groupedRecentActivities).map(([date, entries]) => (
+                          <div key={date}>
+                            {/* Date Header */}
+                            <div className="flex items-center gap-2 mb-3">
+                              <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                {formatDateUI(date)}
+                              </h4>
                             </div>
-                            <p className="text-sm text-gray-600">{getCategoryName(entry.category)} service</p>
-                            <div className="flex justify-between items-center mt-1">
-                              <span className={`text-xs font-medium ${
-                                entry.status === 'completed' ? 'text-green-600' :
-                                entry.status === 'in-progress' ? 'text-blue-600' :
-                                entry.status === 'pending' ? 'text-amber-600' : 'text-gray-600'
-                              }`}>
-                                {entry.status?.replace('-', ' ')}
-                              </span>
-                              {entry.tokenId && <span className="text-xs text-gray-500 font-mono">{shortenTokenId(entry.tokenId)}</span>}
+                            
+                            {/* Entries for this date */}
+                            <div className="space-y-4">
+                              {entries.map(entry => (
+                                <div key={entry.id} className="flex gap-3 pb-4 last:pb-0 border-b last:border-0 border-gray-100">
+                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <FiUser className="h-4 w-4 text-gray-600" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex justify-between items-baseline">
+                                      <p className="text-sm font-medium text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
+                                      <span className="text-xs text-gray-500 ml-2">{formatTime(entry.created_at)}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-600">{getCategoryName(entry.category)} service</p>
+                                    <div className="flex justify-between items-center mt-1">
+                                      <span className={`text-xs font-medium ${
+                                        entry.status === 'completed' ? 'text-green-600' :
+                                        entry.status === 'in-progress' ? 'text-blue-600' :
+                                        entry.status === 'pending' ? 'text-amber-600' : 'text-gray-600'
+                                      }`}>
+                                        {entry.status?.replace('-', ' ')}
+                                      </span>
+                                      {entry.tokenId && <span className="text-xs text-gray-500 font-mono">{shortenTokenId(entry.tokenId)}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
+                        ))}
+                      </div>
+                    ) : (
                     <div className="text-center py-8 text-gray-500">No recent activity</div>
                   )}
                 </div>
