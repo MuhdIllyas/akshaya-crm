@@ -211,40 +211,43 @@ router.get('/ledger', async (req, res) => {
 
     const ledgerRes = await client.query(
       `
-      SELECT DISTINCT ON (wt.correction_group_id)
-        wt.id,
-        wt.created_at,
-        wt.type,
-        wt.amount,
-        wt.category,
-        wt.correction_group_id,
-        wt.is_reversal,
-        wt.reference_type,
+      SELECT * FROM (
+        SELECT DISTINCT ON (wt.correction_group_id)
+          wt.id,
+          wt.created_at,
+          wt.type,
+          wt.amount,
+          wt.category,
+          wt.correction_group_id,
+          wt.is_reversal,
+          wt.reference_type,
 
-        w.id AS wallet_id,
-        w.name AS wallet_name,
-        w.wallet_type,
+          w.id AS wallet_id,
+          w.name AS wallet_name,
+          w.wallet_type,
 
-        s.name AS staff_name,
-        sv.name AS service_name
+          s.name AS staff_name,
+          sv.name AS service_name
 
-      FROM wallet_transactions wt
-      JOIN wallets w ON w.id = wt.wallet_id
+        FROM wallet_transactions wt
+        JOIN wallets w ON w.id = wt.wallet_id
 
-      LEFT JOIN staff s
-        ON s.id = wt.staff_id
+        LEFT JOIN staff s
+          ON s.id = wt.staff_id
 
-      LEFT JOIN service_entries se
-        ON se.id = wt.reference_id
-        AND wt.reference_type = 'payment'
+        LEFT JOIN service_entries se
+          ON se.id = wt.reference_id
+          AND wt.reference_type = 'payment'
 
-      LEFT JOIN services sv
-        ON sv.id = se.category_id
+        LEFT JOIN services sv
+          ON sv.id = se.category_id
 
-      ${whereClause}
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+        ${whereClause}
+          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
 
-      ORDER BY wt.correction_group_id, wt.created_at DESC
+        ORDER BY wt.correction_group_id, wt.created_at DESC
+      ) AS distinct_transactions
+      ORDER BY created_at DESC
       LIMIT 500
       `,
       params
