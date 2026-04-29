@@ -505,7 +505,7 @@ const StaffDashboard = () => {
                 <p className="text-xs uppercase tracking-wider text-white/70 mb-2 font-semibold">Quick Actions</p>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={() => navigate('/staff/token/create')}
+                    onClick={() => navigate('dashboard/staff/token')}
                     className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     New Token
@@ -517,7 +517,7 @@ const StaffDashboard = () => {
                     Quick Service
                   </button>
                   <button
-                    onClick={() => navigate('/staff/reports')}
+                    onClick={() => navigate('/dashboard/staff/performance')}
                     className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     View Reports
