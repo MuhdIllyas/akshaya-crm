@@ -108,6 +108,12 @@ router.get("/staff-performance", async (req, res) => {
         FROM payments p
         JOIN service_entries se ON se.id = p.service_entry_id
         WHERE p.created_at::date BETWEEN $1 AND $2
+          -- 🔥 CRITICAL FIX: Exclude payments that have been reversed/corrected
+          AND COALESCE(p.is_reversal, FALSE) = FALSE
+          AND NOT EXISTS (
+            SELECT 1 FROM wallet_transactions wt 
+            WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+          )
         GROUP BY se.staff_id
       ),
 
