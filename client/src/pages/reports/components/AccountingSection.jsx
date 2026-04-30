@@ -2334,6 +2334,39 @@ const AccountingSection = ({
   const [activeAccountingTab, setActiveAccountingTab] = useState('daily');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAdminExpenseModal, setShowAdminExpenseModal] = useState(false);
+  const [showMiscIncomeModal, setShowMiscIncomeModal] = useState(false);
+  const [miscIncomeForm, setMiscIncomeForm] = useState({
+    amount: '',
+    wallet_id: '',
+    description: '',
+    date: new Date().toISOString().split('T')[0]
+  });
+
+  const handleMiscIncomeSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/misc-income`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(miscIncomeForm)
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to add misc income');
+      }
+      toast.success('Misc Income recorded successfully!');
+      setShowMiscIncomeModal(false);
+      setMiscIncomeForm({ amount: '', wallet_id: '', description: '', date: new Date().toISOString().split('T')[0] });
+      
+      // Force a full refresh so Wallet balances and the Ledger update instantly
+      handleRefreshAllData(); 
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
   const [loading, setLoading] = useState(false);
 
   const [ledgerFilters, setLedgerFilters] = useState({
@@ -3068,9 +3101,24 @@ const AccountingSection = ({
 
             {/* Income View */}
             {activeAccountingTab === 'income' && (
-              <IncomeViewComponent
-                transactions={accountingData.income || []}
-              />
+              <>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-sm font-semibold text-gray-900 flex items-center">
+                    <FiTrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
+                    Income & Collections
+                  </h2>
+                  <button
+                    onClick={() => setShowMiscIncomeModal(true)}
+                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center space-x-1 text-sm shadow-sm"
+                  >
+                    <FiPlusCircle className="h-4 w-4" />
+                    <span>Add Misc Income</span>
+                  </button>
+                </div>
+                <IncomeViewComponent
+                  transactions={accountingData.income || []}
+                />
+              </>
             )}
 
             {/* Ledger View */}
@@ -3985,6 +4033,66 @@ const AccountingSection = ({
           </div>
         </div>
       )}
+
+      {/* Misc Income Modal */}
+      <AnimatePresence>
+        {showMiscIncomeModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMiscIncomeModal(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
+                  <h2 className="text-lg font-bold text-gray-900 flex items-center">
+                    <FiTrendingUp className="mr-2 text-emerald-600 h-5 w-5" />
+                    Add Misc Income / Overage
+                  </h2>
+                  <button onClick={() => setShowMiscIncomeModal(false)} className="text-gray-400 hover:text-gray-600">
+                    <FiX className="h-5 w-5" />
+                  </button>
+                </div>
+                <form onSubmit={handleMiscIncomeSubmit} className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input type="date" value={miscIncomeForm.date} onChange={(e) => setMiscIncomeForm(prev => ({...prev, date: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                    <input type="number" min="0" step="0.01" value={miscIncomeForm.amount} onChange={(e) => setMiscIncomeForm(prev => ({...prev, amount: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required placeholder="Enter amount" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Wallet to Credit</label>
+                    <select value={miscIncomeForm.wallet_id} onChange={(e) => setMiscIncomeForm(prev => ({...prev, wallet_id: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required>
+                      <option value="">Select a wallet...</option>
+                      {derivedWallets.map(w => (
+                        <option key={w.id} value={w.id}>{w.name} ({w.wallet_type || w.type})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description / Reason</label>
+                    <textarea value={miscIncomeForm.description} onChange={(e) => setMiscIncomeForm(prev => ({...prev, description: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required placeholder="e.g., Cash drawer overage for 29/04, Sale of scrap paper, etc." rows="3" />
+                  </div>
+                  <div className="flex justify-end pt-4 border-t border-gray-100">
+                    <button type="button" onClick={() => setShowMiscIncomeModal(false)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg mr-3 hover:bg-gray-50 text-sm font-medium transition-colors">Cancel</button>
+                    <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium transition-colors">Record Income</button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
       
       {/* Admin Expense Modal */}
       <AnimatePresence>

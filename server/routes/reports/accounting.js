@@ -173,6 +173,68 @@ router.post('/daily-summary/actual-cash', async (req, res) => {
   }
 });
 
+// ========== ADD MISCELLANEOUS INCOME / OVERAGE ==========
+router.post('/misc-income', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { amount, wallet_id, description, date } = req.body;
+    const staffId = req.user.id;
+    const centreId = req.user.centre_id;
+
+    if (!amount || !wallet_id) {
+      return res.status(400).json({ error: "Amount and Wallet ID are required" });
+    }
+
+    await client.query('BEGIN');
+
+    // 1. Verify the wallet exists and belongs to the centre
+    const walletRes = await client.query(
+      `SELECT id FROM wallets WHERE id = $1 AND centre_id = $2`,
+      [wallet_id, centreId]
+    );
+
+    if (walletRes.rows.length === 0) {
+      throw new Error("Invalid wallet for your centre");
+    }
+
+    const groupId = crypto.randomUUID();
+
+    // 2. Add the money to the wallet directly
+    await client.query(
+      `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
+      [amount, wallet_id]
+    );
+
+    // 3. Record it in the wallet_transactions ledger
+    await client.query(
+      `INSERT INTO wallet_transactions (
+        wallet_id, staff_id, type, amount, description, category, 
+        correction_group_id, created_at
+      )
+       VALUES ($1, $2, 'credit', $3, $4, 'Misc Income', $5, $6)`,
+      [
+        wallet_id, 
+        staffId, 
+        amount, 
+        description || 'Miscellaneous Income / Cash Overage', 
+        groupId,
+        date ? new Date(date) : new Date()
+      ]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Income recorded successfully" });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Misc income error:', err);
+    res.status(500).json({ error: err.message || 'Failed to record income' });
+  } finally {
+    client.release();
+  }
+});
+
 // ========== LEDGER (FIXED - Shows only latest non-reversal transactions AND chronologically sorted) ==========
 router.get('/ledger', async (req, res) => {
   const client = await req.db.connect();
