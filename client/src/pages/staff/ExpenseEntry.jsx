@@ -39,8 +39,9 @@ const ExpenseEntry = () => {
     { id: 10, name: "Office Supplies", color: "#84CC16", icon: "📦", requires_approval: false },
     { id: 11, name: "Cleaning Supplies", color: "#84CC16", icon: "🧹", requires_approval: false },
     { id: 12, name: "Stationery", color: "#84CC16", icon: "✏️", requires_approval: false },
-    { id: 13, name: "Other Expenses", color: "#6B7280", icon: "📝", requires_approval: false },
-    { id: 14, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true }
+    { id: 13, name: "Bank / CDM Charges", color: "#64748B", icon: "🏦", requires_approval: false },
+    { id: 14, name: "Other Expenses", color: "#6B7280", icon: "📝", requires_approval: false },
+    { id: 15, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true }
   ];
 
   useEffect(() => {
