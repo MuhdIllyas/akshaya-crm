@@ -2881,6 +2881,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         se.total_charges,
         se.created_at,
         se.updated_at,
+        st.name AS staff_name,
+        st.id AS staff_id,
         s.name AS service_name,
         sc.name AS subcategory_name,
 
@@ -2936,6 +2938,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         se.total_charges,
         se.created_at,
         se.updated_at,
+        st.name,
+        st.id,
         s.name,
         sc.name
 
