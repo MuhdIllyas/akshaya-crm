@@ -335,21 +335,15 @@ const StaffDashboard = () => {
   const shortenTokenId = (tokenId) => tokenId ? `#${tokenId.split('-').pop()}` : 'N/A';
   const handleStartService = async (tokenId, tokenStaffId, tokenStatus) => {
     try {
-      // 1. If the token is unassigned, assign it to this staff member first to lock it
       if (!tokenStaffId || tokenStaffId === 'null' || tokenStaffId === '') {
         await api.put(`/token/${tokenId}/assign`, { staffId });
       }
-
-      // 2. If the token is still pending, update the status to in-progress
       if (tokenStatus === 'pending') {
         await api.put(`/token/${tokenId}/status`, { status: 'in-progress' });
       }
-
-      // 3. Finally, navigate to the service entry screen
       navigate(`/dashboard/staff/token/${tokenId}/service`);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to start service. Someone else might have already taken it.');
-      // Refresh to get latest state in case of failure
       refreshTokens(); 
     }
   };
@@ -364,31 +358,28 @@ const StaffDashboard = () => {
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  // Token filtering
-    const getActiveTokens = () => tokens.filter(t => {
-      const tokenStaff = String(t.staffId || '').trim();
-      const localStaff = String(staffId).trim();
-      const isAssignedToMe = tokenStaff === localStaff;
-      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-      // Exclude campaign tokens from the regular active tab
-      return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.type !== 'campaign';
-    });
+  // Token filtering (unchanged)
+  const getActiveTokens = () => tokens.filter(t => {
+    const tokenStaff = String(t.staffId || '').trim();
+    const localStaff = String(staffId).trim();
+    const isAssignedToMe = tokenStaff === localStaff;
+    const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+    return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.type !== 'campaign';
+  });
 
-    const getCompletedTokens = () => tokens.filter(t => {
-      const tokenStaff = String(t.staffId || '').trim();
-      const localStaff = String(staffId).trim();
-      // Exclude campaign tokens from the regular completed tab
-      return tokenStaff === localStaff && t.status === 'completed' && t.type !== 'campaign';
-    });
+  const getCompletedTokens = () => tokens.filter(t => {
+    const tokenStaff = String(t.staffId || '').trim();
+    const localStaff = String(staffId).trim();
+    return tokenStaff === localStaff && t.status === 'completed' && t.type !== 'campaign';
+  });
 
-    const getCampaignTokens = () => tokens.filter(t => {
-      const tokenStaff = String(t.staffId || '').trim();
-      const localStaff = String(staffId).trim();
-      const isAssignedToMe = tokenStaff === localStaff;
-      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-      // Show both assigned and unassigned campaign tokens here
-      return (isAssignedToMe || isUnassigned) && t.type === 'campaign';
-    });
+  const getCampaignTokens = () => tokens.filter(t => {
+    const tokenStaff = String(t.staffId || '').trim();
+    const localStaff = String(staffId).trim();
+    const isAssignedToMe = tokenStaff === localStaff;
+    const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+    return (isAssignedToMe || isUnassigned) && t.type === 'campaign';
+  });
 
   const activeTokens = getActiveTokens();
   const completedTokens = getCompletedTokens();
@@ -507,7 +498,6 @@ const StaffDashboard = () => {
       <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-            {/* Left side: Avatar + greeting + status */}
             <div className="flex-1">
               <div className="flex items-start gap-4 mb-3">
                 <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
@@ -522,7 +512,6 @@ const StaffDashboard = () => {
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-4 text-sm text-white/90 mt-2 mb-6">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 bg-green-400 rounded-full"></span>
@@ -535,8 +524,6 @@ const StaffDashboard = () => {
                   View Profile
                 </button>
               </div>
-
-              {/* Quick Actions */}
               <div>
                 <p className="text-xs uppercase tracking-wider text-white/70 mb-2 font-semibold">Quick Actions</p>
                 <div className="flex flex-wrap gap-2">
@@ -561,15 +548,11 @@ const StaffDashboard = () => {
                 </div>
               </div>
             </div>
-
-            {/* Right side: Date & Time */}
             <div className="md:text-right">
               <p className="text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
               <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
             </div>
           </div>
-
-          {/* Announcement */}
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
             Exciting updates coming soon! Check back frequently — new features will be announced here.
           </div>
@@ -703,8 +686,8 @@ const StaffDashboard = () => {
             <FiPlus className="h-6 w-6" />
           </button>
 
-          {/* Search & Filter Bar */}
-          <div className="flex flex-wrap gap-4 mb-6">
+          {/* Search & Filter Bar + Wallet Pill */}
+          <div className="flex flex-wrap gap-4 mb-6 items-center">
             <div className="relative flex-1 max-w-md">
               <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
@@ -721,38 +704,26 @@ const StaffDashboard = () => {
               <option value="week">This Week</option>
               <option value="all">All Time</option>
             </select>
-          </div>
 
-          {/* My Assigned Wallet Balance Card */}
-          {myWallet && (
-            <motion.div
-              whileHover={{ y: -2 }}
-              className="bg-white rounded-xl border border-indigo-200 p-6 shadow-sm relative overflow-hidden mb-6"
-            >
-              {/* Background watermark icon */}
-              <div className="absolute -bottom-6 -right-4 p-3 opacity-5">
-                <FiBriefcase className="h-32 w-32 text-indigo-800" />
-              </div>
-              
-              <div className="flex items-center justify-between relative z-10">
-                <div>
-                  <p className="text-sm font-semibold text-indigo-600 mb-1 tracking-wide uppercase">My Assigned Wallet</p>
-                  <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(myWallet.balance)}</h3>
-                  <div className="flex items-center mt-3">
-                    <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md border border-indigo-100 flex items-center">
-                      {myWallet.name}
-                    </span>
-                    <span className="ml-3 text-xs font-medium text-gray-500 capitalize bg-gray-100 px-2 py-1 rounded-md">
-                      {myWallet.wallet_type || 'Cash'}
-                    </span>
-                  </div>
+            {/* ----- Ultra‑Compact Wallet Pill ----- */}
+            {myWallet && (
+              <motion.div
+                whileHover={{ y: -1 }}
+                className="inline-flex items-center gap-2 bg-white border border-indigo-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => navigate('/dashboard/wallets')}
+              >
+                <div className="p-1 bg-indigo-100 rounded-full">
+                  <FiBriefcase className="h-3.5 w-3.5 text-indigo-600" />
                 </div>
-                <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200">
-                  <FiDollarSign className="h-8 w-8 text-white" />
-                </div>
-              </div>
-            </motion.div>
-          )}
+                <span className="text-sm font-medium text-gray-700">
+                  {myWallet.name}
+                </span>
+                <span className="text-sm font-bold text-gray-900">
+                  {formatCurrency(myWallet.balance)}
+                </span>
+              </motion.div>
+            )}
+          </div>
 
           {/* Stats Row - Token Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
@@ -914,7 +885,6 @@ const StaffDashboard = () => {
                                     </div>
                                   </div>
                                   <div>
-                                    {/* Show Start/Continue for pending/in-progress tokens in BOTH Active and Campaign tabs */}
                                     {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
                                       <button 
                                         onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
@@ -924,8 +894,6 @@ const StaffDashboard = () => {
                                         {token.status === 'pending' ? 'Start' : 'Continue'}
                                       </button>
                                     )}
-                                    
-                                    {/* Show Details for completed tokens in BOTH Completed and Campaign tabs */}
                                     {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
                                       <button onClick={() => handleViewDetails(token.tokenId)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 flex items-center gap-2">
                                         <FiBarChart2 className="h-4 w-4" /> Details
@@ -1072,15 +1040,12 @@ const StaffDashboard = () => {
                       <div className="space-y-6">
                         {Object.entries(groupedRecentActivities).map(([date, entries]) => (
                           <div key={date}>
-                            {/* Date Header */}
                             <div className="flex items-center gap-2 mb-3">
                               <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
                               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                 {formatDateUI(date)}
                               </h4>
                             </div>
-                            
-                            {/* Entries for this date */}
                             <div className="space-y-4">
                               {entries.map(entry => (
                                 <div key={entry.id} className="flex gap-3 pb-4 last:pb-0 border-b last:border-0 border-gray-100">
