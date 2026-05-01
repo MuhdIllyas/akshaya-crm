@@ -2669,8 +2669,8 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
               'status', p.status,
               'created_at', p.created_at
             )
-            ORDER BY p.created_at DESC NULLS LAST  -- 🔥 Fixed chronological sorting
-          ) FILTER (WHERE p.id IS NOT NULL),
+            ORDER BY p.created_at DESC NULLS LAST
+          ) FILTER (WHERE p.id IS NOT NULL AND p.status = 'received'),  -- 🔥 STATUS CHECK ADDED HERE
           '[]'
         ) AS payment_history
 
@@ -2910,8 +2910,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
               'status', p.status,
               'created_at', p.created_at
             )
-            ORDER BY p.created_at DESC NULLS LAST  -- 🔥 Fixed chronological sorting
-          ) FILTER (WHERE p.id IS NOT NULL),
+            ORDER BY p.created_at DESC NULLS LAST
+          ) FILTER (WHERE p.id IS NOT NULL AND p.status = 'received'),  -- 🔥 STATUS CHECK ADDED HERE
           '[]'
         ) AS payment_history
 
