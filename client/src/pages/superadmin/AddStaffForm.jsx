@@ -388,6 +388,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               <option value="Part-time">Part-time</option>
               <option value="Contract">Contract</option>
               <option value="Freelance">Freelance</option>
+              <option value="Freelance">Probation</option>
             </select>
           </div>
 
