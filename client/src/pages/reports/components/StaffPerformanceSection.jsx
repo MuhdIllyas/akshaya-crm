@@ -5,7 +5,7 @@ import {
   FiTrendingUp, FiCheckCircle, FiAward, FiUsers,
   FiArrowLeft, FiX, FiFilter, FiDownload, FiMoreVertical,
   FiActivity, FiStar, FiClock, FiTrendingDown, FiSearch,
-  FiChevronRight, FiRefreshCw, FiEye, FiFileText, FiList
+  FiChevronRight, FiRefreshCw, FiEye, FiFileText
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
@@ -13,7 +13,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 const formatINR = (value) =>
   Number(value || 0).toLocaleString("en-IN");
 
-// Compact StatCard Component 
+// Compact StatCard Component (same as WalletsSection)
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
@@ -41,6 +41,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
   </motion.div>
 );
 
+// Updated InfoTooltip component with proper positioning
 const InfoTooltip = ({ content, placement = "top", children }) => {
   const [isVisible, setIsVisible] = useState(false);
   const tooltipRef = useRef(null);
@@ -97,6 +98,7 @@ const InfoTooltip = ({ content, placement = "top", children }) => {
   );
 };
 
+// StaffPerformanceCard Component - Updated to match WalletCard style with ratings
 const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
   const collectionProgress = staff.expectedAmount > 0 ? (staff.collectedAmount / staff.expectedAmount) * 100 : 0;
 
@@ -114,7 +116,7 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
             <div className="bg-indigo-500 rounded-lg flex items-center justify-center w-8 h-8">
               <FiUser className="text-white h-4 w-4" />
             </div>
-            {rank !== null && rank <= 3 && (
+            {rank <= 3 && (
               <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white ${
                 rank === 1 ? 'bg-amber-500' : 
                 rank === 2 ? 'bg-gray-500' : 
@@ -132,6 +134,7 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
         <FiChevronRight className="h-4 w-4 text-gray-400" />
       </div>
 
+      {/* Revenue */}
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1">
           <span className="text-gray-600 text-xs">Revenue</span>
@@ -139,6 +142,7 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
         </div>
       </div>
 
+      {/* Performance Score */}
       <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold mb-2 ${
         staff.collectionRate >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
         staff.collectionRate >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -147,6 +151,7 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
         {staff.collectionRate}% Collection Rate
       </div>
 
+      {/* Key Metrics */}
       <div className="grid grid-cols-3 gap-2 mb-2">
         <div className="text-center p-2 bg-gray-50 rounded">
           <div className="text-xs text-gray-600 mb-1">Services</div>
@@ -163,13 +168,17 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
               placement="top"
               content={
                 <div className="space-y-2">
-                  <p className="font-semibold text-white">Incentive Readiness Score (0–100)</p>
+                  <p className="font-semibold text-white">
+                    Incentive Readiness Score (0–100)
+                  </p>
                   <div className="space-y-1">
                     <p>• <b>50%</b> Collection discipline</p>
                     <p>• <b>30%</b> Revenue efficiency (₹ / day)</p>
                     <p>• <b>20%</b> Consistency (active days)</p>
                   </div>
-                  <p className="text-gray-300 text-xs mt-1">Based on completed services & received payments</p>
+                  <p className="text-gray-300 text-xs mt-1">
+                    Based on completed services & received payments
+                  </p>
                 </div>
               }
             />
@@ -178,6 +187,7 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
         </div>
       </div>
 
+      {/* Collection Progress */}
       <div className="space-y-1.5">
         <div className="flex justify-between text-xs">
           <span className="text-gray-500">Collected</span>
@@ -205,6 +215,7 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
         </div>
       )}
 
+      {/* Add Ratings Info */}
       {staff.totalReviews > 0 && (
         <div className="flex items-center justify-between text-xs border-t border-gray-100 pt-2 mt-2">
           <div className="flex items-center text-yellow-600">
@@ -218,6 +229,7 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
   );
 };
 
+// StaffDetailsPanel Component - Updated to match WalletDetailsPanel style with ratings
 const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingDistribution, onClose }) => {
   const [activeTab, setActiveTab] = useState('performance');
 
@@ -244,10 +256,14 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col w-full max-w-sm"
       >
+        {/* Header */}
         <div className="border-b border-gray-200">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center space-x-2">
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
                 <FiArrowLeft className="h-4 w-4 text-gray-600" />
               </button>
               <div>
@@ -255,18 +271,24 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                 <p className="text-xs text-gray-600">{staff.role}</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
               <FiX className="h-4 w-4 text-gray-600" />
             </button>
           </div>
 
+          {/* Tabs */}
           <div className="flex px-4 border-b border-gray-200">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center px-3 py-2 border-b-2 text-xs font-medium transition-colors ${
-                  activeTab === tab.id ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  activeTab === tab.id
+                    ? 'border-indigo-500 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <tab.icon className="h-3 w-3 mr-1" />
@@ -278,13 +300,38 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
 
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
+            {/* Performance Score - Fixed tooltip positioning */}
             <div className="bg-white border border-gray-200 rounded-lg p-4 relative">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1 min-w-0 mr-2">
                   <div className="flex items-center space-x-2 mb-1">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">Incentive Readiness</h3>
+                    <h3 className="font-semibold text-gray-900 text-sm truncate">
+                      Incentive Readiness
+                    </h3>
+                    <div className="relative">
+                      <InfoTooltip
+                        placement="bottom"
+                        content={
+                          <div className="space-y-2">
+                            <p className="font-semibold text-white">
+                              How this score is calculated
+                            </p>
+                            <div className="space-y-1">
+                              <p>• <b>50%</b> Collection discipline</p>
+                              <p>• <b>30%</b> Revenue efficiency (₹ / day)</p>
+                              <p>• <b>20%</b> Consistency (active days)</p>
+                            </div>
+                            <p className="text-gray-300 text-xs mt-1">
+                              Based only on completed services & received payments
+                            </p>
+                          </div>
+                        }
+                      />
+                    </div>
                   </div>
-                  <p className="text-gray-500 text-xs truncate">Performance-based incentive eligibility</p>
+                  <p className="text-gray-500 text-xs truncate">
+                    Performance-based incentive eligibility
+                  </p>
                 </div>
                 <div className={`inline-flex flex-col px-3 py-2 border rounded-lg shrink-0 ${
                   staff.incentiveScore >= 80 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' :
@@ -293,7 +340,8 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                 }`}>
                   <span className="font-bold text-lg">{staff.incentiveScore}%</span>
                   <span className="text-xs">
-                    {staff.incentiveScore >= 80 ? 'Excellent' : staff.incentiveScore >= 60 ? 'Good' : 'Needs Improvement'}
+                    {staff.incentiveScore >= 80 ? 'Excellent' :
+                     staff.incentiveScore >= 60 ? 'Good' : 'Needs Improvement'}
                   </span>
                 </div>
               </div>
@@ -301,13 +349,15 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
               <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
                   className={`h-full rounded-full ${
-                    staff.incentiveScore >= 80 ? 'bg-emerald-500' : staff.incentiveScore >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+                    staff.incentiveScore >= 80 ? 'bg-emerald-500' :
+                    staff.incentiveScore >= 60 ? 'bg-amber-500' : 'bg-rose-500'
                   }`}
                   style={{ width: `${staff.incentiveScore}%` }}
                 />
               </div>
             </div>
 
+            {/* Revenue Details */}
             <div className="space-y-3">
               <h3 className="font-semibold text-gray-900 text-sm">Revenue Details</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -328,6 +378,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
               </div>
             </div>
 
+            {/* Collection Stats */}
             <div className="border border-gray-200 rounded-lg p-4">
               <h3 className="font-semibold text-gray-900 text-sm mb-3">Collection Stats</h3>
               <div className="space-y-2">
@@ -336,7 +387,9 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                   <span className={`font-bold text-xs ${
                     staff.collectionRate >= 90 ? 'text-emerald-600' :
                     staff.collectionRate >= 70 ? 'text-amber-600' : 'text-rose-600'
-                  }`}>{staff.collectionRate}%</span>
+                  }`}>
+                    {staff.collectionRate}%
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600 text-xs">Avg. Transaction</span>
@@ -349,11 +402,14 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
               </div>
             </div>
 
+            {/* Ratings Section */}
             {(activeTab === 'performance' || activeTab === 'efficiency') && staff.totalReviews > 0 && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                  <FiStar className="h-3 w-3 mr-2 text-yellow-500" /> Customer Ratings
+                  <FiStar className="h-3 w-3 mr-2 text-yellow-500" />
+                  Customer Ratings
                 </h3>
+                
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="flex items-center">
@@ -363,7 +419,9 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                           <FiStar
                             key={star}
                             className={`h-4 w-4 ${
-                              star <= Math.round(staff.avgStaffRating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
+                              star <= Math.round(staff.avgStaffRating)
+                                ? 'fill-yellow-400 text-yellow-400'
+                                : 'text-gray-300'
                             }`}
                           />
                         ))}
@@ -372,6 +430,8 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                     <p className="text-xs text-gray-500 mt-1">Based on {staff.totalReviews} reviews</p>
                   </div>
                 </div>
+                
+                {/* Rating Breakdown */}
                 {ratingDistribution && ratingDistribution.length > 0 && (
                   <div className="space-y-2">
                     {[5,4,3,2,1].map(rating => {
@@ -379,6 +439,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                       const count = ratingData ? Number(ratingData.count) : 0;
                       const total = ratingDistribution.reduce((sum, r) => sum + Number(r.count), 0);
                       const percentage = total > 0 ? (count / total) * 100 : 0;
+                      
                       return (
                         <div key={rating} className="flex items-center text-xs">
                           <span className="w-8 text-gray-600">{rating}★</span>
@@ -390,7 +451,9 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                               />
                             </div>
                           </div>
-                          <span className="w-8 text-right text-gray-500">{Math.round(percentage)}%</span>
+                          <span className="w-8 text-right text-gray-500">
+                            {Math.round(percentage)}%
+                          </span>
                         </div>
                       );
                     })}
@@ -399,6 +462,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
               </div>
             )}
 
+            {/* Category Strength */}
             {activeTab === 'categories' && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 text-sm mb-3">Category-wise Strength</h3>
@@ -411,22 +475,37 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                 ) : (
                   <div className="space-y-2">
                     {categoryStrength.map((c) => {
-                      const totalRevenue = categoryStrength.reduce((sum, x) => sum + Number(x.revenue), 0);
-                      const percent = totalRevenue > 0 ? Math.round((c.revenue / totalRevenue) * 100) : 0;
+                      const totalRevenue = categoryStrength.reduce(
+                        (sum, x) => sum + Number(x.revenue),
+                        0
+                      );
+
+                      const percent =
+                        totalRevenue > 0
+                          ? Math.round((c.revenue / totalRevenue) * 100)
+                          : 0;
+
                       return (
                         <div key={c.service_id}>
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="font-medium text-gray-700">{c.service_name}</span>
-                            <span className="text-gray-500">₹{Number(c.revenue).toLocaleString("en-IN")}</span>
+                            <span className="font-medium text-gray-700">
+                              {c.service_name}
+                            </span>
+                            <span className="text-gray-500">
+                              ₹{Number(c.revenue).toLocaleString("en-IN")}
+                            </span>
                           </div>
+
                           <div className="w-full bg-gray-200 rounded-full h-1.5">
                             <div
                               className="bg-indigo-600 h-1.5 rounded-full"
                               style={{ width: `${percent}%` }}
                             />
                           </div>
+
                           <div className="text-xs text-gray-500 mt-1">
-                            {c.applications} apps • Profit ₹{Number(c.profit).toLocaleString("en-IN")}
+                            {c.applications} apps • Profit ₹
+                            {Number(c.profit).toLocaleString("en-IN")}
                           </div>
                         </div>
                       );
@@ -436,23 +515,34 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
               </div>
             )}
 
+            {/* Efficiency Metrics */}
             {activeTab === 'efficiency' && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                  <FiActivity className="h-3 w-3 mr-2 text-green-600" /> Efficiency Metrics
+                  <FiActivity className="h-3 w-3 mr-2 text-green-600" />
+                  Efficiency Metrics
                 </h3>
+
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-green-50 rounded p-2 border border-green-200">
                     <p className="text-xs text-green-700">Active Days</p>
-                    <p className="font-bold text-green-900 text-sm">{staff.activeDays}</p>
+                    <p className="font-bold text-green-900 text-sm">
+                      {staff.activeDays}
+                    </p>
                   </div>
+
                   <div className="bg-blue-50 rounded p-2 border border-blue-200">
                     <p className="text-xs text-blue-700">Revenue / Day</p>
-                    <p className="font-bold text-blue-900 text-sm">₹{formatINR(staff.revenuePerDay)}</p>
+                    <p className="font-bold text-blue-900 text-sm">
+                      ₹{formatINR(staff.revenuePerDay)}
+                    </p>
                   </div>
+
                   <div className="bg-amber-50 rounded p-2 border border-amber-200">
                     <p className="text-xs text-amber-700">Profit / Day</p>
-                    <p className="font-bold text-amber-900 text-sm">₹{formatINR(staff.profitPerDay)}</p>
+                    <p className="font-bold text-amber-900 text-sm">
+                      ₹{formatINR(staff.profitPerDay)}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -464,6 +554,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
   );
 };
 
+// Main Staff Performance Section Component - Updated with trainee view toggle
 const StaffPerformanceSection = ({ 
   data, 
   showCharts, 
@@ -473,6 +564,7 @@ const StaffPerformanceSection = ({
   setSelectedStaff: externalSetSelectedStaff,
   setActiveSection,
   centreId,
+  // Props for superadmin mode
   ratingDistribution: externalRatingDistribution,
   loadingReviews: externalLoadingReviews,
   isSuperAdmin = false
@@ -482,24 +574,27 @@ const StaffPerformanceSection = ({
   const setSelectedStaff = externalSetSelectedStaff ?? setInternalSelectedStaff;
 
   const [staffPerformance, setStaffPerformance] = useState([]);
-  const [traineePerformance, setTraineePerformance] = useState([]); 
-  
+  const [traineePerformance, setTraineePerformance] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingTrainee, setLoadingTrainee] = useState(false);
   const [categoryStrength, setCategoryStrength] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [fromDate, setFromDate] = useState(null);
   const [toDate, setToDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('revenue'); 
+  const [sortBy, setSortBy] = useState('revenue'); // 'revenue', 'rate', 'incentive'
+  const [staffMode, setStaffMode] = useState('permanent'); // 'permanent' or 'trainee'
   
+  // Review states - use props if provided (superadmin), otherwise use internal state
   const [internalReviewSummary, setInternalReviewSummary] = useState(null);
   const [internalRatingDistribution, setInternalRatingDistribution] = useState([]);
   const [internalLoadingReviews, setInternalLoadingReviews] = useState(false);
 
-  const reviewSummary = isSuperAdmin ? null : internalReviewSummary; 
+  const reviewSummary = isSuperAdmin ? null : internalReviewSummary; // Superadmin doesn't need summary cards
   const ratingDistribution = externalRatingDistribution || internalRatingDistribution;
   const loadingReviews = externalLoadingReviews !== undefined ? externalLoadingReviews : internalLoadingReviews;
 
+  // Date range picker component
   const DateRangePicker = () => {
     const [isOpen, setIsOpen] = useState(false);
     
@@ -603,32 +698,51 @@ const StaffPerformanceSection = ({
     );
   };
 
+  // Fetch functions
   const fetchStaffPerformance = async (from, to, centreId) => {
     const token = localStorage.getItem("token");
+
     const params = new URLSearchParams({ from, to });
     if (centreId) params.append("centreId", centreId);
+
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/staffreport/staff-performance?${params.toString()}`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
     );
-    if (!res.ok) throw new Error("Failed to fetch staff performance");
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch staff performance");
+    }
+
     return res.json();
   };
 
   const fetchTraineePerformance = async (from, to, centreId) => {
     const token = localStorage.getItem("token");
+
     const params = new URLSearchParams({ from, to });
     if (centreId) params.append("centreId", centreId);
+
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/staffreport/trainee-performance?${params.toString()}`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
     );
-    if (!res.ok) throw new Error("Failed to fetch trainee performance");
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch trainee performance");
+    }
+
     return res.json();
   };
 
+  // Fetch review summary (for dashboard cards) - only for non-superadmin
   const fetchReviewSummary = async () => {
     if (isSuperAdmin) return;
+    
     try {
       setInternalLoadingReviews(true);
       const token = localStorage.getItem("token");
@@ -638,11 +752,16 @@ const StaffPerformanceSection = ({
         params.append("from", fromDate);
         params.append("to", toDate);
       }
+      
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/staffreport/review-summary?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
+      
       if (!res.ok) throw new Error("Failed to fetch review summary");
+      
       const data = await res.json();
       setInternalReviewSummary(data);
     } catch (err) {
@@ -652,22 +771,30 @@ const StaffPerformanceSection = ({
     }
   };
 
+  // Fetch rating distribution (for charts) - only for non-superadmin
   const fetchRatingDistribution = async () => {
     if (isSuperAdmin) return;
+    
     try {
       setInternalLoadingReviews(true);
       const token = localStorage.getItem("token");
+      
       const params = new URLSearchParams();
       if (centreId) params.append("centreId", centreId);
       if (fromDate && toDate) {
         params.append("from", fromDate);
         params.append("to", toDate);
       }
+      
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/staffreport/rating-distribution?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
+      
       if (!res.ok) throw new Error("Failed to fetch rating distribution");
+      
       const data = await res.json();
       setInternalRatingDistribution(data);
     } catch (err) {
@@ -681,21 +808,31 @@ const StaffPerformanceSection = ({
   useEffect(() => {
     if (!fromDate || !toDate) return;
     loadStaffPerformance(fromDate, toDate);
+    loadTraineePerformance(fromDate, toDate);
   }, [fromDate, toDate]);
 
   useEffect(() => {
     if (!selectedStaff || !fromDate || !toDate) return;
+
     const fetchCategoryStrength = async () => {
       try {
         setLoadingCategories(true);
         const token = localStorage.getItem("token");
-        const params = new URLSearchParams({ from: fromDate, to: toDate });
+
+        const params = new URLSearchParams({
+          from: fromDate,
+          to: toDate,
+        });
+
         if (centreId) params.append("centreId", centreId);
 
         const res = await fetch(
           `${import.meta.env.VITE_API_URL}/api/staffreport/staff/${selectedStaff.id}/category-strength?${params.toString()}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
         );
+
         const data = await res.json();
         setCategoryStrength(data);
       } catch (err) {
@@ -705,13 +842,16 @@ const StaffPerformanceSection = ({
         setLoadingCategories(false);
       }
     };
+
     fetchCategoryStrength();
   }, [selectedStaff, fromDate, toDate]);
 
   useEffect(() => {
     const now = new Date();
     const to = now.toISOString().slice(0, 10);
+
     let from;
+
     if (timePeriod === "monthly") {
       from = new Date(now.getFullYear(), now.getMonth(), 1);
     } else if (timePeriod === "quarterly") {
@@ -720,10 +860,12 @@ const StaffPerformanceSection = ({
     } else {
       from = new Date(now.getFullYear(), 0, 1);
     }
+
     setFromDate(from.toISOString().slice(0, 10));
     setToDate(to);
   }, [timePeriod]);
 
+  // Fetch review data when centreId or date range changes (for non-superadmin)
   useEffect(() => {
     if (!isSuperAdmin && fromDate && toDate) {
       fetchReviewSummary();
@@ -731,7 +873,7 @@ const StaffPerformanceSection = ({
     }
   }, [isSuperAdmin, centreId, fromDate, toDate]);
 
-  const formatPerformanceData = (rows) => {
+  const transformStaffRows = (rows) => {
     return rows.map((row) => {
       const incentiveScore = Number(row.incentive_score ?? 0);
       const expected = Number(row.expected_amount);
@@ -741,20 +883,32 @@ const StaffPerformanceSection = ({
         id: row.staff_id,
         name: row.staff_name,
         role: "Staff",
+
         expectedAmount: expected,
         collectedAmount: collected,
         pendingAmount: Math.max(expected - collected, 0),
-        collectionRate: expected > 0 ? Math.round((collected / expected) * 100) : 100,
+
+        collectionRate:
+          expected > 0
+            ? Math.round((collected / expected) * 100)
+            : 100,
+
         revenueCollected: collected,
         serviceCharge: Number(row.service_charge_earned),
         servicesCompleted: Number(row.services_completed),
         avgTransaction: Number(row.avg_ticket_size || 0),
         incentiveScore: incentiveScore,
+
+        // Review data
         totalReviews: Number(row.total_reviews || 0),
         avgStaffRating: Number(row.avg_staff_rating || 0),
+
+        // Efficiency metrics
         activeDays: Number(row.active_days || 0),
         revenuePerDay: Number(row.revenue_per_day || 0),
         profitPerDay: Number(row.profit_per_day || 0),
+
+        // Placeholders
         achievement: 0,
         monthlyTarget: 0,
         todayCollection: 0,
@@ -765,79 +919,81 @@ const StaffPerformanceSection = ({
   const loadStaffPerformance = async (from, to) => {
     try {
       setLoading(true);
-
-      const [staffRows, traineeRows] = await Promise.all([
-        fetchStaffPerformance(from, to, centreId),
-        fetchTraineePerformance(from, to, centreId).catch(() => []) 
-      ]);
-
-      setStaffPerformance(formatPerformanceData(staffRows));
-      setTraineePerformance(formatPerformanceData(traineeRows));
-
+      const rows = await fetchStaffPerformance(from, to, centreId);
+      setStaffPerformance(transformStaffRows(rows));
     } catch (err) {
       console.error("Staff performance load failed", err);
       setStaffPerformance([]);
-      setTraineePerformance([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const loadTraineePerformance = async (from, to) => {
+    try {
+      setLoadingTrainee(true);
+      const rows = await fetchTraineePerformance(from, to, centreId);
+      setTraineePerformance(transformStaffRows(rows));
+    } catch (err) {
+      console.error("Trainee performance load failed", err);
+      setTraineePerformance([]);
+    } finally {
+      setLoadingTrainee(false);
+    }
+  };
+
+  // Derive the set of trainee IDs to exclude from permanent view
+  const traineeIds = useMemo(() => new Set(traineePerformance.map(s => s.id)), [traineePerformance]);
+  
+  const permanentStaff = useMemo(() => {
+    return staffPerformance.filter(s => !traineeIds.has(s.id));
+  }, [staffPerformance, traineeIds]);
+
+  // Active dataset based on toggle
+  const activeData = staffMode === 'permanent' ? permanentStaff : traineePerformance;
+
+  // Filter and sort active data
   const filteredAndSortedStaff = useMemo(() => {
-    let result = [...staffPerformance];
-    if (searchQuery) {
-      result = result.filter(staff => staff.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case 'rate': return b.collectionRate - a.collectionRate;
-        case 'incentive': return b.incentiveScore - a.incentiveScore;
-        case 'services': return b.servicesCompleted - a.servicesCompleted;
-        case 'name': return a.name.localeCompare(b.name);
-        case 'revenue': default: return b.revenueCollected - a.revenueCollected;
-      }
-    });
-    return result;
-  }, [staffPerformance, sortBy, searchQuery]);
-
-  const filteredAndSortedTrainees = useMemo(() => {
-    let result = [...traineePerformance];
-    if (searchQuery) {
-      result = result.filter(staff => staff.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    }
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case 'rate': return b.collectionRate - a.collectionRate;
-        case 'incentive': return b.incentiveScore - a.incentiveScore;
-        case 'services': return b.servicesCompleted - a.servicesCompleted;
-        case 'name': return a.name.localeCompare(b.name);
-        case 'revenue': default: return b.revenueCollected - a.revenueCollected;
-      }
-    });
-    return result;
-  }, [traineePerformance, sortBy, searchQuery]);
-
-  // COMBINED DATA FOR THE QUICK VIEW TABLE
-  const combinedStaffForTable = useMemo(() => {
-    const all = [
-      ...filteredAndSortedStaff.map(s => ({ ...s, isTrainee: false })),
-      ...filteredAndSortedTrainees.map(s => ({ ...s, isTrainee: true }))
-    ];
-    return all.sort((a, b) => b.expectedAmount - a.expectedAmount); 
-  }, [filteredAndSortedStaff, filteredAndSortedTrainees]);
-
-  const summaryStats = useMemo(() => {
-    const combinedStaff = [...staffPerformance, ...traineePerformance];
-    if (combinedStaff.length === 0) return null;
+    let result = [...activeData];
     
-    const totalRevenue = combinedStaff.reduce((sum, s) => sum + s.revenueCollected, 0);
-    const avgRate = Math.round(combinedStaff.reduce((sum, s) => sum + s.collectionRate, 0) / combinedStaff.length);
-    const totalServices = combinedStaff.reduce((sum, s) => sum + s.servicesCompleted, 0);
-    const avgIncentive = Math.round(combinedStaff.reduce((sum, s) => sum + s.incentiveScore, 0) / combinedStaff.length);
+    if (searchQuery) {
+      result = result.filter(staff => 
+        staff.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'rate':
+          return b.collectionRate - a.collectionRate;
+        case 'incentive':
+          return b.incentiveScore - a.incentiveScore;
+        case 'services':
+          return b.servicesCompleted - a.servicesCompleted;
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'revenue':
+        default:
+          return b.revenueCollected - a.revenueCollected;
+      }
+    });
+    
+    return result;
+  }, [activeData, sortBy, searchQuery]);
+
+  // Summary stats
+  const summaryStats = useMemo(() => {
+    if (activeData.length === 0) return null;
+    
+    const totalRevenue = activeData.reduce((sum, s) => sum + s.revenueCollected, 0);
+    const avgRate = Math.round(activeData.reduce((sum, s) => sum + s.collectionRate, 0) / activeData.length);
+    const totalServices = activeData.reduce((sum, s) => sum + s.servicesCompleted, 0);
+    const avgIncentive = Math.round(activeData.reduce((sum, s) => sum + s.incentiveScore, 0) / activeData.length);
     
     return { totalRevenue, avgRate, totalServices, avgIncentive };
-  }, [staffPerformance, traineePerformance]);
+  }, [activeData]);
 
+  // Custom Tooltip for charts
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
@@ -860,9 +1016,12 @@ const StaffPerformanceSection = ({
     return null;
   };
 
+  const isLoading = staffMode === 'permanent' ? loading : loadingTrainee;
+
   return (
     <>
       <div className="mb-6">
+        {/* Header Section */}
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900 flex items-center">
@@ -872,14 +1031,46 @@ const StaffPerformanceSection = ({
             <p className="text-gray-600 text-sm mt-1">Revenue collection and performance metrics</p>
           </div>
           <button
-            onClick={() => loadStaffPerformance(fromDate, toDate)}
+            onClick={() => {
+              if (staffMode === 'permanent') loadStaffPerformance(fromDate, toDate);
+              else loadTraineePerformance(fromDate, toDate);
+            }}
             className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            <FiRefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            <FiRefreshCw className={`h-4 w-4 mr-2 ${loading || loadingTrainee ? "animate-spin" : ""}`} />
             Refresh
           </button>
         </div>
 
+        {/* Staff Type Toggle */}
+        <div className="mb-4">
+          <div className="inline-flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setStaffMode('permanent')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                staffMode === 'permanent'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FiUser className="h-4 w-4 mr-2 inline" />
+              Permanent Staff
+            </button>
+            <button
+              onClick={() => setStaffMode('trainee')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                staffMode === 'trainee'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FiUsers className="h-4 w-4 mr-2 inline" />
+              Trainees ({traineePerformance.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Controls */}
         <div className="flex flex-wrap gap-3 mb-4 items-end">
           <DateRangePicker />
           
@@ -919,6 +1110,7 @@ const StaffPerformanceSection = ({
           </div>
         </div>
 
+        {/* Summary Stats */}
         {summaryStats && (
           <div className="grid gap-3 mb-4 grid-cols-2 md:grid-cols-4">
             <StatCard
@@ -956,7 +1148,8 @@ const StaffPerformanceSection = ({
           </div>
         )}
 
-        {!isSuperAdmin && reviewSummary && (
+        {/* Review Stats Cards - Only show for non-superadmin and permanent staff mode */}
+        {!isSuperAdmin && staffMode === 'permanent' && reviewSummary && (
           <div className="grid gap-3 mb-4 grid-cols-3">
             <StatCard
               title="Total Reviews"
@@ -982,8 +1175,10 @@ const StaffPerformanceSection = ({
           </div>
         )}
 
+        {/* Charts Section */}
         {showCharts && filteredAndSortedStaff.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+            {/* Revenue vs Services */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -1011,6 +1206,7 @@ const StaffPerformanceSection = ({
               </ResponsiveContainer>
             </div>
 
+            {/* Collection Performance */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -1038,6 +1234,7 @@ const StaffPerformanceSection = ({
               </ResponsiveContainer>
             </div>
 
+            {/* Avg Transaction Size */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -1064,6 +1261,7 @@ const StaffPerformanceSection = ({
               </ResponsiveContainer>
             </div>
 
+            {/* Rating Distribution */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -1115,93 +1313,30 @@ const StaffPerformanceSection = ({
           </div>
         )}
 
-        {/* 🔥 NEW QUICK VIEW REVENUE TABLE */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-            <h3 className="text-sm font-bold text-gray-900 flex items-center">
-              <FiList className="mr-2 text-indigo-600" />
-              Quick View: Revenue & Charges Breakdown
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-white border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
-                  <th className="p-3 font-medium">Staff Name</th>
-                  <th className="p-3 font-medium text-center">Type</th>
-                  <th className="p-3 font-medium text-center">Services</th>
-                  <th className="p-3 font-medium text-right">Total Revenue</th>
-                  <th className="p-3 font-medium text-right text-blue-600">Dept Charges</th>
-                  <th className="p-3 font-medium text-right text-indigo-600">Service Charges</th>
-                  <th className="p-3 font-medium text-right text-emerald-600">Collected</th>
-                  <th className="p-3 font-medium text-right text-rose-600">Pending</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm divide-y divide-gray-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan="8" className="p-8 text-center text-gray-500">
-                      <FiRefreshCw className="animate-spin h-5 w-5 mx-auto mb-2 text-indigo-500" />
-                      Loading breakdown...
-                    </td>
-                  </tr>
-                ) : combinedStaffForTable.length > 0 ? (
-                  combinedStaffForTable.map(staff => {
-                    const deptCharge = staff.expectedAmount - staff.serviceCharge;
-                    return (
-                      <tr key={`table-${staff.id}`} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-3 font-medium text-gray-900">{staff.name}</td>
-                        <td className="p-3 text-center">
-                          <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${staff.isTrainee ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-                            {staff.isTrainee ? 'Trainee' : 'Staff'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-center text-gray-600">{staff.servicesCompleted}</td>
-                        <td className="p-3 text-right font-bold text-gray-900">₹{formatINR(staff.expectedAmount)}</td>
-                        <td className="p-3 text-right font-medium text-blue-700">₹{formatINR(deptCharge)}</td>
-                        <td className="p-3 text-right font-bold text-indigo-600">₹{formatINR(staff.serviceCharge)}</td>
-                        <td className="p-3 text-right font-medium text-emerald-600">₹{formatINR(staff.collectedAmount)}</td>
-                        <td className="p-3 text-right font-medium text-rose-600">{staff.pendingAmount > 0 ? `₹${formatINR(staff.pendingAmount)}` : '-'}</td>
-                      </tr>
-                    )
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="8" className="p-4 text-center text-gray-500 text-sm">No data available for the selected period</td>
-                  </tr>
-                )}
-                
-                {combinedStaffForTable.length > 0 && (
-                  <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
-                    <td className="p-3 text-gray-900" colSpan="2">Grand Total</td>
-                    <td className="p-3 text-center text-gray-900">{combinedStaffForTable.reduce((sum, s) => sum + s.servicesCompleted, 0)}</td>
-                    <td className="p-3 text-right text-gray-900">₹{formatINR(combinedStaffForTable.reduce((sum, s) => sum + s.expectedAmount, 0))}</td>
-                    <td className="p-3 text-right text-blue-700">₹{formatINR(combinedStaffForTable.reduce((sum, s) => sum + (s.expectedAmount - s.serviceCharge), 0))}</td>
-                    <td className="p-3 text-right text-indigo-600">₹{formatINR(combinedStaffForTable.reduce((sum, s) => sum + s.serviceCharge, 0))}</td>
-                    <td className="p-3 text-right text-emerald-600">₹{formatINR(combinedStaffForTable.reduce((sum, s) => sum + s.collectedAmount, 0))}</td>
-                    <td className="p-3 text-right text-rose-600">₹{formatINR(combinedStaffForTable.reduce((sum, s) => sum + s.pendingAmount, 0))}</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Permanent Staff Grid */}
+        {/* Staff Performance Grid */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 text-sm">
-              Permanent Staff List {filteredAndSortedStaff.length > 0 && `(${filteredAndSortedStaff.length})`}
+              {staffMode === 'permanent' ? 'Permanent Staff' : 'Trainee'} Performance {filteredAndSortedStaff.length > 0 && `(${filteredAndSortedStaff.length})`}
             </h3>
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              Showing top performers by {sortBy}
+              Showing {staffMode === 'permanent' ? 'top performers' : 'all trainees'} by {sortBy}
             </span>
           </div>
 
-          {!loading && filteredAndSortedStaff.length === 0 && (
+          {isLoading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-2"></div>
+                <p className="text-gray-600 text-sm">Loading {staffMode === 'permanent' ? 'staff' : 'trainee'} performance…</p>
+              </div>
+            </div>
+          )}
+
+          {!isLoading && filteredAndSortedStaff.length === 0 && (
             <div className="text-center py-8 border border-gray-200 rounded-lg bg-white">
               <FiUser className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-              <p className="text-gray-600 text-sm mb-1">No staff found</p>
+              <p className="text-gray-600 text-sm mb-1">No {staffMode === 'permanent' ? 'staff' : 'trainees'} found</p>
               <p className="text-gray-500 text-xs">Try adjusting your filters or search criteria</p>
             </div>
           )}
@@ -1218,32 +1353,9 @@ const StaffPerformanceSection = ({
             ))}
           </div>
         </div>
-
-        {/* Trainee / Probation Grid */}
-        {!loading && filteredAndSortedTrainees.length > 0 && (
-          <div className="mt-8 space-y-3">
-            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-              <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-                <FiUsers className="mr-2 text-blue-600" />
-                Trainee & Probation List ({filteredAndSortedTrainees.length})
-              </h3>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {filteredAndSortedTrainees.map((staff) => (
-                <StaffPerformanceCard
-                  key={`trainee-${staff.id}`}
-                  staff={staff}
-                  rank={null} 
-                  isSelected={selectedStaff?.id === staff.id}
-                  onClick={() => setSelectedStaff(staff)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
       </div>
 
+      {/* Staff Details Panel */}
       <AnimatePresence>
         {selectedStaff && (
           <StaffDetailsPanel
