@@ -188,6 +188,160 @@ router.get("/staff-performance", async (req, res) => {
 });
 
 /* =========================================================
+   1.5️⃣ TRAINEE / PROBATION PERFORMANCE (SEPARATE VIEW)
+========================================================= */
+router.get("/trainee-performance", async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({ error: "from and to are required" });
+    }
+
+    const params = [from, to];
+    let centreFilter = "";
+
+    // Admin → fixed centre
+    if (req.user.role === "admin") {
+      params.push(req.user.centre_id);
+      centreFilter = `AND s.centre_id = $${params.length}`;
+    }
+
+    // SuperAdmin → selected centre
+    if (req.user.role === "superadmin" && req.query.centreId) {
+      params.push(Number(req.query.centreId));
+      centreFilter = `AND s.centre_id = $${params.length}`;
+    }
+
+    const { rows } = await pool.query(
+      `
+      WITH service_agg AS (
+        SELECT
+          se.staff_id,
+          COUNT(se.id) AS services_completed,
+          COUNT(DISTINCT se.created_at::date) AS active_days,
+          SUM(se.total_charges) AS expected_amount,
+          SUM(se.service_charges) AS service_charge_earned,
+
+          ROUND(
+            SUM(se.total_charges)::numeric
+            / NULLIF(COUNT(se.id), 0),
+            2
+          ) AS avg_ticket_size,
+
+          ROUND(
+            SUM(se.total_charges)::numeric
+            / NULLIF(COUNT(DISTINCT se.created_at::date), 0),
+            2
+          ) AS revenue_per_day,
+
+          ROUND(
+            SUM(se.service_charges)::numeric
+            / NULLIF(COUNT(DISTINCT se.created_at::date), 0),
+            2
+          ) AS profit_per_day,
+
+          MAX(
+            ROUND(
+              SUM(se.total_charges)::numeric
+              / NULLIF(COUNT(DISTINCT se.created_at::date), 0),
+              2
+            )
+          ) OVER () AS max_revenue_per_day
+
+        FROM service_entries se
+        WHERE se.created_at::date BETWEEN $1 AND $2
+        GROUP BY se.staff_id
+      ),
+
+      payment_agg AS (
+        SELECT
+          se.staff_id,
+          SUM(p.amount) FILTER (WHERE p.status = 'received') AS collected_amount
+        FROM payments p
+        JOIN service_entries se ON se.id = p.service_entry_id
+        WHERE p.created_at::date BETWEEN $1 AND $2
+          AND COALESCE(p.is_reversal, FALSE) = FALSE
+          AND NOT EXISTS (
+            SELECT 1 FROM wallet_transactions wt 
+            WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+          )
+        GROUP BY se.staff_id
+      ),
+
+      /* Review Aggregation */
+      review_agg AS (
+        SELECT
+          sr.staff_id,
+          COUNT(sr.id) AS total_reviews,
+          ROUND(AVG(sr.staff_rating)::numeric, 2) AS avg_staff_rating
+        FROM service_reviews sr
+        WHERE sr.is_submitted = true
+          AND sr.staff_rating IS NOT NULL
+        GROUP BY sr.staff_id
+      )
+
+      SELECT
+        s.id   AS staff_id,
+        s.name AS staff_name,
+
+        COALESCE(sa.services_completed, 0) AS services_completed,
+        COALESCE(sa.active_days, 0) AS active_days,
+
+        COALESCE(sa.expected_amount, 0) AS expected_amount,
+        COALESCE(sa.service_charge_earned, 0) AS service_charge_earned,
+        COALESCE(pa.collected_amount, 0) AS collected_amount,
+
+        COALESCE(sa.avg_ticket_size, 0) AS avg_ticket_size,
+        COALESCE(sa.revenue_per_day, 0) AS revenue_per_day,
+        COALESCE(sa.profit_per_day, 0) AS profit_per_day,
+
+        /* Review Data */
+        COALESCE(ra.total_reviews, 0) AS total_reviews,
+        COALESCE(ra.avg_staff_rating, 0) AS avg_staff_rating,
+
+        /* Incentive Score (Even for trainees, it's good to see their metric progress) */
+        ROUND(
+          (
+            (COALESCE(pa.collected_amount, 0)
+            / NULLIF(sa.expected_amount, 0)) * 50
+
+            +
+
+            (sa.revenue_per_day
+            / NULLIF(sa.max_revenue_per_day, 0)) * 30
+
+            +
+
+            (sa.active_days
+            / NULLIF(($2::date - $1::date + 1), 0)) * 20
+          )::numeric,
+          0
+        ) AS incentive_score
+
+      FROM staff s
+      LEFT JOIN service_agg sa ON sa.staff_id = s.id
+      LEFT JOIN payment_agg pa ON pa.staff_id = s.id
+      LEFT JOIN review_agg ra  ON ra.staff_id = s.id
+
+      WHERE s.role = 'staff'
+        -- 🔥 CRITICAL: ONLY FETCH PROBATION/TRAINEE STAFF
+        AND s.employment_type = 'probation'
+      ${centreFilter}
+
+      ORDER BY collected_amount DESC;
+      `,
+      params
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error("Trainee performance report error:", err);
+    res.status(500).json({ error: "Failed to fetch trainee performance" });
+  }
+});
+
+/* =========================================================
    2️⃣ SERVICE-WISE (CATEGORY-WISE) STRENGTH
    service_entries.category_id → services.id
 ========================================================= */

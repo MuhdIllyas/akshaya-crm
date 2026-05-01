@@ -46,7 +46,6 @@ const InfoTooltip = ({ content, placement = "top", children }) => {
   const [isVisible, setIsVisible] = useState(false);
   const tooltipRef = useRef(null);
 
-  // Handle click outside to close
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (tooltipRef.current && !tooltipRef.current.contains(event.target)) {
@@ -88,7 +87,6 @@ const InfoTooltip = ({ content, placement = "top", children }) => {
           >
             <div className="relative bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl">
               {content}
-              {/* Tooltip arrow */}
               <div 
                 className={`absolute w-3 h-3 bg-gray-900 transform rotate-45 ${placement === 'top' ? '-bottom-1.5 left-1/2 -translate-x-1/2' : '-top-1.5 left-1/2 -translate-x-1/2'}`}
               />
@@ -556,7 +554,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
   );
 };
 
-// Main Staff Performance Section Component - Updated to work with both admin and superadmin
+// Main Staff Performance Section Component - Updated with trainee view toggle
 const StaffPerformanceSection = ({ 
   data, 
   showCharts, 
@@ -576,13 +574,16 @@ const StaffPerformanceSection = ({
   const setSelectedStaff = externalSetSelectedStaff ?? setInternalSelectedStaff;
 
   const [staffPerformance, setStaffPerformance] = useState([]);
+  const [traineePerformance, setTraineePerformance] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingTrainee, setLoadingTrainee] = useState(false);
   const [categoryStrength, setCategoryStrength] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [fromDate, setFromDate] = useState(null);
   const [toDate, setToDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('revenue'); // 'revenue', 'rate', 'incentive'
+  const [staffMode, setStaffMode] = useState('permanent'); // 'permanent' or 'trainee'
   
   // Review states - use props if provided (superadmin), otherwise use internal state
   const [internalReviewSummary, setInternalReviewSummary] = useState(null);
@@ -718,6 +719,26 @@ const StaffPerformanceSection = ({
     return res.json();
   };
 
+  const fetchTraineePerformance = async (from, to, centreId) => {
+    const token = localStorage.getItem("token");
+
+    const params = new URLSearchParams({ from, to });
+    if (centreId) params.append("centreId", centreId);
+
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL}/api/staffreport/trainee-performance?${params.toString()}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch trainee performance");
+    }
+
+    return res.json();
+  };
+
   // Fetch review summary (for dashboard cards) - only for non-superadmin
   const fetchReviewSummary = async () => {
     if (isSuperAdmin) return;
@@ -787,6 +808,7 @@ const StaffPerformanceSection = ({
   useEffect(() => {
     if (!fromDate || !toDate) return;
     loadStaffPerformance(fromDate, toDate);
+    loadTraineePerformance(fromDate, toDate);
   }, [fromDate, toDate]);
 
   useEffect(() => {
@@ -851,54 +873,54 @@ const StaffPerformanceSection = ({
     }
   }, [isSuperAdmin, centreId, fromDate, toDate]);
 
+  const transformStaffRows = (rows) => {
+    return rows.map((row) => {
+      const incentiveScore = Number(row.incentive_score ?? 0);
+      const expected = Number(row.expected_amount);
+      const collected = Number(row.collected_amount);
+
+      return {
+        id: row.staff_id,
+        name: row.staff_name,
+        role: "Staff",
+
+        expectedAmount: expected,
+        collectedAmount: collected,
+        pendingAmount: Math.max(expected - collected, 0),
+
+        collectionRate:
+          expected > 0
+            ? Math.round((collected / expected) * 100)
+            : 100,
+
+        revenueCollected: collected,
+        serviceCharge: Number(row.service_charge_earned),
+        servicesCompleted: Number(row.services_completed),
+        avgTransaction: Number(row.avg_ticket_size || 0),
+        incentiveScore: incentiveScore,
+
+        // Review data
+        totalReviews: Number(row.total_reviews || 0),
+        avgStaffRating: Number(row.avg_staff_rating || 0),
+
+        // Efficiency metrics
+        activeDays: Number(row.active_days || 0),
+        revenuePerDay: Number(row.revenue_per_day || 0),
+        profitPerDay: Number(row.profit_per_day || 0),
+
+        // Placeholders
+        achievement: 0,
+        monthlyTarget: 0,
+        todayCollection: 0,
+      };
+    });
+  };
+
   const loadStaffPerformance = async (from, to) => {
     try {
       setLoading(true);
-
       const rows = await fetchStaffPerformance(from, to, centreId);
-
-      setStaffPerformance(
-        rows.map((row) => {
-          const incentiveScore = Number(row.incentive_score ?? 0);
-          const expected = Number(row.expected_amount);
-          const collected = Number(row.collected_amount);
-
-          return {
-            id: row.staff_id,
-            name: row.staff_name,
-            role: "Staff",
-
-            expectedAmount: expected,
-            collectedAmount: collected,
-            pendingAmount: Math.max(expected - collected, 0),
-
-            collectionRate:
-              expected > 0
-                ? Math.round((collected / expected) * 100)
-                : 100,
-
-            revenueCollected: collected,
-            serviceCharge: Number(row.service_charge_earned),
-            servicesCompleted: Number(row.services_completed),
-            avgTransaction: Number(row.avg_ticket_size || 0),
-            incentiveScore: incentiveScore,
-
-            // Review data
-            totalReviews: Number(row.total_reviews || 0),
-            avgStaffRating: Number(row.avg_staff_rating || 0),
-
-            // Efficiency metrics
-            activeDays: Number(row.active_days || 0),
-            revenuePerDay: Number(row.revenue_per_day || 0),
-            profitPerDay: Number(row.profit_per_day || 0),
-
-            // Placeholders
-            achievement: 0,
-            monthlyTarget: 0,
-            todayCollection: 0,
-          };
-        })
-      );
+      setStaffPerformance(transformStaffRows(rows));
     } catch (err) {
       console.error("Staff performance load failed", err);
       setStaffPerformance([]);
@@ -907,18 +929,39 @@ const StaffPerformanceSection = ({
     }
   };
 
-  // Filter and sort staff
+  const loadTraineePerformance = async (from, to) => {
+    try {
+      setLoadingTrainee(true);
+      const rows = await fetchTraineePerformance(from, to, centreId);
+      setTraineePerformance(transformStaffRows(rows));
+    } catch (err) {
+      console.error("Trainee performance load failed", err);
+      setTraineePerformance([]);
+    } finally {
+      setLoadingTrainee(false);
+    }
+  };
+
+  // Derive the set of trainee IDs to exclude from permanent view
+  const traineeIds = useMemo(() => new Set(traineePerformance.map(s => s.id)), [traineePerformance]);
+  
+  const permanentStaff = useMemo(() => {
+    return staffPerformance.filter(s => !traineeIds.has(s.id));
+  }, [staffPerformance, traineeIds]);
+
+  // Active dataset based on toggle
+  const activeData = staffMode === 'permanent' ? permanentStaff : traineePerformance;
+
+  // Filter and sort active data
   const filteredAndSortedStaff = useMemo(() => {
-    let result = [...staffPerformance];
+    let result = [...activeData];
     
-    // Search filter
     if (searchQuery) {
       result = result.filter(staff => 
         staff.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
     
-    // Sort
     result.sort((a, b) => {
       switch (sortBy) {
         case 'rate':
@@ -936,19 +979,19 @@ const StaffPerformanceSection = ({
     });
     
     return result;
-  }, [staffPerformance, sortBy, searchQuery]);
+  }, [activeData, sortBy, searchQuery]);
 
   // Summary stats
   const summaryStats = useMemo(() => {
-    if (staffPerformance.length === 0) return null;
+    if (activeData.length === 0) return null;
     
-    const totalRevenue = staffPerformance.reduce((sum, s) => sum + s.revenueCollected, 0);
-    const avgRate = Math.round(staffPerformance.reduce((sum, s) => sum + s.collectionRate, 0) / staffPerformance.length);
-    const totalServices = staffPerformance.reduce((sum, s) => sum + s.servicesCompleted, 0);
-    const avgIncentive = Math.round(staffPerformance.reduce((sum, s) => sum + s.incentiveScore, 0) / staffPerformance.length);
+    const totalRevenue = activeData.reduce((sum, s) => sum + s.revenueCollected, 0);
+    const avgRate = Math.round(activeData.reduce((sum, s) => sum + s.collectionRate, 0) / activeData.length);
+    const totalServices = activeData.reduce((sum, s) => sum + s.servicesCompleted, 0);
+    const avgIncentive = Math.round(activeData.reduce((sum, s) => sum + s.incentiveScore, 0) / activeData.length);
     
     return { totalRevenue, avgRate, totalServices, avgIncentive };
-  }, [staffPerformance]);
+  }, [activeData]);
 
   // Custom Tooltip for charts
   const CustomTooltip = ({ active, payload, label }) => {
@@ -973,6 +1016,8 @@ const StaffPerformanceSection = ({
     return null;
   };
 
+  const isLoading = staffMode === 'permanent' ? loading : loadingTrainee;
+
   return (
     <>
       <div className="mb-6">
@@ -986,12 +1031,43 @@ const StaffPerformanceSection = ({
             <p className="text-gray-600 text-sm mt-1">Revenue collection and performance metrics</p>
           </div>
           <button
-            onClick={() => loadStaffPerformance(fromDate, toDate)}
+            onClick={() => {
+              if (staffMode === 'permanent') loadStaffPerformance(fromDate, toDate);
+              else loadTraineePerformance(fromDate, toDate);
+            }}
             className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            <FiRefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            <FiRefreshCw className={`h-4 w-4 mr-2 ${loading || loadingTrainee ? "animate-spin" : ""}`} />
             Refresh
           </button>
+        </div>
+
+        {/* Staff Type Toggle */}
+        <div className="mb-4">
+          <div className="inline-flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setStaffMode('permanent')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                staffMode === 'permanent'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FiUser className="h-4 w-4 mr-2 inline" />
+              Permanent Staff
+            </button>
+            <button
+              onClick={() => setStaffMode('trainee')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                staffMode === 'trainee'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FiUsers className="h-4 w-4 mr-2 inline" />
+              Trainees ({traineePerformance.length})
+            </button>
+          </div>
         </div>
 
         {/* Controls */}
@@ -1072,8 +1148,8 @@ const StaffPerformanceSection = ({
           </div>
         )}
 
-        {/* Review Stats Cards - Only show for non-superadmin */}
-        {!isSuperAdmin && reviewSummary && (
+        {/* Review Stats Cards - Only show for non-superadmin and permanent staff mode */}
+        {!isSuperAdmin && staffMode === 'permanent' && reviewSummary && (
           <div className="grid gap-3 mb-4 grid-cols-3">
             <StatCard
               title="Total Reviews"
@@ -1241,26 +1317,26 @@ const StaffPerformanceSection = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 text-sm">
-              Staff Performance {filteredAndSortedStaff.length > 0 && `(${filteredAndSortedStaff.length})`}
+              {staffMode === 'permanent' ? 'Permanent Staff' : 'Trainee'} Performance {filteredAndSortedStaff.length > 0 && `(${filteredAndSortedStaff.length})`}
             </h3>
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              Showing top performers by {sortBy}
+              Showing {staffMode === 'permanent' ? 'top performers' : 'all trainees'} by {sortBy}
             </span>
           </div>
 
-          {loading && (
+          {isLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-2"></div>
-                <p className="text-gray-600 text-sm">Loading staff performance…</p>
+                <p className="text-gray-600 text-sm">Loading {staffMode === 'permanent' ? 'staff' : 'trainee'} performance…</p>
               </div>
             </div>
           )}
 
-          {!loading && filteredAndSortedStaff.length === 0 && (
+          {!isLoading && filteredAndSortedStaff.length === 0 && (
             <div className="text-center py-8 border border-gray-200 rounded-lg bg-white">
               <FiUser className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-              <p className="text-gray-600 text-sm mb-1">No staff found</p>
+              <p className="text-gray-600 text-sm mb-1">No {staffMode === 'permanent' ? 'staff' : 'trainees'} found</p>
               <p className="text-gray-500 text-xs">Try adjusting your filters or search criteria</p>
             </div>
           )}
