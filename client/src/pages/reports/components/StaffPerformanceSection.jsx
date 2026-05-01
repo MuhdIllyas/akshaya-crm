@@ -554,7 +554,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
   );
 };
 
-// Main Staff Performance Section Component - Updated with trainee view toggle
+// Main Staff Performance Section Component - Updated with trainee view toggle and revenue breakdown table
 const StaffPerformanceSection = ({ 
   data, 
   showCharts, 
@@ -993,6 +993,20 @@ const StaffPerformanceSection = ({
     return { totalRevenue, avgRate, totalServices, avgIncentive };
   }, [activeData]);
 
+  // Combined revenue breakdown for Quick View table (permanent + trainees)
+  const revenueBreakdownData = useMemo(() => {
+    const permanent = permanentStaff.map(s => ({ ...s, type: 'Permanent' }));
+    const trainees = traineePerformance.map(s => ({ ...s, type: 'Trainee' }));
+    return [...permanent, ...trainees];
+  }, [permanentStaff, traineePerformance]);
+
+  const revenueGrandTotal = useMemo(() => {
+    const totalRevenue = revenueBreakdownData.reduce((sum, s) => sum + s.revenueCollected, 0);
+    const totalServiceCharge = revenueBreakdownData.reduce((sum, s) => sum + s.serviceCharge, 0);
+    const totalDeptCharge = totalRevenue - totalServiceCharge;
+    return { totalRevenue, totalDeptCharge, totalServiceCharge };
+  }, [revenueBreakdownData]);
+
   // Custom Tooltip for charts
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -1309,6 +1323,57 @@ const StaffPerformanceSection = ({
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ========== NEW: Revenue Breakdown Quick View Table ========== */}
+        {revenueBreakdownData.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
+              <FiDollarSign className="h-4 w-4 mr-2 text-indigo-600" />
+              Quick View: Revenue Breakdown
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Staff Name</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Type</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Total Revenue</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Dept. Charges</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Service Charges (Profit)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {revenueBreakdownData.map((staff, idx) => {
+                    const deptCharge = staff.revenueCollected - staff.serviceCharge;
+                    return (
+                      <tr key={staff.id} className={idx % 2 === 0 ? 'bg-gray-50' : ''}>
+                        <td className="py-2 px-3 font-medium text-gray-900">{staff.name}</td>
+                        <td className="py-2 px-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            staff.type === 'Permanent' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {staff.type}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(staff.revenueCollected)}</td>
+                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(deptCharge)}</td>
+                        <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(staff.serviceCharge)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300 font-semibold bg-gray-100">
+                    <td className="py-2 px-3 text-gray-900" colSpan={2}>Grand Total</td>
+                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalRevenue)}</td>
+                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalDeptCharge)}</td>
+                    <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(revenueGrandTotal.totalServiceCharge)}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         )}
