@@ -710,7 +710,6 @@ const StaffDashboard = () => {
               <motion.div
                 whileHover={{ y: -1 }}
                 className="inline-flex items-center gap-2 bg-white border border-indigo-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate('/dashboard/wallets')}
               >
                 <div className="p-1 bg-indigo-100 rounded-full">
                   <FiBriefcase className="h-3.5 w-3.5 text-indigo-600" />
