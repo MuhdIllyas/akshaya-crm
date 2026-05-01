@@ -2643,7 +2643,8 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
         se.phone AS customer_phone,
         se.total_charges,
         se.created_at,
-        st.name AS staff_name,
+        st.id AS staff_id,         -- 🔥 Guaranteed Staff ID
+        st.name AS staff_name,     -- 🔥 Guaranteed Staff Name
         s.name AS service_name,
         sc.name AS subcategory_name,
 
@@ -2668,7 +2669,7 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
               'status', p.status,
               'created_at', p.created_at
             )
-            ORDER BY p.created_at NULLS LAST
+            ORDER BY p.created_at DESC NULLS LAST  -- 🔥 Fixed chronological sorting
           ) FILTER (WHERE p.id IS NOT NULL),
           '[]'
         ) AS payment_history
@@ -2697,7 +2698,8 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
         se.phone,
         se.total_charges,
         se.created_at,
-        st.name,
+        st.id,                     -- 🔥 Group by Staff ID
+        st.name,                   -- 🔥 Group by Staff Name
         s.name,
         sc.name
 
@@ -2881,8 +2883,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         se.total_charges,
         se.created_at,
         se.updated_at,
-        st.name AS staff_name,
-        st.id AS staff_id,
+        st.id AS staff_id,         -- 🔥 Guaranteed Staff ID
+        st.name AS staff_name,     -- 🔥 Guaranteed Staff Name
         s.name AS service_name,
         sc.name AS subcategory_name,
 
@@ -2908,7 +2910,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
               'status', p.status,
               'created_at', p.created_at
             )
-            ORDER BY p.created_at DESC NULLS LAST
+            ORDER BY p.created_at DESC NULLS LAST  -- 🔥 Fixed chronological sorting
           ) FILTER (WHERE p.id IS NOT NULL),
           '[]'
         ) AS payment_history
@@ -2938,8 +2940,8 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         se.total_charges,
         se.created_at,
         se.updated_at,
-        st.name,
-        st.id,
+        st.id,                     -- 🔥 Group by Staff ID
+        st.name,                   -- 🔥 Group by Staff Name
         s.name,
         sc.name
 
