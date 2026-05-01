@@ -496,6 +496,9 @@ const StaffDashboard = () => {
     </div>
   );
 
+  // Find the wallet assigned to the logged-in staff member
+  const myWallet = wallets.find(w => String(w.assigned_staff_id) === String(staffId));
+
   return (
     <div className="min-h-screen bg-gray-50">
       <ToastContainer position="top-right" autoClose={4000} />
@@ -719,6 +722,37 @@ const StaffDashboard = () => {
               <option value="all">All Time</option>
             </select>
           </div>
+
+          {/* My Assigned Wallet Balance Card */}
+          {myWallet && (
+            <motion.div
+              whileHover={{ y: -2 }}
+              className="bg-white rounded-xl border border-indigo-200 p-6 shadow-sm relative overflow-hidden mb-6"
+            >
+              {/* Background watermark icon */}
+              <div className="absolute -bottom-6 -right-4 p-3 opacity-5">
+                <FiBriefcase className="h-32 w-32 text-indigo-800" />
+              </div>
+              
+              <div className="flex items-center justify-between relative z-10">
+                <div>
+                  <p className="text-sm font-semibold text-indigo-600 mb-1 tracking-wide uppercase">My Assigned Wallet</p>
+                  <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(myWallet.balance)}</h3>
+                  <div className="flex items-center mt-3">
+                    <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md border border-indigo-100 flex items-center">
+                      {myWallet.name}
+                    </span>
+                    <span className="ml-3 text-xs font-medium text-gray-500 capitalize bg-gray-100 px-2 py-1 rounded-md">
+                      {myWallet.wallet_type || 'Cash'}
+                    </span>
+                  </div>
+                </div>
+                <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200">
+                  <FiDollarSign className="h-8 w-8 text-white" />
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Stats Row - Token Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">

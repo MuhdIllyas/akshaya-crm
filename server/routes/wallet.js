@@ -78,7 +78,7 @@ router.get("/:walletId/daily-balances", authenticateToken, getDailyBalances);
 router.get('/', async (req, res) => {
   try {
     const result = await req.db.query(`
-      SELECT id, name, balance, wallet_type, status, centre_id
+      SELECT id, name, balance, wallet_type, status, centre_id, assigned_staff_id
       FROM wallets
       ORDER BY name ASC
     `);
@@ -115,7 +115,7 @@ router.get('/my-centre-wallets', async (req, res) => {
     }
     const centreId = req.user.centre_id;
     const result = await req.db.query(`
-      SELECT id, name, balance, wallet_type, status, is_shared
+      SELECT id, name, balance, wallet_type, status, is_shared, assigned_staff_id
       FROM wallets
       WHERE centre_id = $1
       ORDER BY name ASC
