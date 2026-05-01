@@ -554,7 +554,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
   );
 };
 
-// Main Staff Performance Section Component - Updated with trainee view toggle and revenue breakdown table
+// Main Staff Performance Section Component
 const StaffPerformanceSection = ({ 
   data, 
   showCharts, 
@@ -564,7 +564,6 @@ const StaffPerformanceSection = ({
   setSelectedStaff: externalSetSelectedStaff,
   setActiveSection,
   centreId,
-  // Props for superadmin mode
   ratingDistribution: externalRatingDistribution,
   loadingReviews: externalLoadingReviews,
   isSuperAdmin = false
@@ -582,19 +581,17 @@ const StaffPerformanceSection = ({
   const [fromDate, setFromDate] = useState(null);
   const [toDate, setToDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('revenue'); // 'revenue', 'rate', 'incentive'
-  const [staffMode, setStaffMode] = useState('permanent'); // 'permanent' or 'trainee'
+  const [sortBy, setSortBy] = useState('revenue');
+  const [staffMode, setStaffMode] = useState('permanent');
   
-  // Review states - use props if provided (superadmin), otherwise use internal state
   const [internalReviewSummary, setInternalReviewSummary] = useState(null);
   const [internalRatingDistribution, setInternalRatingDistribution] = useState([]);
   const [internalLoadingReviews, setInternalLoadingReviews] = useState(false);
 
-  const reviewSummary = isSuperAdmin ? null : internalReviewSummary; // Superadmin doesn't need summary cards
+  const reviewSummary = isSuperAdmin ? null : internalReviewSummary;
   const ratingDistribution = externalRatingDistribution || internalRatingDistribution;
   const loadingReviews = externalLoadingReviews !== undefined ? externalLoadingReviews : internalLoadingReviews;
 
-  // Date range picker component
   const DateRangePicker = () => {
     const [isOpen, setIsOpen] = useState(false);
     
@@ -701,67 +698,41 @@ const StaffPerformanceSection = ({
   // Fetch functions
   const fetchStaffPerformance = async (from, to, centreId) => {
     const token = localStorage.getItem("token");
-
     const params = new URLSearchParams({ from, to });
     if (centreId) params.append("centreId", centreId);
-
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/staffreport/staff-performance?${params.toString()}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
-
-    if (!res.ok) {
-      throw new Error("Failed to fetch staff performance");
-    }
-
+    if (!res.ok) throw new Error("Failed to fetch staff performance");
     return res.json();
   };
 
   const fetchTraineePerformance = async (from, to, centreId) => {
     const token = localStorage.getItem("token");
-
     const params = new URLSearchParams({ from, to });
     if (centreId) params.append("centreId", centreId);
-
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/staffreport/trainee-performance?${params.toString()}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
-
-    if (!res.ok) {
-      throw new Error("Failed to fetch trainee performance");
-    }
-
+    if (!res.ok) throw new Error("Failed to fetch trainee performance");
     return res.json();
   };
 
-  // Fetch review summary (for dashboard cards) - only for non-superadmin
   const fetchReviewSummary = async () => {
     if (isSuperAdmin) return;
-    
     try {
       setInternalLoadingReviews(true);
       const token = localStorage.getItem("token");
       const params = new URLSearchParams();
       if (centreId) params.append("centreId", centreId);
-      if (fromDate && toDate) {
-        params.append("from", fromDate);
-        params.append("to", toDate);
-      }
-      
+      if (fromDate && toDate) { params.append("from", fromDate); params.append("to", toDate); }
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/staffreport/review-summary?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      
       if (!res.ok) throw new Error("Failed to fetch review summary");
-      
       const data = await res.json();
       setInternalReviewSummary(data);
     } catch (err) {
@@ -771,30 +742,19 @@ const StaffPerformanceSection = ({
     }
   };
 
-  // Fetch rating distribution (for charts) - only for non-superadmin
   const fetchRatingDistribution = async () => {
     if (isSuperAdmin) return;
-    
     try {
       setInternalLoadingReviews(true);
       const token = localStorage.getItem("token");
-      
       const params = new URLSearchParams();
       if (centreId) params.append("centreId", centreId);
-      if (fromDate && toDate) {
-        params.append("from", fromDate);
-        params.append("to", toDate);
-      }
-      
+      if (fromDate && toDate) { params.append("from", fromDate); params.append("to", toDate); }
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/staffreport/rating-distribution?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      
       if (!res.ok) throw new Error("Failed to fetch rating distribution");
-      
       const data = await res.json();
       setInternalRatingDistribution(data);
     } catch (err) {
@@ -813,26 +773,16 @@ const StaffPerformanceSection = ({
 
   useEffect(() => {
     if (!selectedStaff || !fromDate || !toDate) return;
-
     const fetchCategoryStrength = async () => {
       try {
         setLoadingCategories(true);
         const token = localStorage.getItem("token");
-
-        const params = new URLSearchParams({
-          from: fromDate,
-          to: toDate,
-        });
-
+        const params = new URLSearchParams({ from: fromDate, to: toDate });
         if (centreId) params.append("centreId", centreId);
-
         const res = await fetch(
           `${import.meta.env.VITE_API_URL}/api/staffreport/staff/${selectedStaff.id}/category-strength?${params.toString()}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
-
         const data = await res.json();
         setCategoryStrength(data);
       } catch (err) {
@@ -842,30 +792,22 @@ const StaffPerformanceSection = ({
         setLoadingCategories(false);
       }
     };
-
     fetchCategoryStrength();
   }, [selectedStaff, fromDate, toDate]);
 
   useEffect(() => {
     const now = new Date();
     const to = now.toISOString().slice(0, 10);
-
     let from;
-
-    if (timePeriod === "monthly") {
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (timePeriod === "quarterly") {
+    if (timePeriod === "monthly") from = new Date(now.getFullYear(), now.getMonth(), 1);
+    else if (timePeriod === "quarterly") {
       const q = Math.floor(now.getMonth() / 3) * 3;
       from = new Date(now.getFullYear(), q, 1);
-    } else {
-      from = new Date(now.getFullYear(), 0, 1);
-    }
-
+    } else from = new Date(now.getFullYear(), 0, 1);
     setFromDate(from.toISOString().slice(0, 10));
     setToDate(to);
   }, [timePeriod]);
 
-  // Fetch review data when centreId or date range changes (for non-superadmin)
   useEffect(() => {
     if (!isSuperAdmin && fromDate && toDate) {
       fetchReviewSummary();
@@ -878,37 +820,24 @@ const StaffPerformanceSection = ({
       const incentiveScore = Number(row.incentive_score ?? 0);
       const expected = Number(row.expected_amount);
       const collected = Number(row.collected_amount);
-
       return {
         id: row.staff_id,
         name: row.staff_name,
         role: "Staff",
-
         expectedAmount: expected,
         collectedAmount: collected,
         pendingAmount: Math.max(expected - collected, 0),
-
-        collectionRate:
-          expected > 0
-            ? Math.round((collected / expected) * 100)
-            : 100,
-
+        collectionRate: expected > 0 ? Math.round((collected / expected) * 100) : 100,
         revenueCollected: collected,
         serviceCharge: Number(row.service_charge_earned),
         servicesCompleted: Number(row.services_completed),
         avgTransaction: Number(row.avg_ticket_size || 0),
         incentiveScore: incentiveScore,
-
-        // Review data
         totalReviews: Number(row.total_reviews || 0),
         avgStaffRating: Number(row.avg_staff_rating || 0),
-
-        // Efficiency metrics
         activeDays: Number(row.active_days || 0),
         revenuePerDay: Number(row.revenue_per_day || 0),
         profitPerDay: Number(row.profit_per_day || 0),
-
-        // Placeholders
         achievement: 0,
         monthlyTarget: 0,
         todayCollection: 0,
@@ -924,9 +853,7 @@ const StaffPerformanceSection = ({
     } catch (err) {
       console.error("Staff performance load failed", err);
       setStaffPerformance([]);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const loadTraineePerformance = async (from, to) => {
@@ -937,63 +864,38 @@ const StaffPerformanceSection = ({
     } catch (err) {
       console.error("Trainee performance load failed", err);
       setTraineePerformance([]);
-    } finally {
-      setLoadingTrainee(false);
-    }
+    } finally { setLoadingTrainee(false); }
   };
 
-  // Derive the set of trainee IDs to exclude from permanent view
   const traineeIds = useMemo(() => new Set(traineePerformance.map(s => s.id)), [traineePerformance]);
-  
-  const permanentStaff = useMemo(() => {
-    return staffPerformance.filter(s => !traineeIds.has(s.id));
-  }, [staffPerformance, traineeIds]);
-
-  // Active dataset based on toggle
+  const permanentStaff = useMemo(() => staffPerformance.filter(s => !traineeIds.has(s.id)), [staffPerformance, traineeIds]);
   const activeData = staffMode === 'permanent' ? permanentStaff : traineePerformance;
 
-  // Filter and sort active data
   const filteredAndSortedStaff = useMemo(() => {
     let result = [...activeData];
-    
-    if (searchQuery) {
-      result = result.filter(staff => 
-        staff.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    
+    if (searchQuery) result = result.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
     result.sort((a, b) => {
       switch (sortBy) {
-        case 'rate':
-          return b.collectionRate - a.collectionRate;
-        case 'incentive':
-          return b.incentiveScore - a.incentiveScore;
-        case 'services':
-          return b.servicesCompleted - a.servicesCompleted;
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'revenue':
-        default:
-          return b.revenueCollected - a.revenueCollected;
+        case 'rate': return b.collectionRate - a.collectionRate;
+        case 'incentive': return b.incentiveScore - a.incentiveScore;
+        case 'services': return b.servicesCompleted - a.servicesCompleted;
+        case 'name': return a.name.localeCompare(b.name);
+        default: return b.revenueCollected - a.revenueCollected;
       }
     });
-    
     return result;
   }, [activeData, sortBy, searchQuery]);
 
-  // Summary stats
   const summaryStats = useMemo(() => {
     if (activeData.length === 0) return null;
-    
     const totalRevenue = activeData.reduce((sum, s) => sum + s.revenueCollected, 0);
     const avgRate = Math.round(activeData.reduce((sum, s) => sum + s.collectionRate, 0) / activeData.length);
     const totalServices = activeData.reduce((sum, s) => sum + s.servicesCompleted, 0);
     const avgIncentive = Math.round(activeData.reduce((sum, s) => sum + s.incentiveScore, 0) / activeData.length);
-    
     return { totalRevenue, avgRate, totalServices, avgIncentive };
   }, [activeData]);
 
-  // Combined revenue breakdown for Quick View table (permanent + trainees)
+  // Combined revenue breakdown data for the Quick View table
   const revenueBreakdownData = useMemo(() => {
     const permanent = permanentStaff.map(s => ({ ...s, type: 'Permanent' }));
     const trainees = traineePerformance.map(s => ({ ...s, type: 'Trainee' }));
@@ -1007,7 +909,6 @@ const StaffPerformanceSection = ({
     return { totalRevenue, totalDeptCharge, totalServiceCharge };
   }, [revenueBreakdownData]);
 
-  // Custom Tooltip for charts
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
@@ -1062,24 +963,18 @@ const StaffPerformanceSection = ({
             <button
               onClick={() => setStaffMode('permanent')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                staffMode === 'permanent'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                staffMode === 'permanent' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <FiUser className="h-4 w-4 mr-2 inline" />
-              Permanent Staff
+              <FiUser className="h-4 w-4 mr-2 inline" /> Permanent Staff
             </button>
             <button
               onClick={() => setStaffMode('trainee')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                staffMode === 'trainee'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                staffMode === 'trainee' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <FiUsers className="h-4 w-4 mr-2 inline" />
-              Trainees ({traineePerformance.length})
+              <FiUsers className="h-4 w-4 mr-2 inline" /> Trainees ({traineePerformance.length})
             </button>
           </div>
         </div>
@@ -1087,7 +982,6 @@ const StaffPerformanceSection = ({
         {/* Controls */}
         <div className="flex flex-wrap gap-3 mb-4 items-end">
           <DateRangePicker />
-          
           <select
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
             value={timePeriod}
@@ -1097,7 +991,6 @@ const StaffPerformanceSection = ({
             <option value="quarterly">This Quarter</option>
             <option value="yearly">This Year</option>
           </select>
-          
           <div className="flex items-center space-x-3">
             <div className="relative">
               <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
@@ -1109,7 +1002,6 @@ const StaffPerformanceSection = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -1127,65 +1019,19 @@ const StaffPerformanceSection = ({
         {/* Summary Stats */}
         {summaryStats && (
           <div className="grid gap-3 mb-4 grid-cols-2 md:grid-cols-4">
-            <StatCard
-              title="Total Revenue"
-              value={`₹${formatINR(summaryStats.totalRevenue)}`}
-              subtitle="All staff combined"
-              icon={FiDollarSign}
-              color="bg-indigo-600"
-              trend={8.5}
-            />
-            <StatCard
-              title="Avg Collection Rate"
-              value={`${summaryStats.avgRate}%`}
-              subtitle="Average across staff"
-              icon={FiPercent}
-              color="bg-emerald-600"
-              trend={2.3}
-            />
-            <StatCard
-              title="Total Services"
-              value={summaryStats.totalServices}
-              subtitle="Services completed"
-              icon={FiBriefcase}
-              color="bg-blue-600"
-              trend={12.7}
-            />
-            <StatCard
-              title="Avg Incentive Score"
-              value={`${summaryStats.avgIncentive}%`}
-              subtitle="Performance rating"
-              icon={FiAward}
-              color="bg-amber-600"
-              trend={-1.2}
-            />
+            <StatCard title="Total Revenue" value={`₹${formatINR(summaryStats.totalRevenue)}`} subtitle="All staff combined" icon={FiDollarSign} color="bg-indigo-600" trend={8.5} />
+            <StatCard title="Avg Collection Rate" value={`${summaryStats.avgRate}%`} subtitle="Average across staff" icon={FiPercent} color="bg-emerald-600" trend={2.3} />
+            <StatCard title="Total Services" value={summaryStats.totalServices} subtitle="Services completed" icon={FiBriefcase} color="bg-blue-600" trend={12.7} />
+            <StatCard title="Avg Incentive Score" value={`${summaryStats.avgIncentive}%`} subtitle="Performance rating" icon={FiAward} color="bg-amber-600" trend={-1.2} />
           </div>
         )}
 
-        {/* Review Stats Cards - Only show for non-superadmin and permanent staff mode */}
+        {/* Review Stats Cards (only permanent mode) */}
         {!isSuperAdmin && staffMode === 'permanent' && reviewSummary && (
           <div className="grid gap-3 mb-4 grid-cols-3">
-            <StatCard
-              title="Total Reviews"
-              value={reviewSummary.total_reviews || 0}
-              subtitle="Customer feedback received"
-              icon={FiStar}
-              color="bg-purple-600"
-            />
-            <StatCard
-              title="Avg Service Rating"
-              value={reviewSummary.avg_service_rating ? Number(reviewSummary.avg_service_rating).toFixed(1) : '0.0'}
-              subtitle="Out of 5"
-              icon={FiAward}
-              color="bg-pink-600"
-            />
-            <StatCard
-              title="Avg Staff Rating"
-              value={reviewSummary.avg_staff_rating ? Number(reviewSummary.avg_staff_rating).toFixed(1) : '0.0'}
-              subtitle="Out of 5"
-              icon={FiUserCheck}
-              color="bg-indigo-600"
-            />
+            <StatCard title="Total Reviews" value={reviewSummary.total_reviews || 0} subtitle="Customer feedback received" icon={FiStar} color="bg-purple-600" />
+            <StatCard title="Avg Service Rating" value={reviewSummary.avg_service_rating ? Number(reviewSummary.avg_service_rating).toFixed(1) : '0.0'} subtitle="Out of 5" icon={FiAward} color="bg-pink-600" />
+            <StatCard title="Avg Staff Rating" value={reviewSummary.avg_staff_rating ? Number(reviewSummary.avg_staff_rating).toFixed(1) : '0.0'} subtitle="Out of 5" icon={FiUserCheck} color="bg-indigo-600" />
           </div>
         )}
 
@@ -1195,24 +1041,14 @@ const StaffPerformanceSection = ({
             {/* Revenue vs Services */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Revenue vs Services</h3>
-                  <p className="text-gray-500 text-xs">Top performers</p>
-                </div>
+                <div><h3 className="font-semibold text-gray-900 text-sm">Revenue vs Services</h3><p className="text-gray-500 text-xs">Top performers</p></div>
                 <FiBarChart2 className="h-4 w-4 text-indigo-600" />
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={filteredAndSortedStaff.slice(0, 6)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => `₹${value/1000}k`}
-                  />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => `₹${value/1000}k`} />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="revenueCollected" name="Revenue" fill="#6366F1" radius={[2, 2, 0, 0]} />
                   <Bar dataKey="servicesCompleted" name="Services" fill="#10B981" radius={[2, 2, 0, 0]} />
@@ -1223,24 +1059,14 @@ const StaffPerformanceSection = ({
             {/* Collection Performance */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Collection Performance</h3>
-                  <p className="text-gray-500 text-xs">Rate vs Incentive</p>
-                </div>
+                <div><h3 className="font-semibold text-gray-900 text-sm">Collection Performance</h3><p className="text-gray-500 text-xs">Rate vs Incentive</p></div>
                 <FiTrendingUp className="h-4 w-4 text-indigo-600" />
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={filteredAndSortedStaff.slice(0, 6)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => `${value}%`}
-                  />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => `${value}%`} />
                   <Tooltip content={<CustomTooltip />} />
                   <Line type="monotone" dataKey="collectionRate" name="Collection Rate" stroke="#6366F1" strokeWidth={2} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="incentiveScore" name="Incentive Score" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
@@ -1251,24 +1077,14 @@ const StaffPerformanceSection = ({
             {/* Avg Transaction Size */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Avg. Transaction Size</h3>
-                  <p className="text-gray-500 text-xs">Ticket size comparison</p>
-                </div>
+                <div><h3 className="font-semibold text-gray-900 text-sm">Avg. Transaction Size</h3><p className="text-gray-500 text-xs">Ticket size comparison</p></div>
                 <FiDollarSign className="h-4 w-4 text-indigo-600" />
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={filteredAndSortedStaff.slice(0, 6)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(value) => `₹${value/1000}k`}
-                  />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => `₹${value/1000}k`} />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="avgTransaction" name="Avg. Transaction" fill="#F59E0B" radius={[2, 2, 0, 0]} />
                 </BarChart>
@@ -1278,21 +1094,13 @@ const StaffPerformanceSection = ({
             {/* Rating Distribution */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
               <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Rating Distribution</h3>
-                  <p className="text-gray-500 text-xs">Staff performance ratings</p>
-                </div>
+                <div><h3 className="font-semibold text-gray-900 text-sm">Rating Distribution</h3><p className="text-gray-500 text-xs">Staff performance ratings</p></div>
                 <FiStar className="h-4 w-4 text-yellow-500" />
               </div>
-              
               {loadingReviews ? (
-                <div className="flex items-center justify-center h-[200px]">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-                </div>
+                <div className="flex items-center justify-center h-[200px]"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div></div>
               ) : ratingDistribution.length === 0 ? (
-                <div className="flex items-center justify-center h-[200px] text-gray-500 text-sm">
-                  No rating data available
-                </div>
+                <div className="flex items-center justify-center h-[200px] text-gray-500 text-sm">No rating data available</div>
               ) : (
                 <div className="space-y-3">
                   {[5,4,3,2,1].map(rating => {
@@ -1300,23 +1108,14 @@ const StaffPerformanceSection = ({
                     const count = ratingData ? Number(ratingData.count) : 0;
                     const total = ratingDistribution.reduce((sum, r) => sum + Number(r.count), 0);
                     const percentage = total > 0 ? (count / total) * 100 : 0;
-                    
                     return (
                       <div key={rating} className="space-y-1">
                         <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center">
-                            <span className="font-medium text-gray-700">{rating} ★</span>
-                          </div>
+                          <div className="flex items-center"><span className="font-medium text-gray-700">{rating} ★</span></div>
                           <span className="text-gray-500">{count} reviews</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              rating >= 4 ? 'bg-emerald-500' :
-                              rating >= 3 ? 'bg-amber-500' : 'bg-rose-500'
-                            }`}
-                            style={{ width: `${percentage}%` }}
-                          />
+                          <div className={`h-2 rounded-full ${rating >= 4 ? 'bg-emerald-500' : rating >= 3 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${percentage}%` }} />
                         </div>
                       </div>
                     );
@@ -1327,55 +1126,83 @@ const StaffPerformanceSection = ({
           </div>
         )}
 
-        {/* ========== NEW: Revenue Breakdown Quick View Table ========== */}
+        {/* ----- MODERN REVENUE BREAKDOWN TABLE ----- */}
         {revenueBreakdownData.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-            <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-              <FiDollarSign className="h-4 w-4 mr-2 text-indigo-600" />
-              Quick View: Revenue Breakdown
-            </h3>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6"
+          >
+            {/* Table Header */}
+            <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
+              <div className="flex items-center">
+                <div className="p-2 bg-indigo-100 rounded-lg mr-3">
+                  <FiDollarSign className="h-4 w-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">Revenue Breakdown</h3>
+                  <p className="text-xs text-gray-500">Department charges vs Service charges (Profit)</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Table Content */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 px-3 font-medium text-gray-600">Staff Name</th>
-                    <th className="text-left py-2 px-3 font-medium text-gray-600">Type</th>
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">Total Revenue</th>
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">Dept. Charges</th>
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">Service Charges (Profit)</th>
+                  <tr className="bg-gray-50/80 backdrop-blur-sm">
+                    <th className="text-left py-3 px-5 font-medium text-gray-600 uppercase tracking-wider text-xs">Staff Name</th>
+                    <th className="text-left py-3 px-5 font-medium text-gray-600 uppercase tracking-wider text-xs">Type</th>
+                    <th className="text-right py-3 px-5 font-medium text-gray-600 uppercase tracking-wider text-xs">Total Revenue</th>
+                    <th className="text-right py-3 px-5 font-medium text-gray-600 uppercase tracking-wider text-xs">Dept. Charges</th>
+                    <th className="text-right py-3 px-5 font-medium text-gray-600 uppercase tracking-wider text-xs">Service Charges (Profit)</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {revenueBreakdownData.map((staff, idx) => {
+                <tbody className="divide-y divide-gray-100">
+                  {revenueBreakdownData.map((staff) => {
                     const deptCharge = staff.revenueCollected - staff.serviceCharge;
                     return (
-                      <tr key={staff.id} className={idx % 2 === 0 ? 'bg-gray-50' : ''}>
-                        <td className="py-2 px-3 font-medium text-gray-900">{staff.name}</td>
-                        <td className="py-2 px-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                            staff.type === 'Permanent' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
+                      <tr key={staff.id} className="hover:bg-gray-50/50 transition-colors duration-150">
+                        <td className="py-3 px-5">
+                          <div className="flex items-center">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${staff.type === 'Permanent' ? 'bg-indigo-100' : 'bg-amber-100'}`}>
+                              <FiUser className={`h-4 w-4 ${staff.type === 'Permanent' ? 'text-indigo-600' : 'text-amber-600'}`} />
+                            </div>
+                            <span className="font-medium text-gray-900">{staff.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-5">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                            staff.type === 'Permanent' 
+                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' 
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
                           }`}>
                             {staff.type}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(staff.revenueCollected)}</td>
-                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(deptCharge)}</td>
-                        <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(staff.serviceCharge)}</td>
+                        <td className="py-3 px-5 text-right tabular-nums font-mono text-gray-900">₹{formatINR(staff.revenueCollected)}</td>
+                        <td className="py-3 px-5 text-right tabular-nums font-mono text-gray-600">₹{formatINR(deptCharge)}</td>
+                        <td className="py-3 px-5 text-right tabular-nums font-mono font-medium text-emerald-600">₹{formatINR(staff.serviceCharge)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-gray-300 font-semibold bg-gray-100">
-                    <td className="py-2 px-3 text-gray-900" colSpan={2}>Grand Total</td>
-                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalRevenue)}</td>
-                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalDeptCharge)}</td>
-                    <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(revenueGrandTotal.totalServiceCharge)}</td>
+                  <tr className="bg-indigo-50/60 border-t-2 border-indigo-200">
+                    <td className="py-3 px-5 font-semibold text-indigo-900" colSpan={2}>
+                      <div className="flex items-center">
+                        <FiBarChart2 className="h-4 w-4 mr-2 text-indigo-600" />
+                        Grand Total
+                      </div>
+                    </td>
+                    <td className="py-3 px-5 text-right tabular-nums font-mono font-bold text-indigo-900">₹{formatINR(revenueGrandTotal.totalRevenue)}</td>
+                    <td className="py-3 px-5 text-right tabular-nums font-mono font-bold text-indigo-800">₹{formatINR(revenueGrandTotal.totalDeptCharge)}</td>
+                    <td className="py-3 px-5 text-right tabular-nums font-mono font-bold text-emerald-700">₹{formatINR(revenueGrandTotal.totalServiceCharge)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Staff Performance Grid */}
