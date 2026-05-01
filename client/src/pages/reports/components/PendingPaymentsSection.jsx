@@ -17,7 +17,6 @@ import {
   FiCheck, FiXCircle, FiAlertTriangle, FiLock as FiLockIcon,
   FiUnlock as FiUnlockIcon, FiCalendar as FiCalendarIcon,
   FiUserPlus, FiUsers as FiUsersIcon, FiClock as FiClockIcon,
-  FiTrendingUp as FiTrendingUpIcon, FiTrendingDown as FiTrendingDownIcon,
   FiMail, FiPhone, FiMap, FiGlobe as FiGlobeIcon,
   FiCreditCard as FiCreditCardIcon, FiDollarSign as FiDollarSignIcon,
   FiShoppingCart, FiPackage as FiPackageIcon, FiTruck,
@@ -68,7 +67,6 @@ const PendingPaymentsStatCard = ({ title, value, icon: Icon, color, subtitle, tr
 const PendingPaymentDetailModal = ({ isOpen, onClose, serviceEntry }) => {
   if (!serviceEntry) return null;
 
-  // Format date helper
   const formatDate = (date) => {
     if (!date) return "—";
     const d = new Date(date);
@@ -175,10 +173,9 @@ const ReceivePaymentModal = ({ isOpen, onClose, onSuccess, payment }) => {
     remarks: ''
   });
 
-  // Fetch wallets when modal opens
   useEffect(() => {
     if (isOpen && payment) {
-      setFormData(prev => ({ ...prev, amount: payment.due })); // Auto-fill due amount
+      setFormData(prev => ({ ...prev, amount: payment.due })); 
       getWallets().then(res => setWallets(res.data || [])).catch(console.error);
     }
   }, [isOpen, payment]);
@@ -192,8 +189,8 @@ const ReceivePaymentModal = ({ isOpen, onClose, onSuccess, payment }) => {
         payment_method: formData.paymentMethod,
         remarks: formData.remarks
       });
-      onSuccess(); // Refresh table
-      onClose();   // Close modal
+      onSuccess(); 
+      onClose();   
     } catch (err) {
       alert(err.response?.data?.error || "Payment failed");
     } finally {
@@ -315,7 +312,6 @@ const PendingPaymentsSection = ({
   const activeToDate = isSuperAdmin ? externalToDate : toDate;
   const setActiveToDate = isSuperAdmin ? setExternalToDate : setToDate;
 
-  // Format date function
   const formatDate = (date) => {
     if (!date) return "—";
     const d = new Date(date);
@@ -326,7 +322,6 @@ const PendingPaymentsSection = ({
     });
   };
 
-  // Check if payment is overdue
   const isOverdue = (createdAt, days = 7) => {
     if (!createdAt) return false;
     const diffDays =
@@ -337,31 +332,23 @@ const PendingPaymentsSection = ({
   const normalizePayments = (rows = []) => {
     return rows.map(r => ({
       id: String(r.service_entry_id || r.id),
-
       customer: {
         name: r.customer_name || "—",
         phone: r.customer_phone || ""
       },
-
       service: {
         type: r.service_name || "—",
         subcategory: r.subcategory_name || ""
       },
-
-      // ✅ ADD THIS
       staff: {
         id: r.staff_id || null,
         name: r.staff_name || "—"
       },
-
       total: Number(r.total_charges || 0),
       paid: Number(r.paid_amount || 0),
       due: Number(r.pending_amount || 0),
-
       createdAt: r.created_at,
-      paymentHistory: Array.isArray(r.payment_history)
-        ? r.payment_history
-        : []
+      paymentHistory: Array.isArray(r.payment_history) ? r.payment_history : []
     }));
   };
 
@@ -371,14 +358,8 @@ const PendingPaymentsSection = ({
 
       const response =
         filter === "history"
-          ? await getPendingPaymentsHistory({
-              from: fromDate,
-              to: toDate
-            })
-          : await getPendingPayments({
-              from: fromDate,
-              to: toDate
-            });
+          ? await getPendingPaymentsHistory({ from: fromDate, to: toDate })
+          : await getPendingPayments({ from: fromDate, to: toDate });
 
       const rows = Array.isArray(response?.data)
         ? response.data
@@ -389,8 +370,6 @@ const PendingPaymentsSection = ({
       const normalized = normalizePayments(rows);
 
       setPendingPayments(normalized);
-
-      // ✅ update stats here (important)
       setStats({
         totalReceivables: normalized.reduce((s, p) => s + p.total, 0),
         totalDue: normalized.reduce((s, p) => s + p.due, 0),
@@ -398,13 +377,9 @@ const PendingPaymentsSection = ({
         overdueCount: normalized.filter(p => isOverdue(p.createdAt)).length,
         averageDue:
           normalized.length > 0
-            ? Math.round(
-                normalized.reduce((s, p) => s + p.due, 0) /
-                normalized.length
-              )
+            ? Math.round(normalized.reduce((s, p) => s + p.due, 0) / normalized.length)
             : 0
       });
-
     } catch (err) {
       console.error("Pending payments fetch error:", err);
       alert("Failed to load pending payments");
@@ -432,7 +407,6 @@ const PendingPaymentsSection = ({
   const filteredPayments = useMemo(() => {
     let filtered = [...payments];
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(payment =>
@@ -443,17 +417,13 @@ const PendingPaymentsSection = ({
       );
     }
 
-    // Date filter - FIXED: Use activeFromDate and activeToDate
     if (activeFromDate || activeToDate) {
       filtered = filtered.filter(payment => {
         const paymentDate = new Date(payment.createdAt);
         const from = activeFromDate ? new Date(activeFromDate) : null;
         const to = activeToDate ? new Date(activeToDate) : null;
-        
         let include = true;
-        if (from) {
-          include = include && paymentDate >= from;
-        }
+        if (from) include = include && paymentDate >= from;
         if (to) {
           const toEndOfDay = new Date(to);
           toEndOfDay.setHours(23, 59, 59, 999);
@@ -463,7 +433,6 @@ const PendingPaymentsSection = ({
       });
     }
 
-    // Status filter
     if (activeFilter === 'overdue') {
       filtered = filtered.filter(payment => isOverdue(payment.createdAt));
     } else if (activeFilter === 'pending') {
@@ -557,8 +526,8 @@ const PendingPaymentsSection = ({
             <div className="flex items-center space-x-2">
               <FiFilter className="h-4 w-4 text-gray-500" />
               <select
-                value={activeFilter}  // FIXED: Use activeFilter
-                onChange={(e) => setActiveFilter(e.target.value)}  // FIXED: Use setActiveFilter
+                value={activeFilter}
+                onChange={(e) => setActiveFilter(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="all">All Payments</option>
@@ -568,14 +537,14 @@ const PendingPaymentsSection = ({
                 <option value="history">Cleared History</option>
               </select>
             </div>
-            {/* Date Filter - FIXED: Use active date variables */}
+            {/* Date Filter */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative">
                 <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="date"
-                  value={activeFromDate}  // FIXED: Use activeFromDate
-                  onChange={(e) => setActiveFromDate(e.target.value)}  // FIXED: Use setActiveFromDate
+                  value={activeFromDate}
+                  onChange={(e) => setActiveFromDate(e.target.value)}
                   className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm w-full lg:w-auto"
                 />
               </div>
@@ -584,8 +553,8 @@ const PendingPaymentsSection = ({
                 <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="date"
-                  value={activeToDate}  // FIXED: Use activeToDate
-                  onChange={(e) => setActiveToDate(e.target.value)}  // FIXED: Use setActiveToDate
+                  value={activeToDate}
+                  onChange={(e) => setActiveToDate(e.target.value)}
                   className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm w-full lg:w-auto"
                 />
               </div>
@@ -600,7 +569,7 @@ const PendingPaymentsSection = ({
                 </button>
                 <button
                   onClick={() => {
-                    setActiveFromDate('');  // FIXED: Clear active dates
+                    setActiveFromDate('');
                     setActiveToDate('');
                     if (!isSuperAdmin) fetchPendingPayments();
                   }}
@@ -674,8 +643,12 @@ const PendingPaymentsSection = ({
                 filteredPayments.map((payment) => (
                   <tr key={payment.id} className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${isOverdue(payment.createdAt) ? 'bg-rose-50 hover:bg-rose-100' : ''}`}>
                     <td className="py-4 px-4">
+                      {/* 🔥 FIXED CLICK HANDLER HERE */}
                       <button
-                        onClick={() => setSelectedService(payment)}
+                        onClick={() => {
+                          setSelectedService(payment);
+                          setShowServiceModal(true);
+                        }}
                         className="text-left hover:text-indigo-600 transition-colors group w-full"
                       >
                         <div className="flex items-center space-x-3">
@@ -758,21 +731,31 @@ const PendingPaymentsSection = ({
                     <td>{payment.staff.name}</td>
                     <td className="py-4 px-4">
                       <div className="flex items-center space-x-1">
+                        {/* 🔥 FIXED CLICK HANDLER HERE */}
                         <button
-                          onClick={() => setSelectedService(payment)}
+                          onClick={() => {
+                            setSelectedService(payment);
+                            setShowServiceModal(true);
+                          }}
                           className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors group"
                           title="View Details"
                         >
                           <FiEye className="h-4 w-4 group-hover:scale-110 transition-transform" />
                         </button>
+                        
+                        {/* 🔥 FIXED CLICK HANDLER HERE */}
                         <button
-                          onClick={() => setSelectedPayment(payment)}
+                          onClick={() => {
+                            setSelectedPayment(payment);
+                            setShowPaymentModal(true);
+                          }}
                           className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors group"
                           title="Receive Payment"
                           disabled={payment.due === 0}
                         >
                           <FiCreditCard className={`h-4 w-4 group-hover:scale-110 transition-transform ${payment.due === 0 ? 'opacity-50' : ''}`} />
                         </button>
+                        
                         <button
                           onClick={() => {
                             const message = `Dear ${payment.customer.name},\n\nThis is a reminder for your pending payment of ₹${payment.due} for service ${payment.id}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
@@ -786,9 +769,7 @@ const PendingPaymentsSection = ({
                         </button>
                         {isOverdue(payment.createdAt) && (
                           <button
-                            onClick={() => {
-                              // toast.info(`Marked ${payment.customer.name}'s payment as high priority`);
-                            }}
+                            onClick={() => {}}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors group"
                             title="Mark as High Priority"
                           >
@@ -809,14 +790,6 @@ const PendingPaymentsSection = ({
                           ? 'No matching payments found'
                           : 'No pending payments'}
                       </p>
-                      {searchQuery && (
-                        <button
-                          onClick={() => setSearchQuery('')}
-                          className="text-indigo-600 hover:text-indigo-800 text-sm"
-                        >
-                          Clear search
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -839,9 +812,6 @@ const PendingPaymentsSection = ({
                     ₹{filteredPayments.reduce((sum, p) => sum + p.due, 0).toLocaleString('en-IN')}
                   </span>
                 </p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-600">Showing all records</span>
               </div>
             </div>
           </div>
@@ -901,26 +871,11 @@ const PendingPaymentsSection = ({
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h4 className="font-semibold text-gray-900 mb-4">Quick Actions</h4>
           <div className="space-y-3">
-            <button 
-              onClick={() => {
-                const overduePayments = payments.filter(p => isOverdue(p.createdAt));
-                if (overduePayments.length === 0) {
-                  // toast.info('No overdue payments to send reminders');
-                  return;
-                }
-                // toast.success(`Reminders sent to ${overduePayments.length} customers`);
-              }}
-              className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
+            <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               <span className="text-gray-700">Send Bulk Reminders</span>
               <FiMail className="h-4 w-4 text-blue-600" />
             </button>
-            <button 
-              onClick={() => {
-                // toast.info('Report generation would be implemented here');
-              }}
-              className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
+            <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
               <span className="text-gray-700">Generate Report</span>
               <FiFileText className="h-4 w-4 text-purple-600" />
             </button>
@@ -936,30 +891,32 @@ const PendingPaymentsSection = ({
           </div>
         </div>
       </div>
-      {/* Modals */}
-      <PendingPaymentDetailModal
-        isOpen={showServiceModal}
-        onClose={() => {
-          setShowServiceModal(false);
-          setSelectedService(null);
-        }}
-        serviceEntry={selectedService}
-      />
 
-      <ReceivePaymentModal
-        isOpen={showPaymentModal}
-        onClose={() => {
-          setShowPaymentModal(false);
-          setSelectedPayment(null);
-        }}
-        onSuccess={() => {
-          if (!isSuperAdmin) fetchPendingPayments();
-          // Note: For superadmin, triggering a re-render/refetch 
-          // usually happens automatically if they change the date/filter,
-          // but you can also alert("Payment received, please refresh");
-        }}
-        payment={selectedPayment}
-      />
+      {/* 🔥 THE MODALS ARE NOW GUARANTEED TO RENDER */}
+      {showServiceModal && (
+        <PendingPaymentDetailModal
+          isOpen={showServiceModal}
+          onClose={() => {
+            setShowServiceModal(false);
+            setSelectedService(null);
+          }}
+          serviceEntry={selectedService}
+        />
+      )}
+
+      {showPaymentModal && (
+        <ReceivePaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setSelectedPayment(null);
+          }}
+          onSuccess={() => {
+            if (!isSuperAdmin) fetchPendingPayments();
+          }}
+          payment={selectedPayment}
+        />
+      )}
     </div>
   );
 };
