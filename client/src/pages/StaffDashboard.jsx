@@ -335,21 +335,15 @@ const StaffDashboard = () => {
   const shortenTokenId = (tokenId) => tokenId ? `#${tokenId.split('-').pop()}` : 'N/A';
   const handleStartService = async (tokenId, tokenStaffId, tokenStatus) => {
     try {
-      // 1. If the token is unassigned, assign it to this staff member first to lock it
       if (!tokenStaffId || tokenStaffId === 'null' || tokenStaffId === '') {
         await api.put(`/token/${tokenId}/assign`, { staffId });
       }
-
-      // 2. If the token is still pending, update the status to in-progress
       if (tokenStatus === 'pending') {
         await api.put(`/token/${tokenId}/status`, { status: 'in-progress' });
       }
-
-      // 3. Finally, navigate to the service entry screen
       navigate(`/dashboard/staff/token/${tokenId}/service`);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to start service. Someone else might have already taken it.');
-      // Refresh to get latest state in case of failure
       refreshTokens(); 
     }
   };
@@ -370,14 +364,12 @@ const StaffDashboard = () => {
       const localStaff = String(staffId).trim();
       const isAssignedToMe = tokenStaff === localStaff;
       const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-      // Exclude campaign tokens from the regular active tab
       return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.type !== 'campaign';
     });
 
     const getCompletedTokens = () => tokens.filter(t => {
       const tokenStaff = String(t.staffId || '').trim();
       const localStaff = String(staffId).trim();
-      // Exclude campaign tokens from the regular completed tab
       return tokenStaff === localStaff && t.status === 'completed' && t.type !== 'campaign';
     });
 
@@ -386,7 +378,6 @@ const StaffDashboard = () => {
       const localStaff = String(staffId).trim();
       const isAssignedToMe = tokenStaff === localStaff;
       const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-      // Show both assigned and unassigned campaign tokens here
       return (isAssignedToMe || isUnassigned) && t.type === 'campaign';
     });
 
@@ -723,35 +714,24 @@ const StaffDashboard = () => {
             </select>
           </div>
 
-          {/* My Assigned Wallet Balance Card */}
+          {/* ===== UPDATED: Compact Wallet Card ===== */}
           {myWallet && (
-            <motion.div
-              whileHover={{ y: -2 }}
-              className="bg-white rounded-xl border border-indigo-200 p-6 shadow-sm relative overflow-hidden mb-6"
-            >
-              {/* Background watermark icon */}
-              <div className="absolute -bottom-6 -right-4 p-3 opacity-5">
-                <FiBriefcase className="h-32 w-32 text-indigo-800" />
-              </div>
-              
-              <div className="flex items-center justify-between relative z-10">
+            <div className="bg-white rounded-xl border border-indigo-200 p-4 mb-6 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-100 rounded-lg">
+                  <FiBriefcase className="h-5 w-5 text-indigo-600" />
+                </div>
                 <div>
-                  <p className="text-sm font-semibold text-indigo-600 mb-1 tracking-wide uppercase">My Assigned Wallet</p>
-                  <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(myWallet.balance)}</h3>
-                  <div className="flex items-center mt-3">
-                    <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md border border-indigo-100 flex items-center">
-                      {myWallet.name}
-                    </span>
-                    <span className="ml-3 text-xs font-medium text-gray-500 capitalize bg-gray-100 px-2 py-1 rounded-md">
-                      {myWallet.wallet_type || 'Cash'}
-                    </span>
-                  </div>
-                </div>
-                <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200">
-                  <FiDollarSign className="h-8 w-8 text-white" />
+                  <p className="text-sm font-medium text-gray-600">
+                    My Wallet · <span className="text-indigo-700">{myWallet.name}</span>
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900 mt-0.5">{formatCurrency(myWallet.balance)}</p>
                 </div>
               </div>
-            </motion.div>
+              <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                {myWallet.wallet_type || 'Cash'}
+              </span>
+            </div>
           )}
 
           {/* Stats Row - Token Metrics */}
@@ -914,7 +894,6 @@ const StaffDashboard = () => {
                                     </div>
                                   </div>
                                   <div>
-                                    {/* Show Start/Continue for pending/in-progress tokens in BOTH Active and Campaign tabs */}
                                     {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
                                       <button 
                                         onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
@@ -924,8 +903,6 @@ const StaffDashboard = () => {
                                         {token.status === 'pending' ? 'Start' : 'Continue'}
                                       </button>
                                     )}
-                                    
-                                    {/* Show Details for completed tokens in BOTH Completed and Campaign tabs */}
                                     {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
                                       <button onClick={() => handleViewDetails(token.tokenId)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 flex items-center gap-2">
                                         <FiBarChart2 className="h-4 w-4" /> Details
