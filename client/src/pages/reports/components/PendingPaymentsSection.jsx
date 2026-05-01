@@ -33,7 +33,7 @@ import {
   FiSun, FiMoon, FiWatch, FiWatch as FiWatchIcon, FiCircle,
   FiDatabase, FiCreditCard, FiHome, FiLoader, FiArrowUpCircle, FiTool
 } from 'react-icons/fi';
-import { getPendingPayments, getPendingPaymentsHistory } from '@/services/serviceService';
+import { getPendingPayments, getPendingPaymentsHistory, receiveServicePayment, getWallets } from '@/services/serviceService';
 
 // Pending Payments Stat Card
 const PendingPaymentsStatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, compact = false }) => (
@@ -61,6 +61,215 @@ const PendingPaymentsStatCard = ({ title, value, icon: Icon, color, subtitle, tr
     </div>
   </motion.div>
 );
+
+// ==========================================
+// 1. SERVICE DETAIL MODAL
+// ==========================================
+const PendingPaymentDetailModal = ({ isOpen, onClose, serviceEntry }) => {
+  if (!serviceEntry) return null;
+
+  // Format date helper
+  const formatDate = (date) => {
+    if (!date) return "—";
+    const d = new Date(date);
+    return isNaN(d) ? "—" : d.toLocaleDateString("en-IN", {
+      day: "2-digit", month: "short", year: "numeric",
+    });
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Service Details</h3>
+                <p className="text-sm text-gray-600">ID: {serviceEntry.id} • Staff: {serviceEntry.staff?.name}</p>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+                <FiX className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Customer & Service Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-500 mb-1">Customer Name</p>
+                  <p className="font-semibold text-gray-900">{serviceEntry.customer.name}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-500 mb-1">Phone Number</p>
+                  <p className="font-semibold text-gray-900">{serviceEntry.customer.phone}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-500 mb-1">Service Type</p>
+                  <p className="font-semibold text-gray-900">{serviceEntry.service.type}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-500 mb-1">Subcategory</p>
+                  <p className="font-semibold text-gray-900">{serviceEntry.service.subcategory || "—"}</p>
+                </div>
+              </div>
+
+              {/* Financials */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-3 border-b pb-2">Financial Summary</h4>
+                <div className="flex justify-between py-1">
+                  <span className="text-gray-600">Total Amount</span>
+                  <span className="font-bold text-gray-900">₹{serviceEntry.total.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-gray-600">Amount Paid</span>
+                  <span className="font-bold text-emerald-600">₹{serviceEntry.paid.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between py-1 border-t mt-2 pt-2">
+                  <span className="font-bold text-gray-900">Balance Due</span>
+                  <span className="font-bold text-rose-600 text-lg">₹{serviceEntry.due.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              {/* Payment History */}
+              <div>
+                <h4 className="font-bold text-gray-900 mb-3">Payment History</h4>
+                {serviceEntry.paymentHistory && serviceEntry.paymentHistory.length > 0 ? (
+                  <div className="space-y-3">
+                    {serviceEntry.paymentHistory.map((ph, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <div>
+                          <p className="font-medium text-gray-900">{formatDate(ph.created_at)}</p>
+                          <p className="text-xs text-gray-500">{ph.wallet_name || 'Wallet'}</p>
+                        </div>
+                        <span className="font-bold text-emerald-600">+₹{Number(ph.amount).toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No payments recorded yet.</p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+// ==========================================
+// 2. RECEIVE PAYMENT MODAL
+// ==========================================
+const ReceivePaymentModal = ({ isOpen, onClose, onSuccess, payment }) => {
+  const [wallets, setWallets] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    amount: '',
+    wallet: '',
+    paymentMethod: 'cash',
+    remarks: ''
+  });
+
+  // Fetch wallets when modal opens
+  useEffect(() => {
+    if (isOpen && payment) {
+      setFormData(prev => ({ ...prev, amount: payment.due })); // Auto-fill due amount
+      getWallets().then(res => setWallets(res.data || [])).catch(console.error);
+    }
+  }, [isOpen, payment]);
+
+  const handleSubmit = async () => {
+    try {
+      setLoading(true);
+      await receiveServicePayment(payment.id, {
+        amount: formData.amount,
+        wallet_id: formData.wallet,
+        payment_method: formData.paymentMethod,
+        remarks: formData.remarks
+      });
+      onSuccess(); // Refresh table
+      onClose();   // Close modal
+    } catch (err) {
+      alert(err.response?.data?.error || "Payment failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!payment) return null;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-xl p-6 max-w-md w-full"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Receive Payment</h3>
+              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+                <FiX className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
+
+            <div className="bg-rose-50 p-3 rounded-lg mb-4 flex justify-between items-center border border-rose-100">
+              <span className="text-rose-800 font-medium">Balance Due</span>
+              <span className="text-rose-800 font-bold text-xl">₹{payment.due.toLocaleString('en-IN')}</span>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Collection Amount (₹)</label>
+                <input
+                  type="number"
+                  max={payment.due}
+                  value={formData.amount}
+                  onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Credit to Wallet</label>
+                <select
+                  value={formData.wallet}
+                  onChange={(e) => setFormData(prev => ({ ...prev, wallet: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select a wallet...</option>
+                  {wallets.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-4 flex space-x-3">
+                <button onClick={onClose} className="flex-1 px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSubmit} 
+                  disabled={loading || !formData.amount || !formData.wallet}
+                  className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex justify-center items-center"
+                >
+                  {loading ? <FiRefreshCw className="animate-spin" /> : "Record Payment"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
 
 const PendingPaymentsSection = ({
   isMobile,
@@ -727,6 +936,30 @@ const PendingPaymentsSection = ({
           </div>
         </div>
       </div>
+      {/* Modals */}
+      <PendingPaymentDetailModal
+        isOpen={showServiceModal}
+        onClose={() => {
+          setShowServiceModal(false);
+          setSelectedService(null);
+        }}
+        serviceEntry={selectedService}
+      />
+
+      <ReceivePaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setSelectedPayment(null);
+        }}
+        onSuccess={() => {
+          if (!isSuperAdmin) fetchPendingPayments();
+          // Note: For superadmin, triggering a re-render/refetch 
+          // usually happens automatically if they change the date/filter,
+          // but you can also alert("Payment received, please refresh");
+        }}
+        payment={selectedPayment}
+      />
     </div>
   );
 };
