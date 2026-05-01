@@ -326,7 +326,7 @@ router.get("/trainee-performance", async (req, res) => {
 
       WHERE s.role = 'staff'
         -- 🔥 CRITICAL: ONLY FETCH PROBATION/TRAINEE STAFF
-        AND s.employment_type = 'probation'
+        AND s.employment_type = 'Probation'
       ${centreFilter}
 
       ORDER BY collected_amount DESC;
