@@ -2906,7 +2906,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
               'status', p.status,
               'created_at', p.created_at
             )
-            ORDER BY p.created_at NULLS LAST
+            ORDER BY p.created_at DESC NULLS LAST
           ) FILTER (WHERE p.id IS NOT NULL),
           '[]'
         ) AS payment_history
