@@ -1041,6 +1041,27 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  const handleGenericTaskStatusUpdate = async (taskId, newStatus) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) throw new Error('Failed to update task');
+      // Refresh tasks or update local state
+      await fetchTasks(); // or optimistically update the tasks array
+      toast.success(`Task marked as ${newStatus}`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update task');
+      throw err; // important so Chat.jsx can stop its spinner
+    }
+  };
+
   const fetchStaff = async () => {
     try {
       if (!token) {
@@ -2420,7 +2441,7 @@ const MessengerPage = ({ user }) => {
                   onlineUsers={onlineUsers}
                   serviceEntryId={activeConversation?.context_type === 'service_entry' ? activeConversation.context_id : null}
                   serviceInfo={{ tasks: tasks }}
-                  onTaskStatusUpdate={handleServiceTaskStatusUpdate}
+                  onTaskStatusUpdate={handleGenericTaskStatusUpdate}
                 />
               </div>
             ) : activeView === "activity" ? (<div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>) : activeView === "calendar" ? (<div className="h-full overflow-y-auto">{renderCalendarView()}</div>) : activeView === "files" ? (<div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>) : activeView === "tasks" ? (<div className="h-full overflow-y-auto">{renderTasksView()}</div>) : activeView === "schedules" ? (<div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>) : (<div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>)}
