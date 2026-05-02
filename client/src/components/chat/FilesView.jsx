@@ -19,7 +19,10 @@ import {
   FiBriefcase
 } from "react-icons/fi";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+    if (!API_BASE_URL) {
+      throw new Error("VITE_API_URL is not defined");
+}
 
 const categories = [
   { id: "govt_orders", label: "Government Orders", icon: "📜", color: "bg-purple-100 text-purple-700" },
@@ -72,7 +75,7 @@ const FilesView = ({ user }) => {
   const fetchServices = async () => {
     setServicesLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/servicemanagement/services`, {
+      const res = await fetch(`${API_BASE_URL}/servicemanagement/services`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -109,7 +112,7 @@ const FilesView = ({ user }) => {
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/files`, {
+      const res = await fetch(`${API_BASE_URL}/files`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -137,7 +140,7 @@ const FilesView = ({ user }) => {
   const fetchVersions = async (fileId) => {
     setVersionsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/files/${fileId}/versions`, {
+      const res = await fetch(`${API_BASE_URL}/files/${fileId}/versions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -161,7 +164,7 @@ const FilesView = ({ user }) => {
   const downloadVersion = async (versionId, fileName) => {
     setDownloadLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/files/version/${versionId}`, {
+      const res = await fetch(`${API_BASE_URL}/files/version/${versionId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -284,7 +287,7 @@ const FilesView = ({ user }) => {
         related_service_id: newFileData.related_service_id
       });
 
-      const res = await fetch(`${API_BASE}/files/upload`, {
+      const res = await fetch(`${API_BASE_URL}/files/upload`, {
         method: "POST",
         headers: { 
           Authorization: `Bearer ${token}`
@@ -345,7 +348,7 @@ const FilesView = ({ user }) => {
     formData.append("file_id", fileId);
 
     try {
-      const res = await fetch(`${API_BASE}/files/upload`, {
+      const res = await fetch(`${API_BASE_URL}/files/upload`, {
         method: "POST",
         headers: { 
           Authorization: `Bearer ${token}`
@@ -375,7 +378,7 @@ const FilesView = ({ user }) => {
     if (!window.confirm("Are you sure you want to delete this file permanently?")) return;
 
     try {
-      const res = await fetch(`${API_BASE}/files/${fileId}`, {
+      const res = await fetch(`${API_BASE_URL}/files/${fileId}`, {
         method: "DELETE",
         headers: { 
           Authorization: `Bearer ${token}`,
