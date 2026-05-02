@@ -653,7 +653,7 @@ const Chat = ({
                 const messageKey = msg.isOptimistic
                   ? `opt-${msg.tempId || msg.id}-${index}`
                   : `msg-${msg.id}`;
-                const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
+                const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName));
                 return (
                   <motion.div
                     key={messageKey}
