@@ -501,7 +501,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
       }),
       isCurrentUser: m.sender_id === userId,
       messageType: m.type,
-      isFile: m.type !== "text"
+      isFile: m.type === "file" || m.type === "image" // 🔥 FIXED: Only treat actual files/images as files
     }));
     
     res.json(formatted);

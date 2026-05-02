@@ -594,8 +594,27 @@ const Chat = ({
                   ? `opt-${msg.tempId || msg.id}-${index}`
                   : `msg-${msg.id}`;
                 
-                // Identify if this is a task message
-                const isTaskType = msg.message_type === 'task' || msg.messageType === 'task';
+                // 🔥 Aggressive Task Detection
+                const rawText = msg.message || msg.text || '';
+                let isTaskType = msg.message_type === 'task' || msg.messageType === 'task';
+                let parsedTaskInfo = null;
+
+                // Sniff for JSON Payload (if backend forced it to 'text')
+                if (!isTaskType && typeof rawText === 'string' && rawText.includes('"taskId"')) {
+                  try {
+                    const parsed = JSON.parse(rawText);
+                    if (parsed.taskId) {
+                      isTaskType = true;
+                      parsedTaskInfo = parsed;
+                    }
+                  } catch(e) {}
+                }
+
+                // Fallback for your Old System (system messages with numeric fileNames)
+                if (!isTaskType && (msg.isSystem || msg.sender_type === 'system') && msg.fileName && !isNaN(Number(msg.fileName))) {
+                  isTaskType = true;
+                  parsedTaskInfo = { taskId: Number(msg.fileName), title: rawText };
+                }
 
                 return (
                   <motion.div
@@ -631,12 +650,14 @@ const Chat = ({
                         ) : isTaskType ? (
                           /* 🔥 NEW TASK RENDERER 🔥 */
                           (() => {
-                            let taskInfo = {};
-                            try {
-                              taskInfo = typeof msg.message === 'string' ? JSON.parse(msg.message) : (msg.message || msg.text || {});
-                              if (typeof taskInfo === 'string') taskInfo = { title: taskInfo };
-                            } catch (e) {
-                              taskInfo = { title: msg.message || msg.text };
+                            let taskInfo = parsedTaskInfo;
+                            if (!taskInfo) {
+                              try {
+                                taskInfo = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;
+                                if (typeof taskInfo === 'string') taskInfo = { title: taskInfo };
+                              } catch (e) {
+                                taskInfo = { title: rawText };
+                              }
                             }
 
                             // Link with real-time array from the sidebar
