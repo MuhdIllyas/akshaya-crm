@@ -321,24 +321,24 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
 const MessengerPage = ({ user }) => {
   const token = localStorage.getItem("token");
 
-  let decodedUserId = null;
+  let decodedPayload = null;
   if (token) {
     try {
       const base64Url = token.split('.')[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(window.atob(base64));
-      decodedUserId = payload.id || payload.staff_id || payload.userId || payload.sub;
+      decodedPayload = JSON.parse(window.atob(base64));
     } catch (err) {
       console.error("Could not decode token", err);
     }
   }
 
+  // Safely extract the role and centre from the token if the `user` prop is missing
   const currentUser = {
-    role: user?.role || "admin",
-    id: decodedUserId || user?.id || user?.staff_id || 1,
-    centreId: user?.centre_id || null,
-    name: user?.name || "Current User",
-    username: user?.username || ""
+    role: user?.role || decodedPayload?.role || localStorage.getItem("role") || "staff", 
+    id: user?.id || decodedPayload?.id || 1,
+    centreId: user?.centre_id || decodedPayload?.centre_id || localStorage.getItem("centreId") || null,
+    name: user?.name || decodedPayload?.username || "Current User",
+    username: user?.username || decodedPayload?.username || ""
   };
 
   const [activeView, setActiveView] = useState("chats");
