@@ -29,17 +29,19 @@ const authenticateToken = (req, res, next) => {
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const isGlobal = req.body.is_global === "true";
-    const centreId = req.body.centre_id;
-
     let uploadPath = "uploads";
 
     if (isGlobal) {
+      // 🔥 SECURITY: Prevent staff from uploading to the global folder
+      if (req.user.role === "staff") {
+        return cb(new Error("Staff members are not allowed to upload global files"));
+      }
       uploadPath = path.join("uploads", "global");
     } else {
-      // Use centre_id from body or from user for admin
-      let finalCentreId = centreId;
-      if (req.user.role === "admin" && (!centreId || centreId === "")) {
-        finalCentreId = req.user.centre_id;
+      // 🔥 SECURITY: Force admin/staff to only upload to their assigned centre folder
+      let finalCentreId = req.body.centre_id;
+      if (req.user.role !== "superadmin") {
+        finalCentreId = req.user.centre_id; 
       }
       uploadPath = path.join("uploads", `centre_${finalCentreId}`);
     }
@@ -110,14 +112,18 @@ router.post("/upload", authenticateToken, upload.single("file"), async (req, res
 
     // Override centre_id based on user role
     if (req.user.role === "superadmin") {
-      // Superadmin can set centre_id based on is_global
+      // Superadmin can upload globally or to a specific centre
       finalCentreId = isGlobalBool ? null : finalCentreId;
     } else if (req.user.role === "admin") {
-      // Admin can only upload to their own centre
+      // Admin can upload globally OR to their own centre
       finalCentreId = isGlobalBool ? null : req.user.centre_id;
     } else if (req.user.role === "staff") {
-      // Staff can only upload to their own centre
-      finalCentreId = isGlobalBool ? null : req.user.centre_id;
+      // 🔥 SECURITY: Block staff from creating global files in the database
+      if (isGlobalBool) {
+        throw new Error("Staff members are not allowed to upload global files");
+      }
+      // Staff can ONLY upload to their own centre
+      finalCentreId = req.user.centre_id;
     } else {
       throw new Error("Permission denied");
     }
