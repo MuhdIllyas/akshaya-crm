@@ -2814,18 +2814,17 @@ const AccountingSection = ({
         throw new Error(data.error || "Failed to create expense");
       }
 
-      const expRes = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-
-      const expenses = await expRes.json();
-      onUpdateAccounting("expenses", expenses);
-
+      // 🔥 FIX: Use your existing fetchExpenses function so the data gets mapped correctly!
+      await fetchExpenses();
+      
+      // 🔥 FIX: Also refresh wallet balances so the UI updates the deducted amount instantly
+      await refreshWalletBookBalances();
+      
+      toast.success("Expense added successfully!");
       setShowAdminExpenseModal(false);
+      
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message || "Failed to add expense");
     }
   };
 
