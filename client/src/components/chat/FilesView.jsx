@@ -762,7 +762,7 @@ const FilesView = ({ user }) => {
                               onChange={() => setNewFileData({ ...newFileData, is_global: false, centre_id: "" })}
                               className="text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                             />
-                            <span className="text-sm text-gray-700 font-medium">Local (Your Centre Only)</span>
+                            <span className="text-sm text-gray-700 font-medium">Local (Selected Centre Only)</span>
                           </label>
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
