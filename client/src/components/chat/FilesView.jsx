@@ -20,9 +20,6 @@ import {
 } from "react-icons/fi";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
-    if (!API_BASE_URL) {
-      throw new Error("VITE_API_URL is not defined");
-}
 
 const categories = [
   { id: "govt_orders", label: "Government Orders", icon: "📜", color: "bg-purple-100 text-purple-700" },
@@ -36,6 +33,12 @@ const categories = [
 
 const FilesView = ({ user }) => {
   const token = localStorage.getItem("token");
+  if (!API_BASE_URL) {
+    console.error("VITE_API_URL is not defined");
+  }
+
+  // Normalise role for case‑insensitive comparisons
+  const normalizedRole = user?.role?.toLowerCase();
 
   const [files, setFiles] = useState([]);
   const [services, setServices] = useState([]);
@@ -65,56 +68,52 @@ const FilesView = ({ user }) => {
   });
 
   const [centres, setCentres] = useState([]);
-  
-  // Fetch centres for superadmin dropdown
-  useEffect(() => {
-    if (user?.role === "superadmin") {
-      const fetchCentres = async () => {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/centres`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setCentres(data);
-          }
-        } catch (err) {
-          console.error("Failed to fetch centres", err);
-        }
-      };
-      fetchCentres();
-    }
-  }, [user?.role]);
+  const [centresLoading, setCentresLoading] = useState(false);
+  const [centresError, setCentresError] = useState("");
 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState("newest");
 
-  /* ================================
-     FETCH SERVICES
-  ================================= */
+  // Fetch centres for superadmin
+  useEffect(() => {
+    if (normalizedRole === "superadmin") {
+      const fetchCentres = async () => {
+        setCentresLoading(true);
+        setCentresError("");
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/centres`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          setCentres(data);
+        } catch (err) {
+          console.error("Failed to fetch centres", err);
+          setCentresError("Unable to load centres. Please refresh or contact support.");
+        } finally {
+          setCentresLoading(false);
+        }
+      };
+      fetchCentres();
+    }
+  }, [normalizedRole, token]);
 
+  // Fetch services
   const fetchServices = async () => {
     setServicesLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/servicemanagement/services`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setServices(data);
-      
-      // Create a map for quick service name lookup by ID
       const map = {};
-      data.forEach(service => {
-        map[service.id] = service.name;
-      });
+      data.forEach(service => { map[service.id] = service.name; });
       setServicesMap(map);
-      
     } catch (error) {
       console.error("Error fetching services:", error);
     } finally {
@@ -122,26 +121,14 @@ const FilesView = ({ user }) => {
     }
   };
 
-  // Fetch services on component mount
-  useEffect(() => {
-    fetchServices();
-  }, []);
-
-  /* ================================
-     FETCH FILES
-  ================================= */
-
+  // Fetch files
   const fetchFiles = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/files`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setFiles(data);
     } catch (error) {
@@ -151,25 +138,14 @@ const FilesView = ({ user }) => {
     }
   };
 
-  useEffect(() => {
-    fetchFiles();
-  }, []);
-
-  /* ================================
-     FETCH VERSION HISTORY
-  ================================= */
-
+  // Fetch version history
   const fetchVersions = async (fileId) => {
     setVersionsLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/files/${fileId}/versions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-      
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setVersions(data);
     } catch (error) {
@@ -179,54 +155,34 @@ const FilesView = ({ user }) => {
     }
   };
 
-  /* ================================
-     DOWNLOAD VERSION
-  ================================= */
-
+  // Download version
   const downloadVersion = async (versionId, fileName) => {
     setDownloadLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/files/version/${versionId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
-      
       if (!res.ok) {
-        if (res.status === 401) {
-          throw new Error("Unauthorized - Please login again");
-        } else if (res.status === 403) {
-          throw new Error("Access denied - You don't have permission to download this file");
-        } else {
-          const errorData = await res.json();
-          throw new Error(errorData.error || `Download failed with status ${res.status}`);
-        }
+        if (res.status === 401) throw new Error("Unauthorized - Please login again");
+        if (res.status === 403) throw new Error("Access denied - You don't have permission to download this file");
+        const errorData = await res.json();
+        throw new Error(errorData.error || `Download failed with status ${res.status}`);
       }
-      
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
       const contentDisposition = res.headers.get('Content-Disposition');
       let filename = fileName || 'download';
-      
       if (contentDisposition) {
         const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-        if (match && match[1]) {
-          filename = match[1].replace(/['"]/g, '');
-        }
+        if (match && match[1]) filename = match[1].replace(/['"]/g, '');
       }
-      
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-      }, 100);
-      
+      setTimeout(() => window.URL.revokeObjectURL(url), 100);
     } catch (error) {
       console.error("Download error:", error);
       alert("Failed to download file: " + error.message);
@@ -235,23 +191,19 @@ const FilesView = ({ user }) => {
     }
   };
 
-  /* ================================
-     UPLOAD NEW FILE
-  ================================= */
-
+  // Upload new file
   const handleNewUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Validate required fields
     if (!newFileData.name || !newFileData.category) {
       setUploadError("Please fill in all required fields");
       return;
     }
 
-    // For non-admin users, validate centre_id for local files
-    if (!newFileData.is_global && user?.role !== "admin" && !newFileData.centre_id) {
-      setUploadError("Centre ID is required for local files");
+    // For superadmin: if local, centre_id must be selected
+    if (!newFileData.is_global && normalizedRole === "superadmin" && !newFileData.centre_id) {
+      setUploadError("Please select a centre for the local file");
       return;
     }
 
@@ -274,13 +226,12 @@ const FilesView = ({ user }) => {
     formData.append("name", newFileData.name);
     formData.append("category", newFileData.category);
     formData.append("is_global", newFileData.is_global ? "true" : "false");
-    
-    // Handle centre_id
+
     if (!newFileData.is_global) {
       if (newFileData.centre_id && newFileData.centre_id.trim() !== "") {
         formData.append("centre_id", newFileData.centre_id);
-      } else if (user?.role === "admin") {
-        formData.append("centre_id", "");
+      } else if (normalizedRole === "admin") {
+        formData.append("centre_id", user.centre_id || "");
       } else {
         setUploadError("Centre ID is required for local files");
         clearInterval(interval);
@@ -289,41 +240,24 @@ const FilesView = ({ user }) => {
     } else {
       formData.append("centre_id", "");
     }
-    
-    // Add optional fields
-    if (newFileData.description && newFileData.description.trim() !== "") {
-      formData.append("description", newFileData.description);
-    }
-    
-    if (newFileData.related_service_id && newFileData.related_service_id.trim() !== "") {
-      formData.append("related_service_id", newFileData.related_service_id);
-    }
+
+    if (newFileData.description?.trim()) formData.append("description", newFileData.description);
+    if (newFileData.related_service_id?.trim()) formData.append("related_service_id", newFileData.related_service_id);
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/files/upload`, {
         method: "POST",
-        headers: { 
-          Authorization: `Bearer ${token}`
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
-
       clearInterval(interval);
-
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || `Upload failed with status ${res.status}`);
       }
-
-      const responseData = await res.json();
-      console.log("Upload successful:", responseData);
-
       setUploadProgress(100);
       setUploadSuccess("File uploaded successfully!");
-      
-      // Refresh services to ensure we have the latest
       await fetchServices();
-      
       setTimeout(() => {
         setIsUploadOpen(false);
         setUploadProgress(0);
@@ -339,7 +273,6 @@ const FilesView = ({ user }) => {
         });
         fetchFiles();
       }, 1500);
-      
     } catch (error) {
       console.error("Upload error:", error);
       setUploadError(error.message);
@@ -348,10 +281,7 @@ const FilesView = ({ user }) => {
     }
   };
 
-  /* ================================
-     UPLOAD NEW VERSION
-  ================================= */
-
+  // Upload new version
   const handleVersionUpload = async (e, fileId) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -363,47 +293,33 @@ const FilesView = ({ user }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/files/upload`, {
         method: "POST",
-        headers: { 
-          Authorization: `Bearer ${token}`
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
-
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Version upload failed");
       }
-
       await fetchFiles();
       await fetchVersions(fileId);
-      
     } catch (error) {
       console.error("Version upload error:", error);
       alert(error.message);
     }
   };
 
-  /* ================================
-     DELETE FILE
-  ================================= */
-
+  // Delete file
   const deleteFile = async (fileId) => {
     if (!window.confirm("Are you sure you want to delete this file permanently?")) return;
-
     try {
       const res = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
         method: "DELETE",
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
-
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Delete failed");
       }
-
       setSelectedFile(null);
       fetchFiles();
     } catch (error) {
@@ -412,33 +328,23 @@ const FilesView = ({ user }) => {
     }
   };
 
-  /* ================================
-     FILTERING & SORTING
-  ================================= */
-
+  // Filtering & sorting
   const filteredFiles = files
     .filter(file => {
       const matchesSearch = file.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             file.category?.toLowerCase().includes(searchTerm.toLowerCase());
-      
       const matchesCategory = selectedCategory === "all" || file.category === selectedCategory;
-      
       const matchesType = filterType === "all" ||
                          (filterType === "global" && file.is_global) ||
                          (filterType === "local" && !file.is_global);
-      
       return matchesSearch && matchesCategory && matchesType;
     })
     .sort((a, b) => {
       switch (sortBy) {
-        case "newest":
-          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-        case "oldest":
-          return new Date(a.created_at || 0) - new Date(b.created_at || 0);
-        case "name":
-          return (a.name || "").localeCompare(b.name || "");
-        default:
-          return 0;
+        case "newest": return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        case "oldest": return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+        case "name": return (a.name || "").localeCompare(b.name || "");
+        default: return 0;
       }
     });
 
@@ -446,11 +352,16 @@ const FilesView = ({ user }) => {
     return categories.find(c => c.id === categoryId) || categories[5];
   };
 
-  // Get service name by ID using the map
   const getServiceName = (serviceId) => {
     if (!serviceId) return null;
     return servicesMap[serviceId] || null;
   };
+
+  // Initial data fetching
+  useEffect(() => {
+    fetchServices();
+    fetchFiles();
+  }, []);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -463,7 +374,6 @@ const FilesView = ({ user }) => {
               <h1 className="text-2xl font-bold text-gray-800">File Repository</h1>
               <p className="text-sm text-gray-500 mt-1">Manage and organize your documents</p>
             </div>
-            
             <button
               onClick={() => setIsUploadOpen(true)}
               className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2 shadow-sm"
@@ -485,7 +395,6 @@ const FilesView = ({ user }) => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`px-4 py-2 border rounded-lg flex items-center gap-2 transition-colors ${
@@ -515,7 +424,6 @@ const FilesView = ({ user }) => {
                     ))}
                   </select>
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">File Type</label>
                   <select
@@ -528,7 +436,6 @@ const FilesView = ({ user }) => {
                     <option value="local">Local Files</option>
                   </select>
                 </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
                   <select
@@ -583,9 +490,7 @@ const FilesView = ({ user }) => {
                           v{file.version_number || 1}
                         </span>
                       </div>
-                      
                       <h3 className="font-semibold text-gray-800 mb-1 line-clamp-2">{file.name}</h3>
-                      
                       <div className="flex items-center gap-2 mb-3 flex-wrap">
                         <span className={`text-xs px-2 py-1 rounded-full ${category.color}`}>
                           {category.label}
@@ -603,13 +508,11 @@ const FilesView = ({ user }) => {
                           </span>
                         )}
                       </div>
-                      
                       <div className="flex items-center justify-between text-xs text-gray-500">
                         <div className="flex items-center gap-1">
                           <FiClock size={12} />
                           {file.created_at ? new Date(file.created_at).toLocaleDateString() : 'N/A'}
                         </div>
-                        
                         {file.is_global ? (
                           <span className="flex items-center gap-1 text-purple-600 font-medium">
                             <FiGlobe size={12} /> Global
@@ -634,20 +537,14 @@ const FilesView = ({ user }) => {
         <div className="fixed right-0 top-0 w-96 h-full bg-white border-l shadow-xl overflow-y-auto animate-slideIn z-40">
           <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">Version History</h2>
-            <button 
-              onClick={() => setSelectedFile(null)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
+            <button onClick={() => setSelectedFile(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
               <FiX size={18} className="text-gray-500" />
             </button>
           </div>
-          
           <div className="p-4">
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
               <h3 className="font-medium text-blue-800 mb-1">Current File</h3>
               <p className="text-sm text-blue-600 line-clamp-2">{selectedFile.name}</p>
-              
-              {/* Access Type Badge */}
               <div className="mt-2 flex items-center gap-2 text-xs">
                 {selectedFile.is_global ? (
                   <span className="flex items-center gap-1 text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
@@ -659,8 +556,6 @@ const FilesView = ({ user }) => {
                   </span>
                 )}
               </div>
-              
-              {/* Service Badge */}
               {selectedFile.related_service_id && (
                 <p className="text-xs text-blue-500 mt-2 flex items-center gap-1">
                   <FiBriefcase size={12} />
@@ -668,7 +563,6 @@ const FilesView = ({ user }) => {
                 </p>
               )}
             </div>
-            
             {versionsLoading ? (
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -716,18 +610,12 @@ const FilesView = ({ user }) => {
                               )}
                               Download
                             </button>
-                            
                             <label className="flex-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center gap-1 text-sm cursor-pointer">
                               <FiUpload size={14} />
                               Update
-                              <input
-                                type="file"
-                                hidden
-                                onChange={(e) => handleVersionUpload(e, selectedFile.id)}
-                              />
+                              <input type="file" hidden onChange={(e) => handleVersionUpload(e, selectedFile.id)} />
                             </label>
-                            
-                            {(user?.role === "superadmin" || user?.role === "admin") && index === 0 && (
+                            {(normalizedRole === "superadmin" || normalizedRole === "admin") && index === 0 && (
                               <button
                                 onClick={() => deleteFile(selectedFile.id)}
                                 className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
@@ -765,24 +653,20 @@ const FilesView = ({ user }) => {
                 <FiX size={20} className="text-gray-500" />
               </button>
             </div>
-            
-            {/* Error Message */}
+
             {uploadError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
                 <FiAlertCircle size={18} />
                 <span className="text-sm">{uploadError}</span>
               </div>
             )}
-            
-            {/* Success Message */}
             {uploadSuccess && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
                 <FiCheckCircle size={18} />
                 <span className="text-sm">{uploadSuccess}</span>
               </div>
             )}
-            
-            {/* Progress Steps */}
+
             <div className="flex items-center justify-between mb-6">
               {[1, 2, 3].map((step) => (
                 <div key={step} className="flex items-center">
@@ -792,14 +676,12 @@ const FilesView = ({ user }) => {
                     {step}
                   </div>
                   {step < 3 && (
-                    <div className={`w-12 h-1 ${
-                      uploadStep > step ? 'bg-navy-700' : 'bg-gray-200'
-                    }`}></div>
+                    <div className={`w-12 h-1 ${uploadStep > step ? 'bg-navy-700' : 'bg-gray-200'}`}></div>
                   )}
                 </div>
               ))}
             </div>
-            
+
             {uploadProgress > 0 && uploadProgress < 100 ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between text-sm">
@@ -807,19 +689,13 @@ const FilesView = ({ user }) => {
                   <span className="font-medium">{uploadProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-navy-700 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  ></div>
+                  <div className="bg-navy-700 h-2 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
                 {uploadStep === 1 && (
-                  <form onSubmit={(e) => { 
-                    e.preventDefault(); 
-                    setUploadStep(2); 
-                  }} className="space-y-4">
+                  <form onSubmit={(e) => { e.preventDefault(); setUploadStep(2); }} className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         File Name <span className="text-red-500">*</span>
@@ -829,27 +705,19 @@ const FilesView = ({ user }) => {
                         placeholder="Enter file name"
                         className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         value={newFileData.name}
-                        onChange={(e) =>
-                          setNewFileData({ ...newFileData, name: e.target.value })
-                        }
+                        onChange={(e) => setNewFileData({ ...newFileData, name: e.target.value })}
                       />
                     </div>
-                    
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Description (optional)
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
                       <textarea
                         placeholder="Enter file description"
                         className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows="3"
                         value={newFileData.description}
-                        onChange={(e) =>
-                          setNewFileData({ ...newFileData, description: e.target.value })
-                        }
+                        onChange={(e) => setNewFileData({ ...newFileData, description: e.target.value })}
                       />
                     </div>
-                    
                     <button
                       type="submit"
                       disabled={!newFileData.name}
@@ -859,7 +727,7 @@ const FilesView = ({ user }) => {
                     </button>
                   </form>
                 )}
-                
+
                 {uploadStep === 2 && (
                   <>
                     <div>
@@ -868,35 +736,30 @@ const FilesView = ({ user }) => {
                       </label>
                       <select
                         className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        onChange={(e) =>
-                          setNewFileData({ ...newFileData, category: e.target.value })
-                        }
                         value={newFileData.category}
+                        onChange={(e) => setNewFileData({ ...newFileData, category: e.target.value })}
                       >
                         <option value="">Select Category</option>
                         {categories.map(cat => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.label} {cat.icon}
-                          </option>
+                          <option key={cat.id} value={cat.id}>{cat.label} {cat.icon}</option>
                         ))}
                       </select>
                     </div>
 
-                    {/* Access Level (Admin/Superadmin only) */}
-                    {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                    {/* Access Level – shown for both admin and superadmin */}
+                    {(normalizedRole === "admin" || normalizedRole === "superadmin") && (
                       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3 mt-2">
                         <h4 className="text-sm font-semibold text-gray-700 flex items-center">
                           <FiGlobe className="mr-2 text-indigo-600" />
                           File Access Level
                         </h4>
-                        
                         <div className="flex gap-6">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="radio"
                               name="is_global"
                               checked={!newFileData.is_global}
-                              onChange={() => setNewFileData({ ...newFileData, is_global: false })}
+                              onChange={() => setNewFileData({ ...newFileData, is_global: false, centre_id: "" })}
                               className="text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                             />
                             <span className="text-sm text-gray-700 font-medium">Local (Your Centre Only)</span>
@@ -913,31 +776,40 @@ const FilesView = ({ user }) => {
                           </label>
                         </div>
 
-                        {/* Centre Selection for Superadmin */}
-                        {user?.role === 'superadmin' && !newFileData.is_global && (
+                        {/* Superadmin: centre selection for local files */}
+                        {normalizedRole === "superadmin" && !newFileData.is_global && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Centre <span className="text-red-500">*</span></label>
-                            <select
-                              value={newFileData.centre_id}
-                              onChange={(e) => setNewFileData({ ...newFileData, centre_id: e.target.value })}
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
-                            >
-                              <option value="">Select a centre...</option>
-                              {centres.map((c) => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                            </select>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Assign to Centre <span className="text-red-500">*</span>
+                            </label>
+                            {centresLoading ? (
+                              <div className="text-sm text-gray-500">Loading centres...</div>
+                            ) : centresError ? (
+                              <div className="text-sm text-red-600">{centresError}</div>
+                            ) : centres.length === 0 ? (
+                              <div className="text-sm text-amber-600">No centres available. Please create a centre first.</div>
+                            ) : (
+                              <select
+                                value={newFileData.centre_id}
+                                onChange={(e) => setNewFileData({ ...newFileData, centre_id: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                              >
+                                <option value="">Select a centre...</option>
+                                {centres.map(c => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                            )}
                           </div>
                         )}
 
-                        {/* Read-only centre display for Admin */}
-                        {user?.role === 'admin' && !newFileData.is_global && (
+                        {/* Admin: read‑only centre display */}
+                        {normalizedRole === "admin" && !newFileData.is_global && (
                           <div className="mt-2 text-sm text-blue-700 flex items-center gap-2">
-                            <FiHome size={14} /> Centre ID: {user.centre_id} (Auto-assigned)
+                            <FiHome size={14} /> Centre: {user.centre_name || user.centre_id || "Your assigned centre"}
                           </div>
                         )}
 
-                        {/* Global file message */}
                         {newFileData.is_global && (
                           <div className="mt-2 text-sm text-purple-700 flex items-center gap-2">
                             <FiGlobe size={14} /> This file will be accessible globally.
@@ -945,22 +817,15 @@ const FilesView = ({ user }) => {
                         )}
                       </div>
                     )}
-                    
+
                     {/* Related Service Dropdown */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Related Service (optional)
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Related Service (optional)</label>
                       <div className="relative">
                         <select
                           className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
                           value={newFileData.related_service_id}
-                          onChange={(e) =>
-                            setNewFileData({
-                              ...newFileData,
-                              related_service_id: e.target.value
-                            })
-                          }
+                          onChange={(e) => setNewFileData({ ...newFileData, related_service_id: e.target.value })}
                         >
                           <option value="">Select a service</option>
                           {servicesLoading ? (
@@ -976,24 +841,19 @@ const FilesView = ({ user }) => {
                         <FiBriefcase className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
                       </div>
                       {services.length === 0 && !servicesLoading && (
-                        <p className="text-xs text-amber-600 mt-1">
-                          No services found. Please add services first.
-                        </p>
+                        <p className="text-xs text-amber-600 mt-1">No services found. Please add services first.</p>
                       )}
                     </div>
-                    
+
                     <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={() => setUploadStep(1)}
-                        className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors"
-                      >
+                      <button onClick={() => setUploadStep(1)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors">
                         Back
                       </button>
                       <button
                         onClick={() => setUploadStep(3)}
                         disabled={
-                          !newFileData.category || 
-                          (user?.role === "superadmin" && !newFileData.is_global && !newFileData.centre_id)
+                          !newFileData.category ||
+                          (normalizedRole === "superadmin" && !newFileData.is_global && !newFileData.centre_id)
                         }
                         className="flex-1 bg-navy-700 text-white py-2 rounded-lg hover:bg-navy-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                       >
@@ -1002,34 +862,24 @@ const FilesView = ({ user }) => {
                     </div>
                   </>
                 )}
-                
+
                 {uploadStep === 3 && (
                   <>
                     <div className="relative border-2 border-dashed rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
                       <FiUpload size={32} className="mx-auto mb-2 text-gray-400" />
                       <p className="text-sm text-gray-600 mb-2">Click to browse or drag and drop</p>
                       <p className="text-xs text-gray-400">PDF, DOC, XLS, Images (Max 10MB)</p>
-                      <input
-                        type="file"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        onChange={handleNewUpload}
-                      />
+                      <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleNewUpload} />
                     </div>
-                    
-                    {/* Summary of selections */}
                     <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
                       <p><span className="font-medium">File Name:</span> {newFileData.name}</p>
                       <p><span className="font-medium">Category:</span> {categories.find(c => c.id === newFileData.category)?.label || 'Not selected'}</p>
                       {newFileData.related_service_id && (
                         <p><span className="font-medium">Service:</span> {services.find(s => s.id === parseInt(newFileData.related_service_id))?.name}</p>
                       )}
-                      <p><span className="font-medium">Access:</span> {newFileData.is_global ? 'Global' : `Centre ${newFileData.centre_id || user?.centre_id}`}</p>
+                      <p><span className="font-medium">Access:</span> {newFileData.is_global ? 'Global' : `Centre ${newFileData.centre_id || user?.centre_id || 'Not assigned'}`}</p>
                     </div>
-                    
-                    <button
-                      onClick={() => setUploadStep(2)}
-                      className="w-full bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
+                    <button onClick={() => setUploadStep(2)} className="w-full bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors">
                       Back
                     </button>
                   </>
@@ -1040,32 +890,12 @@ const FilesView = ({ user }) => {
         </div>
       )}
 
-      {/* Styles */}
       <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        
-        @keyframes slideIn {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-        
-        .animate-slideIn {
-          animation: slideIn 0.3s ease-out;
-        }
-        
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-slideIn { animation: slideIn 0.3s ease-out; }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
       `}</style>
     </div>
   );
