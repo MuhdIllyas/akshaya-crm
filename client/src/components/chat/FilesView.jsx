@@ -75,7 +75,7 @@ const FilesView = ({ user }) => {
   const fetchServices = async () => {
     setServicesLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/servicemanagement/services`, {
+      const res = await fetch(`${API_BASE_URL}/api/servicemanagement/services`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -112,7 +112,7 @@ const FilesView = ({ user }) => {
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/files`, {
+      const res = await fetch(`${API_BASE_URL}/api/files`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -140,7 +140,7 @@ const FilesView = ({ user }) => {
   const fetchVersions = async (fileId) => {
     setVersionsLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/files/${fileId}/versions`, {
+      const res = await fetch(`${API_BASE_URL}/api/files/${fileId}/versions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -164,7 +164,7 @@ const FilesView = ({ user }) => {
   const downloadVersion = async (versionId, fileName) => {
     setDownloadLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/files/version/${versionId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/files/version/${versionId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -287,7 +287,7 @@ const FilesView = ({ user }) => {
         related_service_id: newFileData.related_service_id
       });
 
-      const res = await fetch(`${API_BASE_URL}/files/upload`, {
+      const res = await fetch(`${API_BASE_URL}/api/files/upload`, {
         method: "POST",
         headers: { 
           Authorization: `Bearer ${token}`
@@ -348,7 +348,7 @@ const FilesView = ({ user }) => {
     formData.append("file_id", fileId);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/files/upload`, {
+      const res = await fetch(`${API_BASE_URL}/api/files/upload`, {
         method: "POST",
         headers: { 
           Authorization: `Bearer ${token}`
@@ -378,7 +378,7 @@ const FilesView = ({ user }) => {
     if (!window.confirm("Are you sure you want to delete this file permanently?")) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/files/${fileId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
         method: "DELETE",
         headers: { 
           Authorization: `Bearer ${token}`,
