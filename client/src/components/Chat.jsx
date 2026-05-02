@@ -29,7 +29,7 @@ import { BsCircleFill } from "react-icons/bs";
 import { toast } from "react-toastify";
 import EmojiPicker from 'emoji-picker-react';
 import { socket } from "@/services/socket";
-import axios from "axios"; // <-- added for template API
+import axios from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -163,7 +163,6 @@ const Chat = ({
     const customerMessages = currentMessages.filter(m => m.sender_type === 'customer' && !m.isOptimistic);
     if (customerMessages.length > 0) {
       const lastMsg = customerMessages[customerMessages.length - 1];
-      // ✅ Use createdAt (raw timestamp) instead of time (formatted string)
       const ts = lastMsg.createdAt || lastMsg.created_at;
       if (ts) setLastCustomerMessageTime(new Date(ts));
     } else {
@@ -198,10 +197,8 @@ const Chat = ({
   // Join conversation room when active
   useEffect(() => {
     if (!socket.connected || !activeConversation?.id) return;
-    console.log("Joining conversation:", activeConversation.id);
     socket.emit("join_conversation", activeConversation.id);
     return () => {
-      console.log("Leaving conversation:", activeConversation.id);
       socket.emit("leave_conversation", activeConversation.id);
       if (isTyping) {
         fetch(`${API_BASE_URL}/api/chat/typing`, {
@@ -653,7 +650,8 @@ const Chat = ({
                 const messageKey = msg.isOptimistic
                   ? `opt-${msg.tempId || msg.id}-${index}`
                   : `msg-${msg.id}`;
-                const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
+                // ✅ REMOVED serviceEntryId condition so task cards appear in all chats
+                const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName));
                 return (
                   <motion.div
                     key={messageKey}

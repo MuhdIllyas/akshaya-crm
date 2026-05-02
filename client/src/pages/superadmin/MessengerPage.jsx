@@ -1138,6 +1138,30 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== GENERIC TASK STATUS UPDATE ==============
+  // This handler is used for task cards inside the Chat component
+  // It calls the general task status update endpoint and refreshes the task list
+  const handleGenericTaskStatusUpdate = async (taskId, newStatus) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error('Failed to update task');
+      // Refresh the tasks list to reflect the change
+      await fetchTasks();
+      toast.success(`Task marked as ${newStatus}`);
+    } catch (err) {
+      console.error('Error updating task:', err);
+      toast.error('Failed to update task');
+      throw err; // important for Chat.jsx to stop loading spinner
+    }
+  };
+
   // ============== DATA FETCHING FUNCTIONS ==============
 
   const fetchCentres = async () => {
@@ -2420,7 +2444,7 @@ const MessengerPage = ({ user }) => {
                   onlineUsers={onlineUsers}
                   serviceEntryId={activeConversation?.context_type === 'service_entry' ? activeConversation.context_id : null}
                   serviceInfo={{ tasks: tasks }}
-                  onTaskStatusUpdate={handleServiceTaskStatusUpdate}
+                  onTaskStatusUpdate={handleGenericTaskStatusUpdate}
                 />
               </div>
             ) : activeView === "activity" ? (<div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>) : activeView === "calendar" ? (<div className="h-full overflow-y-auto">{renderCalendarView()}</div>) : activeView === "files" ? (<div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>) : activeView === "tasks" ? (<div className="h-full overflow-y-auto">{renderTasksView()}</div>) : activeView === "schedules" ? (<div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>) : (<div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>)}
