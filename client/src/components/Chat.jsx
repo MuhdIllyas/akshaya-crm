@@ -22,8 +22,6 @@ import {
   FiMessageSquare,
   FiUser,
   FiSmartphone,
-  FiCheck,
-  FiCheckSquare
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdCheckmarkCircleOutline } from "react-icons/io";
@@ -31,7 +29,7 @@ import { BsCircleFill } from "react-icons/bs";
 import { toast } from "react-toastify";
 import EmojiPicker from 'emoji-picker-react';
 import { socket } from "@/services/socket";
-import axios from "axios";
+import axios from "axios"; // <-- added for template API
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -64,6 +62,57 @@ const formatDate = (dateString) => {
   }
 };
 
+// TaskMessage component (interactive task card)
+const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
+  const [completing, setCompleting] = useState(false);
+  const completed = taskData?.status === 'completed';
+
+  const handleComplete = async () => {
+    if (completing || completed) return;
+    setCompleting(true);
+    try {
+      if (onStatusUpdate) {
+        await onStatusUpdate(taskId, 'completed');
+      }
+    } catch (err) {
+      // Error toast is handled by parent
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const match = text.match(/📋 Task created: "(.*?)" assigned to (.*?)\. Due: (.*?)(\.|$)/);
+  const title = match ? match[1] : text.replace(/^📋 Task created: /, '').replace(/\.$/, '');
+  const assignee = match ? match[2] : '';
+  const dueDate = match ? match[3] : '';
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h4 className={`font-medium ${completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+            {title}
+          </h4>
+          {assignee && <p className="text-xs text-gray-500 mt-1">👤 {assignee}</p>}
+          {dueDate && <p className="text-xs text-gray-500">📅 {dueDate}</p>}
+        </div>
+        {!completed && (
+          <button
+            onClick={handleComplete}
+            disabled={completing}
+            className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+          >
+            {completing ? '...' : '✓ Complete'}
+          </button>
+        )}
+        {completed && (
+          <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">✓ Completed</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const Chat = ({
   activeConversation,
   messages,
@@ -79,8 +128,6 @@ const Chat = ({
   serviceInfo = null,
   serviceEntryId = null,
   onTaskStatusUpdate = null,
-  chatTasks = [],     // 🔥 Added this prop
-  onEditTask = null   // 🔥 Added this prop
 }) => {
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -91,6 +138,7 @@ const Chat = ({
   const [messageReadBy, setMessageReadBy] = useState({});
   const [isTyping, setIsTyping] = useState(false);
   const [showTasksModal, setShowTasksModal] = useState(false);
+  // WhatsApp 24h window state
   const [lastCustomerMessageTime, setLastCustomerMessageTime] = useState(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("reengagement_message");
@@ -105,13 +153,17 @@ const Chat = ({
   const lastTypingEmitRef = useRef(0);
 
   const currentMessages = messages[activeConversation?.id] || [];
+
+  // Compute if 24h window is open
   const isWithinWindow = isWithin24Hours(lastCustomerMessageTime);
 
+  // Update last customer message time whenever messages change
   useEffect(() => {
     if (!activeConversation || activeConversation.channel !== 'whatsapp') return;
     const customerMessages = currentMessages.filter(m => m.sender_type === 'customer' && !m.isOptimistic);
     if (customerMessages.length > 0) {
       const lastMsg = customerMessages[customerMessages.length - 1];
+      // ✅ Use createdAt (raw timestamp) instead of time (formatted string)
       const ts = lastMsg.createdAt || lastMsg.created_at;
       if (ts) setLastCustomerMessageTime(new Date(ts));
     } else {
@@ -119,6 +171,7 @@ const Chat = ({
     }
   }, [currentMessages, activeConversation]);
 
+  // Get display name for the conversation (handles WhatsApp)
   const getConversationDisplayName = useCallback(() => {
     if (!activeConversation) return '';
     if (activeConversation.channel === 'whatsapp') {
@@ -142,6 +195,7 @@ const Chat = ({
     return activeConversation?.channel !== 'whatsapp' && !activeConversation?.is_group;
   }, [activeConversation]);
 
+  // Join conversation room when active
   useEffect(() => {
     if (!socket.connected || !activeConversation?.id) return;
     console.log("Joining conversation:", activeConversation.id);
@@ -165,6 +219,7 @@ const Chat = ({
     };
   }, [activeConversation?.id, isTyping, API_BASE_URL]);
 
+  // Listen for socket events
   useEffect(() => {
     if (!socket.connected || !activeConversation?.id) return;
     const handleTyping = (data) => {
@@ -185,6 +240,7 @@ const Chat = ({
     };
   }, [activeConversation?.id, currentUser.id]);
 
+  // Auto-scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       setTimeout(() => {
@@ -193,6 +249,7 @@ const Chat = ({
     }
   }, [currentMessages, activeConversation?.id]);
 
+  // Mark messages as read
   useEffect(() => {
     if (!activeConversation || !currentMessages.length || !socket.connected) return;
     const unreadMessages = currentMessages
@@ -209,6 +266,7 @@ const Chat = ({
     }
   }, [currentMessages, activeConversation?.id, activeConversation]);
 
+  // Typing indicator
   const emitTyping = useCallback((typing) => {
     if (!activeConversation?.id) return;
     const now = Date.now();
@@ -360,6 +418,7 @@ const Chat = ({
     }
   };
 
+  // Manual template send handler
   const handleSendTemplate = async () => {
     if (!activeConversation?.id) return;
     setSendingTemplate(true);
@@ -536,6 +595,7 @@ const Chat = ({
               <FiList size={18} />
             </button>
           )}
+          {/* WhatsApp Template Button (only if window expired) */}
           {isWhatsApp && !isWithinWindow && (
             <button
               onClick={() => setShowTemplateModal(true)}
@@ -593,29 +653,7 @@ const Chat = ({
                 const messageKey = msg.isOptimistic
                   ? `opt-${msg.tempId || msg.id}-${index}`
                   : `msg-${msg.id}`;
-                
-                // 🔥 Aggressive Task Detection
-                const rawText = msg.message || msg.text || '';
-                let isTaskType = msg.message_type === 'task' || msg.messageType === 'task';
-                let parsedTaskInfo = null;
-
-                // Sniff for JSON Payload (if backend forced it to 'text')
-                if (!isTaskType && typeof rawText === 'string' && rawText.includes('"taskId"')) {
-                  try {
-                    const parsed = JSON.parse(rawText);
-                    if (parsed.taskId) {
-                      isTaskType = true;
-                      parsedTaskInfo = parsed;
-                    }
-                  } catch(e) {}
-                }
-
-                // Fallback for your Old System (system messages with numeric fileNames)
-                if (!isTaskType && (msg.isSystem || msg.sender_type === 'system') && msg.fileName && !isNaN(Number(msg.fileName))) {
-                  isTaskType = true;
-                  parsedTaskInfo = { taskId: Number(msg.fileName), title: rawText };
-                }
-
+                const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
                 return (
                   <motion.div
                     key={messageKey}
@@ -623,138 +661,82 @@ const Chat = ({
                     animate={{ opacity: 1, y: 0 }}
                     className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
                   >
-                    <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
-                      {!msg.isCurrentUser && (
+                    {isTaskMessage ? (
+                      <div className="flex max-w-xs lg:max-w-md flex-row">
                         <div className="mr-2 flex-shrink-0 relative">
                           <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-                            {msg.sender_type === 'customer' ? (
-                              <FiUser size={14} className="text-gray-500" />
-                            ) : (
-                              msg.sender?.[0] || '?'
-                            )}
-                          </div>
-                          {!isWhatsApp && isUserOnline(msg.senderId) && (
-                            <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
-                          )}
-                        </div>
-                      )}
-                      
-                      <div
-                        className={`px-4 py-2 rounded-2xl ${msg.isCurrentUser
-                            ? "bg-navy-700 text-white rounded-br-none"
-                            : "bg-white text-gray-700 rounded-bl-none shadow-sm border border-gray-200"
-                          } ${msg.isOptimistic ? 'opacity-70' : ''} ${isTaskType ? '!bg-transparent !p-0 !border-none !shadow-none' : ''}`}
-                      >
-                        {msg.isDeleted ? (
-                          <p className="text-sm italic text-gray-400">This message was deleted</p>
-                        ) : isTaskType ? (
-                          /* 🔥 NEW TASK RENDERER 🔥 */
-                          (() => {
-                            let taskInfo = parsedTaskInfo;
-                            if (!taskInfo) {
-                              try {
-                                taskInfo = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;
-                                if (typeof taskInfo === 'string') taskInfo = { title: taskInfo };
-                              } catch (e) {
-                                taskInfo = { title: rawText };
-                              }
-                            }
-
-                            // Link with real-time array from the sidebar
-                            const liveTask = chatTasks?.find(t => String(t.id) === String(taskInfo.taskId || taskInfo.id)) || taskInfo;
-                            const isCompleted = liveTask.status === 'completed';
-
-                            return (
-                              <div 
-                                onClick={() => onEditTask && onEditTask(liveTask)}
-                                className={`w-64 p-3 rounded-lg border shadow-sm cursor-pointer transition-all text-left ${
-                                  isCompleted ? 'bg-gray-50 border-gray-200 opacity-75' : 'bg-white border-indigo-200 hover:border-indigo-400 hover:shadow-md'
-                                }`}
-                              >
-                                <div className="flex items-start gap-3">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (onTaskStatusUpdate && (liveTask.taskId || liveTask.id)) {
-                                        onTaskStatusUpdate(liveTask.taskId || liveTask.id, isCompleted ? 'pending' : 'completed');
-                                      }
-                                    }}
-                                    className={`mt-0.5 shrink-0 w-5 h-5 flex items-center justify-center rounded border transition-colors ${
-                                      isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 bg-gray-50 hover:border-emerald-500 text-transparent hover:text-emerald-200'
-                                    }`}
-                                  >
-                                    <FiCheck size={14} className={isCompleted ? "opacity-100" : "opacity-0 hover:opacity-100 transition-opacity"} />
-                                  </button>
-                                  
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <FiCheckSquare className="text-indigo-600 shrink-0" size={12} />
-                                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Assigned Task</span>
-                                    </div>
-                                    <h4 className={`text-sm font-semibold truncate ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                                      {liveTask.title}
-                                    </h4>
-                                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                      {liveTask.dueDate && (
-                                        <span className="text-[10px] text-gray-500 flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
-                                          <FiClock size={10} />
-                                          {new Date(liveTask.dueDate).toLocaleDateString()}
-                                        </span>
-                                      )}
-                                      {liveTask.priority && (
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${
-                                          liveTask.priority === 'high' ? 'bg-red-100 text-red-700' :
-                                          liveTask.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                          'bg-green-100 text-green-700'
-                                        }`}>
-                                          {liveTask.priority}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()
-                        ) : msg.isFile ? (
-                          <div
-                            className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-                            onClick={() => msg.fileUrl && window.open(msg.fileUrl, '_blank')}
-                          >
-                            {msg.messageType === 'image' || msg.message_type === 'image' ? (
-                              <>
-                                <FiImage className="flex-shrink-0" size={20} />
-                                <span className="truncate">{msg.fileName || 'Image'}</span>
-                              </>
-                            ) : (
-                              <>
-                                <FiFile className="flex-shrink-0" size={20} />
-                                <span className="truncate">{msg.fileName || 'File'}</span>
-                              </>
-                            )}
-                            <FiDownload size={14} className="ml-2" />
-                          </div>
-                        ) : (
-                          <p className="text-sm whitespace-pre-wrap break-words">{msg.text || msg.message}</p>
-                        )}
-                        
-                        <div className={`flex justify-between items-center mt-1 text-xs ${msg.isCurrentUser && !isTaskType ? "text-blue-200" : "text-gray-500"} ${isTaskType && msg.isCurrentUser ? "text-gray-500 justify-end" : ""}`}>
-                          <span>{msg.time || (msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')}</span>
-                          <div className="flex items-center">
-                            {renderMessageStatus(msg)}
+                            <FiMessageSquare size={14} />
                           </div>
                         </div>
+                        <TaskMessage
+                          taskId={msg.fileName}
+                          text={msg.text}
+                          taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
+                          onStatusUpdate={onTaskStatusUpdate}
+                        />
                       </div>
-
-                      {msg.isCurrentUser && !msg.isDeleted && !msg.isOptimistic && (
-                        <button
-                          onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
-                          className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition self-end mb-1"
+                    ) : (
+                      <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
+                        {!msg.isCurrentUser && (
+                          <div className="mr-2 flex-shrink-0 relative">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                              {msg.sender_type === 'customer' ? (
+                                <FiUser size={14} className="text-gray-500" />
+                              ) : (
+                                msg.sender?.[0] || '?'
+                              )}
+                            </div>
+                            {!isWhatsApp && isUserOnline(msg.senderId) && (
+                              <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
+                            )}
+                          </div>
+                        )}
+                        <div
+                          className={`px-4 py-2 rounded-2xl ${msg.isCurrentUser
+                              ? "bg-navy-700 text-white rounded-br-none"
+                              : "bg-white text-gray-700 rounded-bl-none shadow-sm border border-gray-200"
+                            } ${msg.isOptimistic ? 'opacity-70' : ''}`}
                         >
-                          <FiTrash2 size={14} />
-                        </button>
-                      )}
-                    </div>
+                          {msg.isDeleted ? (
+                            <p className="text-sm italic text-gray-400">This message was deleted</p>
+                          ) : msg.isFile ? (
+                            <div
+                              className="flex items-center gap-2 cursor-pointer hover:opacity-80"
+                              onClick={() => msg.fileUrl && window.open(msg.fileUrl, '_blank')}
+                            >
+                              {msg.messageType === 'image' ? (
+                                <>
+                                  <FiImage className="flex-shrink-0" size={20} />
+                                  <span className="truncate">{msg.fileName || 'Image'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FiFile className="flex-shrink-0" size={20} />
+                                  <span className="truncate">{msg.fileName || 'File'}</span>
+                                </>
+                              )}
+                              <FiDownload size={14} className="ml-2" />
+                            </div>
+                          ) : (
+                            <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                          )}
+                          <div className={`flex justify-between items-center mt-1 text-xs ${msg.isCurrentUser ? "text-blue-200" : "text-gray-500"}`}>
+                            <span>{msg.time}</span>
+                            <div className="flex items-center">
+                              {renderMessageStatus(msg)}
+                            </div>
+                          </div>
+                        </div>
+                        {msg.isCurrentUser && !msg.isDeleted && !msg.isOptimistic && (
+                          <button
+                            onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
+                            className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition self-end mb-1"
+                          >
+                            <FiTrash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 );
               })}
@@ -952,6 +934,7 @@ const Chat = ({
               >
                 <option value="reengagement_message">Re‑engagement</option>
                 <option value="application_update">Application Update</option>
+                {/* Add more templates as needed */}
               </select>
             </div>
             <div className="mb-4">
