@@ -227,15 +227,13 @@ const FilesView = ({ user }) => {
     formData.append("category", newFileData.category);
     formData.append("is_global", newFileData.is_global ? "true" : "false");
 
+    // Handle centre_id
     if (!newFileData.is_global) {
       if (newFileData.centre_id && newFileData.centre_id.trim() !== "") {
         formData.append("centre_id", newFileData.centre_id);
-      } else if (normalizedRole === "admin") {
-        formData.append("centre_id", user.centre_id || "");
       } else {
-        setUploadError("Centre ID is required for local files");
-        clearInterval(interval);
-        return;
+        // Staff and Admin let the backend handle the centre_id automatically!
+        formData.append("centre_id", ""); 
       }
     } else {
       formData.append("centre_id", "");
