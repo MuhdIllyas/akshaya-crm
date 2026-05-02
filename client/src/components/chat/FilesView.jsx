@@ -64,6 +64,28 @@ const FilesView = ({ user }) => {
     related_service_id: ""
   });
 
+  const [centres, setCentres] = useState([]);
+  
+  // Fetch centres for superadmin dropdown
+  useEffect(() => {
+    if (user?.role === "superadmin") {
+      const fetchCentres = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/centres`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setCentres(data);
+          }
+        } catch (err) {
+          console.error("Failed to fetch centres", err);
+        }
+      };
+      fetchCentres();
+    }
+  }, [user?.role]);
+
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState("newest");
@@ -278,15 +300,6 @@ const FilesView = ({ user }) => {
     }
 
     try {
-      console.log("Uploading file with data:", {
-        name: newFileData.name,
-        category: newFileData.category,
-        is_global: newFileData.is_global,
-        centre_id: newFileData.centre_id,
-        description: newFileData.description,
-        related_service_id: newFileData.related_service_id
-      });
-
       const res = await fetch(`${API_BASE_URL}/api/files/upload`, {
         method: "POST",
         headers: { 
@@ -406,7 +419,7 @@ const FilesView = ({ user }) => {
   const filteredFiles = files
     .filter(file => {
       const matchesSearch = file.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           file.category?.toLowerCase().includes(searchTerm.toLowerCase());
+                            file.category?.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesCategory = selectedCategory === "all" || file.category === selectedCategory;
       
@@ -803,7 +816,10 @@ const FilesView = ({ user }) => {
             ) : (
               <div className="space-y-4">
                 {uploadStep === 1 && (
-                  <>
+                  <form onSubmit={(e) => { 
+                    e.preventDefault(); 
+                    setUploadStep(2); 
+                  }} className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         File Name <span className="text-red-500">*</span>
@@ -835,13 +851,13 @@ const FilesView = ({ user }) => {
                     </div>
                     
                     <button
-                      onClick={() => setUploadStep(2)}
+                      type="submit"
                       disabled={!newFileData.name}
                       className="w-full bg-navy-700 text-white py-2 rounded-lg hover:bg-navy-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >
                       Next
                     </button>
-                  </>
+                  </form>
                 )}
                 
                 {uploadStep === 2 && (
@@ -865,63 +881,68 @@ const FilesView = ({ user }) => {
                         ))}
                       </select>
                     </div>
-                    
-                    {user?.role === "superadmin" && (
-                      <label className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 text-blue-600"
-                          checked={newFileData.is_global}
-                          onChange={(e) =>
-                            setNewFileData({
-                              ...newFileData,
-                              is_global: e.target.checked,
-                              centre_id: e.target.checked ? "" : newFileData.centre_id
-                            })
-                          }
-                        />
-                        <span className="text-sm text-gray-700">Make this file globally accessible</span>
-                      </label>
-                    )}
-                    
-                    {/* Show centre_id input only for non-global files and non-admin users */}
-                    {!newFileData.is_global && user?.role !== "admin" && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Centre ID {user?.role !== "superadmin" && <span className="text-red-500">*</span>}
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="Enter Centre ID"
-                          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={newFileData.centre_id}
-                          onChange={(e) =>
-                            setNewFileData({
-                              ...newFileData,
-                              centre_id: e.target.value
-                            })
-                          }
-                        />
-                      </div>
-                    )}
-                    
-                    {/* For admin users, show their centre_id as read-only */}
-                    {!newFileData.is_global && user?.role === "admin" && (
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-blue-700">
-                          <span className="font-medium">Centre ID:</span> {user.centre_id} (auto-assigned)
-                        </p>
-                      </div>
-                    )}
-                    
-                    {/* Show message for global files */}
-                    {newFileData.is_global && (
-                      <div className="p-3 bg-purple-50 rounded-lg">
-                        <p className="text-sm text-purple-700 flex items-center gap-2">
-                          <FiGlobe size={14} />
-                          This file will be accessible globally
-                        </p>
+
+                    {/* Access Level (Admin/Superadmin only) */}
+                    {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3 mt-2">
+                        <h4 className="text-sm font-semibold text-gray-700 flex items-center">
+                          <FiGlobe className="mr-2 text-indigo-600" />
+                          File Access Level
+                        </h4>
+                        
+                        <div className="flex gap-6">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="is_global"
+                              checked={!newFileData.is_global}
+                              onChange={() => setNewFileData({ ...newFileData, is_global: false })}
+                              className="text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                            />
+                            <span className="text-sm text-gray-700 font-medium">Local (Specific Centre)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="is_global"
+                              checked={newFileData.is_global}
+                              onChange={() => setNewFileData({ ...newFileData, is_global: true, centre_id: "" })}
+                              className="text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                            />
+                            <span className="text-sm text-gray-700 font-medium">Global (All Centres)</span>
+                          </label>
+                        </div>
+
+                        {/* Centre Selection for Superadmin */}
+                        {user?.role === 'superadmin' && !newFileData.is_global && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Centre <span className="text-red-500">*</span></label>
+                            <select
+                              value={newFileData.centre_id}
+                              onChange={(e) => setNewFileData({ ...newFileData, centre_id: e.target.value })}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                            >
+                              <option value="">Select a centre...</option>
+                              {centres.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Read-only centre display for Admin */}
+                        {user?.role === 'admin' && !newFileData.is_global && (
+                          <div className="mt-2 text-sm text-blue-700 flex items-center gap-2">
+                            <FiHome size={14} /> Centre ID: {user.centre_id} (Auto-assigned)
+                          </div>
+                        )}
+
+                        {/* Global file message */}
+                        {newFileData.is_global && (
+                          <div className="mt-2 text-sm text-purple-700 flex items-center gap-2">
+                            <FiGlobe size={14} /> This file will be accessible globally.
+                          </div>
+                        )}
                       </div>
                     )}
                     
@@ -972,7 +993,7 @@ const FilesView = ({ user }) => {
                         onClick={() => setUploadStep(3)}
                         disabled={
                           !newFileData.category || 
-                          (!newFileData.is_global && !newFileData.centre_id && user?.role !== "admin")
+                          (user?.role === "superadmin" && !newFileData.is_global && !newFileData.centre_id)
                         }
                         className="flex-1 bg-navy-700 text-white py-2 rounded-lg hover:bg-navy-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                       >
