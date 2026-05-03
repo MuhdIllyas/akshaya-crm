@@ -127,6 +127,7 @@ const Chat = ({
   onlineUsers = new Set(),
   serviceInfo = null,
   serviceEntryId = null,
+  allTasks = [],
   onTaskStatusUpdate = null,
   onNormalTaskStatusUpdate = null
 }) => {
@@ -738,7 +739,7 @@ const Chat = ({
                       // 🔥 NEW TASK UI (Updated for normalized database)
                       (() => {
                           // Use the live task data attached by your backend fetch query
-                          const task = msg.live_task_data || msg.data; 
+                          const task = msg.live_task_data || msg.data || allTasks.find(t => String(t.id) === String(msg.text)); 
                           
                           if (!task) return null;
                           

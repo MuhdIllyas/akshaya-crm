@@ -551,7 +551,8 @@ const MessengerPage = ({ user }) => {
           is_read_by_me: String(msg.sender_id) === String(currentUser.id),
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
-          sender_type: msg.sender_type // store for avatar display
+          sender_type: msg.sender_type,
+          live_task_data: msg.live_task_data || null
         };
 
         return {
@@ -838,7 +839,8 @@ const MessengerPage = ({ user }) => {
           is_read_by_me: msg.is_read_by_me || isCurrentUser,
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
-          sender_type: msg.sender_type
+          sender_type: msg.sender_type,
+          live_task_data: msg.live_task_data || null
         };
       });
 
@@ -1810,7 +1812,10 @@ const MessengerPage = ({ user }) => {
             const lastMessageSenderName = c.last_message_sender;
             const lastMessageSenderId = c.last_message_sender_id;
 
-            if (lastMessageSenderId && String(lastMessageSenderId) !== String(currentUser.id) && lastMessageSenderName) {
+            // 👈 NEW: Hide raw IDs for tasks in the sidebar
+            if (!isNaN(lastMessageText) && lastMessageText.trim() !== '') {
+               lastMessageText = "📋 Sent a task";
+            } else if (lastMessageSenderId && String(lastMessageSenderId) !== String(currentUser.id) && lastMessageSenderName) {
               lastMessageText = `${lastMessageSenderName}: ${lastMessageText}`;
             }
 
@@ -2464,6 +2469,7 @@ const MessengerPage = ({ user }) => {
                   onlineUsers={onlineUsers}
                   serviceEntryId={activeConversation?.context_type === 'service_entry' ? activeConversation.context_id : null}
                   serviceInfo={{ tasks: tasks }}
+                  allTasks={tasks}
                   onTaskStatusUpdate={handleServiceTaskStatusUpdate}
                   onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
                 />
