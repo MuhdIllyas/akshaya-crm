@@ -682,11 +682,11 @@ const Chat = ({
 
                     // 🔥 NEW TASK UI (ADD THIS BLOCK)
                     (() => {
-                      let task;
+                    let task;
                       try {
-                        task = typeof msg.message === "string"
-                          ? JSON.parse(msg.message)
-                          : msg.message;
+                        task = typeof msg.text === "string"
+                          ? JSON.parse(msg.text)
+                          : msg.text;  
                       } catch {
                         return null;
                       }
