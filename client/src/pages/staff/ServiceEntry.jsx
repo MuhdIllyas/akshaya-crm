@@ -411,6 +411,8 @@ const ServiceEntry = () => {
     const doc = new jsPDF();
 
     // Header
+    doc.addFont('/NotoSans-Regular.ttf', 'NotoSans', 'normal');
+    doc.setFont('NotoSans');
     doc.setFontSize(16);
     doc.text('INVOICE', 14, 20);
     doc.setFontSize(10);
