@@ -81,61 +81,6 @@ const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
     }
   };
 
-  const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
-    const [completing, setCompleting] = useState(false);
-    const completed = taskData?.status === 'completed';
-
-    const handleComplete = async () => {
-      if (completing || completed) return;
-      setCompleting(true);
-      try {
-        if (onStatusUpdate) {
-          await onStatusUpdate(taskId, taskData.status);
-        }
-      } catch {
-        // parent handles the error toast
-      } finally {
-        setCompleting(false);
-      }
-    };
-
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
-        <div className="flex justify-between items-start gap-4">
-          <div>
-            <h4 className={`font-medium ${
-              completed ? 'line-through text-gray-500' : 'text-gray-900'
-            }`}>
-              {taskData.title}
-            </h4>
-            <p className="text-xs text-gray-500 mt-1">
-              Priority: {taskData.priority} | Status: {taskData.status}
-            </p>
-            {taskData.due_date && (
-              <p className="text-xs text-gray-500">
-                📅 {formatDate(taskData.due_date)}
-              </p>
-            )}
-          </div>
-          {!completed && (
-            <button
-              onClick={handleComplete}
-              disabled={completing}
-              className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-            >
-              {completing ? '...' : '✓ Complete'}
-            </button>
-          )}
-          {completed && (
-            <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
-              ✓ Completed
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const match = text.match(/📋 Task created: "(.*?)" assigned to (.*?)\. Due: (.*?)(\.|$)/);
   const title = match ? match[1] : text.replace(/^📋 Task created: /, '').replace(/\.$/, '');
   const assignee = match ? match[2] : '';
@@ -250,6 +195,61 @@ const Chat = ({
   const shouldShowOnlineIndicator = useCallback(() => {
     return activeConversation?.channel !== 'whatsapp' && !activeConversation?.is_group;
   }, [activeConversation]);
+
+  const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
+    const [completing, setCompleting] = useState(false);
+    const completed = taskData?.status === 'completed';
+
+    const handleComplete = async () => {
+      if (completing || completed) return;
+      setCompleting(true);
+      try {
+        if (onStatusUpdate) {
+          await onStatusUpdate(taskId, taskData.status);
+        }
+      } catch {
+        // parent handles the error toast
+      } finally {
+        setCompleting(false);
+      }
+    };
+
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
+        <div className="flex justify-between items-start gap-4">
+          <div>
+            <h4 className={`font-medium ${
+              completed ? 'line-through text-gray-500' : 'text-gray-900'
+            }`}>
+              {taskData.title}
+            </h4>
+            <p className="text-xs text-gray-500 mt-1">
+              Priority: {taskData.priority} | Status: {taskData.status}
+            </p>
+            {taskData.due_date && (
+              <p className="text-xs text-gray-500">
+                📅 {formatDate(taskData.due_date)}
+              </p>
+            )}
+          </div>
+          {!completed && (
+            <button
+              onClick={handleComplete}
+              disabled={completing}
+              className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+            >
+              {completing ? '...' : '✓ Complete'}
+            </button>
+          )}
+          {completed && (
+            <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
+              ✓ Completed
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Join conversation room when active
   useEffect(() => {
