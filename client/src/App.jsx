@@ -8,6 +8,7 @@ import StaffTasks from "./pages/staff/StaffTasks";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
+import Calendarview from "./pages/events/CalendarView";
 import StaffManagement from "./pages/admin/StaffManagement";
 import StaffProfile from "./pages/admin/StaffProfile";
 import EditStaffForm from "./components/EditStaffForm";
@@ -224,6 +225,11 @@ const App = () => {
             <Route
               path="staff/myprofile"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><MyProfile /></ProtectedRoute>}
+            />
+
+            <Route
+              path="admin/calendar"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><Calendarview /></ProtectedRoute>}
             />
 
             <Route

@@ -159,6 +159,7 @@ const DashboardLayout = () => {
     superadmin: [
       { path: "/dashboard/superadmin", label: "Overview", icon: DashboardIcon },
       { path: "/dashboard/superadmin/centremanagement", label: "Centre Management", icon: CentreIcon },
+      { path: "/dashboard/superadmin/calendar", label: "Calendar", icon: EventsIcon },
       { path: "/dashboard/superadmin/staffmanagement", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/superadmin/walletmanagement", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/superadmin/servicemanagement", label: "Service Management", icon: ServicesIcon },
@@ -174,6 +175,7 @@ const DashboardLayout = () => {
     
     admin: [
       { path: "/dashboard/admin", label: "Overview", icon: DashboardIcon },
+      { path: "/dashboard/admin/calendar", label: "Calendar", icon: EventsIcon },
       { path: "/dashboard/admin/staff", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/admin/wallets", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/admin/services", label: "Service Management", icon: ServicesIcon },
@@ -530,6 +532,7 @@ const MessengerIconWithBadge = ({ isActive = false, isCollapsed = false, unreadC
 
 // Icon Definitions
 const DashboardIcon = createIcon("M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6");
+const EventsIcon = createIcon(`M8 7V3m8 4V3m-9 8h10 M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z M12 16h.01 M12 12h.01 M12 20h.01`);
 const CentreIcon = createIcon("M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 8v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4");
 const UsersIcon = createIcon("M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z");
 const WalletIcon = createIcon("M3 10h18M7 15h1m2 0h1m-1 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z");
