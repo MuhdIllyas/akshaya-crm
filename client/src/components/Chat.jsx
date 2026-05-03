@@ -654,7 +654,7 @@ const Chat = ({
                   ? `opt-${msg.tempId || msg.id}-${index}`
                   : `msg-${msg.id}`;
                 const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
-                const isNewTaskMessage = msg.message_type === "task";
+                const isNewTaskMessage = msg.messageType === "task";
                 return (
                   <motion.div
                     key={messageKey}
