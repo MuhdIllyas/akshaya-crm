@@ -410,40 +410,97 @@ const ServiceEntry = () => {
 const generateInvoicePDF = () => {
   const doc = new jsPDF();
 
-  // Register the font
-  doc.setFontSize(16);
-  doc.text('INVOICE', 14, 20);
-  doc.setFontSize(10);
-  doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 28);
-  doc.text(`Customer: ${invoiceData.customerName}`, 14, 34);
-  doc.text(`Phone: ${invoiceData.phone}`, 14, 40);
+  // Brand colours
+  const navy = '#0F172A';        // dark sidebar navy
+  const white = '#FFFFFF';
+  const accent = '#3B82F6';      // bright blue for accents (optional)
 
-  // Build table body & calculate total
+  // ---- HEADER BAND ----
+  doc.setFillColor(navy);
+  doc.rect(0, 0, 210, 35, 'F');   // full width top bar
+
+  // Try to add logo, if available
+  try {
+    // logo-dark should be a PNG in /public (e.g., logo-dark.png)
+    doc.addImage('/logo-dark.png', 'PNG', 10, 5, 22, 22);
+  } catch (e) {
+    // fallback: centre name as text
+    doc.setTextColor(white);
+    doc.setFontSize(16);
+    doc.text('Akshaya e Centre', 14, 18);
+  }
+
+  // Centre name / address on the right
+  doc.setTextColor(white);
+  doc.setFontSize(14);
+  doc.text('Akshaya e Centre Pukayur', 120, 16);
+  doc.setFontSize(8);
+  doc.text('Pukayur, Kerala | +91 9633975301', 120, 24);
+
+  // ---- INVOICE TITLE & CUSTOMER INFO ----
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('INVOICE', 14, 50);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 58);
+  doc.text(`Customer: ${invoiceData.customerName}`, 14, 64);
+  doc.text(`Phone: ${invoiceData.phone}`, 14, 70);
+
+  // ---- ITEMS TABLE ----
   const tableBody = invoiceData.items.map((item, idx) => [
     idx + 1,
     item.description,
-    `Rs. ${parseFloat(item.amount || 0).toFixed(2)}`, // <-- Changed ₹ to Rs.
+    `Rs. ${parseFloat(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
   ]);
   const total = invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0);
 
   autoTable(doc, {
-    startY: 48,
-    head: [['#', 'Description', 'Amount (Rs.)']], // <-- Changed ₹ to Rs.
+    startY: 78,
+    head: [['#', 'Description', 'Amount (Rs.)']],
     body: tableBody,
-    foot: [['', 'Total', `Rs. ${total.toFixed(2)}`]], // <-- Changed ₹ to Rs.
-    theme: 'grid',
-    styles: { font: 'helvetica' }, // <-- Better to use default helvetica if NotoSans isn't base64 embedded
-    headStyles: { fillColor: [41, 128, 185] },
-    footStyles: { fillColor: [240, 240, 240] },
+    foot: [['', 'Total', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
+    theme: 'plain',
+    styles: {
+      font: 'helvetica',
+      fontSize: 10,
+      cellPadding: 4,
+    },
+    headStyles: {
+      fillColor: navy,
+      textColor: white,
+      fontStyle: 'bold',
+    },
+    footStyles: {
+      fillColor: '#f1f5f9',
+      textColor: navy,
+      fontStyle: 'bold',
+    },
+    columnStyles: {
+      0: { cellWidth: 10 },
+      1: { cellWidth: 'auto' },
+      2: { halign: 'right' },
+    },
   });
 
+  // ---- NOTES & FOOTER ----
+  let finalY = doc.lastAutoTable.finalY + 10;
+
   if (invoiceData.notes) {
-    doc.setFont('NotoSans');                      // make sure notes also use the correct font
     doc.setFontSize(9);
-    doc.text('Notes:', 14, doc.lastAutoTable.finalY + 10);
-    doc.text(invoiceData.notes, 14, doc.lastAutoTable.finalY + 16);
+    doc.setTextColor(80, 80, 80);
+    doc.text('Notes:', 14, finalY);
+    doc.text(invoiceData.notes, 14, finalY + 5);
+    finalY += 15;
   }
 
+  // Thank you line (never white-on-white – always visible)
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Thank you for your business — Akshaya e Centre Pukayur', 14, finalY + 4);
+
+  // Save
   doc.save(`invoice_${Date.now()}.pdf`);
   setInvoiceModalOpen(false);
 };
