@@ -411,8 +411,6 @@ const generateInvoicePDF = () => {
   const doc = new jsPDF();
 
   // Register the font
-  doc.addFont('/NotoSans-Regular.ttf', 'NotoSans', 'normal');
-  doc.setFont('NotoSans');
   doc.setFontSize(16);
   doc.text('INVOICE', 14, 20);
   doc.setFontSize(10);
@@ -424,17 +422,17 @@ const generateInvoicePDF = () => {
   const tableBody = invoiceData.items.map((item, idx) => [
     idx + 1,
     item.description,
-    `₹${parseFloat(item.amount || 0).toFixed(2)}`,
+    `Rs. ${parseFloat(item.amount || 0).toFixed(2)}`, // <-- Changed ₹ to Rs.
   ]);
   const total = invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0);
 
   autoTable(doc, {
     startY: 48,
-    head: [['#', 'Description', 'Amount (₹)']],
+    head: [['#', 'Description', 'Amount (Rs.)']], // <-- Changed ₹ to Rs.
     body: tableBody,
-    foot: [['', 'Total', `₹${total.toFixed(2)}`]],
+    foot: [['', 'Total', `Rs. ${total.toFixed(2)}`]], // <-- Changed ₹ to Rs.
     theme: 'grid',
-    styles: { font: 'NotoSans' },                 // ← CRITICAL: applies the custom font to the table
+    styles: { font: 'helvetica' }, // <-- Better to use default helvetica if NotoSans isn't base64 embedded
     headStyles: { fillColor: [41, 128, 185] },
     footStyles: { fillColor: [240, 240, 240] },
   });
