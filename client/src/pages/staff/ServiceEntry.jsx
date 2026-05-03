@@ -436,7 +436,7 @@ const generateInvoicePDF = () => {
   doc.text('Akshaya e Centre Pukayur', 120, 16);
   doc.setFontSize(8);
   doc.text('Olakara PO, Malappuram , Kerala ', 120, 24);
-  doc.text('Pin - 676306 | +91 8078924261', 120, 24);
+  doc.text('Pin - 676306 | +91 8078924261', 120, 28);
 
   // ---- INVOICE TITLE & CUSTOMER INFO ----
   doc.setTextColor(0, 0, 0);
