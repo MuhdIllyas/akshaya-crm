@@ -316,6 +316,7 @@ router.post("/add", async (req, res) => {
 
   } catch (err) {
     await client.query("ROLLBACK");
+    console.error("TASK CREATION ERROR:", err); 
     res.status(400).json({ error: err.message });
   } finally {
     client.release();
