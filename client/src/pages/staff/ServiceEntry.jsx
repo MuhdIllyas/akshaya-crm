@@ -455,10 +455,7 @@ const generateInvoicePDF = () => {
     (formData.subcategory
       ? ' - ' + getSubcategoryName(formData.category, formData.subcategory)
       : '');
-  const staffName =
-    localStorage.getItem('name') ||
-    localStorage.getItem('username') ||
-    'Staff #' + userId;
+  const staffName = localStorage.getItem('name');
 
   doc.setFontSize(10);
   doc.text(`Service: ${serviceName}`, 14, 78);
@@ -514,7 +511,7 @@ const generateInvoicePDF = () => {
 
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text('Thank you for your business — Akshaya e Centre Pukayur', 14, finalY + 4);
+  doc.text('Thank you for your visit — Akshaya e Centre Pukayur', 14, finalY + 4);
 
   doc.save(`invoice_${Date.now()}.pdf`);
   setInvoiceModalOpen(false);
