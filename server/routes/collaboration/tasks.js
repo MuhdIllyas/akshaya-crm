@@ -202,39 +202,9 @@ router.post("/add", async (req, res) => {
     );
     const assignedStaffName = assignedStaffRes.rows[0]?.name || 'Unknown';
 
-    const insertRes = await client.query(
-      `INSERT INTO tasks
-       (centre_id,title,description,
-        assigned_to,assigned_by,assigned_by_role,
-        priority,due_date,
-        related_service_id,
-        related_service_entry_id,
-        related_customer_id,
-        conversation_id) 
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       RETURNING *`,
-      [
-        centreId,
-        title,
-        description || null,
-        assigned_to,
-        req.user.id,
-        req.user.role,
-        priority,
-        due_date || null,
-        related_service_id || null,
-        related_service_entry_id || null,
-        related_customer_id || null,
-        conversation.id || null
-      ]
-    );
-
-    const task = insertRes.rows[0];
-
     /* ================================
-   🔥 RESOLVE CONVERSATION
+   🔥 1. RESOLVE CONVERSATION FIRST
     ================================ */
-
     let conversationInput = {
       channel: "internal",
       centre_id: centreId,
@@ -259,9 +229,40 @@ router.post("/add", async (req, res) => {
     const conversation = await resolveConversation(conversationInput);
 
     /* ================================
-      🔥 INSERT CHAT MESSAGE (TASK)
+   🔥 2. INSERT TASK (Now with conversation_id)
     ================================ */
+    const insertRes = await client.query(
+      `INSERT INTO tasks
+       (centre_id,title,description,
+        assigned_to,assigned_by,assigned_by_role,
+        priority,due_date,
+        related_service_id,
+        related_service_entry_id,
+        related_customer_id,
+        conversation_id) 
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING *`,
+      [
+        centreId,
+        title,
+        description || null,
+        assigned_to,
+        req.user.id,
+        req.user.role,
+        priority,
+        due_date || null,
+        related_service_id || null,
+        related_service_entry_id || null,
+        related_customer_id || null,
+        conversation.id // <--- Safely passed here
+      ]
+    );
 
+    const task = insertRes.rows[0];
+
+    /* ================================
+      🔥 3. INSERT CHAT MESSAGE (TASK)
+    ================================ */
     await client.query(
       `INSERT INTO chat_messages
       (conversation_id, sender_type, sender_id, message, message_type, created_at)
