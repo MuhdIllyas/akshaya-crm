@@ -80,9 +80,7 @@ const getEventStatus = (event) => {
 /* -------------------------------------------------------------------------- */
 /*   MOCK API (replace with real services)                                    */
 /* -------------------------------------------------------------------------- */
-const fetchEvents = async () => [
-  // Example events for initial render – you can replace with actual API call
-];
+const fetchEvents = async () => [];
 const createEventAPI = async (d) => ({ ...d, id: 'evt_' + Date.now() });
 const updateEventAPI = async (id, d) => ({ ...d, id });
 const deleteEventAPI = async () => true;
@@ -111,10 +109,10 @@ const CalendarProvider = ({ children }) => {
   const userRole = localStorage.getItem('role') || ROLES.ADMIN;
   const userCentre = localStorage.getItem('centre_id') || '1';
 
-  // Fetch events (simulated)
+  // Fetch events
   useEffect(() => { fetchEvents().then(setEvents); }, []);
 
-  // Filtered events (role + filters + search)
+  // Filtered events
   const filteredEvents = useMemo(() => {
     let res = events;
     if (userRole === ROLES.STAFF) res = res.filter(e => e.scope === SCOPES.GLOBAL || e.assignedTo === userId || e.centre === userCentre);
@@ -130,13 +128,11 @@ const CalendarProvider = ({ children }) => {
     return res;
   }, [events, filters, searchQuery, userRole, userId, userCentre]);
 
-  // Helpers
   const getEventsForDate = useCallback((date) => filteredEvents.filter(e => isSameDay(parseISO(e.date), date)), [filteredEvents]);
   const todayEvents = useMemo(() => getEventsForDate(new Date()), [getEventsForDate]);
   const overdueEvents = useMemo(() => filteredEvents.filter(e => !e.completed && isPast(parseISO(e.date)) && !isToday(parseISO(e.date))), [filteredEvents]);
   const upcomingEvents = useMemo(() => filteredEvents.filter(e => !e.completed && isFuture(parseISO(e.date))), [filteredEvents]);
 
-  // CRUD
   const addEvent = useCallback(async (data) => {
     const ev = await createEventAPI(data);
     setEvents(prev => [...prev, ev]);
@@ -176,7 +172,6 @@ const CalendarProvider = ({ children }) => {
 const FilterDrawer = () => {
   const { filters, setFilters, sidebarOpen, setSidebarOpen } = useCal();
   const hasActive = Object.values(filters).some(v => v !== 'all');
-
   return (
     <AnimatePresence>
       {sidebarOpen && (
@@ -233,16 +228,13 @@ const FilterSection = ({ title, children }) => (
 );
 
 const FilterOption = ({ active, onClick, children }) => (
-  <button
-    onClick={onClick}
-    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${active ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}
-  >
+  <button onClick={onClick} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${active ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
     {children}
   </button>
 );
 
 /* -------------------------------------------------------------------------- */
-/*   EVENT DETAIL MODAL (compact, on‑click)                                   */
+/*   EVENT DETAIL MODAL                                                       */
 /* -------------------------------------------------------------------------- */
 const EventDetailModal = () => {
   const { selectedEvent, setShowDetail, deleteEvent, completeEvent, userRole, userId, setEditingEvent, setShowForm } = useCal();
@@ -299,7 +291,7 @@ const EventDetailModal = () => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*   EVENT FORM MODAL (create / edit)                                         */
+/*   EVENT FORM MODAL                                                         */
 /* -------------------------------------------------------------------------- */
 const EventFormModal = () => {
   const { showForm, setShowForm, editingEvent, quickAddDate, addEvent, updateEvent, userRole, userCentre } = useCal();
@@ -317,7 +309,8 @@ const EventFormModal = () => {
         title: editingEvent.title || '', description: editingEvent.description || '',
         date: editingEvent.date ? format(parseISO(editingEvent.date), 'yyyy-MM-dd') : '',
         time: editingEvent.time || '', endTime: editingEvent.endTime || '', location: editingEvent.location || '',
-        category: editingEvent.category || EVENT_CATEGORIES.TASK, eventSubType: editingEvent.eventSubType || EVENT_SUB_TYPES.TASK,
+        category: editingEvent.category || EVENT_CATEGORIES.TASK,
+        eventSubType: editingEvent.eventSubType || EVENT_SUB_TYPES.TASK,
         service: editingEvent.service || '', priority: editingEvent.priority || PRIORITIES.MEDIUM,
         scope: editingEvent.scope || SCOPES.CENTRE, assignedName: editingEvent.assignedName || '',
         assignedTo: editingEvent.assignedTo || '', centre: editingEvent.centre || userCentre,
@@ -344,23 +337,22 @@ const EventFormModal = () => {
           <button onClick={() => setShowForm(false)}><FiX /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <input required value={form.title} onChange={e => setForm(p => ({...p, title: e.target.value}))} placeholder="Event title" className="w-full px-3 py-2 border rounded-lg text-sm" />
-          <textarea value={form.description} onChange={e => setForm(p => ({...p, description: e.target.value}))} placeholder="Description" rows={2} className="w-full px-3 py-2 border rounded-lg text-sm resize-none" />
+          <input required value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Event title" className="w-full px-3 py-2 border rounded-lg text-sm" />
+          <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Description" rows={2} className="w-full px-3 py-2 border rounded-lg text-sm resize-none" />
           <div className="grid grid-cols-2 gap-3">
-            <input required type="date" value={form.date} onChange={e => setForm(p => ({...p, date: e.target.value}))} className="w-full px-3 py-2 border rounded-lg text-sm" />
+            <input required type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm" />
             <div className="flex gap-2">
-              <input type="time" value={form.time} onChange={e => setForm(p => ({...p, time: e.target.value}))} className="w-full px-3 py-2 border rounded-lg text-sm" />
-              <input type="time" value={form.endTime} onChange={e => setForm(p => ({...p, endTime: e.target.value}))} placeholder="End" className="w-full px-3 py-2 border rounded-lg text-sm" />
+              <input type="time" value={form.time} onChange={e => setForm(p => ({ ...p, time: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm" />
+              <input type="time" value={form.endTime} onChange={e => setForm(p => ({ ...p, endTime: e.target.value }))} placeholder="End" className="w-full px-3 py-2 border rounded-lg text-sm" />
             </div>
           </div>
-          <input value={form.location} onChange={e => setForm(p => ({...p, location: e.target.value}))} placeholder="Location" className="w-full px-3 py-2 border rounded-lg text-sm" />
+          <input value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} placeholder="Location" className="w-full px-3 py-2 border rounded-lg text-sm" />
           <div className="flex flex-wrap gap-2">
             {Object.values(EVENT_CATEGORIES).map(cat => (
-              <button key={cat} type="button" onClick={() => setForm(p => ({...p, category: cat}))}
-                className={`px-3 py-1 rounded-lg border text-sm ${form.category === cat ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{cat}</button>
+              <button key={cat} type="button" onClick={() => setForm(p => ({ ...p, category: cat }))} className={`px-3 py-1 rounded-lg border text-sm ${form.category === cat ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{cat}</button>
             ))}
           </div>
-          <select value={form.eventSubType} onChange={e => setForm(p => ({...p, eventSubType: e.target.value}))} className="w-full px-3 py-2 border rounded-lg text-sm">
+          <select value={form.eventSubType} onChange={e => setForm(p => ({ ...p, eventSubType: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm">
             <option value={EVENT_SUB_TYPES.DEADLINE}>Deadline</option>
             <option value={EVENT_SUB_TYPES.START}>Start</option>
             <option value={EVENT_SUB_TYPES.ANNOUNCEMENT}>Announcement</option>
@@ -372,21 +364,21 @@ const EventFormModal = () => {
             <option value={EVENT_SUB_TYPES.RESULT}>Result</option>
             <option value={EVENT_SUB_TYPES.FOLLOWUP}>Follow-up</option>
           </select>
-          <select value={form.service} onChange={e => setForm(p => ({...p, service: e.target.value}))} className="w-full px-3 py-2 border rounded-lg text-sm">
+          <select value={form.service} onChange={e => setForm(p => ({ ...p, service: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm">
             <option value="">No service</option>
             {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <div className="grid grid-cols-2 gap-3">
-            <select value={form.priority} onChange={e => setForm(p => ({...p, priority: e.target.value}))} className="w-full px-3 py-2 border rounded-lg text-sm">
+            <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm">
               <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
             </select>
-            <select value={form.scope} onChange={e => setForm(p => ({...p, scope: e.target.value}))} className="w-full px-3 py-2 border rounded-lg text-sm">
+            <select value={form.scope} onChange={e => setForm(p => ({ ...p, scope: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm">
               <option value={SCOPES.PERSONAL}>Personal</option><option value={SCOPES.CENTRE}>My centre</option>
               {userRole === ROLES.SUPERADMIN && <option value={SCOPES.GLOBAL}>Global</option>}
             </select>
           </div>
-          <input value={form.assignedName} onChange={e => setForm(p => ({...p, assignedName: e.target.value, assignedTo: e.target.value ? 'staff_custom' : ''}))} placeholder="Assign to…" className="w-full px-3 py-2 border rounded-lg text-sm" />
-          <input value={form.centre} onChange={e => setForm(p => ({...p, centre: e.target.value}))} placeholder="Centre" className="w-full px-3 py-2 border rounded-lg text-sm" />
+          <input value={form.assignedName} onChange={e => setForm(p => ({ ...p, assignedName: e.target.value, assignedTo: e.target.value ? 'staff_custom' : '' }))} placeholder="Assign to…" className="w-full px-3 py-2 border rounded-lg text-sm" />
+          <input value={form.centre} onChange={e => setForm(p => ({ ...p, centre: e.target.value }))} placeholder="Centre" className="w-full px-3 py-2 border rounded-lg text-sm" />
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
             <button type="submit" className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800">{editingEvent ? 'Save' : 'Create event'}</button>
@@ -398,30 +390,22 @@ const EventFormModal = () => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*   MAIN HEADER (date range, view toggles, actions)                          */
+/*   MAIN HEADER                                                              */
 /* -------------------------------------------------------------------------- */
 const CalendarHeader = () => {
   const { currentDate, setCurrentDate, view, setView, sidebarOpen, setSidebarOpen, setShowForm, setEditingEvent, setQuickAddDate } = useCal();
 
-  const goToday = () => {
-    setCurrentDate(new Date());
-  };
-
-  const goPrev = () => {
-    setCurrentDate(prev => {
-      if (view === 'month') return subMonths(prev, 1);
-      if (view === 'week') return subWeeks(prev, 1);
-      return addDays(prev, -1);
-    });
-  };
-
-  const goNext = () => {
-    setCurrentDate(prev => {
-      if (view === 'month') return addMonths(prev, 1);
-      if (view === 'week') return addWeeks(prev, 1);
-      return addDays(prev, 1);
-    });
-  };
+  const goToday = () => setCurrentDate(new Date());
+  const goPrev = () => setCurrentDate(prev => {
+    if (view === 'month') return subMonths(prev, 1);
+    if (view === 'week') return subWeeks(prev, 1);
+    return addDays(prev, -1);
+  });
+  const goNext = () => setCurrentDate(prev => {
+    if (view === 'month') return addMonths(prev, 1);
+    if (view === 'week') return addWeeks(prev, 1);
+    return addDays(prev, 1);
+  });
 
   const getDateRangeLabel = () => {
     if (view === 'month') return format(currentDate, 'MMMM yyyy');
@@ -443,7 +427,7 @@ const CalendarHeader = () => {
         <button onClick={goToday} className="ml-2 text-sm font-medium text-blue-600 hover:text-blue-800">Today</button>
       </div>
 
-      {/* Center: search */}
+      {/* Search */}
       <div className="hidden sm:flex items-center bg-gray-50 border rounded-lg px-3 py-1.5 w-60">
         <FiSearch size={16} className="text-gray-400 mr-2" />
         <input
@@ -455,7 +439,7 @@ const CalendarHeader = () => {
         />
       </div>
 
-      {/* Right: view toggles + actions */}
+      {/* View toggles + actions */}
       <div className="flex items-center gap-2">
         <div className="flex bg-gray-100 rounded-lg p-0.5">
           {[
@@ -464,29 +448,16 @@ const CalendarHeader = () => {
             { key: 'day', Icon: FiClock },
             { key: 'list', Icon: FiList },
           ].map(({ key, Icon }) => (
-            <button
-              key={key}
-              onClick={() => setView(key)}
-              className={`p-1.5 rounded-md transition ${view === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
+            <button key={key} onClick={() => setView(key)} className={`p-1.5 rounded-md transition ${view === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
               <Icon size={16} />
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="p-2 hover:bg-gray-100 rounded-lg relative"
-          title="Filters"
-        >
+        <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg relative" title="Filters">
           <FiFilter size={18} className="text-gray-600" />
-          {Object.values(useCal().filters).some(v => v !== 'all') && (
-            <span className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full" />
-          )}
+          {Object.values(useCal().filters).some(v => v !== 'all') && <span className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full" />}
         </button>
-        <button
-          onClick={() => { setEditingEvent(null); setQuickAddDate(null); setShowForm(true); }}
-          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
-        >
+        <button onClick={() => { setEditingEvent(null); setQuickAddDate(null); setShowForm(true); }} className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
           <FiPlus size={16} /> New Event
         </button>
       </div>
@@ -495,12 +466,11 @@ const CalendarHeader = () => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*   LIST VIEW (Dribbble style) – grouped by day, vertical timeline           */
+/*   LIST VIEW (Dribbble style)                                               */
 /* -------------------------------------------------------------------------- */
 const ListView = () => {
   const { currentDate, events, setSelectedEvent, setShowDetail } = useCal();
-  // Show events for 7 days starting from Monday of current week
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 }); // Sunday start? Dribbble shows Sun-Sat
+  const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const grouped = days.map(day => {
@@ -513,7 +483,6 @@ const ListView = () => {
   return (
     <div className="flex-1 overflow-y-auto p-4">
       <div className="grid grid-cols-7 gap-4">
-        {/* Date headers */}
         {days.map((day, idx) => (
           <div key={idx} className="text-center border-b pb-2">
             <div className="text-xs font-semibold text-gray-500 uppercase">{format(day, 'EEE')}</div>
@@ -521,16 +490,11 @@ const ListView = () => {
           </div>
         ))}
       </div>
-
-      {/* Display days side‑by‑side, each with its events stacked */}
       <div className="grid grid-cols-7 gap-4 mt-4">
         {grouped.map(({ date, allDay, timed }, idx) => (
           <div key={idx} className="space-y-3">
-            {/* All day events */}
             {allDay.map(ev => (
-              <div
-                key={ev.id}
-                onClick={() => { setSelectedEvent(ev); setShowDetail(true); }}
+              <div key={ev.id} onClick={() => { setSelectedEvent(ev); setShowDetail(true); }}
                 className="bg-purple-50 border-l-4 rounded-r-lg px-3 py-2 text-sm cursor-pointer hover:shadow-sm transition"
                 style={{ borderLeftColor: BORDER_COLORS[ev.eventSubType] || '#6B7280' }}
               >
@@ -538,22 +502,13 @@ const ListView = () => {
                 {ev.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{ev.description}</div>}
               </div>
             ))}
-
-            {/* Timed events – show a placeholder for each hour block */}
             <div className="space-y-1">
               {timed.map(ev => {
                 const hour = parseInt(ev.time.split(':')[0]);
-                // simple display: just list with time
                 return (
-                  <div key={ev.id}
-                    onClick={() => { setSelectedEvent(ev); setShowDetail(true); }}
-                    className="flex items-start gap-2 group cursor-pointer"
-                  >
+                  <div key={ev.id} onClick={() => { setSelectedEvent(ev); setShowDetail(true); }} className="flex items-start gap-2 group cursor-pointer">
                     <div className="w-12 text-right text-xs text-gray-400 pt-0.5">{ev.time}</div>
-                    <div
-                      className="flex-1 bg-white border rounded-lg p-2 text-sm hover:shadow-sm transition"
-                      style={{ borderLeftWidth: 3, borderLeftColor: BORDER_COLORS[ev.eventSubType] || '#6B7280' }}
-                    >
+                    <div className="flex-1 bg-white border rounded-lg p-2 text-sm hover:shadow-sm transition" style={{ borderLeftWidth: 3, borderLeftColor: BORDER_COLORS[ev.eventSubType] || '#6B7280' }}>
                       <div className="font-medium">{ev.title}</div>
                       <div className="text-xs text-gray-500">{ev.time}{ev.endTime ? ` - ${ev.endTime}` : ''}</div>
                       {ev.location && <div className="text-xs text-gray-400 flex items-center gap-1"><FiMapPin size={10} /> {ev.location}</div>}
@@ -570,7 +525,7 @@ const ListView = () => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*   OTHER VIEWS (kept simple)                                                */
+/*   OTHER VIEWS                                                              */
 /* -------------------------------------------------------------------------- */
 const MonthView = () => {
   const { currentDate, getEventsForDate, setSelectedEvent, setShowDetail, setQuickAddDate, setEditingEvent, setShowForm } = useCal();
@@ -595,8 +550,7 @@ const MonthView = () => {
           const isCur = isSameMonth(day, currentDate);
           const today = isToday(day);
           return (
-            <div key={idx}
-              onClick={() => { setQuickAddDate(day); setEditingEvent(null); setShowForm(true); }}
+            <div key={idx} onClick={() => { setQuickAddDate(day); setEditingEvent(null); setShowForm(true); }}
               className={`bg-white p-1 min-h-[90px] cursor-pointer hover:bg-gray-50 transition ${!isCur ? 'opacity-40' : ''} ${today ? 'ring-2 ring-inset ring-blue-400' : ''}`}
             >
               <div className="text-right mb-1"><span className={`text-xs font-semibold ${today ? 'bg-blue-500 text-white rounded-full w-5 h-5 inline-flex items-center justify-center' : ''}`}>{getDate(day)}</span></div>
@@ -698,32 +652,32 @@ const AgendaView = () => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*   ROOT COMPONENT                                                           */
+/*   ROOT COMPONENT – Fixed Provider Wrapping                                 */
 /* -------------------------------------------------------------------------- */
-const CalendarView = () => {
+const CalendarApp = () => {
   const { view } = useCal();
   return (
-    <CalendarProvider>
-      <div className="h-screen flex flex-col bg-white text-gray-800">
-        <ToastContainer position="top-right" autoClose={3000} hideProgressBar />
-        {/* Filters drawer */}
-        <FilterDrawer />
-        {/* Header */}
-        <CalendarHeader />
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          {view === 'list' && <ListView />}
-          {view === 'month' && <MonthView />}
-          {view === 'week' && <WeekView />}
-          {view === 'day' && <DayView />}
-          {view === 'agenda' && <AgendaView />}
-        </div>
-        {/* Modals */}
-        <EventDetailModal />
-        <EventFormModal />
+    <div className="h-screen flex flex-col bg-white text-gray-800">
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar />
+      <FilterDrawer />
+      <CalendarHeader />
+      <div className="flex-1 overflow-hidden">
+        {view === 'list'    && <ListView />}
+        {view === 'month'   && <MonthView />}
+        {view === 'week'    && <WeekView />}
+        {view === 'day'     && <DayView />}
+        {view === 'agenda'  && <AgendaView />}
       </div>
-    </CalendarProvider>
+      <EventDetailModal />
+      <EventFormModal />
+    </div>
   );
 };
+
+const CalendarView = () => (
+  <CalendarProvider>
+    <CalendarApp />
+  </CalendarProvider>
+);
 
 export default CalendarView;
