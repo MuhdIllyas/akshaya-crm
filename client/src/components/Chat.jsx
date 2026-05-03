@@ -654,6 +654,7 @@ const Chat = ({
                   ? `opt-${msg.tempId || msg.id}-${index}`
                   : `msg-${msg.id}`;
                 const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
+                const isNewTaskMessage = msg.message_type === "task";
                 return (
                   <motion.div
                     key={messageKey}
@@ -661,21 +662,67 @@ const Chat = ({
                     animate={{ opacity: 1, y: 0 }}
                     className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
                   >
-                    {isTaskMessage ? (
-                      <div className="flex max-w-xs lg:max-w-md flex-row">
-                        <div className="mr-2 flex-shrink-0 relative">
-                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-                            <FiMessageSquare size={14} />
+                  {isTaskMessage ? (
+                    // ✅ EXISTING SERVICE TASK (DO NOT TOUCH)
+                    <div className="flex max-w-xs lg:max-w-md flex-row">
+                      <div className="mr-2 flex-shrink-0 relative">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                          <FiMessageSquare size={14} />
+                        </div>
+                      </div>
+                      <TaskMessage
+                        taskId={msg.fileName}
+                        text={msg.text}
+                        taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
+                        onStatusUpdate={onTaskStatusUpdate}
+                      />
+                    </div>
+
+                  ) : isNewTaskMessage ? (
+
+                    // 🔥 NEW TASK UI (ADD THIS BLOCK)
+                    (() => {
+                      let task;
+                      try {
+                        task = typeof msg.message === "string"
+                          ? JSON.parse(msg.message)
+                          : msg.message;
+                      } catch {
+                        return null;
+                      }
+
+                      return (
+                        <div className="flex max-w-xs lg:max-w-md flex-row">
+                          <div className="mr-2 flex-shrink-0 relative">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                              📋
+                            </div>
+                          </div>
+
+                          <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
+                            <div className="font-medium text-gray-900">
+                              {task.title}
+                            </div>
+
+                            <div className="text-xs text-gray-500 mt-1">
+                              Priority: {task.priority}
+                            </div>
+
+                            <div className="text-xs text-gray-500">
+                              Status: {task.status}
+                            </div>
+
+                            {task.due_date && (
+                              <div className="text-xs text-gray-500">
+                                📅 {formatDate(task.due_date)}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <TaskMessage
-                          taskId={msg.fileName}
-                          text={msg.text}
-                          taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
-                          onStatusUpdate={onTaskStatusUpdate}
-                        />
-                      </div>
-                    ) : (
+                      );
+                    })()
+
+                  ) : (
                       <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
                         {!msg.isCurrentUser && (
                           <div className="mr-2 flex-shrink-0 relative">
