@@ -422,7 +422,7 @@ const generateInvoicePDF = () => {
   // Try to add logo, if available
   try {
     // logo-dark should be a PNG in /public (e.g., logo-dark.png)
-    doc.addImage('/logo-dark.png', 'PNG', 10, 5, 22, 22);
+    doc.addImage('/logo-light.png', 'PNG', 10, 5, 22, 22);
   } catch (e) {
     // fallback: centre name as text
     doc.setTextColor(white);
@@ -435,7 +435,8 @@ const generateInvoicePDF = () => {
   doc.setFontSize(14);
   doc.text('Akshaya e Centre Pukayur', 120, 16);
   doc.setFontSize(8);
-  doc.text('Pukayur, Kerala | +91 9633975301', 120, 24);
+  doc.text('Olakara PO, Malappuram , Kerala ', 120, 24);
+  doc.text('Pin - 676306 | +91 8078924261', 120, 24);
 
   // ---- INVOICE TITLE & CUSTOMER INFO ----
   doc.setTextColor(0, 0, 0);
@@ -498,7 +499,7 @@ const generateInvoicePDF = () => {
   // Thank you line (never white-on-white – always visible)
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text('Thank you for your business — Akshaya e Centre Pukayur', 14, finalY + 4);
+  doc.text('Thank you for your visit — Akshaya e Centre Pukayur', 14, finalY + 4);
 
   // Save
   doc.save(`invoice_${Date.now()}.pdf`);
