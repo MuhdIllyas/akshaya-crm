@@ -2031,75 +2031,44 @@ const MessengerPage = ({ user }) => {
                 <FiCheckSquare className="mr-2" /> Tasks
               </h4>
               <div className="space-y-2 max-h-60 overflow-y-auto">
-              {/* Tasks Section (for BOTH service and normal conversations) */}
-              {(() => {
-                // Filter tasks based on whether it is a service chat or a normal chat
-                const conversationTasks = tasks.filter(t => {
-                  if (activeConversation.context_type === 'service_entry') {
-                    return t.related_service_entry_id === activeConversation.context_id;
+                {(() => {
+                  const serviceTasks = tasks.filter(t => t.related_service_entry_id === activeConversation.context_id);
+                  if (serviceTasks.length === 0) {
+                    return <p className="text-sm text-gray-500 text-center py-2">No tasks for this service</p>;
                   }
-                  // Normal tasks tied to this conversation
-                  return t.conversation_id === activeConversation.id;
-                });
-
-                // Only show the Tasks section if there are tasks OR it's a service chat
-                if (conversationTasks.length === 0 && activeConversation.context_type !== 'service_entry') {
-                  return null;
-                }
-
-                return (
-                  <>
-                    <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
-                      <FiCheckSquare className="mr-2" /> Tasks
-                    </h4>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {conversationTasks.length === 0 ? (
-                        <p className="text-sm text-gray-500 text-center py-2">No tasks for this conversation</p>
-                      ) : (
-                        conversationTasks.map(task => (
-                          <div key={task.id} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <p className={`font-medium text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>
-                                  {task.title}
-                                </p>
-                                {task.description && (
-                                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
-                                )}
-                                <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
-                                  {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
-                                  {task.due_date && <span>📅 {new Date(task.due_date).toLocaleDateString()}</span>}
-                                  <span className={`px-2 py-0.5 rounded-full ${task.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                      task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                        'bg-green-100 text-green-800'
-                                    }`}>
-                                    {task.priority}
-                                  </span>
-                                </div>
-                              </div>
-                              {task.status !== 'completed' && (
-                                <button
-                                  onClick={() => {
-                                    // Route to the correct update function based on task type
-                                    if (task.related_service_entry_id) {
-                                      handleServiceTaskStatusUpdate(task.id, 'completed');
-                                    } else {
-                                      handleNormalTaskStatusUpdate(task.id, task.status);
-                                    }
-                                  }}
-                                  className="ml-2 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition"
-                                >
-                                  ✓ Complete
-                                </button>
-                              )}
-                            </div>
+                  return serviceTasks.map(task => (
+                    <div key={task.id} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className={`font-medium text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                            {task.title}
+                          </p>
+                          {task.description && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
+                          )}
+                          <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
+                            {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
+                            {task.due_date && <span>📅 {new Date(task.due_date).toLocaleDateString()}</span>}
+                            <span className={`px-2 py-0.5 rounded-full ${task.priority === 'high' ? 'bg-red-100 text-red-800' :
+                                task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-green-100 text-green-800'
+                              }`}>
+                              {task.priority}
+                            </span>
                           </div>
-                        ))
-                      )}
+                        </div>
+                        {task.status !== 'completed' && (
+                          <button
+                            onClick={() => handleServiceTaskStatusUpdate(task.id, 'completed')}
+                            className="ml-2 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                          >
+                            ✓ Complete
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </>
-                );
-              })()}
+                  ));
+                })()}
               </div>
             </>
           )}
