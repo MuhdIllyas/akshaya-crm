@@ -11,6 +11,8 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry } from '/src/services/serviceService';
 import api from '@/services/serviceService';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
 const getLatestTransactions = (transactions) => {
@@ -94,6 +96,15 @@ const ServiceEntry = () => {
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const isEditMode = Boolean(editingEntryId);
+  
+  // ========== INVOICE GENERATOR STATE ==========
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [invoiceData, setInvoiceData] = useState({
+    customerName: '',
+    phone: '',
+    items: [{ description: '', amount: '' }],
+    notes: '',
+  });
   
   const userRole = localStorage.getItem('role') || 'staff';
   const userId = localStorage.getItem('id');
@@ -374,6 +385,70 @@ const ServiceEntry = () => {
   const formatAmount = (amount) => {
     const num = parseFloat(amount);
     return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
+  // ========== INVOICE GENERATOR FUNCTIONS ==========
+  const openInvoiceModal = () => {
+    // Build default items from current formData
+    const items = [
+      { description: 'Service Charge', amount: formData.serviceCharge || '0' },
+      {
+        description: 'Department Charge',
+        amount: formData.departmentCharge || '0',
+      },
+    ];
+
+    setInvoiceData({
+      customerName: formData.customerName,
+      phone: formData.phone,
+      items,
+      notes: '',
+    });
+    setInvoiceModalOpen(true);
+  };
+
+  const generateInvoicePDF = () => {
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFontSize(16);
+    doc.text('INVOICE', 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 28);
+    doc.text(`Customer: ${invoiceData.customerName}`, 14, 34);
+    doc.text(`Phone: ${invoiceData.phone}`, 14, 40);
+
+    // Table of items
+    const tableBody = invoiceData.items.map((item, idx) => [
+      idx + 1,
+      item.description,
+      `₹${parseFloat(item.amount || 0).toFixed(2)}`,
+    ]);
+
+    const total = invoiceData.items.reduce(
+      (sum, it) => sum + parseFloat(it.amount || 0),
+      0
+    );
+
+    autoTable(doc, {
+      startY: 48,
+      head: [['#', 'Description', 'Amount (₹)']],
+      body: tableBody,
+      foot: [['', 'Total', `₹${total.toFixed(2)}`]],
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185] },
+      footStyles: { fillColor: [240, 240, 240] },
+    });
+
+    // Notes
+    if (invoiceData.notes) {
+      doc.setFontSize(9);
+      doc.text('Notes:', 14, doc.lastAutoTable.finalY + 10);
+      doc.text(invoiceData.notes, 14, doc.lastAutoTable.finalY + 16);
+    }
+
+    doc.save(`invoice_${Date.now()}.pdf`);
+    setInvoiceModalOpen(false);
   };
 
   // ========== useEffect HOOKS ==========
@@ -1637,6 +1712,14 @@ const ServiceEntry = () => {
               Cancel
             </button>
             <button
+              type="button"
+              onClick={openInvoiceModal}
+              className="px-4 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 flex items-center gap-2 shadow-md"
+            >
+              <FiFileText className="h-5 w-5" />
+              Preview Invoice
+            </button>
+            <button
               type="submit"
               className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
             >
@@ -2171,6 +2254,155 @@ const ServiceEntry = () => {
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== INVOICE GENERATOR MODAL ========== */}
+      {invoiceModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Edit Invoice</h2>
+              <button
+                onClick={() => setInvoiceModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Customer details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer Name
+                  </label>
+                  <input
+                    type="text"
+                    value={invoiceData.customerName}
+                    onChange={(e) =>
+                      setInvoiceData({ ...invoiceData, customerName: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={invoiceData.phone}
+                    onChange={(e) =>
+                      setInvoiceData({ ...invoiceData, phone: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+              </div>
+
+              {/* Editable line items */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Invoice Items
+                </label>
+                {invoiceData.items.map((item, idx) => (
+                  <div key={idx} className="flex gap-2 mb-3 items-center">
+                    <input
+                      type="text"
+                      placeholder="Description"
+                      value={item.description}
+                      onChange={(e) => {
+                        const newItems = [...invoiceData.items];
+                        newItems[idx].description = e.target.value;
+                        setInvoiceData({ ...invoiceData, items: newItems });
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Amount"
+                      value={item.amount}
+                      onChange={(e) => {
+                        const newItems = [...invoiceData.items];
+                        newItems[idx].amount = e.target.value;
+                        setInvoiceData({ ...invoiceData, items: newItems });
+                      }}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                    {invoiceData.items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newItems = invoiceData.items.filter((_, i) => i !== idx);
+                          setInvoiceData({ ...invoiceData, items: newItems });
+                        }}
+                        className="text-rose-500 hover:text-rose-700"
+                      >
+                        <FiTrash2 className="h-5 w-5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInvoiceData({
+                      ...invoiceData,
+                      items: [...invoiceData.items, { description: '', amount: '' }],
+                    })
+                  }
+                  className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                >
+                  <FiPlus className="h-4 w-4" /> Add Item
+                </button>
+              </div>
+
+              {/* Total displayed */}
+              <div className="bg-gray-50 p-3 rounded-lg flex justify-between">
+                <span className="font-medium">Total</span>
+                <span className="font-bold text-indigo-700">
+                  ₹
+                  {invoiceData.items
+                    .reduce((sum, it) => sum + parseFloat(it.amount || 0), 0)
+                    .toFixed(2)}
+                </span>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes (optional)
+                </label>
+                <textarea
+                  value={invoiceData.notes}
+                  onChange={(e) =>
+                    setInvoiceData({ ...invoiceData, notes: e.target.value })
+                  }
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="Any additional remarks…"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setInvoiceModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generateInvoicePDF}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center gap-2"
+              >
+                <FiFileText className="h-4 w-4" />
+                Download Invoice PDF
               </button>
             </div>
           </div>
