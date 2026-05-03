@@ -11,7 +11,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry } from '/src/services/serviceService';
 import api from '@/services/serviceService';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
