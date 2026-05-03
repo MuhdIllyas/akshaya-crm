@@ -3,6 +3,7 @@ import pool from "../../db.js";
 import jwt from "jsonwebtoken";
 import { io } from "../../server.js";
 import { logActivity } from "../../utils/activityLogger.js";
+import { resolveConversation } from "../../utils/conversationService.js";
 
 const router = express.Router();
 
@@ -228,6 +229,50 @@ router.post("/add", async (req, res) => {
 
     const task = insertRes.rows[0];
 
+    /* ================================
+   🔥 RESOLVE CONVERSATION
+    ================================ */
+
+    let conversationInput = {
+      channel: "internal",
+      centre_id: centreId,
+      created_by: req.user.id
+    };
+
+    if (related_service_entry_id) {
+      conversationInput.context_type = "service_entry";
+      conversationInput.context_id = related_service_entry_id;
+    } else if (related_customer_id) {
+      conversationInput.context_type = "customer";
+      conversationInput.customer_id = related_customer_id;
+    } else {
+      conversationInput.participant_ids = [req.user.id, assigned_to];
+    }
+
+    const conversation = await resolveConversation(conversationInput);
+
+    /* ================================
+      🔥 INSERT CHAT MESSAGE (TASK)
+    ================================ */
+
+    await client.query(
+      `INSERT INTO chat_messages
+      (conversation_id, sender_type, sender_id, message, message_type, created_at)
+      VALUES ($1,'staff',$2,$3,'task',NOW())`,
+      [
+        conversation.id,
+        req.user.id,
+        JSON.stringify({
+          task_id: task.id,
+          title: task.title,
+          assigned_to: task.assigned_to,
+          priority: task.priority,
+          status: task.status,
+          due_date: task.due_date
+        })
+      ]
+    );
+
     if (due_date) {
       await client.query(
         `INSERT INTO calendar_events
@@ -261,7 +306,11 @@ router.post("/add", async (req, res) => {
     });
     // ======================================
 
-    io.to(`centre_${centreId}`).emit("taskAssigned", task);
+    io.to(`conversation_${conversation.id}`).emit("new_message", {
+      conversation_id: conversation.id,
+      message_type: "task",
+      data: task
+    });
 
     res.status(201).json(task);
 
