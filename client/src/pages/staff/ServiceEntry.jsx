@@ -407,51 +407,48 @@ const ServiceEntry = () => {
     setInvoiceModalOpen(true);
   };
 
-  const generateInvoicePDF = () => {
-    const doc = new jsPDF();
+const generateInvoicePDF = () => {
+  const doc = new jsPDF();
 
-    // Header
-    doc.addFont('/NotoSans-Regular.ttf', 'NotoSans', 'normal');
-    doc.setFont('NotoSans');
-    doc.setFontSize(16);
-    doc.text('INVOICE', 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 28);
-    doc.text(`Customer: ${invoiceData.customerName}`, 14, 34);
-    doc.text(`Phone: ${invoiceData.phone}`, 14, 40);
+  // Register the font
+  doc.addFont('/NotoSans-Regular.ttf', 'NotoSans', 'normal');
+  doc.setFont('NotoSans');
+  doc.setFontSize(16);
+  doc.text('INVOICE', 14, 20);
+  doc.setFontSize(10);
+  doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 28);
+  doc.text(`Customer: ${invoiceData.customerName}`, 14, 34);
+  doc.text(`Phone: ${invoiceData.phone}`, 14, 40);
 
-    // Table of items
-    const tableBody = invoiceData.items.map((item, idx) => [
-      idx + 1,
-      item.description,
-      `₹${parseFloat(item.amount || 0).toFixed(2)}`,
-    ]);
+  // Build table body & calculate total
+  const tableBody = invoiceData.items.map((item, idx) => [
+    idx + 1,
+    item.description,
+    `₹${parseFloat(item.amount || 0).toFixed(2)}`,
+  ]);
+  const total = invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0);
 
-    const total = invoiceData.items.reduce(
-      (sum, it) => sum + parseFloat(it.amount || 0),
-      0
-    );
+  autoTable(doc, {
+    startY: 48,
+    head: [['#', 'Description', 'Amount (₹)']],
+    body: tableBody,
+    foot: [['', 'Total', `₹${total.toFixed(2)}`]],
+    theme: 'grid',
+    styles: { font: 'NotoSans' },                 // ← CRITICAL: applies the custom font to the table
+    headStyles: { fillColor: [41, 128, 185] },
+    footStyles: { fillColor: [240, 240, 240] },
+  });
 
-    autoTable(doc, {
-      startY: 48,
-      head: [['#', 'Description', 'Amount (₹)']],
-      body: tableBody,
-      foot: [['', 'Total', `₹${total.toFixed(2)}`]],
-      theme: 'grid',
-      headStyles: { fillColor: [41, 128, 185] },
-      footStyles: { fillColor: [240, 240, 240] },
-    });
+  if (invoiceData.notes) {
+    doc.setFont('NotoSans');                      // make sure notes also use the correct font
+    doc.setFontSize(9);
+    doc.text('Notes:', 14, doc.lastAutoTable.finalY + 10);
+    doc.text(invoiceData.notes, 14, doc.lastAutoTable.finalY + 16);
+  }
 
-    // Notes
-    if (invoiceData.notes) {
-      doc.setFontSize(9);
-      doc.text('Notes:', 14, doc.lastAutoTable.finalY + 10);
-      doc.text(invoiceData.notes, 14, doc.lastAutoTable.finalY + 16);
-    }
-
-    doc.save(`invoice_${Date.now()}.pdf`);
-    setInvoiceModalOpen(false);
-  };
+  doc.save(`invoice_${Date.now()}.pdf`);
+  setInvoiceModalOpen(false);
+};
 
   // ========== useEffect HOOKS ==========
   
