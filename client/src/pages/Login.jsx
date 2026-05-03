@@ -80,6 +80,7 @@ const Login = () => {
         localStorage.setItem("id", res.data.id);
         localStorage.setItem("role", res.data.role);
         localStorage.setItem("username", res.data.username);
+        localStorage.setItem("name", res.data.name);
         localStorage.setItem("centre_id", res.data.centre_id || "");
 
         if (rememberMe) {
