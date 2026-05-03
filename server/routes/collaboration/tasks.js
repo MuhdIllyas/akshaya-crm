@@ -248,7 +248,12 @@ router.post("/add", async (req, res) => {
       conversationInput.context_type = "customer";
       conversationInput.customer_id = related_customer_id;
     } else {
-      conversationInput.participant_ids = [req.user.id, assigned_to];
+      // SAFE PARTICIPANT ARRAY: Only add assigned_to if it exists
+      const participants = [req.user.id];
+      if (assigned_to && assigned_to !== req.user.id) {
+        participants.push(assigned_to);
+      }
+      conversationInput.participant_ids = participants;
     }
 
     const conversation = await resolveConversation(conversationInput);
