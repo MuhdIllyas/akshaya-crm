@@ -435,7 +435,7 @@ const generateInvoicePDF = () => {
   doc.setFontSize(14);
   doc.text('Akshaya e Centre Pukayur', 120, 16);
   doc.setFontSize(8);
-  doc.text('Olakara PO, Malappuram , Kerala ', 120, 24);
+  doc.text('Olakara PO, Malappuram, Kerala ', 120, 24);
   doc.text('Pin - 676306 | +91 8078924261', 120, 28);
 
   // ---- INVOICE TITLE & CUSTOMER INFO ----
@@ -449,6 +449,23 @@ const generateInvoicePDF = () => {
   doc.text(`Customer: ${invoiceData.customerName}`, 14, 64);
   doc.text(`Phone: ${invoiceData.phone}`, 14, 70);
 
+    // ---------- SERVICE & STAFF ----------
+  const serviceName =
+    getCategoryName(formData.category) +
+    (formData.subcategory
+      ? ' - ' + getSubcategoryName(formData.category, formData.subcategory)
+      : '');
+  const staffName =
+    localStorage.getItem('name') ||
+    localStorage.getItem('staff_name') ||
+    localStorage.getItem('username') ||
+    'Staff #' + userId;
+
+  doc.setFontSize(10);
+  doc.text(`Service: ${serviceName}`, 14, 78);
+  doc.text(`Served by: ${staffName}`, 14, 84);
+  // ------------------------------------
+
   // ---- ITEMS TABLE ----
   const tableBody = invoiceData.items.map((item, idx) => [
     idx + 1,
@@ -458,7 +475,7 @@ const generateInvoicePDF = () => {
   const total = invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0);
 
   autoTable(doc, {
-    startY: 78,
+    startY: 92,  // moved down to make room for service & staff lines
     head: [['#', 'Description', 'Amount (Rs.)']],
     body: tableBody,
     foot: [['', 'Total', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
@@ -496,12 +513,10 @@ const generateInvoicePDF = () => {
     finalY += 15;
   }
 
-  // Thank you line (never white-on-white – always visible)
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text('Thank you for your visit — Akshaya e Centre Pukayur', 14, finalY + 4);
+  doc.text('Thank you for your business — Akshaya e Centre Pukayur', 14, finalY + 4);
 
-  // Save
   doc.save(`invoice_${Date.now()}.pdf`);
   setInvoiceModalOpen(false);
 };
