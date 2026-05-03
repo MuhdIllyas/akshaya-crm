@@ -102,6 +102,7 @@ const ServiceEntry = () => {
   const [invoiceData, setInvoiceData] = useState({
     customerName: '',
     phone: '',
+    staffName: '',
     items: [{ description: '', amount: '' }],
     notes: '',
   });
@@ -401,6 +402,7 @@ const ServiceEntry = () => {
     setInvoiceData({
       customerName: formData.customerName,
       phone: formData.phone,
+      staffName: localStorage.getItem('name') || localStorage.getItem('username') || '',
       items,
       notes: '',
     });
@@ -455,11 +457,7 @@ const generateInvoicePDF = () => {
     (formData.subcategory
       ? ' - ' + getSubcategoryName(formData.category, formData.subcategory)
       : '');
-  const staffName =
-    localStorage.getItem('name') ||
-    localStorage.getItem('staff_name') ||
-    localStorage.getItem('username') ||
-    'Staff #' + userId;
+  const staffName = invoiceData.staffName || 'Staff #' + userId;
 
   doc.setFontSize(10);
   doc.text(`Service: ${serviceName}`, 14, 78);
