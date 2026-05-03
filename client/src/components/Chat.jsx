@@ -734,28 +734,23 @@ const Chat = ({
                       />
                     </div>
 
-                  ) : isNewTaskMessage ? (
-
-                    // 🔥 NEW TASK UI (ADD THIS BLOCK)
-                    (() => {
-                        let task;
-                        try {
-                          task = typeof msg.text === "string"
-                            ? JSON.parse(msg.text)
-                            : msg.text;
-                        } catch {
-                          return null;
-                        }
-                        return (
-                          <NormalTaskMessage
-                            taskId={task.task_id}
-                            taskData={task}
-                            onStatusUpdate={onNormalTaskStatusUpdate}
-                          />
-                        );
+                    ) : isNewTaskMessage ? (
+                      // 🔥 NEW TASK UI (Updated for normalized database)
+                      (() => {
+                          // Use the live task data attached by your backend fetch query
+                          const task = msg.live_task_data || msg.data; 
+                          
+                          if (!task) return null;
+                          
+                          return (
+                            <NormalTaskMessage
+                              taskId={task.id}
+                              taskData={task}
+                              onStatusUpdate={onNormalTaskStatusUpdate}
+                            />
+                          );
                       })()
-
-                  ) : (
+                    ) : (
                       <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
                         {!msg.isCurrentUser && (
                           <div className="mr-2 flex-shrink-0 relative">

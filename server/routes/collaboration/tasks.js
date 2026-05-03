@@ -209,8 +209,9 @@ router.post("/add", async (req, res) => {
         priority,due_date,
         related_service_id,
         related_service_entry_id,
-        related_customer_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        related_customer_id,
+        conversation_id) 
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING *`,
       [
         centreId,
@@ -223,7 +224,8 @@ router.post("/add", async (req, res) => {
         due_date || null,
         related_service_id || null,
         related_service_entry_id || null,
-        related_customer_id || null
+        related_customer_id || null,
+        conversation.id || null
       ]
     );
 
@@ -262,14 +264,7 @@ router.post("/add", async (req, res) => {
       [
         conversation.id,
         req.user.id,
-        JSON.stringify({
-          task_id: task.id,
-          title: task.title,
-          assigned_to: task.assigned_to,
-          priority: task.priority,
-          status: task.status,
-          due_date: task.due_date
-        })
+        task.id.toString() 
       ]
     );
 
