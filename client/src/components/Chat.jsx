@@ -81,6 +81,61 @@ const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
     }
   };
 
+  const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
+    const [completing, setCompleting] = useState(false);
+    const completed = taskData?.status === 'completed';
+
+    const handleComplete = async () => {
+      if (completing || completed) return;
+      setCompleting(true);
+      try {
+        if (onStatusUpdate) {
+          await onStatusUpdate(taskId, taskData.status);
+        }
+      } catch {
+        // parent handles the error toast
+      } finally {
+        setCompleting(false);
+      }
+    };
+
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
+        <div className="flex justify-between items-start gap-4">
+          <div>
+            <h4 className={`font-medium ${
+              completed ? 'line-through text-gray-500' : 'text-gray-900'
+            }`}>
+              {taskData.title}
+            </h4>
+            <p className="text-xs text-gray-500 mt-1">
+              Priority: {taskData.priority} | Status: {taskData.status}
+            </p>
+            {taskData.due_date && (
+              <p className="text-xs text-gray-500">
+                📅 {formatDate(taskData.due_date)}
+              </p>
+            )}
+          </div>
+          {!completed && (
+            <button
+              onClick={handleComplete}
+              disabled={completing}
+              className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+            >
+              {completing ? '...' : '✓ Complete'}
+            </button>
+          )}
+          {completed && (
+            <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
+              ✓ Completed
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const match = text.match(/📋 Task created: "(.*?)" assigned to (.*?)\. Due: (.*?)(\.|$)/);
   const title = match ? match[1] : text.replace(/^📋 Task created: /, '').replace(/\.$/, '');
   const assignee = match ? match[2] : '';
@@ -128,6 +183,7 @@ const Chat = ({
   serviceInfo = null,
   serviceEntryId = null,
   onTaskStatusUpdate = null,
+  onNormalTaskStatusUpdate = null
 }) => {
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -682,45 +738,22 @@ const Chat = ({
 
                     // 🔥 NEW TASK UI (ADD THIS BLOCK)
                     (() => {
-                    let task;
-                      try {
-                        task = typeof msg.text === "string"
-                          ? JSON.parse(msg.text)
-                          : msg.text;  
-                      } catch {
-                        return null;
-                      }
-
-                      return (
-                        <div className="flex max-w-xs lg:max-w-md flex-row">
-                          <div className="mr-2 flex-shrink-0 relative">
-                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-                              📋
-                            </div>
-                          </div>
-
-                          <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
-                            <div className="font-medium text-gray-900">
-                              {task.title}
-                            </div>
-
-                            <div className="text-xs text-gray-500 mt-1">
-                              Priority: {task.priority}
-                            </div>
-
-                            <div className="text-xs text-gray-500">
-                              Status: {task.status}
-                            </div>
-
-                            {task.due_date && (
-                              <div className="text-xs text-gray-500">
-                                📅 {formatDate(task.due_date)}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()
+                        let task;
+                        try {
+                          task = typeof msg.text === "string"
+                            ? JSON.parse(msg.text)
+                            : msg.text;
+                        } catch {
+                          return null;
+                        }
+                        return (
+                          <NormalTaskMessage
+                            taskId={task.task_id}
+                            taskData={task}
+                            onStatusUpdate={onNormalTaskStatusUpdate}
+                          />
+                        );
+                      })()
 
                   ) : (
                       <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>

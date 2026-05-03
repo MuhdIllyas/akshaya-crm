@@ -1138,6 +1138,50 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== TASK STATUS UPDATE FOR NORMAL CHAT ==============
+  const handleNormalTaskStatusUpdate = async (taskId, currentStatus) => {
+    const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+      // Update the tasks state (so the task list is in sync)
+      await fetchTasks();
+      toast.success(`Task marked as ${newStatus}`);
+
+      // Update the local messages state to change the JSON of this task-card message
+      setMessages(prev => {
+        const convId = activeConversation?.id;
+        if (!convId || !prev[convId]) return prev;
+        const updated = prev[convId].map(msg => {
+          if (msg.messageType === 'task') {
+            try {
+              const taskData = JSON.parse(msg.text);
+              if (taskData.task_id === taskId) {
+                return {
+                  ...msg,
+                  text: JSON.stringify({ ...taskData, status: newStatus }),
+                };
+              }
+            } catch {}
+          }
+          return msg;
+        });
+        return { ...prev, [convId]: updated };
+      });
+    } catch (err) {
+      console.error('Error updating task:', err);
+      toast.error('Failed to update task');
+    }
+  };
+
   // ============== DATA FETCHING FUNCTIONS ==============
 
   const fetchCentres = async () => {
@@ -2421,6 +2465,7 @@ const MessengerPage = ({ user }) => {
                   serviceEntryId={activeConversation?.context_type === 'service_entry' ? activeConversation.context_id : null}
                   serviceInfo={{ tasks: tasks }}
                   onTaskStatusUpdate={handleServiceTaskStatusUpdate}
+                  onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
                 />
               </div>
             ) : activeView === "activity" ? (<div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>) : activeView === "calendar" ? (<div className="h-full overflow-y-auto">{renderCalendarView()}</div>) : activeView === "files" ? (<div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>) : activeView === "tasks" ? (<div className="h-full overflow-y-auto">{renderTasksView()}</div>) : activeView === "schedules" ? (<div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>) : (<div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>)}
