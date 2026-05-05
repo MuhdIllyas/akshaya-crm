@@ -5,7 +5,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 
 export default function CalendarView({ events, viewMode, onEventClick }) {
-  // Map events to FullCalendar format with colors
+  
   const mappedEvents = events.map((ev) => ({
     id: ev.id.toString(),
     title: ev.title,
