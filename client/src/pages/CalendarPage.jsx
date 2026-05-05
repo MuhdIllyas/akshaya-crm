@@ -1,5 +1,5 @@
 // pages/CalendarPage.jsx
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import CalendarToolbar from "../components/calendar/CalendarToolbar";
 import CalendarView from "../components/calendar/CalendarView";
 import MiniCalendar from "../components/calendar/MiniCalendar";
@@ -9,51 +9,79 @@ import AgendaView from "../components/calendar/AgendaView";
 import { useEvents } from "../hooks/useEvents";
 
 export default function CalendarPage() {
-  // Safely retrieve hook data – useEvents might not be available everywhere
+  // ---- Safe hook fallback ----
   const eventsHookData = typeof useEvents === "function" ? useEvents() : {};
 
   const {
     events = [],
     leavesData = [],
-    filters: hookFilters,
-    setFilters: hookSetFilters,
     createEvent: hookCreateEvent,
     updateEvent: hookUpdateEvent,
     deleteEvent: hookDeleteEvent,
     userRole = "admin",
-    centresMap = {},
+    services: servicesList = [],
   } = eventsHookData;
 
-  // Fallback filters (in case the hook doesn't provide them)
-  const [localFilters, setLocalFilters] = useState({
-    working: true,
-    holiday: true,
-    weekend: true,
-    task: true,
+  // ---- Filters (aligned with new system) ----
+  const [filters, setFilters] = useState({
+    type: "",           // "application" | "task" | "service" | "holiday"
     priority: "",
     event_type: "",
     visibility: "centre",
+    service_id: "",
+    myEvents: false,
   });
 
-  // Use hook filters if available, otherwise use local state
-  const filters = hookFilters !== undefined ? hookFilters : localFilters;
-  const setFilters = hookSetFilters || setLocalFilters;
-
-  // Fallback CRUD operations (prevent crashes)
-  const createEvent = hookCreateEvent || ((data) => console.warn("createEvent not implemented", data));
-  const updateEvent = hookUpdateEvent || ((id, data) => console.warn("updateEvent not implemented", id, data));
-  const deleteEvent = hookDeleteEvent || ((id) => console.warn("deleteEvent not implemented", id));
-
-  const [viewMode, setViewMode] = useState("month");
+  // ---- View & UI state ----
+  const [viewMode, setViewMode] = useState("month"); // month | week | agenda
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [loading, setLoading] = useState(false);   // optional – set from hook if needed
 
+  // Ref to control FullCalendar API
+  const calendarRef = useRef(null);
+
+  // ---- Filter events ----
+  const filteredEvents = useMemo(() => {
+    if (!Array.isArray(events)) return [];
+
+    return events.filter((e) => {
+      // type filter (single select)
+      if (filters.type && e.type !== filters.type) return false;
+      // priority filter
+      if (filters.priority && e.priority !== filters.priority) return false;
+      // event_type filter
+      if (filters.event_type && e.event_type !== filters.event_type) return false;
+      // visibility filter
+      if (filters.visibility && e.visibility !== filters.visibility) return false;
+      // service filter
+      if (filters.service_id && e.service_id?.toString() !== filters.service_id) return false;
+
+      // myEvents filter – example: assume each event has assigned_to array or created_by field
+      if (filters.myEvents) {
+        const currentUserId = "CURRENT_USER_ID"; // replace with actual logged‑in user ID
+        const isMine =
+          e.created_by === currentUserId ||
+          (Array.isArray(e.assigned_to) && e.assigned_to.includes(currentUserId));
+        if (!isMine) return false;
+      }
+      return true;
+    });
+  }, [events, filters]);
+
+  // ---- CRUD fallbacks ----
+  const createEvent = hookCreateEvent || ((data) => console.warn("createEvent not implemented", data));
+  const updateEvent = hookUpdateEvent || ((id, data) => console.warn("updateEvent not implemented", id, data));
+  const deleteEvent = hookDeleteEvent || ((id) => console.warn("deleteEvent not implemented", id));
+
+  // ---- Handlers ----
   const handleAddEvent = useCallback(
     (data) => {
       createEvent(data);
       setShowCreateModal(false);
+      setEditEvent(null);
     },
     [createEvent]
   );
@@ -87,8 +115,32 @@ export default function CalendarPage() {
 
   const handleMiniCalendarDateChange = (date) => {
     setCurrentDate(date);
-    // Optional: also trigger a gotoDate on the FullCalendar if you keep a ref
+    // Sync the main FullCalendar
+    const api = calendarRef.current?.getApi?.();
+    api?.gotoDate(date);
   };
+
+  // Handle calendar clicks: if a date is clicked (new event), open create modal
+  const handleCalendarEventClick = (event) => {
+    if (event.isNew) {
+      // Pre‑fill date in create modal (via editEvent)
+      setEditEvent(null);
+      setShowCreateModal(true);
+      // Optionally store pre‑selected date
+      setSelectedEvent(null);
+      // You can also pass a "defaultDate" to CreateEventModal if you wish
+      // We'll store it in component state or context
+      // For simplicity, set editEvent to { date: event.date } so modal picks it up
+      setEditEvent({ date: event.date });
+      setShowCreateModal(true);
+    } else {
+      setSelectedEvent(event);
+    }
+  };
+
+  // Loading / Empty state helpers
+  const isLoading = !eventsHookData || loading;
+  const hasEvents = filteredEvents.length > 0;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
@@ -99,43 +151,54 @@ export default function CalendarPage() {
         setFilters={setFilters}
         onAddEvent={openCreateModal}
         userRole={userRole}
+        services={servicesList}
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* MiniCalendar sidebar (hidden on mobile) */}
+        {/* MiniCalendar sidebar (hidden on small screens) */}
         {viewMode !== "agenda" && (
           <aside className="hidden lg:block w-64 p-4 border-r border-gray-200 overflow-y-auto bg-white">
             <MiniCalendar
-              events={events}
+              events={filteredEvents}
               currentDate={currentDate}
               onDateChange={handleMiniCalendarDateChange}
             />
-            {/* Additional quick‑stats or filter chips can go here */}
           </aside>
         )}
 
-        <main className="flex-1 overflow-auto p-4">
-          {viewMode === "agenda" ? (
+        <main className="flex-1 overflow-auto p-4 relative">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              <div className="animate-spin mr-2 h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+              Loading events…
+            </div>
+          ) : viewMode === "agenda" ? (
             <AgendaView
-              calendarData={events}
+              calendarData={filteredEvents}
               leavesData={leavesData}
               onEventClick={setSelectedEvent}
               onEdit={openEditModal}
               onDelete={(item) => {
-                if (item.itemType === "leave") {
-                  // If you need leave deletion, handle it here
-                  console.warn("Leave deletion is not yet implemented");
-                } else {
-                  deleteEvent(item.id);
-                }
+                // Standardised delete: assumes item has id and possibly type
+                deleteEvent(item.id);
               }}
             />
+          ) : !hasEvents ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <p className="text-lg font-medium">No events found</p>
+              <p className="text-sm mt-1">Try adjusting your filters or add a new event.</p>
+            </div>
           ) : (
             <CalendarView
-              key={currentDate.toISOString()} // force re‑render when date changes
-              events={events}
+              ref={calendarRef}
+              key={viewMode + currentDate.toISOString()}
+              events={filteredEvents}
               viewMode={viewMode}
-              onEventClick={setSelectedEvent}
+              onEventClick={handleCalendarEventClick}
+              onDateClick={handleCalendarEventClick} // unified handler for date clicks
             />
           )}
         </main>
@@ -156,7 +219,7 @@ export default function CalendarPage() {
         <CreateEventModal
           initialData={editEvent || undefined}
           onSave={(data) => {
-            if (editEvent) {
+            if (editEvent?.id) {
               handleEditEvent({ ...editEvent, ...data });
             } else {
               handleAddEvent(data);
