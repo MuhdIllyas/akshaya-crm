@@ -1,5 +1,6 @@
 // pages/CalendarPage.jsx
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { toast } from "react-toastify";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import FullCalendar from "@fullcalendar/react";
@@ -879,6 +880,12 @@ function CentreSwitcher({ centres, activeCentreId, onChange }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+useEffect(() => {
+  if (error) {
+    toast.error("Failed to load calendar events");
+  }
+}, [error]);
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
@@ -1102,9 +1109,49 @@ export default function CalendarPage() {
   }, [events, filters, userId]);
 
   // ---------- CRUD handlers ----------
-  const handleAddEvent = useCallback((data) => { hookCreateEvent(data); setShowCreateModal(false); setEditEvent(null); }, [hookCreateEvent]);
-  const handleEditEvent = useCallback((data) => { hookUpdateEvent(data.id, data); setShowCreateModal(false); setEditEvent(null); }, [hookUpdateEvent]);
-  const handleDeleteEvent = useCallback((id) => { hookDeleteEvent(id); setSelectedEvent(null); }, [hookDeleteEvent]);
+  // Create
+  const handleAddEvent = useCallback(
+    async (data) => {
+      try {
+        await hookCreateEvent(data);
+        toast.success("Event created successfully");
+        setShowCreateModal(false);
+        setEditEvent(null);
+      } catch (err) {
+        toast.error(err?.message || "Failed to create event");
+      }
+    },
+    [hookCreateEvent]
+  );
+
+  // Update
+  const handleEditEvent = useCallback(
+    async (data) => {
+      try {
+        await hookUpdateEvent(data.id, data);
+        toast.success("Event updated successfully");
+        setShowCreateModal(false);
+        setEditEvent(null);
+      } catch (err) {
+        toast.error(err?.message || "Failed to update event");
+      }
+    },
+    [hookUpdateEvent]
+  );
+
+  // Delete
+  const handleDeleteEvent = useCallback(
+    async (id) => {
+      try {
+        await hookDeleteEvent(id);
+        toast.success("Event deleted successfully");
+        setSelectedEvent(null);
+      } catch (err) {
+        toast.error(err?.message || "Failed to delete event");
+      }
+    },
+    [hookDeleteEvent]
+  );
 
   const openCreateModal = () => { setEditEvent(null); setShowCreateModal(true); };
   const openEditModal = (event) => { setEditEvent(event); setShowCreateModal(true); };
