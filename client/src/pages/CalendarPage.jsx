@@ -720,10 +720,79 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
 }
 
 // ----------------------------------------------------------------------
-//  CalendarPage (main export)
+//  JWT helpers (inline, so no extra dependencies)
+// ----------------------------------------------------------------------
+function getTokenClaims() {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(atob(payload));
+    return {
+      id: decoded.id,
+      role: decoded.role,
+      centreId: decoded.centre_id,
+      name: decoded.name,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ----------------------------------------------------------------------
+//  Main CalendarPage
 // ----------------------------------------------------------------------
 export default function CalendarPage() {
-  const eventsHookData = typeof useEvents === "function" ? useEvents() : {};
+  // ---------- Auth ----------
+  const claims = getTokenClaims();
+  const userRole = claims?.role || "staff";
+  const userId = claims?.id;
+  const userCentreId = claims?.centreId;
+
+  // ---------- Centres (superadmin) ----------
+  const [centres, setCentres] = useState([]);
+  const [activeCentreId, setActiveCentreId] = useState(null);
+  const [showCentrePicker, setShowCentrePicker] = useState(false);
+
+  useEffect(() => {
+    if (userRole === "superadmin") {
+      fetch(`${import.meta.env.VITE_API_URL}/api/wallet/centres`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      })
+        .then(res => res.json())
+        .then(data => setCentres(data))
+        .catch(() => setCentres([]));
+    } else {
+      setActiveCentreId(userCentreId);
+    }
+  }, [userRole, userCentreId]);
+
+  // ---------- Services list for toolbar ----------
+  const [servicesList, setServicesList] = useState([]);
+  useEffect(() => {
+    if (!activeCentreId || userRole === "staff") return;
+    fetch(`${import.meta.env.VITE_API_URL}/api/services?centreId=${activeCentreId}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    })
+      .then(res => res.json())
+      .then(data => setServicesList(data.map(s => ({ id: s.id, name: s.name }))))
+      .catch(() => setServicesList([]));
+  }, [activeCentreId, userRole]);
+
+  // ---------- Leaves (placeholder, replace with real data if available) ----------
+  const leavesData = [];
+
+  // ---------- Filters for the hook ----------
+  const [hookFilters, setHookFilters] = useState({
+    centreId: activeCentreId,   // initially null, will update
+  });
+
+  // Sync active centre with hook filters
+  useEffect(() => {
+    setHookFilters(prev => ({ ...prev, centreId: activeCentreId }));
+  }, [activeCentreId]);
+
+  // ---------- Events hook ----------
   const {
     events = [],
     loading,
@@ -731,8 +800,9 @@ export default function CalendarPage() {
     addEvent: hookCreateEvent,
     editEvent: hookUpdateEvent,
     removeEvent: hookDeleteEvent,
-  } = typeof useEvents === "function" ? useEvents() : {};
+  } = useEvents(hookFilters);
 
+  // ---------- UI filters (toolbar) ----------
   const [filters, setFilters] = useState({
     type: "",
     priority: "",
@@ -749,6 +819,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const calendarRef = useRef(null);
 
+  // ---------- Client‑side filtering ----------
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
     return events.filter((e) => {
@@ -758,21 +829,17 @@ export default function CalendarPage() {
       if (filters.visibility && e.visibility !== filters.visibility) return false;
       if (filters.service_id && e.service_id?.toString() !== filters.service_id) return false;
       if (filters.myEvents) {
-        const currentUserId = "CURRENT_USER_ID"; // replace with real user ID from context
-        const isMine = e.created_by === currentUserId || (Array.isArray(e.assigned_to) && e.assigned_to.includes(currentUserId));
+        const isMine = e.created_by === userId || (Array.isArray(e.assigned_to) && e.assigned_to.includes(userId));
         if (!isMine) return false;
       }
       return true;
     });
-  }, [events, filters]);
+  }, [events, filters, userId]);
 
-  const createEvent = hookCreateEvent || ((data) => console.warn("createEvent not implemented", data));
-  const updateEvent = hookUpdateEvent || ((id, data) => console.warn("updateEvent not implemented", id, data));
-  const deleteEvent = hookDeleteEvent || ((id) => console.warn("deleteEvent not implemented", id));
-
-  const handleAddEvent = useCallback((data) => { createEvent(data); setShowCreateModal(false); setEditEvent(null); }, [createEvent]);
-  const handleEditEvent = useCallback((data) => { updateEvent(data.id, data); setShowCreateModal(false); setEditEvent(null); }, [updateEvent]);
-  const handleDeleteEvent = useCallback((id) => { deleteEvent(id); setSelectedEvent(null); }, [deleteEvent]);
+  // ---------- CRUD wrappers ----------
+  const handleAddEvent = useCallback((data) => { hookCreateEvent(data); setShowCreateModal(false); setEditEvent(null); }, [hookCreateEvent]);
+  const handleEditEvent = useCallback((data) => { hookUpdateEvent(data.id, data); setShowCreateModal(false); setEditEvent(null); }, [hookUpdateEvent]);
+  const handleDeleteEvent = useCallback((id) => { hookDeleteEvent(id); setSelectedEvent(null); }, [hookDeleteEvent]);
 
   const openCreateModal = () => { setEditEvent(null); setShowCreateModal(true); };
   const openEditModal = (event) => { setEditEvent(event); setShowCreateModal(true); };
@@ -784,8 +851,6 @@ export default function CalendarPage() {
 
   const handleCalendarEventClick = (event) => {
     if (event.isNew) {
-      setEditEvent(null);
-      setShowCreateModal(true);
       setEditEvent({ date: event.date });
       setShowCreateModal(true);
     } else {
@@ -793,11 +858,50 @@ export default function CalendarPage() {
     }
   };
 
-  const isLoading = !eventsHookData || loading;
+  // ---------- Superadmin centre picker ----------
+  if (userRole === "superadmin" && !activeCentreId) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-5xl mx-auto">
+          <h1 className="text-2xl font-bold mb-6">Select a Centre to View Calendar</h1>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {centres.map(c => (
+              <button
+                key={c.id}
+                onClick={() => setActiveCentreId(c.id)}
+                className="bg-white p-6 rounded-xl border hover:shadow-md text-left"
+              >
+                <h3 className="font-bold text-lg">{c.name}</h3>
+                <p className="text-sm text-gray-500">{c.location || 'No Location'}</p>
+                <div className="mt-4 text-indigo-600 text-sm font-medium">View Calendar →</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Main calendar view ----------
+  const isLoading = loading;
   const hasEvents = filteredEvents.length > 0;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
+      {userRole === "superadmin" && activeCentreId && (
+        <div className="bg-indigo-50 px-4 py-1 text-xs text-indigo-700 border-b border-indigo-200 flex justify-between items-center">
+          <span>
+            Viewing: {centres.find(c => c.id === activeCentreId)?.name || `Centre ${activeCentreId}`}
+          </span>
+          <button
+            onClick={() => setActiveCentreId(null)}
+            className="underline hover:text-indigo-900"
+          >
+            Change centre
+          </button>
+        </div>
+      )}
+
       <CalendarToolbar
         viewMode={viewMode}
         setViewMode={setViewMode}
@@ -807,6 +911,7 @@ export default function CalendarPage() {
         userRole={userRole}
         services={servicesList}
       />
+
       <div className="flex-1 flex overflow-hidden">
         {viewMode !== "agenda" && (
           <aside className="hidden lg:block w-64 p-4 border-r border-gray-200 overflow-y-auto bg-white">
@@ -825,7 +930,7 @@ export default function CalendarPage() {
               leavesData={leavesData}
               onEventClick={setSelectedEvent}
               onEdit={openEditModal}
-              onDelete={(item) => deleteEvent(item.id)}
+              onDelete={(item) => handleDeleteEvent(item.id)}
             />
           ) : !hasEvents ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -847,14 +952,16 @@ export default function CalendarPage() {
           )}
         </main>
       </div>
+
       {selectedEvent && (
         <EventModal
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
           onDelete={handleDeleteEvent}
-          onUpdate={updateEvent}
+          onUpdate={hookUpdateEvent}
         />
       )}
+
       {showCreateModal && (
         <CreateEventModal
           initialData={editEvent || undefined}
@@ -863,6 +970,9 @@ export default function CalendarPage() {
             else handleAddEvent(data);
           }}
           onClose={() => { setShowCreateModal(false); setEditEvent(null); }}
+          userRole={userRole}
+          services={servicesList}
+          staffList={[]}   // pass real staff list if needed
         />
       )}
     </div>
