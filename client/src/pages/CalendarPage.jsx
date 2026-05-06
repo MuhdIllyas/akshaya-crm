@@ -502,7 +502,7 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       event_type: "deadline",
       priority: "medium",
       visibility: "centre",
-      related_service_id: "",
+      related_service_id: "",     // backend expects related_service_id
       assigned_to: "",
     }
   );
@@ -570,6 +570,7 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               <option value="expiry">Expiry</option>
               <option value="announcement">Announcement</option>
             </select>
+            {/* Service dropdown (uses related_service_id) */}
             <select
               value={form.related_service_id}
               onChange={(e) => setForm({ ...form, related_service_id: e.target.value })}
@@ -577,6 +578,7 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               <option value="">No Service</option>
               {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+            {/* Staff dropdown */}
             <select value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}>
               <option value="">Unassigned</option>
               {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -777,31 +779,47 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!activeCentreId) return;
     const token = localStorage.getItem("token");
+    if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
 
-    // Services
-    fetch(`${import.meta.env.VITE_API_URL}/api/services?centreId=${activeCentreId}`, { headers })
-      .then(res => res.json())
-      .then(data => {
-        // Backend typically returns `service_name`; map to `name`
-        setServices(data.map(s => ({ id: s.id, name: s.service_name || s.name })));
+    // Services – correct endpoint from servicemanagement.js
+    fetch(`${import.meta.env.VITE_API_URL}/api/servicemanagement/services`, { headers })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          // Backend returns { id, name } so we can use directly
+          setServices(data.map(s => ({ id: s.id, name: s.name })));
+        } else {
+          console.error("Services response is not an array", data);
+          setServices([]);
+        }
       })
-      .catch(err => console.error("FETCH SERVICES ERROR:", err));
+      .catch(err => {
+        console.error("FETCH SERVICES ERROR:", err);
+        setServices([]);
+      });
 
-    // Staff (adjust endpoint as needed)
-    fetch(`${import.meta.env.VITE_API_URL}/api/staff?centreId=${activeCentreId}`, { headers })
-      .then(res => res.json())
-      .then(data => {
-        // Combine first_name and last_name if present
-        setStaff(data.map(s => ({
-          id: s.id,
-          name: s.first_name ? `${s.first_name} ${s.last_name || ''}` : s.name,
-        })));
+    // Staff – correct endpoint from servicemanagement.js
+    fetch(`${import.meta.env.VITE_API_URL}/api/servicemanagement/staff?centre_id=${activeCentreId}`, { headers })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          // Backend returns { id, name } directly
+          setStaff(data.map(s => ({ id: s.id, name: s.name })));
+        } else {
+          console.error("Staff response is not an array", data);
+          setStaff([]);
+        }
       })
-      .catch(err => console.error("FETCH STAFF ERROR:", err));
+      .catch(err => {
+        console.error("FETCH STAFF ERROR:", err);
+        setStaff([]);
+      });
   }, [activeCentreId]);
 
-  // Toolbar services list (can reuse the same `services` array)
+  // Toolbar services list (reuse the same `services` array)
   const servicesList = services;
 
   const leavesData = []; // placeholder
@@ -848,8 +866,10 @@ export default function CalendarPage() {
       if (filters.priority && e.priority !== filters.priority) return false;
       if (filters.event_type && e.event_type !== filters.event_type) return false;
       if (filters.visibility && e.visibility !== filters.visibility) return false;
+      // backend field is related_service_id
       if (filters.service_id && e.related_service_id?.toString() !== filters.service_id) return false;
       if (filters.myEvents) {
+        // assigned_to is a single integer
         const isMine = e.created_by === userId || e.assigned_to === userId;
         if (!isMine) return false;
       }
@@ -867,6 +887,7 @@ export default function CalendarPage() {
 
   const handleMiniCalendarDateChange = (date) => {
     setCurrentDate(date);
+    // FullCalendar ref is not used; this function remains for MiniCalendar sync only
   };
 
   const handleCalendarEventClick = (event) => {
