@@ -45,6 +45,8 @@ import whatsappRoutes from "./routes/whatsapp.js";
 
 import staffperformanceRoutes from "./routes/staffPerformance.js";
 
+import eventsRoutes from "./routes/events.js";
+
 dotenv.config();
 
 import "./routes/scheduler.js";
@@ -295,6 +297,9 @@ app.use("/api/servicecollaboration", serviceCollaborationRoutes);
 app.use("/api/webhook", webhookRoutes);
 app.use("/api/libromi", libromiWebhookRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+
+/* Events */
+app.use("/api/events", eventsRoutes);
 
 /* ================================
    STATIC FILES
