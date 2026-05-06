@@ -1,4 +1,5 @@
 // routes/events.js
+
 import express from "express";
 import pool from "../db.js";
 import jwt from "jsonwebtoken";
@@ -8,18 +9,24 @@ const router = express.Router();
 /* ======================================================
    AUTH MIDDLEWARE
 ====================================================== */
+
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return res.status(401).json({
+      error: "Unauthorized",
+    });
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ error: "Invalid token" });
+      return res.status(403).json({
+        error: "Invalid token",
+      });
     }
+
     req.user = user;
     next();
   });
@@ -27,12 +34,12 @@ const authenticateToken = (req, res, next) => {
 
 router.use(authenticateToken);
 
-/* =========================================================
-   HELPERS
-========================================================= */
+/* ======================================================
+   ROLE FILTER
+====================================================== */
 
 const buildRoleFilter = (user) => {
-  // Superadmin → all events
+  // SUPERADMIN → ALL EVENTS
   if (user.role === "superadmin") {
     return {
       query: "",
@@ -40,7 +47,7 @@ const buildRoleFilter = (user) => {
     };
   }
 
-  // Admin → centre + global
+  // ADMIN → CENTRE + GLOBAL
   if (user.role === "admin") {
     return {
       query: `
@@ -53,7 +60,7 @@ const buildRoleFilter = (user) => {
     };
   }
 
-  // Staff → assigned + centre + global
+  // STAFF → ASSIGNED + CENTRE + GLOBAL
   return {
     query: `
       AND (
@@ -66,9 +73,9 @@ const buildRoleFilter = (user) => {
   };
 };
 
-/* =========================================================
+/* ======================================================
    GET EVENTS
-========================================================= */
+====================================================== */
 
 router.get("/", async (req, res) => {
   const client = await pool.connect();
@@ -89,7 +96,10 @@ router.get("/", async (req, res) => {
     let values = [...roleFilter.values];
     let idx = values.length + 1;
 
-    // Date range
+    /* ======================
+       DATE FILTER
+    ====================== */
+
     if (start && end) {
       conditions.push(`
         (
@@ -102,7 +112,10 @@ router.get("/", async (req, res) => {
       idx += 2;
     }
 
-    // Filters
+    /* ======================
+       TYPE FILTER
+    ====================== */
+
     if (type) {
       conditions.push(`e.type = $${idx}`);
       values.push(type);
@@ -127,9 +140,14 @@ router.get("/", async (req, res) => {
       idx++;
     }
 
-    const whereClause = conditions.length
-      ? `AND ${conditions.join(" AND ")}`
-      : "";
+    const whereClause =
+      conditions.length > 0
+        ? `AND ${conditions.join(" AND ")}`
+        : "";
+
+    /* ======================
+       MAIN QUERY
+    ====================== */
 
     const query = `
       SELECT
@@ -158,19 +176,22 @@ router.get("/", async (req, res) => {
     const result = await client.query(query, values);
 
     res.json(result.rows);
+
   } catch (err) {
     console.error("GET EVENTS ERROR:", err);
+
     res.status(500).json({
       message: "Failed to fetch events",
     });
+
   } finally {
     client.release();
   }
 });
 
-/* =========================================================
+/* ======================================================
    CREATE EVENT
-========================================================= */
+====================================================== */
 
 router.post("/", async (req, res) => {
   const client = await pool.connect();
@@ -179,6 +200,7 @@ router.post("/", async (req, res) => {
     const {
       title,
       description,
+
       date,
       start_datetime,
       end_datetime,
@@ -193,14 +215,22 @@ router.post("/", async (req, res) => {
       priority = "medium",
       status = "active",
 
-      assigned_to = null,
+      assigned_to,
     } = req.body;
 
-    if (!title) {
+    /* ======================
+       VALIDATION
+    ====================== */
+
+    if (!title || !title.trim()) {
       return res.status(400).json({
         message: "Title is required",
       });
     }
+
+    /* ======================
+       INSERT
+    ====================== */
 
     const query = `
       INSERT INTO calendar_events (
@@ -243,6 +273,7 @@ router.post("/", async (req, res) => {
 
     const values = [
       title,
+
       description || null,
 
       date || null,
@@ -258,30 +289,32 @@ router.post("/", async (req, res) => {
       req.user.id,
       req.user.centre_id,
 
-      visibility,
-      priority,
-      status,
+      visibility || "centre",
+      priority || "medium",
+      status || "active",
 
-      assigned_to,
+      assigned_to || null,
     ];
 
     const result = await client.query(query, values);
 
     res.status(201).json(result.rows[0]);
+
   } catch (err) {
     console.error("CREATE EVENT ERROR:", err);
 
     res.status(500).json({
       message: "Failed to create event",
     });
+
   } finally {
     client.release();
   }
 });
 
-/* =========================================================
+/* ======================================================
    UPDATE EVENT
-========================================================= */
+====================================================== */
 
 router.put("/:id", async (req, res) => {
   const client = await pool.connect();
@@ -305,7 +338,10 @@ router.put("/:id", async (req, res) => {
 
     const event = existing.rows[0];
 
-    // Permission check
+    /* ======================
+       PERMISSION CHECK
+    ====================== */
+
     if (
       req.user.role !== "superadmin" &&
       event.centre_id !== req.user.centre_id
@@ -318,6 +354,7 @@ router.put("/:id", async (req, res) => {
     const {
       title,
       description,
+
       date,
       start_datetime,
       end_datetime,
@@ -332,8 +369,7 @@ router.put("/:id", async (req, res) => {
       assigned_to,
     } = req.body;
 
-    const result = await client.query(
-      `
+    const query = `
       UPDATE calendar_events
       SET
         title = $1,
@@ -355,43 +391,47 @@ router.put("/:id", async (req, res) => {
       WHERE id = $12
 
       RETURNING *
-      `,
-      [
-        title,
-        description,
+    `;
 
-        date,
-        start_datetime,
-        end_datetime,
+    const values = [
+      title,
+      description,
 
-        type,
-        event_type,
+      date || null,
+      start_datetime || null,
+      end_datetime || null,
 
-        visibility,
-        priority,
-        status,
+      type,
+      event_type,
 
-        assigned_to,
+      visibility,
+      priority,
+      status,
 
-        id,
-      ]
-    );
+      assigned_to || null,
+
+      id,
+    ];
+
+    const result = await client.query(query, values);
 
     res.json(result.rows[0]);
+
   } catch (err) {
     console.error("UPDATE EVENT ERROR:", err);
 
     res.status(500).json({
       message: "Failed to update event",
     });
+
   } finally {
     client.release();
   }
 });
 
-/* =========================================================
+/* ======================================================
    DELETE EVENT
-========================================================= */
+====================================================== */
 
 router.delete("/:id", async (req, res) => {
   const client = await pool.connect();
@@ -415,7 +455,10 @@ router.delete("/:id", async (req, res) => {
 
     const event = existing.rows[0];
 
-    // Permission check
+    /* ======================
+       PERMISSION CHECK
+    ====================== */
+
     if (
       req.user.role !== "superadmin" &&
       event.centre_id !== req.user.centre_id
@@ -436,12 +479,14 @@ router.delete("/:id", async (req, res) => {
     res.json({
       message: "Event deleted successfully",
     });
+
   } catch (err) {
     console.error("DELETE EVENT ERROR:", err);
 
     res.status(500).json({
       message: "Failed to delete event",
     });
+
   } finally {
     client.release();
   }

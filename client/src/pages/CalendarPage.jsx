@@ -491,6 +491,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
 // ----------------------------------------------------------------------
 function CreateEventModal({ onSave, onClose, initialData, services = [], staffList = [], userRole = "admin" }) {
   const today = new Date().toISOString().slice(0, 10);
+  // 🔥 fixed: default integer fields to null instead of ""
   const [form, setForm] = useState(
     initialData || {
       title: "",
@@ -502,8 +503,8 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       event_type: "deadline",
       priority: "medium",
       visibility: "centre",
-      related_service_id: "",     // backend expects related_service_id
-      assigned_to: "",
+      related_service_id: null,    // now null
+      assigned_to: null,           // now null
     }
   );
 
@@ -514,7 +515,12 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       alert("End time cannot be before start time");
       return;
     }
-    onSave(form);
+    // ensure empty strings become null before sending
+    onSave({
+      ...form,
+      assigned_to: form.assigned_to || null,
+      related_service_id: form.related_service_id || null,
+    });
     onClose();
   };
 
@@ -570,16 +576,19 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               <option value="expiry">Expiry</option>
               <option value="announcement">Announcement</option>
             </select>
-            {/* Service dropdown (uses related_service_id) */}
+            {/* Service dropdown */}
             <select
-              value={form.related_service_id}
-              onChange={(e) => setForm({ ...form, related_service_id: e.target.value })}
+              value={form.related_service_id || ""}
+              onChange={(e) => setForm({ ...form, related_service_id: e.target.value || null })}
             >
               <option value="">No Service</option>
               {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             {/* Staff dropdown */}
-            <select value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}>
+            <select
+              value={form.assigned_to || ""}
+              onChange={(e) => setForm({ ...form, assigned_to: e.target.value || null })}
+            >
               <option value="">Unassigned</option>
               {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -788,7 +797,6 @@ export default function CalendarPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
-          // Backend returns { id, name } so we can use directly
           setServices(data.map(s => ({ id: s.id, name: s.name })));
         } else {
           console.error("Services response is not an array", data);
@@ -806,7 +814,6 @@ export default function CalendarPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
-          // Backend returns { id, name } directly
           setStaff(data.map(s => ({ id: s.id, name: s.name })));
         } else {
           console.error("Staff response is not an array", data);
@@ -866,10 +873,8 @@ export default function CalendarPage() {
       if (filters.priority && e.priority !== filters.priority) return false;
       if (filters.event_type && e.event_type !== filters.event_type) return false;
       if (filters.visibility && e.visibility !== filters.visibility) return false;
-      // backend field is related_service_id
       if (filters.service_id && e.related_service_id?.toString() !== filters.service_id) return false;
       if (filters.myEvents) {
-        // assigned_to is a single integer
         const isMine = e.created_by === userId || e.assigned_to === userId;
         if (!isMine) return false;
       }
@@ -887,7 +892,6 @@ export default function CalendarPage() {
 
   const handleMiniCalendarDateChange = (date) => {
     setCurrentDate(date);
-    // FullCalendar ref is not used; this function remains for MiniCalendar sync only
   };
 
   const handleCalendarEventClick = (event) => {
