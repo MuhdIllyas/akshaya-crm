@@ -491,7 +491,6 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
 // ----------------------------------------------------------------------
 function CreateEventModal({ onSave, onClose, initialData, services = [], staffList = [], userRole = "admin" }) {
   const today = new Date().toISOString().slice(0, 10);
-  // ------------------- FIX: use related_service_id -------------------
   const [form, setForm] = useState(
     initialData || {
       title: "",
@@ -503,7 +502,7 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       event_type: "deadline",
       priority: "medium",
       visibility: "centre",
-      related_service_id: "",     // ← changed from service_id
+      related_service_id: "",
       assigned_to: "",
     }
   );
@@ -571,7 +570,6 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               <option value="expiry">Expiry</option>
               <option value="announcement">Announcement</option>
             </select>
-            {/* ------------------- FIX: related_service_id ------------------- */}
             <select
               value={form.related_service_id}
               onChange={(e) => setForm({ ...form, related_service_id: e.target.value })}
@@ -725,7 +723,7 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
 }
 
 // ----------------------------------------------------------------------
-//  JWT helpers (inline, so no extra dependencies)
+//  JWT helpers (inline)
 // ----------------------------------------------------------------------
 function getTokenClaims() {
   const token = localStorage.getItem("token");
@@ -771,17 +769,40 @@ export default function CalendarPage() {
     }
   }, [userRole, userCentreId]);
 
-  // ---------- Services list for toolbar ----------
-  const [servicesList, setServicesList] = useState([]);
+  // ---------- Services & Staff for dropdowns ----------
+  const [services, setServices] = useState([]);
+  const [staff, setStaff] = useState([]);
+
+  // Fetch services & staff when centre is active
   useEffect(() => {
-    if (!activeCentreId || userRole === "staff") return;
-    fetch(`${import.meta.env.VITE_API_URL}/api/services?centreId=${activeCentreId}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-    })
+    if (!activeCentreId) return;
+    const token = localStorage.getItem("token");
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Services
+    fetch(`${import.meta.env.VITE_API_URL}/api/services?centreId=${activeCentreId}`, { headers })
       .then(res => res.json())
-      .then(data => setServicesList(data.map(s => ({ id: s.id, name: s.name }))))
-      .catch(() => setServicesList([]));
-  }, [activeCentreId, userRole]);
+      .then(data => {
+        // Backend typically returns `service_name`; map to `name`
+        setServices(data.map(s => ({ id: s.id, name: s.service_name || s.name })));
+      })
+      .catch(err => console.error("FETCH SERVICES ERROR:", err));
+
+    // Staff (adjust endpoint as needed)
+    fetch(`${import.meta.env.VITE_API_URL}/api/staff?centreId=${activeCentreId}`, { headers })
+      .then(res => res.json())
+      .then(data => {
+        // Combine first_name and last_name if present
+        setStaff(data.map(s => ({
+          id: s.id,
+          name: s.first_name ? `${s.first_name} ${s.last_name || ''}` : s.name,
+        })));
+      })
+      .catch(err => console.error("FETCH STAFF ERROR:", err));
+  }, [activeCentreId]);
+
+  // Toolbar services list (can reuse the same `services` array)
+  const servicesList = services;
 
   const leavesData = []; // placeholder
 
@@ -827,10 +848,8 @@ export default function CalendarPage() {
       if (filters.priority && e.priority !== filters.priority) return false;
       if (filters.event_type && e.event_type !== filters.event_type) return false;
       if (filters.visibility && e.visibility !== filters.visibility) return false;
-      // ------------------- FIX: related_service_id -------------------
       if (filters.service_id && e.related_service_id?.toString() !== filters.service_id) return false;
       if (filters.myEvents) {
-        // ------------------- FIX: assigned_to is integer -------------------
         const isMine = e.created_by === userId || e.assigned_to === userId;
         if (!isMine) return false;
       }
@@ -848,7 +867,6 @@ export default function CalendarPage() {
 
   const handleMiniCalendarDateChange = (date) => {
     setCurrentDate(date);
-    // FullCalendar does not forward ref; this function remains but the ref is not passed
   };
 
   const handleCalendarEventClick = (event) => {
@@ -943,7 +961,6 @@ export default function CalendarPage() {
               <p className="text-sm mt-1">Try adjusting your filters or add a new event.</p>
             </div>
           ) : (
-            // ------------------- FIX: removed ref -------------------
             <CalendarView
               events={filteredEvents}
               viewMode={viewMode}
@@ -960,7 +977,7 @@ export default function CalendarPage() {
           onClose={() => setSelectedEvent(null)}
           onDelete={handleDeleteEvent}
           onUpdate={hookUpdateEvent}
-          onEdit={openEditModal}   // ← ADDED
+          onEdit={openEditModal}
         />
       )}
 
@@ -973,8 +990,8 @@ export default function CalendarPage() {
           }}
           onClose={() => { setShowCreateModal(false); setEditEvent(null); }}
           userRole={userRole}
-          services={servicesList}
-          staffList={[]}
+          services={services}
+          staffList={staff}
         />
       )}
     </div>
