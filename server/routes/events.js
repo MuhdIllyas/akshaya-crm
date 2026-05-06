@@ -137,7 +137,7 @@ router.get("/", async (req, res) => {
 
         s.name AS service_name,
 
-        CONCAT(st.first_name, ' ', st.last_name) AS assigned_staff_name
+        st.name AS assigned_staff_name
 
       FROM calendar_events e
 
