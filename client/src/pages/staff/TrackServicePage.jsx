@@ -143,6 +143,8 @@ const TrackServicePage = () => {
   const [aadhaarSearch, setAadhaarSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
+  const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
   const [staffList, setStaffList] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
