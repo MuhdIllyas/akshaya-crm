@@ -636,8 +636,12 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
-    if (form.start_datetime && form.end_datetime && new Date(form.end_datetime) < new Date(form.start_datetime)) {
-      alert("End time cannot be before start time");
+    if (
+      form.start_datetime &&
+      form.end_datetime &&
+      new Date(form.end_datetime) < new Date(form.start_datetime)
+    ) {
+      toast.error("End time cannot be before start time");
       return;
     }
     onSave({
@@ -653,81 +657,221 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       <motion.div
         className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
         onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
       >
-        <motion.div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold">{initialData ? "Edit Event" : "Create Event"}</h2>
-            <button onClick={onClose}><FiX /></button>
+        <motion.div
+          onClick={(e) => e.stopPropagation()}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.2 }}
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        >
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {initialData ? "Edit Event" : "Create New Event"}
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {initialData ? "Update the details of your event." : "Fill in the details to schedule a new event."}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-full transition text-gray-400 hover:text-gray-600"
+            >
+              <FiX className="h-5 w-5" />
+            </button>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              className="w-full border p-2 rounded"
-              placeholder="Title"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              required
-            />
-            <textarea
-              className="w-full border p-2 rounded"
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-              <div className="flex gap-2">
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {/* Event Title */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Event Title *</label>
+              <input
+                type="text"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                placeholder="Enter event title"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                required
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                rows={3}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm resize-none"
+                placeholder="Add a short description..."
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
+
+            {/* Date & Time Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                 <input
-                  type="time"
-                  value={form.start_datetime.split("T")[1]}
-                  onChange={(e) => setForm({ ...form, start_datetime: `${form.date}T${e.target.value}` })}
-                />
-                <input
-                  type="time"
-                  value={form.end_datetime.split("T")[1]}
-                  onChange={(e) => setForm({ ...form, end_datetime: `${form.date}T${e.target.value}` })}
+                  type="date"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
                 />
               </div>
+
+              {/* Time */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start</label>
+                  <input
+                    type="time"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                    value={form.start_datetime.split("T")[1] || "09:00"}
+                    onChange={(e) =>
+                      setForm({ ...form, start_datetime: `${form.date}T${e.target.value}` })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End</label>
+                  <input
+                    type="time"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                    value={form.end_datetime.split("T")[1] || "17:00"}
+                    onChange={(e) =>
+                      setForm({ ...form, end_datetime: `${form.date}T${e.target.value}` })
+                    }
+                  />
+                </div>
+              </div>
             </div>
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              <option value="application">Application</option>
-              <option value="task">Task</option>
-              <option value="service">Service</option>
-              <option value="holiday">Holiday</option>
-            </select>
-            <select value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })}>
-              <option value="start">Start</option>
-              <option value="deadline">Deadline</option>
-              <option value="expiry">Expiry</option>
-              <option value="announcement">Announcement</option>
-            </select>
-            <select
-              value={form.related_service_id || ""}
-              onChange={(e) => setForm({ ...form, related_service_id: e.target.value || null })}
-            >
-              <option value="">No Service</option>
-              {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <select
-              value={form.assigned_to || ""}
-              onChange={(e) => setForm({ ...form, assigned_to: e.target.value || null })}
-            >
-              <option value="">Unassigned</option>
-              {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
+
+            {/* Type & Priority Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Event Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                  value={form.type}
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}
+                >
+                  <option value="application">Application</option>
+                  <option value="task">Task</option>
+                  <option value="service">Service</option>
+                  <option value="holiday">Holiday</option>
+                </select>
+              </div>
+
+              {/* Event Sub‑type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Event Sub‑type</label>
+                <select
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                  value={form.event_type}
+                  onChange={(e) => setForm({ ...form, event_type: e.target.value })}
+                >
+                  <option value="start">Start</option>
+                  <option value="deadline">Deadline</option>
+                  <option value="expiry">Expiry</option>
+                  <option value="announcement">Announcement</option>
+                </select>
+              </div>
+
+              {/* Priority */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                <select
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                  value={form.priority}
+                  onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Service & Staff Linking */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Service */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Link to Service</label>
+                <select
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                  value={form.related_service_id || ""}
+                  onChange={(e) =>
+                    setForm({ ...form, related_service_id: e.target.value || null })
+                  }
+                >
+                  <option value="">None</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Staff */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Staff</label>
+                <select
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                  value={form.assigned_to || ""}
+                  onChange={(e) =>
+                    setForm({ ...form, assigned_to: e.target.value || null })
+                  }
+                >
+                  <option value="">Unassigned</option>
+                  {staffList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Visibility (Superadmin only) */}
             {userRole === "superadmin" && (
-              <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })}>
-                <option value="centre">Centre</option>
-                <option value="global">Global</option>
-              </select>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
+                <select
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                  value={form.visibility}
+                  onChange={(e) => setForm({ ...form, visibility: e.target.value })}
+                >
+                  <option value="centre">Centre</option>
+                  <option value="global">Global</option>
+                </select>
+              </div>
             )}
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={onClose}>Cancel</button>
-              <button type="submit">{initialData ? "Update" : "Save"}</button>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium shadow-sm"
+              >
+                {initialData ? "Update Event" : "Create Event"}
+              </button>
             </div>
           </form>
         </motion.div>
