@@ -27,7 +27,7 @@ import useEvents from "../hooks/useEvents";
 import { toast } from "react-toastify";
 
 // ----------------------------------------------------------------------
-//  Tooltip Card (shown on event hover)
+//  Tooltip Card
 // ----------------------------------------------------------------------
 function TooltipCard({ event, position }) {
   if (!event) return null;
@@ -43,19 +43,14 @@ function TooltipCard({ event, position }) {
   const typeStyle = typeColors[event.event_type] || typeColors.default;
 
   const adjustedStyle = useMemo(() => {
-    const tooltipWidth = 280;
-    const tooltipHeight = 200;
-    const padding = 16;
-    let left = position.x + 10;
-    let top = position.y + 10;
-
+    const tw = 280,
+      th = 200,
+      pad = 16;
+    let left = position.x + 10,
+      top = position.y + 10;
     if (typeof window !== "undefined") {
-      if (left + tooltipWidth > window.innerWidth - padding) {
-        left = position.x - tooltipWidth - 10;
-      }
-      if (top + tooltipHeight > window.innerHeight - padding) {
-        top = position.y - tooltipHeight - 10;
-      }
+      if (left + tw > window.innerWidth - pad) left = position.x - tw - 10;
+      if (top + th > window.innerHeight - pad) top = position.y - th - 10;
     }
     return { left: `${left}px`, top: `${top}px` };
   }, [position]);
@@ -81,7 +76,7 @@ function TooltipCard({ event, position }) {
           )}
         </div>
 
-        {event.start_datetime && (
+        {event.start_datetime ? (
           <div className="flex items-center gap-2 text-xs text-gray-600 mb-1.5">
             <FiClock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
             <span>
@@ -96,16 +91,18 @@ function TooltipCard({ event, position }) {
                 })}`}
             </span>
           </div>
+        ) : (
+          event.date && (
+            <div className="flex items-center gap-2 text-xs text-gray-600 mb-1.5">
+              <FiCalendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+              <span>{event.date}</span>
+            </div>
+          )
         )}
 
-        {!event.start_datetime && event.date && (
-          <div className="flex items-center gap-2 text-xs text-gray-600 mb-1.5">
-            <FiCalendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-            <span>{event.date}</span>
-          </div>
-        )}
-
-        <div className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border mb-2 ${typeStyle}`}>
+        <div
+          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border mb-2 ${typeStyle}`}
+        >
           {event.event_type || "Event"}
         </div>
 
@@ -189,18 +186,29 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
       <div className="flex items-center justify-between mb-3">
-        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded-lg transition">
+        <button
+          onClick={() => changeMonth(-1)}
+          className="p-1 hover:bg-gray-100 rounded-lg transition"
+        >
           <FiChevronLeft className="h-4 w-4 text-gray-500" />
         </button>
         <h3 className="text-sm font-semibold text-gray-800">
-          {displayDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+          {displayDate.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          })}
         </h3>
-        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded-lg transition">
+        <button
+          onClick={() => changeMonth(1)}
+          className="p-1 hover:bg-gray-100 rounded-lg transition"
+        >
           <FiChevronRight className="h-4 w-4 text-gray-500" />
         </button>
       </div>
       <div className="grid grid-cols-7 text-xs text-center text-gray-400 mb-2">
-        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => <div key={d}>{d}</div>)}
+        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
+          <div key={d}>{d}</div>
+        ))}
       </div>
       <div className="grid grid-cols-7 gap-1">
         {days.map((cell, i) =>
@@ -237,7 +245,13 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
 // ----------------------------------------------------------------------
 //  AgendaView
 // ----------------------------------------------------------------------
-function AgendaView({ calendarData = [], leavesData = [], onEventClick, onEdit, onDelete }) {
+function AgendaView({
+  calendarData = [],
+  leavesData = [],
+  onEventClick,
+  onEdit,
+  onDelete,
+}) {
   const allItems = useMemo(() => {
     const items = [];
     calendarData.forEach((e) => {
@@ -262,7 +276,10 @@ function AgendaView({ calendarData = [], leavesData = [], onEventClick, onEdit, 
     tomorrow.setDate(today.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
-    const overdue = [], todayItems = [], tomorrowItems = [], upcoming = [];
+    const overdue = [],
+      todayItems = [],
+      tomorrowItems = [],
+      upcoming = [];
     allItems.forEach((item) => {
       if (!item.sortDate) return;
       if (item.sortDate < todayStr) overdue.push(item);
@@ -297,33 +314,50 @@ function AgendaView({ calendarData = [], leavesData = [], onEventClick, onEdit, 
     if (!items.length) return null;
     return (
       <div>
-        <h3 className={`text-sm font-semibold mb-3 ${
-          highlight === "overdue" ? "text-red-600" : highlight === "today" ? "text-indigo-600" : "text-gray-700"
-        }`}>
+        <h3
+          className={`text-sm font-semibold mb-3 ${
+            highlight === "overdue"
+              ? "text-red-600"
+              : highlight === "today"
+              ? "text-indigo-600"
+              : "text-gray-700"
+          }`}
+        >
           {title}
         </h3>
         <div className="space-y-2">
           {items.map((item, idx) => {
             if (item.itemType === "leave") {
               return (
-                <div key={`leave-${item.id}-${idx}`} className="flex items-center gap-2 p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-sm">
+                <div
+                  key={`leave-${item.id}-${idx}`}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-sm"
+                >
                   <FiUser className="h-4 w-4 text-yellow-600 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <span className="font-medium text-gray-800">{item.staff_name || "Staff"}</span>
+                    <span className="font-medium text-gray-800">
+                      {item.staff_name || "Staff"}
+                    </span>
                     <span className="text-xs text-gray-500 ml-1">
-                      Leave: {new Date(item.from_date).toLocaleDateString()} – {new Date(item.to_date).toLocaleDateString()}
+                      Leave: {new Date(item.from_date).toLocaleDateString()} –{" "}
+                      {new Date(item.to_date).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
               );
             }
-            const style = eventTypeStyles[item.event_type] || eventTypeStyles.default;
+            const style =
+              eventTypeStyles[item.event_type] || eventTypeStyles.default;
             return (
               <div
                 key={`ev-${item.id}-${idx}`}
                 onClick={() => onEventClick(item)}
                 className={`group flex items-center justify-between p-2.5 rounded-lg border bg-white hover:shadow-sm transition cursor-pointer ${
-                  highlight === "overdue" ? "border-red-200 bg-red-50" : highlight === "today" ? "border-indigo-200 bg-indigo-50" : "border-gray-200"
+                  highlight === "overdue"
+                    ? "border-red-200 bg-red-50"
+                    : highlight === "today"
+                    ? "border-indigo-200 bg-indigo-50"
+                    : "border-gray-200"
                 }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -331,23 +365,50 @@ function AgendaView({ calendarData = [], leavesData = [], onEventClick, onEdit, 
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">
                       {item.title || style.label}
-                      {item.priority === "high" && <span className="ml-2 text-[10px] text-red-600 font-semibold">HIGH</span>}
+                      {item.priority === "high" && (
+                        <span className="ml-2 text-[10px] text-red-600 font-semibold">
+                          HIGH
+                        </span>
+                      )}
                     </p>
-                    {item.service_name && <p className="text-xs text-gray-400 truncate">{item.service_name}</p>}
-                    {item.description && <p className="text-xs text-gray-400 truncate">{item.description}</p>}
+                    {item.service_name && (
+                      <p className="text-xs text-gray-400 truncate">
+                        {item.service_name}
+                      </p>
+                    )}
+                    {item.description && (
+                      <p className="text-xs text-gray-400 truncate">
+                        {item.description}
+                      </p>
+                    )}
                     {item.start_datetime && (
                       <p className="text-xs text-gray-500 flex items-center gap-1">
                         <FiClock className="h-3 w-3" />
-                        {new Date(item.start_datetime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(item.start_datetime).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </p>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                  <button onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-indigo-600">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(item);
+                    }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-indigo-600"
+                  >
                     <FiEdit className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); onDelete(item); }} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(item);
+                    }}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600"
+                  >
                     <FiTrash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -359,7 +420,12 @@ function AgendaView({ calendarData = [], leavesData = [], onEventClick, onEdit, 
     );
   };
 
-  if (!grouped.overdue.length && !grouped.today.length && !grouped.tomorrow.length && !grouped.upcoming.length) {
+  if (
+    !grouped.overdue.length &&
+    !grouped.today.length &&
+    !grouped.tomorrow.length &&
+    !grouped.upcoming.length
+  ) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-400">
         <FiCalendar className="h-12 w-12 mb-4 text-gray-200" />
@@ -379,7 +445,7 @@ function AgendaView({ calendarData = [], leavesData = [], onEventClick, onEdit, 
 }
 
 // ----------------------------------------------------------------------
-//  CalendarView (updated with hover callbacks)
+//  CalendarView (with hover callbacks)
 // ----------------------------------------------------------------------
 const eventColors = {
   deadline: { bg: "#fecaca", border: "#f87171", text: "#991b1b" },
@@ -395,7 +461,14 @@ function getEventStyle(event) {
   return eventColors[key] || eventColors.default;
 }
 
-function CalendarView({ events, viewMode, onEventClick, onDateClick, onEventHover, onEventLeave }) {
+function CalendarView({
+  events,
+  viewMode,
+  onEventClick,
+  onDateClick,
+  onEventHover,
+  onEventLeave,
+}) {
   const mappedEvents = useMemo(() => {
     return events
       .sort((a, b) => {
@@ -428,19 +501,33 @@ function CalendarView({ events, viewMode, onEventClick, onDateClick, onEventHove
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
       <div className="flex flex-wrap gap-3 mb-3 text-xs">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 bg-red-400 rounded-full" /> Deadline</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-400 rounded-full" /> Start</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 bg-blue-400 rounded-full" /> Announcement</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 bg-orange-400 rounded-full" /> Task</span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 bg-red-400 rounded-full" /> Deadline
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 bg-green-400 rounded-full" /> Start
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 bg-blue-400 rounded-full" /> Announcement
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 bg-orange-400 rounded-full" /> Task
+        </span>
       </div>
       <FullCalendar
         key={viewMode}
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView={viewMode === "week" ? "timeGridWeek" : "dayGridMonth"}
+        initialView={
+          viewMode === "week" ? "timeGridWeek" : "dayGridMonth"
+        }
         initialDate={new Date()}
         events={mappedEvents}
         eventClick={(info) =>
-          onEventClick({ ...info.event.extendedProps, start: info.event.start, end: info.event.end })
+          onEventClick({
+            ...info.event.extendedProps,
+            start: info.event.start,
+            end: info.event.end,
+          })
         }
         eventMouseEnter={(info) => {
           if (onEventHover) {
@@ -454,8 +541,16 @@ function CalendarView({ events, viewMode, onEventClick, onDateClick, onEventHove
         headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
         height="auto"
         dayMaxEvents={true}
-        eventTimeFormat={{ hour: "2-digit", minute: "2-digit", meridiem: "short" }}
-        slotLabelFormat={{ hour: "2-digit", minute: "2-digit", meridiem: "short" }}
+        eventTimeFormat={{
+          hour: "2-digit",
+          minute: "2-digit",
+          meridiem: "short",
+        }}
+        slotLabelFormat={{
+          hour: "2-digit",
+          minute: "2-digit",
+          meridiem: "short",
+        }}
         eventDisplay="block"
         nowIndicator={true}
         dayCellClassNames={(arg) => (arg.isToday ? ["bg-blue-50"] : [])}
@@ -502,7 +597,9 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
     task: "border-purple-200 bg-purple-50",
     default: "border-gray-200 bg-gray-50",
   };
-  const borderColor = colorSets[event.event_type] || (event.type === "task" ? colorSets.task : colorSets.default);
+  const borderColor =
+    colorSets[event.event_type] ||
+    (event.type === "task" ? colorSets.task : colorSets.default);
 
   const priorityColor = {
     high: "bg-red-100 text-red-700",
@@ -520,14 +617,23 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
           onClick={(e) => e.stopPropagation()}
           className={`relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border ${borderColor}`}
         >
-          <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-full hover:bg-black/5">
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 p-1.5 rounded-full hover:bg-black/5"
+          >
             <FiX className="h-5 w-5 text-gray-400" />
           </button>
-          <h2 className="text-xl font-semibold text-gray-900 pr-8 mb-2">{event.title}</h2>
+          <h2 className="text-xl font-semibold text-gray-900 pr-8 mb-2">
+            {event.title}
+          </h2>
           {event.status === "completed" && (
-            <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">Completed</span>
+            <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">
+              Completed
+            </span>
           )}
-          {event.description && <p className="text-gray-600 text-sm mt-3">{event.description}</p>}
+          {event.description && (
+            <p className="text-gray-600 text-sm mt-3">{event.description}</p>
+          )}
           <div className="space-y-3 text-sm mt-4">
             <div className="flex items-center gap-2 text-gray-700">
               <FiCalendar className="h-4 w-4 text-gray-400" />
@@ -541,9 +647,15 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
               <div className="flex items-center gap-2 text-gray-700">
                 <FiClock className="h-4 w-4 text-gray-400" />
                 <span>
-                  {new Date(event.start_datetime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {new Date(event.start_datetime).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                   {event.end_datetime &&
-                    ` - ${new Date(event.end_datetime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                    ` - ${new Date(event.end_datetime).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`}
                 </span>
               </div>
             )}
@@ -553,7 +665,12 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-gray-500">Priority:</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColor[event.priority] || "bg-gray-100 text-gray-600"}`}>
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  priorityColor[event.priority] ||
+                  "bg-gray-100 text-gray-600"
+                }`}
+              >
                 {event.priority}
               </span>
             </div>
@@ -579,7 +696,10 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
           <div className="flex gap-2 mt-6 pt-4 border-t">
             {onEdit && (
               <button
-                onClick={() => { onEdit(event); onClose(); }}
+                onClick={() => {
+                  onEdit(event);
+                  onClose();
+                }}
                 className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm"
               >
                 <FiEdit className="inline mr-1" /> Edit
@@ -587,14 +707,20 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
             )}
             {event.status !== "completed" && (
               <button
-                onClick={() => { onUpdate(event.id, { status: "completed" }); onClose(); }}
+                onClick={() => {
+                  onUpdate(event.id, { status: "completed" });
+                  onClose();
+                }}
                 className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm"
               >
                 Complete
               </button>
             )}
             <button
-              onClick={() => { onDelete(event.id); onClose(); }}
+              onClick={() => {
+                onDelete(event.id);
+                onClose();
+              }}
               className="flex-1 bg-white border border-red-200 text-red-600 py-2 rounded-lg text-sm"
             >
               Delete
@@ -607,9 +733,16 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
 }
 
 // ----------------------------------------------------------------------
-//  CreateEventModal (Professional Design)
+//  CreateEventModal (All‑Day Toggle + Admin Visibility)
 // ----------------------------------------------------------------------
-function CreateEventModal({ onSave, onClose, initialData, services = [], staffList = [], userRole = "admin" }) {
+function CreateEventModal({
+  onSave,
+  onClose,
+  initialData,
+  services = [],
+  staffList = [],
+  userRole = "admin",
+}) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState(
     initialData || {
@@ -624,21 +757,32 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       visibility: "centre",
       related_service_id: null,
       assigned_to: null,
+      allDay: false, // 🆕 all‑day toggle
     }
   );
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
-    if (form.start_datetime && form.end_datetime && new Date(form.end_datetime) < new Date(form.start_datetime)) {
-      toast.error("End time cannot be before start time");
-      return;
-    }
-    onSave({
+
+    // If allDay, clear time fields
+    const payload = {
       ...form,
+      start_datetime: form.allDay ? null : form.start_datetime,
+      end_datetime: form.allDay ? null : form.end_datetime,
       assigned_to: form.assigned_to || null,
       related_service_id: form.related_service_id || null,
-    });
+    };
+
+    // Time validation only when not allDay and times are provided
+    if (!form.allDay && payload.start_datetime && payload.end_datetime) {
+      if (new Date(payload.end_datetime) < new Date(payload.start_datetime)) {
+        toast.error("End time cannot be before start time");
+        return;
+      }
+    }
+
+    onSave(payload);
     onClose();
   };
 
@@ -666,7 +810,9 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
                 {initialData ? "Edit Event" : "Create New Event"}
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                {initialData ? "Update the details of your event." : "Fill in the details to schedule a new event."}
+                {initialData
+                  ? "Update the details of your event."
+                  : "Fill in the details to schedule a new event."}
               </p>
             </div>
             <button
@@ -681,7 +827,9 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             {/* Event Title */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Event Title *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Event Title *
+              </label>
               <input
                 type="text"
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
@@ -694,57 +842,95 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
               <textarea
                 rows={3}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm resize-none"
                 placeholder="Add a short description..."
                 value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
               />
             </div>
 
-            {/* Date & Time Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+            {/* Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date *
+              </label>
+              <input
+                type="date"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+              />
+            </div>
+
+            {/* All‑Day Toggle */}
+            <div className="flex items-center gap-3">
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
-                  type="date"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={form.allDay}
+                  onChange={(e) =>
+                    setForm({ ...form, allDay: e.target.checked })
+                  }
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+                <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+              <span className="text-sm font-medium text-gray-700">
+                All day event
+              </span>
+            </div>
+
+            {/* Time fields – only if NOT allDay */}
+            {!form.allDay && (
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Start Time
+                  </label>
                   <input
                     type="time"
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                     value={form.start_datetime.split("T")[1] || "09:00"}
                     onChange={(e) =>
-                      setForm({ ...form, start_datetime: `${form.date}T${e.target.value}` })
+                      setForm({
+                        ...form,
+                        start_datetime: `${form.date}T${e.target.value}`,
+                      })
                     }
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    End Time
+                  </label>
                   <input
                     type="time"
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                     value={form.end_datetime.split("T")[1] || "17:00"}
                     onChange={(e) =>
-                      setForm({ ...form, end_datetime: `${form.date}T${e.target.value}` })
+                      setForm({
+                        ...form,
+                        end_datetime: `${form.date}T${e.target.value}`,
+                      })
                     }
                   />
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Type & Priority Row */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type
+                </label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                   value={form.type}
@@ -757,11 +943,15 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Event Sub‑type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Event Sub‑type
+                </label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                   value={form.event_type}
-                  onChange={(e) => setForm({ ...form, event_type: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, event_type: e.target.value })
+                  }
                 >
                   <option value="start">Start</option>
                   <option value="deadline">Deadline</option>
@@ -770,11 +960,15 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Priority
+                </label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                   value={form.priority}
-                  onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, priority: e.target.value })
+                  }
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -786,12 +980,17 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
             {/* Service & Staff Linking */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Link to Service</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Link to Service
+                </label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                   value={form.related_service_id || ""}
                   onChange={(e) =>
-                    setForm({ ...form, related_service_id: e.target.value || null })
+                    setForm({
+                      ...form,
+                      related_service_id: e.target.value || null,
+                    })
                   }
                 >
                   <option value="">None</option>
@@ -803,12 +1002,17 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Staff</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assigned Staff
+                </label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                   value={form.assigned_to || ""}
                   onChange={(e) =>
-                    setForm({ ...form, assigned_to: e.target.value || null })
+                    setForm({
+                      ...form,
+                      assigned_to: e.target.value || null,
+                    })
                   }
                 >
                   <option value="">Unassigned</option>
@@ -821,14 +1025,18 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               </div>
             </div>
 
-            {/* Visibility (Superadmin only) */}
-            {userRole === "superadmin" && (
+            {/* Visibility – available for both admin & superadmin */}
+            {(userRole === "admin" || userRole === "superadmin") && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Visibility
+                </label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                   value={form.visibility}
-                  onChange={(e) => setForm({ ...form, visibility: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, visibility: e.target.value })
+                  }
                 >
                   <option value="centre">Centre</option>
                   <option value="global">Global</option>
@@ -860,13 +1068,25 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
 }
 
 // ----------------------------------------------------------------------
-//  CalendarToolbar
+//  CalendarToolbar (visibility filter for admin & superadmin)
 // ----------------------------------------------------------------------
-function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEvent, userRole = "admin", services = [] }) {
+function CalendarToolbar({
+  viewMode,
+  setViewMode,
+  filters,
+  setFilters,
+  onAddEvent,
+  userRole = "admin",
+  services = [],
+}) {
   const viewOptions = [
     { key: "month", label: "Month", icon: <FiGrid className="h-4 w-4" /> },
     { key: "week", label: "Week", icon: <FiCalendar className="h-4 w-4" /> },
-    { key: "agenda", label: "Agenda", icon: <FiList className="h-4 w-4" /> },
+    {
+      key: "agenda",
+      label: "Agenda",
+      icon: <FiList className="h-4 w-4" />,
+    },
   ];
 
   const typeFilters = [
@@ -877,13 +1097,23 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
   ];
 
   const handleTypeToggle = (type) => {
-    setFilters((prev) => ({ ...prev, type: prev.type === type ? null : type }));
+    setFilters((prev) => ({
+      ...prev,
+      type: prev.type === type ? null : type,
+    }));
   };
   const handleMyEventsToggle = () => {
     setFilters((prev) => ({ ...prev, myEvents: !prev.myEvents }));
   };
   const handleClearFilters = () => {
-    setFilters({ type: null, priority: "", event_type: "", visibility: "centre", service_id: "", myEvents: false });
+    setFilters({
+      type: null,
+      priority: "",
+      event_type: "",
+      visibility: "centre",
+      service_id: "",
+      myEvents: false,
+    });
   };
 
   return (
@@ -900,7 +1130,9 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
                 key={opt.key}
                 onClick={() => setViewMode(opt.key)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  viewMode === opt.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
+                  viewMode === opt.key
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
                 }`}
               >
                 {opt.icon}
@@ -908,11 +1140,17 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
               </button>
             ))}
           </div>
-          <button onClick={handleClearFilters} className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-800 transition">
+          <button
+            onClick={handleClearFilters}
+            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-800 transition"
+          >
             <FiX className="h-3 w-3" /> Clear
           </button>
         </div>
-        <button onClick={onAddEvent} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 shadow-sm transition-all">
+        <button
+          onClick={onAddEvent}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 shadow-sm transition-all"
+        >
           <FiPlus className="h-3.5 w-3.5" />
           <span>Add Event</span>
         </button>
@@ -939,13 +1177,25 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
             </button>
           ))}
         </div>
-        <select className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm" value={filters.priority || ""} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}>
+        <select
+          className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm"
+          value={filters.priority || ""}
+          onChange={(e) =>
+            setFilters({ ...filters, priority: e.target.value })
+          }
+        >
           <option value="">All Priorities</option>
           <option value="high">High</option>
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
-        <select className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm" value={filters.event_type || ""} onChange={(e) => setFilters({ ...filters, event_type: e.target.value })}>
+        <select
+          className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm"
+          value={filters.event_type || ""}
+          onChange={(e) =>
+            setFilters({ ...filters, event_type: e.target.value })
+          }
+        >
           <option value="">All Event Types</option>
           <option value="start">Start</option>
           <option value="deadline">Deadline</option>
@@ -953,13 +1203,30 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
           <option value="announcement">Announcement</option>
         </select>
         {services.length > 0 && (
-          <select className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm" value={filters.service_id || ""} onChange={(e) => setFilters({ ...filters, service_id: e.target.value })}>
+          <select
+            className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm"
+            value={filters.service_id || ""}
+            onChange={(e) =>
+              setFilters({ ...filters, service_id: e.target.value })
+            }
+          >
             <option value="">All Services</option>
-            {services.map((svc) => <option key={svc.id} value={svc.id.toString()}>{svc.name}</option>)}
+            {services.map((svc) => (
+              <option key={svc.id} value={svc.id.toString()}>
+                {svc.name}
+              </option>
+            ))}
           </select>
         )}
-        {userRole === "superadmin" && (
-          <select className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm" value={filters.visibility || "centre"} onChange={(e) => setFilters({ ...filters, visibility: e.target.value })}>
+        {/* Visibility filter – available for both admin & superadmin */}
+        {(userRole === "admin" || userRole === "superadmin") && (
+          <select
+            className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm"
+            value={filters.visibility || "centre"}
+            onChange={(e) =>
+              setFilters({ ...filters, visibility: e.target.value })
+            }
+          >
             <option value="">All Visibility</option>
             <option value="centre">Centre</option>
             <option value="global">Global</option>
@@ -968,7 +1235,9 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
         <button
           onClick={handleMyEventsToggle}
           className={`flex items-center gap-1 px-3 py-1 rounded-full border text-xs font-medium transition-colors ${
-            filters.myEvents ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200"
+            filters.myEvents
+              ? "bg-indigo-100 text-indigo-700 border-indigo-300"
+              : "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200"
           }`}
         >
           <FiUser className="h-3 w-3" /> My Events
@@ -988,9 +1257,10 @@ function CentreSwitcher({ centres, activeCentreId, onChange }) {
 
   const selected = centres.find((c) => c.id === activeCentreId);
 
-  const filtered = centres.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    (c.location && c.location.toLowerCase().includes(search.toLowerCase()))
+  const filtered = centres.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.location && c.location.toLowerCase().includes(search.toLowerCase()))
   );
 
   useEffect(() => {
@@ -1015,7 +1285,11 @@ function CentreSwitcher({ centres, activeCentreId, onChange }) {
             {selected ? selected.name : "Select centre"}
           </span>
         </div>
-        <FiChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+        <FiChevronDown
+          className={`h-4 w-4 text-gray-400 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
       </button>
 
       <AnimatePresence>
@@ -1041,7 +1315,9 @@ function CentreSwitcher({ centres, activeCentreId, onChange }) {
             </div>
             <div className="max-h-60 overflow-y-auto p-2">
               {filtered.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">No centres found</p>
+                <p className="text-sm text-gray-500 text-center py-4">
+                  No centres found
+                </p>
               ) : (
                 filtered.map((c) => (
                   <button
@@ -1056,10 +1332,20 @@ function CentreSwitcher({ centres, activeCentreId, onChange }) {
                         : "hover:bg-gray-50 text-gray-700"
                     }`}
                   >
-                    <FiMapPin className={`h-4 w-4 ${activeCentreId === c.id ? "text-indigo-500" : "text-gray-400"}`} />
+                    <FiMapPin
+                      className={`h-4 w-4 ${
+                        activeCentreId === c.id
+                          ? "text-indigo-500"
+                          : "text-gray-400"
+                      }`}
+                    />
                     <div>
                       <p className="font-medium truncate">{c.name}</p>
-                      {c.location && <p className="text-xs text-gray-500 truncate">{c.location}</p>}
+                      {c.location && (
+                        <p className="text-xs text-gray-500 truncate">
+                          {c.location}
+                        </p>
+                      )}
                     </div>
                     {activeCentreId === c.id && (
                       <span className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />
@@ -1112,7 +1398,9 @@ export default function CalendarPage() {
   useEffect(() => {
     if (userRole === "superadmin") {
       fetch(`${import.meta.env.VITE_API_URL}/api/wallet/centres`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
       })
         .then((res) => res.json())
         .then((data) => {
@@ -1137,7 +1425,10 @@ export default function CalendarPage() {
     if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
 
-    fetch(`${import.meta.env.VITE_API_URL}/api/servicemanagement/services`, { headers })
+    fetch(
+      `${import.meta.env.VITE_API_URL}/api/servicemanagement/services`,
+      { headers }
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -1149,7 +1440,10 @@ export default function CalendarPage() {
       })
       .catch(() => setServices([]));
 
-    fetch(`${import.meta.env.VITE_API_URL}/api/servicemanagement/staff?centre_id=${activeCentreId}`, { headers })
+    fetch(
+      `${import.meta.env.VITE_API_URL}/api/servicemanagement/staff?centre_id=${activeCentreId}`,
+      { headers }
+    )
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -1166,7 +1460,9 @@ export default function CalendarPage() {
   const leavesData = [];
 
   // ---------- Hook ----------
-  const [hookFilters, setHookFilters] = useState({ centreId: activeCentreId });
+  const [hookFilters, setHookFilters] = useState({
+    centreId: activeCentreId,
+  });
   useEffect(() => {
     setHookFilters((prev) => ({ ...prev, centreId: activeCentreId }));
   }, [activeCentreId]);
@@ -1223,9 +1519,14 @@ export default function CalendarPage() {
       if (filters.priority && e.priority !== filters.priority) return false;
       if (filters.event_type && e.event_type !== filters.event_type) return false;
       if (filters.visibility && e.visibility !== filters.visibility) return false;
-      if (filters.service_id && e.related_service_id?.toString() !== filters.service_id) return false;
+      if (
+        filters.service_id &&
+        e.related_service_id?.toString() !== filters.service_id
+      )
+        return false;
       if (filters.myEvents) {
-        const isMine = e.created_by === userId || e.assigned_to === userId;
+        const isMine =
+          e.created_by === userId || e.assigned_to === userId;
         if (!isMine) return false;
       }
       return true;
@@ -1274,8 +1575,14 @@ export default function CalendarPage() {
     [hookDeleteEvent]
   );
 
-  const openCreateModal = () => { setEditEvent(null); setShowCreateModal(true); };
-  const openEditModal = (event) => { setEditEvent(event); setShowCreateModal(true); };
+  const openCreateModal = () => {
+    setEditEvent(null);
+    setShowCreateModal(true);
+  };
+  const openEditModal = (event) => {
+    setEditEvent(event);
+    setShowCreateModal(true);
+  };
 
   const handleMiniCalendarDateChange = (date) => setCurrentDate(date);
 
@@ -1337,7 +1644,11 @@ export default function CalendarPage() {
       <div className="flex-1 flex overflow-hidden">
         {viewMode !== "agenda" && (
           <aside className="hidden lg:block w-72 p-4 border-r border-gray-200 overflow-y-auto bg-white/50 backdrop-blur-sm">
-            <MiniCalendar events={filteredEvents} currentDate={currentDate} onDateChange={handleMiniCalendarDateChange} />
+            <MiniCalendar
+              events={filteredEvents}
+              currentDate={currentDate}
+              onDateChange={handleMiniCalendarDateChange}
+            />
           </aside>
         )}
         <main className="flex-1 overflow-auto p-6 relative">
@@ -1356,11 +1667,23 @@ export default function CalendarPage() {
             />
           ) : !hasEvents ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <svg className="w-20 h-20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              <svg
+                className="w-20 h-20 mb-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
               </svg>
               <p className="text-lg font-medium">No events found</p>
-              <p className="text-sm mt-1">Try adjusting your filters or add a new event.</p>
+              <p className="text-sm mt-1">
+                Try adjusting your filters or add a new event.
+              </p>
             </div>
           ) : (
             <CalendarView
@@ -1389,10 +1712,14 @@ export default function CalendarPage() {
         <CreateEventModal
           initialData={editEvent || undefined}
           onSave={(data) => {
-            if (editEvent?.id) handleEditEvent({ ...editEvent, ...data });
+            if (editEvent?.id)
+              handleEditEvent({ ...editEvent, ...data });
             else handleAddEvent(data);
           }}
-          onClose={() => { setShowCreateModal(false); setEditEvent(null); }}
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditEvent(null);
+          }}
           userRole={userRole}
           services={services}
           staffList={staff}
