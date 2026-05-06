@@ -394,23 +394,23 @@ router.put("/:id", async (req, res) => {
     `;
 
     const values = [
-      title,
-      description,
+        title ?? event.title,
+        description ?? event.description,
 
-      date || null,
-      start_datetime || null,
-      end_datetime || null,
+        date ?? event.date,
+        start_datetime ?? event.start_datetime,
+        end_datetime ?? event.end_datetime,
 
-      type,
-      event_type,
+        type ?? event.type,
+        event_type ?? event.event_type,
 
-      visibility,
-      priority,
-      status,
+        visibility ?? event.visibility,
+        priority ?? event.priority,
+        status ?? event.status,
 
-      assigned_to || null,
+        assigned_to ?? event.assigned_to,
 
-      id,
+        id,
     ];
 
     const result = await client.query(query, values);
