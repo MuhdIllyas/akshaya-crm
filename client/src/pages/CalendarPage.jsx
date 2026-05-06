@@ -491,6 +491,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
 // ----------------------------------------------------------------------
 function CreateEventModal({ onSave, onClose, initialData, services = [], staffList = [], userRole = "admin" }) {
   const today = new Date().toISOString().slice(0, 10);
+  // ------------------- FIX: use related_service_id -------------------
   const [form, setForm] = useState(
     initialData || {
       title: "",
@@ -502,7 +503,7 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       event_type: "deadline",
       priority: "medium",
       visibility: "centre",
-      service_id: "",
+      related_service_id: "",     // ← changed from service_id
       assigned_to: "",
     }
   );
@@ -570,7 +571,11 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               <option value="expiry">Expiry</option>
               <option value="announcement">Announcement</option>
             </select>
-            <select value={form.service_id} onChange={(e) => setForm({ ...form, service_id: e.target.value })}>
+            {/* ------------------- FIX: related_service_id ------------------- */}
+            <select
+              value={form.related_service_id}
+              onChange={(e) => setForm({ ...form, related_service_id: e.target.value })}
+            >
               <option value="">No Service</option>
               {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -752,7 +757,6 @@ export default function CalendarPage() {
   // ---------- Centres (superadmin) ----------
   const [centres, setCentres] = useState([]);
   const [activeCentreId, setActiveCentreId] = useState(null);
-  const [showCentrePicker, setShowCentrePicker] = useState(false);
 
   useEffect(() => {
     if (userRole === "superadmin") {
@@ -779,20 +783,17 @@ export default function CalendarPage() {
       .catch(() => setServicesList([]));
   }, [activeCentreId, userRole]);
 
-  // ---------- Leaves (placeholder, replace with real data if available) ----------
-  const leavesData = [];
+  const leavesData = []; // placeholder
 
-  // ---------- Filters for the hook ----------
+  // ---------- Hook filters (sync centreId) ----------
   const [hookFilters, setHookFilters] = useState({
-    centreId: activeCentreId,   // initially null, will update
+    centreId: activeCentreId,
   });
 
-  // Sync active centre with hook filters
   useEffect(() => {
     setHookFilters(prev => ({ ...prev, centreId: activeCentreId }));
   }, [activeCentreId]);
 
-  // ---------- Events hook ----------
   const {
     events = [],
     loading,
@@ -802,7 +803,7 @@ export default function CalendarPage() {
     removeEvent: hookDeleteEvent,
   } = useEvents(hookFilters);
 
-  // ---------- UI filters (toolbar) ----------
+  // ---------- UI filters ----------
   const [filters, setFilters] = useState({
     type: "",
     priority: "",
@@ -817,7 +818,6 @@ export default function CalendarPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const calendarRef = useRef(null);
 
   // ---------- Client‑side filtering ----------
   const filteredEvents = useMemo(() => {
@@ -827,16 +827,18 @@ export default function CalendarPage() {
       if (filters.priority && e.priority !== filters.priority) return false;
       if (filters.event_type && e.event_type !== filters.event_type) return false;
       if (filters.visibility && e.visibility !== filters.visibility) return false;
-      if (filters.service_id && e.service_id?.toString() !== filters.service_id) return false;
+      // ------------------- FIX: related_service_id -------------------
+      if (filters.service_id && e.related_service_id?.toString() !== filters.service_id) return false;
       if (filters.myEvents) {
-        const isMine = e.created_by === userId || (Array.isArray(e.assigned_to) && e.assigned_to.includes(userId));
+        // ------------------- FIX: assigned_to is integer -------------------
+        const isMine = e.created_by === userId || e.assigned_to === userId;
         if (!isMine) return false;
       }
       return true;
     });
   }, [events, filters, userId]);
 
-  // ---------- CRUD wrappers ----------
+  // ---------- CRUD handlers ----------
   const handleAddEvent = useCallback((data) => { hookCreateEvent(data); setShowCreateModal(false); setEditEvent(null); }, [hookCreateEvent]);
   const handleEditEvent = useCallback((data) => { hookUpdateEvent(data.id, data); setShowCreateModal(false); setEditEvent(null); }, [hookUpdateEvent]);
   const handleDeleteEvent = useCallback((id) => { hookDeleteEvent(id); setSelectedEvent(null); }, [hookDeleteEvent]);
@@ -846,7 +848,7 @@ export default function CalendarPage() {
 
   const handleMiniCalendarDateChange = (date) => {
     setCurrentDate(date);
-    calendarRef.current?.getApi?.()?.gotoDate(date);
+    // FullCalendar does not forward ref; this function remains but the ref is not passed
   };
 
   const handleCalendarEventClick = (event) => {
@@ -941,9 +943,8 @@ export default function CalendarPage() {
               <p className="text-sm mt-1">Try adjusting your filters or add a new event.</p>
             </div>
           ) : (
+            // ------------------- FIX: removed ref -------------------
             <CalendarView
-              ref={calendarRef}
-              key={viewMode + currentDate.toISOString()}
               events={filteredEvents}
               viewMode={viewMode}
               onEventClick={handleCalendarEventClick}
@@ -959,6 +960,7 @@ export default function CalendarPage() {
           onClose={() => setSelectedEvent(null)}
           onDelete={handleDeleteEvent}
           onUpdate={hookUpdateEvent}
+          onEdit={openEditModal}   // ← ADDED
         />
       )}
 
@@ -972,7 +974,7 @@ export default function CalendarPage() {
           onClose={() => { setShowCreateModal(false); setEditEvent(null); }}
           userRole={userRole}
           services={servicesList}
-          staffList={[]}   // pass real staff list if needed
+          staffList={[]}
         />
       )}
     </div>
