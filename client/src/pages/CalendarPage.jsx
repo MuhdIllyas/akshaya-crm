@@ -26,6 +26,119 @@ import {
 import useEvents from "../hooks/useEvents";
 
 // ----------------------------------------------------------------------
+//  Tooltip Card (shown on event hover)
+// ----------------------------------------------------------------------
+function TooltipCard({ event, position }) {
+  if (!event) return null;
+
+  const typeColors = {
+    deadline: "text-red-700 bg-red-50 border-red-200",
+    start: "text-green-700 bg-green-50 border-green-200",
+    announcement: "text-blue-700 bg-blue-50 border-blue-200",
+    expiry: "text-yellow-700 bg-yellow-50 border-yellow-200",
+    task: "text-purple-700 bg-purple-50 border-purple-200",
+    default: "text-gray-700 bg-gray-50 border-gray-200",
+  };
+  const typeStyle = typeColors[event.event_type] || typeColors.default;
+
+  // Adjust position so tooltip doesn't go off‑screen
+  const adjustedStyle = useMemo(() => {
+    const tooltipWidth = 280;
+    const tooltipHeight = 200;
+    const padding = 16;
+    let left = position.x + 10;
+    let top = position.y + 10;
+
+    if (typeof window !== "undefined") {
+      if (left + tooltipWidth > window.innerWidth - padding) {
+        left = position.x - tooltipWidth - 10;
+      }
+      if (top + tooltipHeight > window.innerHeight - padding) {
+        top = position.y - tooltipHeight - 10;
+      }
+    }
+    return { left: `${left}px`, top: `${top}px` };
+  }, [position]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.15 }}
+      className="fixed z-[100] pointer-events-none"
+      style={adjustedStyle}
+    >
+      <div className="bg-white rounded-xl shadow-xl border border-gray-100 p-4 w-72 backdrop-blur-sm">
+        {/* Title & Priority */}
+        <div className="flex items-start justify-between mb-2">
+          <h4 className="font-semibold text-gray-900 text-sm leading-tight pr-2">
+            {event.title || "Untitled Event"}
+          </h4>
+          {event.priority === "high" && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
+              HIGH
+            </span>
+          )}
+        </div>
+
+        {/* Time */}
+        {event.start_datetime && (
+          <div className="flex items-center gap-2 text-xs text-gray-600 mb-1.5">
+            <FiClock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+            <span>
+              {new Date(event.start_datetime).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              {event.end_datetime &&
+                ` – ${new Date(event.end_datetime).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}`}
+            </span>
+          </div>
+        )}
+
+        {/* Date (if no start_datetime) */}
+        {!event.start_datetime && event.date && (
+          <div className="flex items-center gap-2 text-xs text-gray-600 mb-1.5">
+            <FiCalendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+            <span>{event.date}</span>
+          </div>
+        )}
+
+        {/* Event Type */}
+        <div className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border mb-2 ${typeStyle}`}>
+          {event.event_type || "Event"}
+        </div>
+
+        {/* Service & Staff */}
+        {event.service_name && (
+          <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+            <FiEye className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+            <span className="truncate">{event.service_name}</span>
+          </div>
+        )}
+        {event.assigned_to && (
+          <div className="flex items-center gap-2 text-xs text-gray-600">
+            <FiUser className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+            <span>{event.assigned_to}</span>
+          </div>
+        )}
+
+        {/* Description (truncated) */}
+        {event.description && (
+          <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">
+            {event.description}
+          </p>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ----------------------------------------------------------------------
 //  MiniCalendar
 // ----------------------------------------------------------------------
 function MiniCalendar({ events = [], currentDate, onDateChange }) {
@@ -271,7 +384,7 @@ function AgendaView({ calendarData = [], leavesData = [], onEventClick, onEdit, 
 }
 
 // ----------------------------------------------------------------------
-//  CalendarView
+//  CalendarView (updated with hover callbacks)
 // ----------------------------------------------------------------------
 const eventColors = {
   deadline: { bg: "#fecaca", border: "#f87171", text: "#991b1b" },
@@ -287,7 +400,7 @@ function getEventStyle(event) {
   return eventColors[key] || eventColors.default;
 }
 
-function CalendarView({ events, viewMode, onEventClick, onDateClick }) {
+function CalendarView({ events, viewMode, onEventClick, onDateClick, onEventHover, onEventLeave }) {
   const mappedEvents = useMemo(() => {
     return events
       .sort((a, b) => {
@@ -334,6 +447,14 @@ function CalendarView({ events, viewMode, onEventClick, onDateClick }) {
         eventClick={(info) =>
           onEventClick({ ...info.event.extendedProps, start: info.event.start, end: info.event.end })
         }
+        eventMouseEnter={(info) => {
+          if (onEventHover) {
+            onEventHover(info.event.extendedProps, info.jsEvent);
+          }
+        }}
+        eventMouseLeave={() => {
+          if (onEventLeave) onEventLeave();
+        }}
         dateClick={handleDateClick}
         headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
         height="auto"
@@ -358,11 +479,7 @@ function CalendarView({ events, viewMode, onEventClick, onDateClick }) {
           );
         }}
         eventDidMount={(info) => {
-          const { description, event_type, priority } = info.event.extendedProps;
-          const parts = [`Type: ${event_type || "event"}`];
-          if (priority) parts.push(`Priority: ${priority}`);
-          if (description) parts.push(description);
-          info.el.title = parts.join("\n");
+          info.el.title = "";  // disable native tooltip
         }}
       />
     </div>
@@ -876,7 +993,6 @@ export default function CalendarPage() {
         .then((res) => res.json())
         .then((data) => {
           setCentres(data);
-          // auto-select first centre if none selected
           if (data.length > 0 && !activeCentreId) {
             setActiveCentreId(data[0].id);
           }
@@ -955,6 +1071,19 @@ export default function CalendarPage() {
   const [editEvent, setEditEvent] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
 
+  // ---------- Tooltip State ----------
+  const [hoveredEvent, setHoveredEvent] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const handleEventHover = useCallback((event, jsEvent) => {
+    setHoveredEvent(event);
+    setTooltipPos({ x: jsEvent.clientX, y: jsEvent.clientY });
+  }, []);
+
+  const handleEventLeave = useCallback(() => {
+    setHoveredEvent(null);
+  }, []);
+
   // ---------- Filtered events ----------
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
@@ -1019,10 +1148,7 @@ export default function CalendarPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              // refresh events manually (optional)
-              setHookFilters({ centreId: activeCentreId }); // trigger refetch
-            }}
+            onClick={() => setHookFilters({ centreId: activeCentreId })}
             className="p-2 hover:bg-gray-100 rounded-lg transition text-gray-500 hover:text-indigo-600"
           >
             <FiRefreshCw className="h-4 w-4" />
@@ -1074,6 +1200,8 @@ export default function CalendarPage() {
               viewMode={viewMode}
               onEventClick={handleCalendarEventClick}
               onDateClick={handleCalendarEventClick}
+              onEventHover={handleEventHover}
+              onEventLeave={handleEventLeave}
             />
           )}
         </main>
@@ -1102,6 +1230,13 @@ export default function CalendarPage() {
           staffList={staff}
         />
       )}
+
+      {/* Custom Tooltip */}
+      <AnimatePresence>
+        {hoveredEvent && !showCreateModal && !selectedEvent && (
+          <TooltipCard event={hoveredEvent} position={tooltipPos} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
