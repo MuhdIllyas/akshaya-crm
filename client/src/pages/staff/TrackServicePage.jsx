@@ -105,37 +105,6 @@ const TrackServicePage = () => {
   const { id } = useParams(); // Get ID from URL params
   const navigate = useNavigate();
   
-  const getSavedFilters = () => {
-    try {
-      const saved = localStorage.getItem('staffServiceSavedView');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Could not load saved filters', e);
-    }
-    return { status: 'all', staff: 'all', expiry: 'all' };
-  };
-
-  const initialFilters = getSavedFilters();
-
-  // Function to save the current view
-  const handleSaveView = () => {
-    const filtersToSave = {
-      status: statusFilter,
-      staff: staffFilter,
-      expiry: expiryFilter
-    };
-    localStorage.setItem('staffServiceSavedView', JSON.stringify(filtersToSave));
-    toast.success('Your custom view has been saved and will load by default!');
-  };
-
-  const handleClearFilters = () => {
-    setStatusFilter('all');
-    setStaffFilter('all');
-    setExpiryFilter('all');
-    setSearchTerm('');
-    setAadhaarSearch('');
-  };
-
   const [services, setServices] = useState([]);
   const [entryServices, setEntryServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
@@ -143,8 +112,6 @@ const TrackServicePage = () => {
   const [aadhaarSearch, setAadhaarSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
-  const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
   const [staffList, setStaffList] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
@@ -645,48 +612,23 @@ const TrackServicePage = () => {
     loadData();
   }, [id]); // Re-run when ID changes
 
-const filteredServices = useMemo(() => {
+  const filteredServices = useMemo(() => {
     return services.filter(service => {
-      // 1. Text Search
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm ||
-        (service.customerName?.toLowerCase().includes(searchLower)) ||
-        (service.phone?.includes(searchTerm)) ||
-        (service.serviceType?.toLowerCase().includes(searchLower)) ||
-        (service.applicationNumber?.toLowerCase().includes(searchLower)) ||
-        (service.email?.toLowerCase().includes(searchLower));
+      const matchesSearch =
+        (service.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+        (service.phone?.includes(searchTerm) || false) ||
+        (service.serviceType?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+        (service.applicationNumber?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+        (service.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
       
-      // 2. Aadhaar
-      const matchesAadhaarSearch = !aadhaarSearch || (service.aadhaar?.includes(aadhaarSearch));
+      const matchesAadhaarSearch = aadhaarSearch ? 
+        (service.aadhaar?.includes(aadhaarSearch) || false) : true;
       
-      // 3. Status
       const matchesStatus = statusFilter === 'all' || service.status === statusFilter;
-
-      // 4. Staff Name
-      const matchesStaff = staffFilter === 'all' || service.assignedToId?.toString() === staffFilter.toString();
-
-      // 5. Expiry Date Logic
-      let matchesExpiry = true;
-      if (expiryFilter !== 'all') {
-        if (!service.rawExpiryDate) {
-          matchesExpiry = false; 
-        } else {
-          const expiryDate = new Date(service.rawExpiryDate);
-          const today = new Date();
-          // Reset times to compare just the dates
-          today.setHours(0, 0, 0, 0);
-          
-          if (expiryFilter === 'upcoming') {
-            matchesExpiry = expiryDate >= today && service.status !== 'Completed';
-          } else if (expiryFilter === 'overdue') {
-            matchesExpiry = expiryDate < today && service.status !== 'Completed';
-          }
-        }
-      }
       
-      return matchesSearch && matchesAadhaarSearch && matchesStatus && matchesStaff && matchesExpiry;
+      return matchesSearch && matchesAadhaarSearch && matchesStatus;
     });
-  }, [services, searchTerm, aadhaarSearch, statusFilter, staffFilter, expiryFilter]);
+  }, [services, searchTerm, aadhaarSearch, statusFilter]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
     try {
