@@ -191,6 +191,7 @@ const DashboardLayout = () => {
     ],
     staff: [
       { path: "/dashboard/staff", label: "My Dashboard", icon: DashboardIcon },
+      { path: "/dashboard/staff/calendar", label: "Calendar", icon: CalendarIcon },
       { path: "/dashboard/staff/tasks", label: "My Tasks", icon: TasksIcon },
       { path: "/dashboard/staff/schedule", label: "Schedule", icon: CalendarIcon },
       { path: "/dashboard/staff/performance", label: "Performance", icon: ChartIcon },

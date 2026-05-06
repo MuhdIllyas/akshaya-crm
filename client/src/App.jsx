@@ -337,6 +337,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><TokenGenerator /></ProtectedRoute>}
             />
             <Route
+              path="staff/calendar"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><CalendarPage /></ProtectedRoute>}
+            />
+            <Route
               path="staff/tasks"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><StaffTasks /></ProtectedRoute>}
             />
