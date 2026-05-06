@@ -1332,21 +1332,21 @@ const [selectedService, setSelectedService] = useState(null);
                     </h3>
                     <button 
                       onClick={handleSaveView}
-                      className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md hover:bg-indigo-100 transition-colors"
+                      className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-md hover:bg-indigo-100 transition-colors"
                       title="Save these filters for next time"
                     >
                       Save My View
                     </button>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {/* Primary Search Input */}
                     <div className="relative">
                       <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                       <input
                         type="text"
                         placeholder="Search name, phone, app no..."
-                        className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                        className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                       />
@@ -1355,7 +1355,7 @@ const [selectedService, setSelectedService] = useState(null);
                     {/* Toggle for Advanced Filters */}
                     <button
                       onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                      className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-gray-900 py-2 border-b border-gray-100"
+                      className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-indigo-600 py-2 border-b border-gray-100 transition-colors"
                     >
                       <span>Advanced Filters</span>
                       <FiChevronDown className={`transition-transform duration-300 ${showAdvancedFilters ? 'rotate-180' : ''}`} />
@@ -1368,70 +1368,89 @@ const [selectedService, setSelectedService] = useState(null);
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="space-y-3 overflow-hidden pt-2"
+                          className="space-y-4 overflow-hidden pt-2"
                         >
                           {/* Status Dropdown */}
                           <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-                            <select
-                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                              value={statusFilter}
-                              onChange={(e) => setStatusFilter(e.target.value)}
-                            >
-                              <option value="all">All Statuses</option>
-                              <option value="Pending">Pending</option>
-                              <option value="In Progress">In Progress</option>
-                              <option value="Delayed">Delayed</option>
-                              <option value="Completed">Completed</option>
-                              <option value="Resubmit">Resubmit</option>
-                              <option value="Paid">Paid</option>
-                            </select>
+                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                            <div className="relative">
+                              <select
+                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                              >
+                                <option value="all">All Statuses</option>
+                                <option value="Pending">Pending</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Delayed">Delayed</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Resubmit">Resubmit</option>
+                                <option value="Paid">Paid</option>
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                <FiChevronDown className="h-4 w-4" />
+                              </div>
+                            </div>
                           </div>
 
                           {/* Assigned Staff Dropdown */}
                           <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Assigned Staff</label>
-                            <select
-                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                              value={staffFilter}
-                              onChange={(e) => setStaffFilter(e.target.value)}
-                            >
-                              <option value="all">Everyone</option>
-                              {staffList.map(staff => (
-                                <option key={staff.id} value={staff.id}>{staff.name}</option>
-                              ))}
-                            </select>
+                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
+                            <div className="relative">
+                              <select
+                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
+                                value={staffFilter}
+                                onChange={(e) => setStaffFilter(e.target.value)}
+                              >
+                                <option value="all">Everyone</option>
+                                {staffList.map(staff => (
+                                  <option key={staff.id} value={staff.id}>{staff.name}</option>
+                                ))}
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                <FiChevronDown className="h-4 w-4" />
+                              </div>
+                            </div>
                           </div>
 
                           {/* Expiry Date Dropdown */}
                           <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Timeline</label>
-                            <select
-                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                              value={expiryFilter}
-                              onChange={(e) => setExpiryFilter(e.target.value)}
-                            >
-                              <option value="all">Any Date</option>
-                              <option value="upcoming">Upcoming Expiry</option>
-                              <option value="overdue">Overdue</option>
-                            </select>
+                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
+                            <div className="relative">
+                              <select
+                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
+                                value={expiryFilter}
+                                onChange={(e) => setExpiryFilter(e.target.value)}
+                              >
+                                <option value="all">Any Date</option>
+                                <option value="upcoming">Upcoming Expiry</option>
+                                <option value="overdue">Overdue</option>
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                <FiChevronDown className="h-4 w-4" />
+                              </div>
+                            </div>
                           </div>
 
                           {/* Aadhaar Search */}
-                          <div className="relative pt-1">
-                             <input
-                              type="text"
-                              placeholder="Search by Aadhaar..."
-                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                              value={aadhaarSearch}
-                              onChange={(e) => setAadhaarSearch(e.target.value)}
-                              maxLength="12"
-                            />
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
+                            <div className="relative">
+                              <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                              <input
+                                type="text"
+                                placeholder="Search by Aadhaar..."
+                                className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                value={aadhaarSearch}
+                                onChange={(e) => setAadhaarSearch(e.target.value)}
+                                maxLength="12"
+                              />
+                            </div>
                           </div>
 
                           <button
                             onClick={handleClearFilters}
-                            className="w-full mt-2 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="w-full mt-4 py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
                           >
                             Clear All Filters
                           </button>
@@ -1440,6 +1459,7 @@ const [selectedService, setSelectedService] = useState(null);
                     </AnimatePresence>
                   </div>
                 </div>
+                {/* -------------------------------------- */}
                 
                 <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
