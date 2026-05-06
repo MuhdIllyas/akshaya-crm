@@ -107,12 +107,48 @@ const TrackServicePage = () => {
   
   const [services, setServices] = useState([]);
   const [entryServices, setEntryServices] = useState([]);
-  const [selectedService, setSelectedService] = useState(null);
+const [selectedService, setSelectedService] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [staffList, setStaffList] = useState([]);
+
+  // --- UPGRADED FILTER STATES & LOCAL STORAGE ---
+  const getSavedFilters = () => {
+    try {
+      const saved = localStorage.getItem('staffServiceSavedView');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Could not load saved filters', e);
+    }
+    return { status: 'all', staff: 'all', expiry: 'all' };
+  };
+
+  const initialFilters = getSavedFilters();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [aadhaarSearch, setAadhaarSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [staffList, setStaffList] = useState([]);
+  const [statusFilter, setStatusFilter] = useState(initialFilters.status);
+  const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
+  const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  const handleSaveView = () => {
+    const filtersToSave = {
+      status: statusFilter,
+      staff: staffFilter,
+      expiry: expiryFilter
+    };
+    localStorage.setItem('staffServiceSavedView', JSON.stringify(filtersToSave));
+    toast.success('Your custom view has been saved!');
+  };
+
+  const handleClearFilters = () => {
+    setStatusFilter('all');
+    setStaffFilter('all');
+    setExpiryFilter('all');
+    setSearchTerm('');
+    setAadhaarSearch('');
+  };
+  // ----------------------------------------------
   const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [trackingFormData, setTrackingFormData] = useState({
@@ -614,21 +650,45 @@ const TrackServicePage = () => {
 
   const filteredServices = useMemo(() => {
     return services.filter(service => {
-      const matchesSearch =
-        (service.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.phone?.includes(searchTerm) || false) ||
-        (service.serviceType?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.applicationNumber?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
+      // 1. Text Search
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm ||
+        (service.customerName?.toLowerCase().includes(searchLower)) ||
+        (service.phone?.includes(searchTerm)) ||
+        (service.serviceType?.toLowerCase().includes(searchLower)) ||
+        (service.applicationNumber?.toLowerCase().includes(searchLower)) ||
+        (service.email?.toLowerCase().includes(searchLower));
       
-      const matchesAadhaarSearch = aadhaarSearch ? 
-        (service.aadhaar?.includes(aadhaarSearch) || false) : true;
+      // 2. Aadhaar Search
+      const matchesAadhaarSearch = !aadhaarSearch || (service.aadhaar?.includes(aadhaarSearch));
       
+      // 3. Status Filter
       const matchesStatus = statusFilter === 'all' || service.status === statusFilter;
+
+      // 4. Staff Name Filter
+      const matchesStaff = staffFilter === 'all' || service.assignedToId?.toString() === staffFilter.toString();
+
+      // 5. Expiry Date Logic
+      let matchesExpiry = true;
+      if (expiryFilter !== 'all') {
+        if (!service.rawExpiryDate) {
+          matchesExpiry = false; 
+        } else {
+          const expiryDate = new Date(service.rawExpiryDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Reset time to compare just dates
+          
+          if (expiryFilter === 'upcoming') {
+            matchesExpiry = expiryDate >= today && service.status !== 'Completed';
+          } else if (expiryFilter === 'overdue') {
+            matchesExpiry = expiryDate < today && service.status !== 'Completed';
+          }
+        }
+      }
       
-      return matchesSearch && matchesAadhaarSearch && matchesStatus;
+      return matchesSearch && matchesAadhaarSearch && matchesStatus && matchesStaff && matchesExpiry;
     });
-  }, [services, searchTerm, aadhaarSearch, statusFilter]);
+  }, [services, searchTerm, aadhaarSearch, statusFilter, staffFilter, expiryFilter]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
     try {
@@ -1264,50 +1324,120 @@ const TrackServicePage = () => {
                   </div>
                 </div>
                 
-                <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                  <div className="space-y-4">
+                {/* --- UPGRADED FILTER UI PANEL --- */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <FiFilter className="text-indigo-600" /> Filters
+                    </h3>
+                    <button 
+                      onClick={handleSaveView}
+                      className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md hover:bg-indigo-100 transition-colors"
+                      title="Save these filters for next time"
+                    >
+                      Save My View
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Primary Search Input */}
                     <div className="relative">
                       <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                       <input
                         type="text"
-                        placeholder="Search services..."
-                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                        placeholder="Search name, phone, app no..."
+                        className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                       />
                     </div>
-                    <div className="relative">
-                      <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <input
-                        type="text"
-                        placeholder="Search by Aadhaar..."
-                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                        value={aadhaarSearch}
-                        onChange={(e) => setAadhaarSearch(e.target.value)}
-                        maxLength="12"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Status Filter</label>
-                      <div className="relative">
-                        <select
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none"
-                          value={statusFilter}
-                          onChange={(e) => setStatusFilter(e.target.value)}
+
+                    {/* Toggle for Advanced Filters */}
+                    <button
+                      onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                      className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-gray-900 py-2 border-b border-gray-100"
+                    >
+                      <span>Advanced Filters</span>
+                      <FiChevronDown className={`transition-transform duration-300 ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Collapsible Panel */}
+                    <AnimatePresence>
+                      {showAdvancedFilters && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="space-y-3 overflow-hidden pt-2"
                         >
-                          <option value="all">All Statuses</option>
-                          <option value="Pending">Pending</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Delayed">Delayed</option>
-                          <option value="Completed">Completed</option>
-                          <option value="Resubmit">Resubmit</option>
-                          <option value="Paid">Paid</option>
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                          <FiChevronDown className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
+                          {/* Status Dropdown */}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                            <select
+                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                              value={statusFilter}
+                              onChange={(e) => setStatusFilter(e.target.value)}
+                            >
+                              <option value="all">All Statuses</option>
+                              <option value="Pending">Pending</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Delayed">Delayed</option>
+                              <option value="Completed">Completed</option>
+                              <option value="Resubmit">Resubmit</option>
+                              <option value="Paid">Paid</option>
+                            </select>
+                          </div>
+
+                          {/* Assigned Staff Dropdown */}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Assigned Staff</label>
+                            <select
+                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                              value={staffFilter}
+                              onChange={(e) => setStaffFilter(e.target.value)}
+                            >
+                              <option value="all">Everyone</option>
+                              {staffList.map(staff => (
+                                <option key={staff.id} value={staff.id}>{staff.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Expiry Date Dropdown */}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Timeline</label>
+                            <select
+                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                              value={expiryFilter}
+                              onChange={(e) => setExpiryFilter(e.target.value)}
+                            >
+                              <option value="all">Any Date</option>
+                              <option value="upcoming">Upcoming Expiry</option>
+                              <option value="overdue">Overdue</option>
+                            </select>
+                          </div>
+
+                          {/* Aadhaar Search */}
+                          <div className="relative pt-1">
+                             <input
+                              type="text"
+                              placeholder="Search by Aadhaar..."
+                              className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                              value={aadhaarSearch}
+                              onChange={(e) => setAadhaarSearch(e.target.value)}
+                              maxLength="12"
+                            />
+                          </div>
+
+                          <button
+                            onClick={handleClearFilters}
+                            className="w-full mt-2 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            Clear All Filters
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
                 
