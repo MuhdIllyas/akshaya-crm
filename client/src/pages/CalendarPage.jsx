@@ -19,7 +19,7 @@ import {
   FiEdit,
   FiTrash2,
 } from "react-icons/fi";
-import { useEvents } from "../hooks/useEvents";
+import useEvents from "../hooks/useEvents";
 
 // ----------------------------------------------------------------------
 //  MiniCalendar
@@ -726,13 +726,12 @@ export default function CalendarPage() {
   const eventsHookData = typeof useEvents === "function" ? useEvents() : {};
   const {
     events = [],
-    leavesData = [],
-    createEvent: hookCreateEvent,
-    updateEvent: hookUpdateEvent,
-    deleteEvent: hookDeleteEvent,
-    userRole = "admin",
-    services: servicesList = [],
-  } = eventsHookData;
+    loading,
+    error,
+    addEvent: hookCreateEvent,
+    editEvent: hookUpdateEvent,
+    removeEvent: hookDeleteEvent,
+  } = typeof useEvents === "function" ? useEvents() : {};
 
   const [filters, setFilters] = useState({
     type: "",
@@ -748,7 +747,6 @@ export default function CalendarPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [loading, setLoading] = useState(false);
   const calendarRef = useRef(null);
 
   const filteredEvents = useMemo(() => {
