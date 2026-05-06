@@ -18,6 +18,10 @@ import {
   FiClock,
   FiEdit,
   FiTrash2,
+  FiMapPin,
+  FiChevronDown,
+  FiSearch,
+  FiRefreshCw,
 } from "react-icons/fi";
 import useEvents from "../hooks/useEvents";
 
@@ -75,15 +79,19 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
   };
 
   return (
-    <div className="p-3 bg-white rounded-xl shadow-sm border border-gray-200">
-      <div className="flex items-center justify-between mb-2">
-        <button onClick={() => changeMonth(-1)}><FiChevronLeft /></button>
-        <h3 className="text-sm font-semibold">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 rounded-lg transition">
+          <FiChevronLeft className="h-4 w-4 text-gray-500" />
+        </button>
+        <h3 className="text-sm font-semibold text-gray-800">
           {displayDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
         </h3>
-        <button onClick={() => changeMonth(1)}><FiChevronRight /></button>
+        <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 rounded-lg transition">
+          <FiChevronRight className="h-4 w-4 text-gray-500" />
+        </button>
       </div>
-      <div className="grid grid-cols-7 text-xs text-center text-gray-400 mb-1">
+      <div className="grid grid-cols-7 text-xs text-center text-gray-400 mb-2">
         {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => <div key={d}>{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-1">
@@ -94,11 +102,11 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
             <button
               key={i}
               onClick={() => onDateChange?.(new Date(year, month, cell.day))}
-              className={`aspect-square flex items-center justify-center text-xs rounded-full relative ${
+              className={`aspect-square flex items-center justify-center text-xs rounded-full relative transition-all duration-150 ${
                 cell.isSelected
-                  ? "bg-indigo-600 text-white font-bold"
+                  ? "bg-indigo-600 text-white font-bold shadow-md"
                   : cell.isToday
-                  ? "border border-indigo-500 text-indigo-600"
+                  ? "border-2 border-indigo-500 text-indigo-600"
                   : "hover:bg-gray-100 text-gray-700"
               }`}
             >
@@ -491,7 +499,6 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
 // ----------------------------------------------------------------------
 function CreateEventModal({ onSave, onClose, initialData, services = [], staffList = [], userRole = "admin" }) {
   const today = new Date().toISOString().slice(0, 10);
-  // 🔥 fixed: default integer fields to null instead of ""
   const [form, setForm] = useState(
     initialData || {
       title: "",
@@ -503,8 +510,8 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       event_type: "deadline",
       priority: "medium",
       visibility: "centre",
-      related_service_id: null,    // now null
-      assigned_to: null,           // now null
+      related_service_id: null,
+      assigned_to: null,
     }
   );
 
@@ -515,7 +522,6 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
       alert("End time cannot be before start time");
       return;
     }
-    // ensure empty strings become null before sending
     onSave({
       ...form,
       assigned_to: form.assigned_to || null,
@@ -576,7 +582,6 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               <option value="expiry">Expiry</option>
               <option value="announcement">Announcement</option>
             </select>
-            {/* Service dropdown */}
             <select
               value={form.related_service_id || ""}
               onChange={(e) => setForm({ ...form, related_service_id: e.target.value || null })}
@@ -584,7 +589,6 @@ function CreateEventModal({ onSave, onClose, initialData, services = [], staffLi
               <option value="">No Service</option>
               {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            {/* Staff dropdown */}
             <select
               value={form.assigned_to || ""}
               onChange={(e) => setForm({ ...form, assigned_to: e.target.value || null })}
@@ -734,6 +738,103 @@ function CalendarToolbar({ viewMode, setViewMode, filters, setFilters, onAddEven
 }
 
 // ----------------------------------------------------------------------
+//  Centre Switcher
+// ----------------------------------------------------------------------
+function CentreSwitcher({ centres, activeCentreId, onChange }) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const selected = centres.find((c) => c.id === activeCentreId);
+
+  const filtered = centres.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.location && c.location.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white hover:shadow-sm transition-all w-full md:w-auto justify-between min-w-[220px]"
+      >
+        <div className="flex items-center gap-2 truncate">
+          <FiMapPin className="h-4 w-4 text-indigo-500 shrink-0" />
+          <span className="truncate">
+            {selected ? selected.name : "Select centre"}
+          </span>
+        </div>
+        <FiChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full mt-2 w-full md:w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden"
+          >
+            <div className="p-3 border-b border-gray-100">
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search centres..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                />
+              </div>
+            </div>
+            <div className="max-h-60 overflow-y-auto p-2">
+              {filtered.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">No centres found</p>
+              ) : (
+                filtered.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      onChange(c.id);
+                      setOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all flex items-center gap-3 ${
+                      activeCentreId === c.id
+                        ? "bg-indigo-50 text-indigo-700 font-medium"
+                        : "hover:bg-gray-50 text-gray-700"
+                    }`}
+                  >
+                    <FiMapPin className={`h-4 w-4 ${activeCentreId === c.id ? "text-indigo-500" : "text-gray-400"}`} />
+                    <div>
+                      <p className="font-medium truncate">{c.name}</p>
+                      {c.location && <p className="text-xs text-gray-500 truncate">{c.location}</p>}
+                    </div>
+                    {activeCentreId === c.id && (
+                      <span className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
 //  JWT helpers (inline)
 // ----------------------------------------------------------------------
 function getTokenClaims() {
@@ -763,7 +864,7 @@ export default function CalendarPage() {
   const userId = claims?.id;
   const userCentreId = claims?.centreId;
 
-  // ---------- Centres (superadmin) ----------
+  // ---------- Centres ----------
   const [centres, setCentres] = useState([]);
   const [activeCentreId, setActiveCentreId] = useState(null);
 
@@ -772,72 +873,62 @@ export default function CalendarPage() {
       fetch(`${import.meta.env.VITE_API_URL}/api/wallet/centres`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       })
-        .then(res => res.json())
-        .then(data => setCentres(data))
+        .then((res) => res.json())
+        .then((data) => {
+          setCentres(data);
+          // auto-select first centre if none selected
+          if (data.length > 0 && !activeCentreId) {
+            setActiveCentreId(data[0].id);
+          }
+        })
         .catch(() => setCentres([]));
     } else {
       setActiveCentreId(userCentreId);
     }
   }, [userRole, userCentreId]);
 
-  // ---------- Services & Staff for dropdowns ----------
+  // ---------- Services & Staff ----------
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
 
-  // Fetch services & staff when centre is active
   useEffect(() => {
     if (!activeCentreId) return;
     const token = localStorage.getItem("token");
     if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
 
-    // Services – correct endpoint from servicemanagement.js
     fetch(`${import.meta.env.VITE_API_URL}/api/servicemanagement/services`, { headers })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
-          setServices(data.map(s => ({ id: s.id, name: s.name })));
+          setServices(data.map((s) => ({ id: s.id, name: s.name })));
         } else {
-          console.error("Services response is not an array", data);
           setServices([]);
         }
       })
-      .catch(err => {
-        console.error("FETCH SERVICES ERROR:", err);
-        setServices([]);
-      });
+      .catch(() => setServices([]));
 
-    // Staff – correct endpoint from servicemanagement.js
     fetch(`${import.meta.env.VITE_API_URL}/api/servicemanagement/staff?centre_id=${activeCentreId}`, { headers })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
-          setStaff(data.map(s => ({ id: s.id, name: s.name })));
+          setStaff(data.map((s) => ({ id: s.id, name: s.name })));
         } else {
-          console.error("Staff response is not an array", data);
           setStaff([]);
         }
       })
-      .catch(err => {
-        console.error("FETCH STAFF ERROR:", err);
-        setStaff([]);
-      });
+      .catch(() => setStaff([]));
   }, [activeCentreId]);
 
-  // Toolbar services list (reuse the same `services` array)
   const servicesList = services;
+  const leavesData = [];
 
-  const leavesData = []; // placeholder
-
-  // ---------- Hook filters (sync centreId) ----------
-  const [hookFilters, setHookFilters] = useState({
-    centreId: activeCentreId,
-  });
-
+  // ---------- Hook ----------
+  const [hookFilters, setHookFilters] = useState({ centreId: activeCentreId });
   useEffect(() => {
-    setHookFilters(prev => ({ ...prev, centreId: activeCentreId }));
+    setHookFilters((prev) => ({ ...prev, centreId: activeCentreId }));
   }, [activeCentreId]);
 
   const {
@@ -849,7 +940,7 @@ export default function CalendarPage() {
     removeEvent: hookDeleteEvent,
   } = useEvents(hookFilters);
 
-  // ---------- UI filters ----------
+  // ---------- UI state ----------
   const [filters, setFilters] = useState({
     type: "",
     priority: "",
@@ -858,14 +949,13 @@ export default function CalendarPage() {
     service_id: "",
     myEvents: false,
   });
-
   const [viewMode, setViewMode] = useState("month");
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editEvent, setEditEvent] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // ---------- Client‑side filtering ----------
+  // ---------- Filtered events ----------
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
     return events.filter((e) => {
@@ -890,9 +980,7 @@ export default function CalendarPage() {
   const openCreateModal = () => { setEditEvent(null); setShowCreateModal(true); };
   const openEditModal = (event) => { setEditEvent(event); setShowCreateModal(true); };
 
-  const handleMiniCalendarDateChange = (date) => {
-    setCurrentDate(date);
-  };
+  const handleMiniCalendarDateChange = (date) => setCurrentDate(date);
 
   const handleCalendarEventClick = (event) => {
     if (event.isNew) {
@@ -903,49 +991,44 @@ export default function CalendarPage() {
     }
   };
 
-  // ---------- Superadmin centre picker ----------
-  if (userRole === "superadmin" && !activeCentreId) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-5xl mx-auto">
-          <h1 className="text-2xl font-bold mb-6">Select a Centre to View Calendar</h1>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {centres.map(c => (
-              <button
-                key={c.id}
-                onClick={() => setActiveCentreId(c.id)}
-                className="bg-white p-6 rounded-xl border hover:shadow-md text-left"
-              >
-                <h3 className="font-bold text-lg">{c.name}</h3>
-                <p className="text-sm text-gray-500">{c.location || 'No Location'}</p>
-                <div className="mt-4 text-indigo-600 text-sm font-medium">View Calendar →</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ---------- Main calendar view ----------
+  // ---------- Render ----------
   const isLoading = loading;
   const hasEvents = filteredEvents.length > 0;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {userRole === "superadmin" && activeCentreId && (
-        <div className="bg-indigo-50 px-4 py-1 text-xs text-indigo-700 border-b border-indigo-200 flex justify-between items-center">
-          <span>
-            Viewing: {centres.find(c => c.id === activeCentreId)?.name || `Centre ${activeCentreId}`}
-          </span>
+    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Top Bar with Centre Switcher */}
+      <div className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4 shadow-sm z-30">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-bold text-gray-800 tracking-tight">
+            📅 Calendar
+          </h1>
+          {userRole === "superadmin" && centres.length > 0 && (
+            <CentreSwitcher
+              centres={centres}
+              activeCentreId={activeCentreId}
+              onChange={setActiveCentreId}
+            />
+          )}
+          {userRole !== "superadmin" && activeCentreId && (
+            <div className="flex items-center gap-2 text-sm text-gray-500 ml-4">
+              <FiMapPin className="h-4 w-4 text-indigo-500" />
+              <span>Your Centre</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setActiveCentreId(null)}
-            className="underline hover:text-indigo-900"
+            onClick={() => {
+              // refresh events manually (optional)
+              setHookFilters({ centreId: activeCentreId }); // trigger refetch
+            }}
+            className="p-2 hover:bg-gray-100 rounded-lg transition text-gray-500 hover:text-indigo-600"
           >
-            Change centre
+            <FiRefreshCw className="h-4 w-4" />
           </button>
         </div>
-      )}
+      </div>
 
       <CalendarToolbar
         viewMode={viewMode}
@@ -959,14 +1042,14 @@ export default function CalendarPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {viewMode !== "agenda" && (
-          <aside className="hidden lg:block w-64 p-4 border-r border-gray-200 overflow-y-auto bg-white">
+          <aside className="hidden lg:block w-72 p-4 border-r border-gray-200 overflow-y-auto bg-white/50 backdrop-blur-sm">
             <MiniCalendar events={filteredEvents} currentDate={currentDate} onDateChange={handleMiniCalendarDateChange} />
           </aside>
         )}
-        <main className="flex-1 overflow-auto p-4 relative">
+        <main className="flex-1 overflow-auto p-6 relative">
           {isLoading ? (
             <div className="flex items-center justify-center h-full text-gray-500">
-              <div className="animate-spin mr-2 h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+              <div className="animate-spin mr-3 h-6 w-6 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
               Loading events…
             </div>
           ) : viewMode === "agenda" ? (
@@ -979,7 +1062,7 @@ export default function CalendarPage() {
             />
           ) : !hasEvents ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-20 h-20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <p className="text-lg font-medium">No events found</p>
