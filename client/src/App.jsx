@@ -293,6 +293,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["superadmin"]}><CentreManagement /></ProtectedRoute>}
             />
             <Route
+              path="superadmin/calendar"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><CalendarPage /></ProtectedRoute>}
+            />
+            <Route
               path="superadmin/staffmanagement"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><SuperadminStaffManagement /></ProtectedRoute>}
             />
