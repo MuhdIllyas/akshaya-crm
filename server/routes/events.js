@@ -35,7 +35,7 @@ const authenticateToken = (req, res, next) => {
 router.use(authenticateToken);
 
 /* ======================================================
-   ROLE FILTER
+   ROLE FILTER (CORRECTED)
 ====================================================== */
 
 const buildRoleFilter = (user) => {
@@ -47,29 +47,20 @@ const buildRoleFilter = (user) => {
     };
   }
 
-  // ADMIN → CENTRE + GLOBAL
-  if (user.role === "admin") {
-    return {
-      query: `
-        AND (
-          e.centre_id = $1
-          OR e.visibility = 'global'
-        )
-      `,
-      values: [user.centre_id],
-    };
-  }
-
-  // STAFF → ASSIGNED + CENTRE + GLOBAL
+  // ADMIN + STAFF:
+  //   - GLOBAL events (visible to everyone)
+  //   - CENTRE events only if they belong to the user's centre
   return {
     query: `
       AND (
-        e.assigned_to = $1
-        OR e.centre_id = $2
-        OR e.visibility = 'global'
+        e.visibility = 'global'
+        OR (
+          e.visibility = 'centre'
+          AND e.centre_id = $1
+        )
       )
     `,
-    values: [user.id, user.centre_id],
+    values: [user.centre_id],
   };
 };
 
