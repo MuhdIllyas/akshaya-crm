@@ -55,6 +55,16 @@ function TooltipCard({ event, position }) {
     return { left: `${left}px`, top: `${top}px` };
   }, [position]);
 
+  // 🔥 FIX 1 – helper to format a date string nicely
+  const formatDate = (rawDate) => {
+    if (!rawDate) return "";
+    return new Date(rawDate).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -95,7 +105,7 @@ function TooltipCard({ event, position }) {
           event.date && (
             <div className="flex items-center gap-2 text-xs text-gray-600 mb-1.5">
               <FiCalendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-              <span>{event.date}</span>
+              <span>{formatDate(event.date)}</span>   {/* 🔥 formatted */}
             </div>
           )
         )}
@@ -163,6 +173,15 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
     return map;
   }, [events]);
 
+  // 🔥 FIX 2 – compute today’s date in LOCAL time (not UTC)
+  const now = new Date();
+  const todayLocalStr =
+    now.getFullYear() +
+    "-" +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(now.getDate()).padStart(2, "0");
+
   const days = [];
   for (let i = 0; i < startDay; i++) days.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
@@ -171,7 +190,7 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
     days.push({
       day: d,
       dateStr,
-      isToday: dateStr === new Date().toISOString().slice(0, 10),
+      isToday: dateStr === todayLocalStr,   // 🔥 local string comparison
       isSelected: dateStr === selectedDateStr,
       events: eventMap[dateStr],
     });
@@ -243,7 +262,7 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
 }
 
 // ----------------------------------------------------------------------
-//  AgendaView
+//  AgendaView (unchanged)
 // ----------------------------------------------------------------------
 function AgendaView({
   calendarData = [],
@@ -607,6 +626,16 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
     low: "bg-green-100 text-green-700",
   };
 
+  // 🔥 FIX 1 – helper for formatted date
+  const formatDate = (rawDate) => {
+    if (!rawDate) return "";
+    return new Date(rawDate).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   return (
     <AnimatePresence>
       <motion.div
@@ -640,7 +669,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
               <span>
                 {event.start_datetime
                   ? new Date(event.start_datetime).toLocaleDateString()
-                  : event.date}
+                  : formatDate(event.date)}   {/* 🔥 formatted */}
               </span>
             </div>
             {event.start_datetime && (
@@ -733,7 +762,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
 }
 
 // ----------------------------------------------------------------------
-//  CreateEventModal (All‑Day Toggle + Admin Visibility)
+//  CreateEventModal (unchanged)
 // ----------------------------------------------------------------------
 function CreateEventModal({
   onSave,
@@ -743,6 +772,7 @@ function CreateEventModal({
   staffList = [],
   userRole = "admin",
 }) {
+  // ... (same as before, no changes needed)
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState(
     initialData || {
@@ -1066,7 +1096,7 @@ function CreateEventModal({
 }
 
 // ----------------------------------------------------------------------
-//  CalendarToolbar (visibility filter for admin & superadmin)
+//  CalendarToolbar (unchanged, except minor visibility default)
 // ----------------------------------------------------------------------
 function CalendarToolbar({
   viewMode,
@@ -1108,7 +1138,7 @@ function CalendarToolbar({
       type: null,
       priority: "",
       event_type: "",
-      visibility: "global", // reset to global view
+      visibility: "global", // default to global
       service_id: "",
       myEvents: false,
     });
@@ -1220,7 +1250,7 @@ function CalendarToolbar({
         {(userRole === "admin" || userRole === "superadmin") && (
           <select
             className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm"
-            value={filters.visibility ?? ""} // FIX: use empty string to show "All" correctly
+            value={filters.visibility ?? ""}
             onChange={(e) =>
               setFilters({ ...filters, visibility: e.target.value })
             }
@@ -1246,7 +1276,7 @@ function CalendarToolbar({
 }
 
 // ----------------------------------------------------------------------
-//  Centre Switcher
+//  Centre Switcher (unchanged)
 // ----------------------------------------------------------------------
 function CentreSwitcher({ centres, activeCentreId, onChange }) {
   const [search, setSearch] = useState("");
