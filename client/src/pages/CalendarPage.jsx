@@ -757,7 +757,7 @@ function CreateEventModal({
       visibility: "centre",
       related_service_id: null,
       assigned_to: null,
-      allDay: false, // 🆕 all‑day toggle
+      allDay: false,
     }
   );
 
@@ -765,7 +765,6 @@ function CreateEventModal({
     e.preventDefault();
     if (!form.title.trim()) return;
 
-    // If allDay, clear time fields
     const payload = {
       ...form,
       start_datetime: form.allDay ? null : form.start_datetime,
@@ -774,7 +773,6 @@ function CreateEventModal({
       related_service_id: form.related_service_id || null,
     };
 
-    // Time validation only when not allDay and times are provided
     if (!form.allDay && payload.start_datetime && payload.end_datetime) {
       if (new Date(payload.end_datetime) < new Date(payload.start_datetime)) {
         toast.error("End time cannot be before start time");
@@ -1110,7 +1108,7 @@ function CalendarToolbar({
       type: null,
       priority: "",
       event_type: "",
-      visibility: "centre",
+      visibility: "global", // reset to global view
       service_id: "",
       myEvents: false,
     });
@@ -1222,7 +1220,7 @@ function CalendarToolbar({
         {(userRole === "admin" || userRole === "superadmin") && (
           <select
             className="border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 shadow-sm"
-            value={filters.visibility || "centre"}
+            value={filters.visibility ?? ""} // FIX: use empty string to show "All" correctly
             onChange={(e) =>
               setFilters({ ...filters, visibility: e.target.value })
             }
@@ -1481,7 +1479,7 @@ export default function CalendarPage() {
     type: "",
     priority: "",
     event_type: "",
-    visibility: "centre",
+    visibility: "global", // default to global view
     service_id: "",
     myEvents: false,
   });
