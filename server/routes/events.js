@@ -270,7 +270,7 @@ router.get("/", async (req, res) => {
     );
 
     /* ======================================================
-       3. SERVICE TRACKING EVENTS
+      3. SERVICE TRACKING EVENTS
     ====================================================== */
 
     let trackingFilter = "";
@@ -288,7 +288,7 @@ router.get("/", async (req, res) => {
     // ADMIN → only centre entries
     else if (req.user.role === "admin") {
       trackingFilter = `
-        WHERE se.centre_id = $1
+        WHERE sf.centre_id = $1
       `;
 
       trackingValues.push(req.user.centre_id);
@@ -298,30 +298,29 @@ router.get("/", async (req, res) => {
       SELECT
         tr.id,
 
-        c.name AS customer_name,
+        se.customer_name,
 
         sv.name AS service_name,
 
         se.id AS service_entry_id,
 
         se.staff_id,
+
         sf.name AS staff_name,
 
-        se.centre_id,
+        sf.centre_id,
 
-        tr.expiry_date,
-        tr.estimated_delivery_date
+        se.expiry_date,
+
+        tr.estimated_delivery
 
       FROM service_tracking tr
 
       LEFT JOIN service_entries se
         ON se.id = tr.service_entry_id
 
-      LEFT JOIN customers c
-        ON c.id = se.customer_id
-
       LEFT JOIN services sv
-        ON sv.id = se.service_id
+        ON sv.id = se.subcategory_id
 
       LEFT JOIN staff sf
         ON sf.id = se.staff_id
@@ -335,7 +334,7 @@ router.get("/", async (req, res) => {
     );
 
     /* ======================================================
-       BUILD SERVICE TRACKING EVENTS
+      BUILD SERVICE TRACKING EVENTS
     ====================================================== */
 
     const serviceTrackingEvents = [];
@@ -343,7 +342,7 @@ router.get("/", async (req, res) => {
     trackingRes.rows.forEach((row) => {
 
       /* ======================
-         EXPIRY EVENT
+        EXPIRY EVENT
       ====================== */
 
       if (row.expiry_date) {
@@ -384,10 +383,10 @@ router.get("/", async (req, res) => {
       }
 
       /* ======================
-         DELIVERY EVENT
+        DELIVERY EVENT
       ====================== */
 
-      if (row.estimated_delivery_date) {
+      if (row.estimated_delivery) {
         serviceTrackingEvents.push({
           id: `delivery-${row.id}`,
 
@@ -397,7 +396,7 @@ router.get("/", async (req, res) => {
             ? `Customer: ${row.customer_name}`
             : null,
 
-          date: row.estimated_delivery_date,
+          date: row.estimated_delivery,
 
           start_datetime: null,
           end_datetime: null,
