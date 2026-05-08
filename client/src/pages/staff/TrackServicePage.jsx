@@ -5,8 +5,7 @@ import {
   FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
-  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft,
-  FiColumns   // added for Kanban view
+  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft   // FiGrid added
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ToastContainer, toast } from 'react-toastify';
@@ -108,7 +107,7 @@ const TrackServicePage = () => {
   
   const [services, setServices] = useState([]);
   const [entryServices, setEntryServices] = useState([]);
-  const [selectedService, setSelectedService] = useState(null);
+const [selectedService, setSelectedService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
 
@@ -164,7 +163,7 @@ const TrackServicePage = () => {
     priority: 'medium'
   });
   const [timeRange, setTimeRange] = useState('week');
-  const [viewMode, setViewMode] = useState('list'); // 'list', 'grid', 'kanban'
+  const [viewMode, setViewMode] = useState('list');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   // Map backend status to frontend status
@@ -1178,71 +1177,6 @@ const TrackServicePage = () => {
     );
   };
 
-  // ---------- KANBAN BOARD COMPONENT (added) ----------
-  const KanbanBoard = ({ services, onServiceSelect, selectedServiceId }) => {
-    const columns = [
-      { status: 'Pending', color: 'bg-amber-100', textColor: 'text-amber-800', dot: 'bg-amber-600' },
-      { status: 'In Progress', color: 'bg-blue-100', textColor: 'text-blue-800', dot: 'bg-blue-600' },
-      { status: 'Delayed', color: 'bg-rose-100', textColor: 'text-rose-800', dot: 'bg-rose-600' },
-      { status: 'Completed', color: 'bg-emerald-100', textColor: 'text-emerald-800', dot: 'bg-emerald-600' },
-      { status: 'Resubmit', color: 'bg-orange-100', textColor: 'text-orange-800', dot: 'bg-orange-600' },
-      { status: 'Paid', color: 'bg-green-100', textColor: 'text-green-700', dot: 'bg-green-600' }
-    ];
-
-    return (
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 h-full">
-        {columns.map(col => {
-          const columnServices = services.filter(s => s.status === col.status);
-          return (
-            <div key={col.status} className="flex flex-col min-h-[400px]">
-              <div className={`px-3 py-2 rounded-t-lg ${col.color} ${col.textColor} font-semibold text-sm flex justify-between items-center`}>
-                <span>{col.status}</span>
-                <span className="bg-white text-gray-600 rounded-full px-2 py-0.5 text-xs">{columnServices.length}</span>
-              </div>
-              <div className="flex-1 bg-gray-50 rounded-b-lg border border-gray-200 border-t-0 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-300px)]">
-                {columnServices.map(service => {
-                  const isSelected = selectedServiceId === service.id;
-                  return (
-                    <motion.div
-                      key={service.id}
-                      whileHover={{ scale: 1.02 }}
-                      className={`p-3 bg-white rounded-lg border cursor-pointer shadow-sm hover:shadow transition ${
-                        isSelected ? 'ring-2 ring-indigo-500' : 'border-gray-200'
-                      }`}
-                      onClick={() => onServiceSelect(service)}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="font-medium text-sm text-gray-900 truncate">{service.customerName}</p>
-                        <div className={`w-2 h-2 rounded-full ${col.dot}`}></div>
-                      </div>
-                      <p className="text-xs text-gray-500 truncate">{service.serviceType}</p>
-                      <div className="flex justify-between items-center mt-2">
-                        <span className="text-xs text-gray-400">{service.applicationNumber}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                          service.priority === 'high' ? 'bg-rose-100 text-rose-600' :
-                          service.priority === 'medium' ? 'bg-amber-100 text-amber-600' :
-                          'bg-emerald-100 text-emerald-600'
-                        }`}>
-                          {service.priority}
-                        </span>
-                      </div>
-                      {service.assignedTo && (
-                        <p className="text-[10px] text-gray-400 mt-1 truncate">{service.assignedTo}</p>
-                      )}
-                    </motion.div>
-                  );
-                })}
-                {columnServices.length === 0 && (
-                  <p className="text-xs text-gray-400 text-center py-4">No services</p>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -1359,23 +1293,14 @@ const TrackServicePage = () => {
                       <button 
                         onClick={() => setViewMode('grid')}
                         className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                        title="Grid View"
                       >
                         <FiGrid className="h-4 w-4" />
                       </button>
                       <button 
                         onClick={() => setViewMode('list')}
                         className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                        title="List View"
                       >
                         <FiList className="h-4 w-4" />
-                      </button>
-                      <button 
-                        onClick={() => setViewMode('kanban')}
-                        className={`p-2 rounded-lg ${viewMode === 'kanban' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                        title="Kanban Board"
-                      >
-                        <FiColumns className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -1536,7 +1461,6 @@ const TrackServicePage = () => {
                 </div>
                 {/* -------------------------------------- */}
                 
-                {/* Service List / Kanban Board container */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-gray-900">
@@ -1547,33 +1471,23 @@ const TrackServicePage = () => {
                       <span className="text-xs text-gray-500">Active</span>
                     </div>
                   </div>
-
-                  {/* Conditionally render List/Grid or Kanban */}
-                  {viewMode === 'kanban' ? (
-                    <KanbanBoard 
-                      services={filteredServices}
-                      onServiceSelect={handleServiceSelect}
-                      selectedServiceId={selectedService?.id}
-                    />
-                  ) : (
-                    <div className={`space-y-3 ${viewMode === 'grid' ? 'grid grid-cols-2 gap-3' : ''} max-h-[500px] overflow-y-auto scrollbar-hide`}>
-                      {filteredServices.map(service => (
-                        <ServiceCard
-                          key={service.id}
-                          service={service}
-                          isSelected={selectedService?.id === service.id}
-                          onClick={() => handleServiceSelect(service)}
-                        />
-                      ))}
-                      {filteredServices.length === 0 && (
-                        <div className="text-center py-8 text-gray-500">
-                          <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                          <p className="text-sm">No services found</p>
-                          <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
+                    {filteredServices.map(service => (
+                      <ServiceCard
+                        key={service.id}
+                        service={service}
+                        isSelected={selectedService?.id === service.id}
+                        onClick={() => handleServiceSelect(service)}
+                      />
+                    ))}
+                    {filteredServices.length === 0 && (
+                      <div className="text-center py-8 text-gray-500">
+                        <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                        <p className="text-sm">No services found</p>
+                        <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -1736,7 +1650,6 @@ const TrackServicePage = () => {
   );
 };
 
-// --------- External Helper Components (unchanged) ----------
 const StatItem = ({ label, value }) => (
   <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
     <p className="text-sm font-medium text-gray-600 mb-1">{label}</p>
