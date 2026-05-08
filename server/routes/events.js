@@ -312,7 +312,7 @@ router.get("/", async (req, res) => {
         tr.expiry_date,
         tr.estimated_delivery_date
 
-      FROM servicetracking tr
+      FROM service_tracking tr
 
       LEFT JOIN service_entries se
         ON se.id = tr.service_entry_id
