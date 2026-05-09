@@ -85,10 +85,6 @@ const sendPendingPaymentWhatsApp = async ({
                 },
               ],
             },
-            {
-              type: "footer",
-              text: "Akshaya E Centre Pukayur",
-            },
           ],
         },
       },
