@@ -312,7 +312,7 @@ router.get("/", async (req, res) => {
         ON se.id = tr.service_entry_id
 
       LEFT JOIN services sv
-        ON sv.id = se.subcategory_id
+        ON sv.id = se.customer_service_id
 
       LEFT JOIN staff sf
         ON sf.id = se.staff_id
