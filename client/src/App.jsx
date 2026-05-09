@@ -199,6 +199,7 @@ const App = () => {
         draggable
         pauseOnHover
         theme="light"
+        style={{ zIndex: 999999 }}
       />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
