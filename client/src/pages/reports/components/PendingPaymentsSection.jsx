@@ -33,6 +33,7 @@ import {
   FiDatabase, FiCreditCard, FiHome, FiLoader, FiArrowUpCircle, FiTool
 } from 'react-icons/fi';
 import { getPendingPayments, getPendingPaymentsHistory, receiveServicePayment, getWallets } from '@/services/serviceService';
+import { toast } from "react-toastify";
 
 // Pending Payments Stat Card
 const PendingPaymentsStatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, compact = false }) => (
@@ -300,6 +301,8 @@ const PendingPaymentsSection = ({
     totalReceivables: 0
   });
 
+  const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
+
   const payments = isSuperAdmin ? externalPayments : pendingPayments;
   const isLoading = isSuperAdmin ? externalLoading : loading;
 
@@ -403,6 +406,45 @@ const PendingPaymentsSection = ({
       });
     }
   }, [payments]);
+
+  const handleSendReminder = async (payment) => {
+    try {
+      setSendingWhatsappId(payment.id);
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments/${payment.id}/send-whatsapp`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send WhatsApp");
+      }
+
+      toast.success(
+        `WhatsApp reminder sent to ${payment.customer.name}`
+      );
+
+    } catch (error) {
+      console.error("WhatsApp reminder error:", error);
+
+      toast.error(
+        error.message || "Failed to send WhatsApp reminder"
+      );
+
+    } finally {
+      setSendingWhatsappId(null);
+    }
+  };
 
   const filteredPayments = useMemo(() => {
     let filtered = [...payments];
@@ -757,15 +799,16 @@ const PendingPaymentsSection = ({
                         </button>
                         
                         <button
-                          onClick={() => {
-                            const message = `Dear ${payment.customer.name},\n\nThis is a reminder for your pending payment of ₹${payment.due} for service ${payment.id}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
-                            const whatsappLink = `https://wa.me/${payment.customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-                            window.open(whatsappLink, '_blank');
-                          }}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors group"
+                          onClick={() => handleSendReminder(payment)}
+                          disabled={sendingWhatsappId === payment.id}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors group disabled:opacity-50"
                           title="Send WhatsApp Reminder"
                         >
-                          <FiMail className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                          {sendingWhatsappId === payment.id ? (
+                            <FiRefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FiMessageSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                          )}
                         </button>
                         {isOverdue(payment.createdAt) && (
                           <button
