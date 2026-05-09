@@ -26,6 +26,98 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
+const LIBROMI_ACCESS_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
+const LIBROMI_PHONE_NUMBER = process.env.LIBROMI_PHONE_NUMBER;
+const LIBROMI_BASE_URL = process.env.LIBROMI_BASE_URL;
+
+const sendPendingPaymentWhatsApp = async ({
+  customerName,
+  serviceName,
+  subcategoryName,
+  pendingAmount,
+  dueDate,
+  phone,
+}) => {
+  try {
+    if (!LIBROMI_ACCESS_TOKEN) {
+      throw new Error("LIBROMI_ACCESS_TOKEN missing");
+    }
+
+    const formattedPhone = phone.startsWith("+91")
+      ? phone
+      : `+91${phone.replace(/^\+91/, "")}`;
+
+    const response = await axios.post(
+      `${LIBROMI_BASE_URL}/messages`,
+      {
+        to: formattedPhone,
+        type: "template",
+        template: {
+          name: "pending_payments",
+          language: {
+            code: "en",
+            policy: "deterministic",
+          },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                {
+                  type: "text",
+                  text: customerName || "Customer",
+                },
+                {
+                  type: "text",
+                  text: serviceName || "Service",
+                },
+                {
+                  type: "text",
+                  text: subcategoryName || "General",
+                },
+                {
+                  type: "text",
+                  text: pendingAmount.toString(),
+                },
+                {
+                  type: "text",
+                  text: dueDate || "Today",
+                },
+              ],
+            },
+            {
+              type: "footer",
+              text: "Akshaya E Centre Pukayur",
+            },
+          ],
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${LIBROMI_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("Pending payment WhatsApp sent:", response.data);
+
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (err) {
+    console.error(
+      "Pending payment WhatsApp failed:",
+      err.response?.data || err.message
+    );
+
+    return {
+      success: false,
+      error: err.response?.data || err.message,
+    };
+  }
+};
+
 // Get centres
 router.get('/centres', async (req, res) => {
   try {
@@ -3033,6 +3125,194 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
     client.release();
   }
 });
+
+router.post("/pending-payments/:id/send-whatsapp",
+  authenticateToken,
+  async (req, res) => {
+    const { id } = req.params;
+
+    const client = await pool.connect();
+
+    try {
+      /* =====================================================
+         1️⃣ ACCESS VALIDATION
+      ===================================================== */
+      const accessCheck = await client.query(
+        `
+        SELECT 
+          st.centre_id,
+          se.staff_id
+        FROM service_entries se
+        JOIN staff st
+          ON st.id = se.staff_id
+        WHERE se.id = $1
+        `,
+        [id]
+      );
+
+      if (accessCheck.rows.length === 0) {
+        return res.status(404).json({
+          error: "Service entry not found",
+        });
+      }
+
+      const access = accessCheck.rows[0];
+
+      // Staff → only own entries
+      if (
+        req.user.role === "staff" &&
+        Number(access.staff_id) !== Number(req.user.id)
+      ) {
+        return res.status(403).json({
+          error: "Unauthorized",
+        });
+      }
+
+      // Admin → only own centre
+      if (
+        req.user.role === "admin" &&
+        Number(access.centre_id) !== Number(req.user.centre_id)
+      ) {
+        return res.status(403).json({
+          error: "Unauthorized",
+        });
+      }
+
+      /* =====================================================
+         2️⃣ FETCH PAYMENT DETAILS
+      ===================================================== */
+      const result = await client.query(
+        `
+        SELECT 
+          se.id,
+          se.customer_name,
+          se.phone,
+          se.total_charges,
+
+          s.name AS service_name,
+          sc.name AS subcategory_name,
+
+          COALESCE(
+            SUM(
+              CASE 
+                WHEN p.status = 'received'
+                THEN p.amount
+                ELSE 0
+              END
+            ),
+            0
+          ) AS paid_amount
+
+        FROM service_entries se
+
+        LEFT JOIN services s
+          ON se.category_id::integer = s.id
+
+        LEFT JOIN subcategories sc
+          ON se.subcategory_id::integer = sc.id
+
+        LEFT JOIN payments p 
+          ON p.service_entry_id = se.id
+          AND COALESCE(p.is_reversal, FALSE) = FALSE
+          AND NOT EXISTS (
+            SELECT 1
+            FROM wallet_transactions wt
+            WHERE wt.reference_payment_id = p.id
+              AND COALESCE(wt.is_reversal, FALSE) = TRUE
+          )
+
+        WHERE se.id = $1
+
+        GROUP BY
+          se.id,
+          s.name,
+          sc.name
+        `,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          error: "Service entry not found",
+        });
+      }
+
+      const entry = result.rows[0];
+
+      /* =====================================================
+         3️⃣ CALCULATE PENDING
+      ===================================================== */
+      const pendingAmount =
+        Number(entry.total_charges) - Number(entry.paid_amount);
+
+      if (pendingAmount <= 0) {
+        return res.status(400).json({
+          error: "No pending payment",
+        });
+      }
+
+      /* =====================================================
+         4️⃣ SEND WHATSAPP
+      ===================================================== */
+      const whatsappResult =
+        await sendPendingPaymentWhatsApp({
+          customerName: entry.customer_name,
+          serviceName: entry.service_name,
+          subcategoryName: entry.subcategory_name,
+          pendingAmount,
+          dueDate: new Date().toLocaleDateString("en-IN"),
+          phone: entry.phone,
+        });
+
+      if (!whatsappResult.success) {
+        return res.status(500).json({
+          error: whatsappResult.error || "Failed to send WhatsApp",
+        });
+      }
+
+      /* =====================================================
+         5️⃣ AUDIT LOG
+      ===================================================== */
+      await client.query(
+        `
+        INSERT INTO audit_logs (
+          action,
+          performed_by,
+          details,
+          centre_id,
+          created_at
+        )
+        VALUES ($1, $2, $3, $4, NOW())
+        `,
+        [
+          "Pending Payment WhatsApp",
+          req.user.username,
+          `Sent pending payment WhatsApp to ${entry.customer_name}`,
+          access.centre_id || null,
+        ]
+      );
+
+      /* =====================================================
+         6️⃣ RESPONSE
+      ===================================================== */
+      res.json({
+        success: true,
+        message: "WhatsApp message sent successfully",
+        data: whatsappResult.data,
+      });
+
+    } catch (err) {
+      console.error("❌ Pending payment WhatsApp error:", err);
+
+      res.status(500).json({
+        error: err.message || "Failed to send WhatsApp message",
+      });
+
+    } finally {
+      client.release();
+    }
+  }
+);
 
 // ========== CUSTOMER ONLINE WORK BOOKING ==========
 

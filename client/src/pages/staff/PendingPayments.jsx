@@ -551,6 +551,7 @@ const PendingPayments = () => {
     totalReceivables: 0,
     collectionRate: 0
   });
+  const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
 
   // Filtered payments - now includes sorting by due descending
   const filteredPayments = useMemo(() => {
@@ -753,23 +754,41 @@ const fetchPendingPayments = async () => {
 
   // Handle send reminder
   const handleSendReminder = async (payment) => {
-    try {
-      // Create WhatsApp message
-      const message = `Dear ${payment.customer.name},\n\nThis is a reminder for your pending payment of ₹${payment.due} for service ${payment.id}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
-      const whatsappLink = `https://wa.me/${payment.customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-      
-      // Open WhatsApp in new tab
-      window.open(whatsappLink, '_blank');
-      
-      // Log reminder
-      // await mockAPI.sendReminder(payment.id);
-      alert(`WhatsApp reminder opened for ${payment.customer.name}`);
-      
-    } catch (error) {
-      console.error('Error sending reminder:', error);
-      alert('Failed to send reminder');
+  try {
+    setSendingWhatsappId(payment.id);
+
+    const token = localStorage.getItem("token");
+
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments/${payment.id}/send-whatsapp`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to send WhatsApp");
     }
-  };
+
+    alert(`WhatsApp reminder sent to ${payment.customer.name}`);
+
+  } catch (error) {
+    console.error("WhatsApp reminder error:", error);
+
+    alert(
+      error.message || "Failed to send WhatsApp reminder"
+    );
+
+  } finally {
+    setSendingWhatsappId(null);
+  }
+};
 
   // Handle payment success
   const handlePaymentSuccess = () => {
@@ -1186,10 +1205,15 @@ const normalizePayments = (rows = []) =>
                               {/* Send Reminder Button */}
                               <button
                                 onClick={() => handleSendReminder(payment)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors group"
+                                disabled={sendingWhatsappId === payment.id}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors group disabled:opacity-50"
                                 title="Send WhatsApp Reminder"
                               >
-                                <FiSend className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                                {sendingWhatsappId === payment.id ? (
+                                  <FiRefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <FiMessageSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                                )}
                               </button>
 
                               {/* Additional action for overdue */}
