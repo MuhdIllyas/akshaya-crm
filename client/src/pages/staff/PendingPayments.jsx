@@ -9,6 +9,7 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getPendingPayments, receiveServicePayment, getWallets, getPendingPaymentsHistory } from '@/services/serviceService';
+import { toast } from 'react-toastify';
 
 const role = localStorage.getItem("role");
 
@@ -288,7 +289,7 @@ const PendingPaymentDetailModal = ({ isOpen, onClose, serviceEntry }) => {
               <button
                 onClick={() => {
                   // In real app, this would trigger receive payment modal
-                  alert('Redirecting to receive payment...');
+                  toast.info('Redirecting to receive payment...');
                   onClose();
                 }}
                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -323,12 +324,12 @@ const handleSubmit = async () => {
       remarks: formData.remarks
     });
 
-    alert("Payment recorded successfully");
+    toast.success("Payment recorded successfully");
     onSuccess();
     onClose();
 
   } catch (err) {
-    alert(err.response?.data?.error || "Payment failed");
+    toast.error(err.response?.data?.error || "Payment failed");
   }
 };
 
@@ -692,7 +693,7 @@ const fetchPendingPayments = async () => {
 
   } catch (err) {
     console.error("Pending payments fetch error:", err);
-    alert("Failed to load payments: " + (err.response?.data?.error || err.message));
+    toast.error("Failed to load payments: " + (err.response?.data?.error || err.message));
   } finally {
     setLoading(false);
   }
@@ -742,7 +743,7 @@ const fetchPendingPayments = async () => {
       setShowServiceModal(true);
     } catch (error) {
       console.error('Error fetching service details:', error);
-      alert('Failed to load service details');
+      toast.error('Failed to load service details');
     }
   };
 
@@ -754,46 +755,48 @@ const fetchPendingPayments = async () => {
 
   // Handle send reminder
   const handleSendReminder = async (payment) => {
-  try {
-    setSendingWhatsappId(payment.id);
+    try {
+      setSendingWhatsappId(payment.id);
 
-    const token = localStorage.getItem("token");
+      const token = localStorage.getItem("token");
 
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments/${payment.id}/send-whatsapp`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments/${payment.id}/send-whatsapp`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send WhatsApp");
       }
-    );
 
-    const data = await response.json();
+      toast.success(
+        `WhatsApp reminder sent to ${payment.customer.name}`
+      );
 
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to send WhatsApp");
+    } catch (error) {
+      console.error("WhatsApp reminder error:", error);
+
+      toast.error(
+        error.message || "Failed to send WhatsApp reminder"
+      );
+
+    } finally {
+      setSendingWhatsappId(null);
     }
-
-    alert(`WhatsApp reminder sent to ${payment.customer.name}`);
-
-  } catch (error) {
-    console.error("WhatsApp reminder error:", error);
-
-    alert(
-      error.message || "Failed to send WhatsApp reminder"
-    );
-
-  } finally {
-    setSendingWhatsappId(null);
-  }
-};
+  };
 
   // Handle payment success
   const handlePaymentSuccess = () => {
     fetchPendingPayments(); // Refresh the list
-    alert('Payment recorded successfully!');
+    toast.success('Payment recorded successfully!');
   };
 
 const normalizePayments = (rows = []) =>
@@ -875,7 +878,7 @@ const normalizePayments = (rows = []) =>
                 <button
                   onClick={() => {
                     fetchPendingPayments();
-                    alert("Refreshing data...");
+                    toast.info("Refreshing data...");
                   }}
                   className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
@@ -883,7 +886,7 @@ const normalizePayments = (rows = []) =>
                   <span>Refresh</span>
                 </button>
                 <button 
-                  onClick={() => alert('Export functionality would be implemented here')}
+                  onClick={() => toast.info('Export functionality would be implemented here')}
                   className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   <FiDownload className="h-4 w-4" />
@@ -1024,7 +1027,7 @@ const normalizePayments = (rows = []) =>
               </div>
               <div className="flex items-center space-x-3">
                 <button 
-                  onClick={() => alert('Bulk reminders would be implemented here')}
+                  onClick={() => toast.info('Bulk reminders would be implemented here')}
                   className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
                 >
                   <FiSend className="h-4 w-4" />
@@ -1219,7 +1222,7 @@ const normalizePayments = (rows = []) =>
                               {/* Additional action for overdue */}
                               {overdue && (
                                 <button
-                                  onClick={() => alert('Priority action for overdue payment')}
+                                  onClick={() => toast.info('Priority action for overdue payment')}
                                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors group"
                                   title="Mark as High Priority"
                                 >
@@ -1331,21 +1334,21 @@ const normalizePayments = (rows = []) =>
               <h4 className="font-semibold text-gray-900 mb-4">Quick Actions</h4>
               <div className="space-y-3">
                 <button 
-                  onClick={() => alert('Send reminders to all overdue customers')}
+                  onClick={() => toast.info('Send reminders to all overdue customers')}
                   className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <span className="text-gray-700">Send Bulk Reminders</span>
                   <FiSend className="h-4 w-4 text-blue-600" />
                 </button>
                 <button 
-                  onClick={() => alert('Generate monthly report')}
+                  onClick={() => toast.info('Generate monthly report')}
                   className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <span className="text-gray-700">Generate Report</span>
                   <FiFileText className="h-4 w-4 text-purple-600" />
                 </button>
                 <button 
-                  onClick={() => alert('View collection analytics')}
+                  onClick={() => toast.info('View collection analytics')}
                   className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <span className="text-gray-700">View Analytics</span>
