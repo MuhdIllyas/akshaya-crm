@@ -487,22 +487,22 @@ router.get("/", async (req, res) => {
     });
 
     /* ======================================================
-       COMBINE ALL EVENTS
-    ====================================================== */
-
-    const combinedEvents = [
-      ...manualEventsRes.rows,
-      ...taskRes.rows,
-      ...serviceTrackingEvents,
-    ];  
-
-    /* ======================================================
       COMBINE SERVICE EVENTS
     ====================================================== */
 
     const serviceTrackingEvents = [
       ...expiryEvents,
       ...deliveryEvents,
+    ];
+
+    /* ======================================================
+      COMBINE ALL EVENTS
+    ====================================================== */
+
+    const combinedEvents = [
+      ...manualEventsRes.rows,
+      ...taskRes.rows,
+      ...serviceTrackingEvents,
     ];
 
     /* ======================================================
