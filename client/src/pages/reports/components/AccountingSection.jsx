@@ -3168,8 +3168,8 @@ const AccountingSection = ({
                     className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="">All Wallets</option>
-                      {wallets?.map(w => (
-                       <option key={w.id} value={w.id}>{w.name}</option>
+                      {derivedWallets?.map(w => (   // <--- UPDATED LINE
+                      <option key={w.id} value={w.id}>{w.name}</option>
                       ))}
                   </select>
 
