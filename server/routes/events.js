@@ -262,7 +262,7 @@ router.get("/", async (req, res) => {
     );
 
     /* ======================================================
-       3. SERVICE TRACKING EVENTS
+      3. SERVICE TRACKING EVENTS
     ====================================================== */
 
     let trackingFilter = "";
@@ -294,6 +294,8 @@ router.get("/", async (req, res) => {
 
         sv.name AS service_name,
 
+        sc.name AS subcategory_name,
+
         se.id AS service_entry_id,
 
         se.staff_id,
@@ -315,7 +317,7 @@ router.get("/", async (req, res) => {
         ON sv.id = se.category_id
 
       LEFT JOIN subcategories sc
-        ON sc.id = se.subcategory_id  
+        ON sc.id = se.subcategory_id
 
       LEFT JOIN staff sf
         ON sf.id = se.staff_id
@@ -327,6 +329,99 @@ router.get("/", async (req, res) => {
       serviceTrackingQuery,
       trackingValues
     );
+
+    /* ======================================================
+      BUILD SERVICE EVENTS
+    ====================================================== */
+
+    const serviceTrackingEvents = [];
+
+    trackingRes.rows.forEach((row) => {
+
+      const fullServiceName = row.subcategory_name
+        ? `${row.service_name} - ${row.subcategory_name}`
+        : row.service_name;
+
+      /* -----------------------------
+        EXPIRY EVENT
+      ----------------------------- */
+
+      if (row.expiry_date) {
+        serviceTrackingEvents.push({
+          id: `expiry-${row.id}`,
+
+          title: `${fullServiceName} Expiry`,
+
+          description: row.customer_name
+            ? `Customer: ${row.customer_name}`
+            : null,
+
+          date: row.expiry_date,
+
+          start_datetime: null,
+          end_datetime: null,
+
+          type: "service",
+          event_type: "expiry",
+
+          priority: "high",
+          status: "active",
+
+          visibility: "centre",
+
+          created_at: null,
+          centre_id: row.centre_id,
+
+          related_service_id: row.service_entry_id,
+
+          service_name: fullServiceName,
+
+          assigned_staff_name: row.staff_name,
+
+          source: "service_tracking_expiry",
+        });
+      }
+
+      /* -----------------------------
+        DELIVERY EVENT
+      ----------------------------- */
+
+      if (row.estimated_delivery) {
+        serviceTrackingEvents.push({
+          id: `delivery-${row.id}`,
+
+          title: `${fullServiceName} Delivery`,
+
+          description: row.customer_name
+            ? `Customer: ${row.customer_name}`
+            : null,
+
+          date: row.estimated_delivery,
+
+          start_datetime: null,
+          end_datetime: null,
+
+          type: "service",
+          event_type: "deadline",
+
+          priority: "medium",
+          status: "active",
+
+          visibility: "centre",
+
+          created_at: null,
+          centre_id: row.centre_id,
+
+          related_service_id: row.service_entry_id,
+
+          service_name: fullServiceName,
+
+          assigned_staff_name: row.staff_name,
+
+          source: "service_tracking_delivery",
+        });
+      }
+    });
 
     /* ======================================================
        BUILD SERVICE EVENTS
