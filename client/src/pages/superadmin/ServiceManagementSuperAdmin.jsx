@@ -8,6 +8,7 @@ import {
   deleteService,
   addSubcategory,
   deleteSubcategory,
+  updateSubcategory
 } from "@/services/serviceService";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -84,6 +85,15 @@ const ServiceManagementSuperAdmin = ({ currentStaff }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [requiresWorkflow, setRequiresWorkflow] = useState(true);
+
+  //edit subcategory states
+  const [showEditSubcategoryModal, setShowEditSubcategoryModal] = useState(false);
+  const [editingSubcategory, setEditingSubcategory] = useState(null);
+  const [editingSubcategoryServiceId, setEditingSubcategoryServiceId] = useState(null);
+  const [editSubcategoryName, setEditSubcategoryName] = useState("");
+  const [editSubcategoryDeptCharges, setEditSubcategoryDeptCharges] = useState("");
+  const [editSubcategoryServiceCharges, setEditSubcategoryServiceCharges] = useState("");
+  const [editSubcategoryDocuments, setEditSubcategoryDocuments] = useState("");
   
   // Debounce search term
   const debouncedSearchQuery = useDebounce(searchQuery, 500); // 500ms delay
@@ -296,6 +306,54 @@ const ServiceManagementSuperAdmin = ({ currentStaff }) => {
       const errorMessage = err.response?.data?.error || "Failed to update service.";
       setError(errorMessage);
       toast.error(errorMessage);
+    }
+  };
+
+  // Open Edit Subcategory Modal
+  const openEditSubcategoryModal = (serviceId, subcategory) => {
+    setEditingSubcategoryServiceId(serviceId);
+    setEditingSubcategory(subcategory);
+    setEditSubcategoryName(subcategory.name);
+    setEditSubcategoryDeptCharges(subcategory.department_charges);
+    setEditSubcategoryServiceCharges(subcategory.service_charges);
+    setEditSubcategoryDocuments(subcategory.required_documents?.map(doc => doc.document_name).join('\n') || '');
+    setShowEditSubcategoryModal(true);
+  };
+
+  // Handle Edit Subcategory Submit
+  const handleEditSubcategory = async (e) => {
+    e.preventDefault();
+    if (!editSubcategoryName.trim()) {
+      toast.error("Subcategory name is required.");
+      return;
+    }
+
+    const documents = editSubcategoryDocuments
+      .split("\n")
+      .map((doc) => doc.trim())
+      .filter((doc) => doc.length > 0);
+
+    try {
+      const subcategoryData = {
+        name: editSubcategoryName,
+        department_charges: parseInt(editSubcategoryDeptCharges) || 0,
+        service_charges: parseInt(editSubcategoryServiceCharges) || 0,
+        requires_wallet: services.find((s) => s.id === editingSubcategoryServiceId)?.requires_wallet || false,
+        requiredDocuments: documents,
+      };
+
+      await updateSubcategory(editingSubcategoryServiceId, editingSubcategory.id, subcategoryData);
+      
+      // Refetch services to get updated data
+      const servicesResponse = await getServices(debouncedSearchQuery);
+      setServices(Array.isArray(servicesResponse.data) ? servicesResponse.data : []);
+
+      setShowEditSubcategoryModal(false);
+      setEditingSubcategory(null);
+      toast.success("Subcategory updated successfully!");
+    } catch (err) {
+      console.error("Error updating subcategory:", err);
+      toast.error(err.response?.data?.error || "Failed to update subcategory.");
     }
   };
 
@@ -685,19 +743,32 @@ const ServiceManagementSuperAdmin = ({ currentStaff }) => {
                                                 </ul>
                                               </div>
                                             )}
-                                            <div className="flex justify-end">
-                                              <motion.button
-                                                whileHover={{ scale: 1.03 }}
-                                                whileTap={{ scale: 0.98 }}
-                                                onClick={() => handleDeleteSubcategory(service.id, subCat.id)}
-                                                className="text-red-500 hover:text-red-700 text-sm flex items-center px-3 py-1.5 bg-red-50 rounded-lg"
-                                              >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                </svg>
-                                                Delete Sub-category
-                                              </motion.button>
-                                            </div>
+                                            {/* Update this container to flex justify-end gap-2 */}
+                                          <div className="flex justify-end gap-2">
+                                            <motion.button
+                                              whileHover={{ scale: 1.03 }}
+                                              whileTap={{ scale: 0.98 }}
+                                              onClick={() => openEditSubcategoryModal(service.id, subCat)}
+                                              className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center px-3 py-1.5 bg-indigo-50 rounded-lg"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                              </svg>
+                                              Edit
+                                            </motion.button>
+
+                                            <motion.button
+                                              whileHover={{ scale: 1.03 }}
+                                              whileTap={{ scale: 0.98 }}
+                                              onClick={() => handleDeleteSubcategory(service.id, subCat.id)}
+                                              className="text-red-500 hover:text-red-700 text-sm flex items-center px-3 py-1.5 bg-red-50 rounded-lg"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                              </svg>
+                                              Delete Sub-category
+                                            </motion.button>
+                                          </div>
                                           </div>
                                         </motion.div>
                                       )}
