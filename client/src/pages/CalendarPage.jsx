@@ -1138,7 +1138,7 @@ function CalendarToolbar({
       type: null,
       priority: "",
       event_type: "",
-      visibility: "", // default to global
+      visibility: "", // default to all visibility
       service_id: "",
       myEvents: false,
     });
