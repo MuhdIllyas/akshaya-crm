@@ -502,6 +502,70 @@ router.delete('/services/:id/subcategories/:subId', authenticateToken, async (re
   }
 });
 
+// PUT /api/servicemanagement/services/:id/subcategories/:subId
+router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, res) => {
+  const { id, subId } = req.params;
+  const { name, department_charges, service_charges, requires_wallet, requiredDocuments } = req.body;
+  
+  const client = await pool.connect();
+  try {
+    if (!name || department_charges == null || service_charges == null) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    await client.query('BEGIN');
+
+    const subCheck = await client.query('SELECT * FROM subcategories WHERE id = $1 AND service_id = $2', [subId, id]);
+    if (subCheck.rows.length === 0) {
+      throw new Error('Subcategory not found');
+    }
+
+    // Update subcategory
+    const updateQuery = `
+      UPDATE subcategories 
+      SET name = $1, department_charges = $2, service_charges = $3, requires_wallet = $4, updated_at = NOW()
+      WHERE id = $5 AND service_id = $6
+      RETURNING *
+    `;
+    const subResult = await client.query(updateQuery, [
+      name, department_charges, service_charges, requires_wallet || false, subId, id
+    ]);
+    const updatedSubcategory = subResult.rows[0];
+
+    // Replace required documents
+    await client.query('DELETE FROM required_documents WHERE sub_category_id = $1', [subId]);
+
+    let documents = [];
+    if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
+      const docQuery = `
+        INSERT INTO required_documents (service_id, sub_category_id, document_name)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      `;
+      for (const doc of requiredDocuments) {
+        const docResult = await client.query(docQuery, [id, subId, doc]);
+        documents.push(docResult.rows[0]);
+      }
+    }
+
+    const auditDetails = `Updated subcategory ${name} in service ID ${id} by ${req.user.role}`;
+    await client.query(
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      ['Subcategory Updated', req.user.username, auditDetails, req.user.centre_id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ...updatedSubcategory, required_documents: documents });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating subcategory:', err);
+    res.status(err.message === 'Subcategory not found' ? 404 : 400).json({ error: err.message || 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/servicemanagement/wallets
 router.get('/wallets', authenticateToken, async (req, res) => {
   const client = await pool.connect();

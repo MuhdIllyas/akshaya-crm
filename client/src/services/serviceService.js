@@ -129,6 +129,12 @@ export const deleteSubcategory = async (serviceId, subId) => {
   return await api.delete(`/services/${serviceId}/subcategories/${subId}`);
 };
 
+// Update a subcategory (admin only)
+export const updateSubcategory = async (serviceId, subId, subcategoryData) => {
+  console.log('serviceService.js: Updating subcategory:', { serviceId, subId, subcategoryData });
+  return await api.put(`/services/${serviceId}/subcategories/${subId}`, subcategoryData);
+};
+
 // Get all wallets
 export const getWallets = async () => {
   console.log('serviceService.js: Fetching wallets');
