@@ -262,7 +262,7 @@ router.get("/", async (req, res) => {
     );
 
     /* ======================================================
-      3. SERVICE TRACKING EVENTS
+    3. SERVICE TRACKING EVENTS
     ====================================================== */
 
     let trackingFilter = "";
@@ -415,95 +415,6 @@ router.get("/", async (req, res) => {
           related_service_id: row.service_entry_id,
 
           service_name: fullServiceName,
-
-          assigned_staff_name: row.staff_name,
-
-          source: "service_tracking_delivery",
-        });
-      }
-    });
-
-    /* ======================================================
-       BUILD SERVICE EVENTS
-    ====================================================== */
-
-    const serviceTrackingEvents = [];
-
-    trackingRes.rows.forEach((row) => {
-
-      /* -----------------------------
-         EXPIRY EVENT
-      ----------------------------- */
-
-      if (row.expiry_date) {
-        serviceTrackingEvents.push({
-          id: `expiry-${row.id}`,
-
-          title: `${row.service_name} Expiry`,
-
-          description: row.customer_name
-            ? `Customer: ${row.customer_name}`
-            : null,
-
-          date: row.expiry_date,
-
-          start_datetime: null,
-          end_datetime: null,
-
-          type: "service",
-          event_type: "expiry",
-
-          priority: "high",
-          status: "active",
-
-          visibility: "centre",
-
-          created_at: null,
-          centre_id: row.centre_id,
-
-          related_service_id: row.service_entry_id,
-
-          service_name: row.service_name,
-
-          assigned_staff_name: row.staff_name,
-
-          source: "service_tracking_expiry",
-        });
-      }
-
-      /* -----------------------------
-         DELIVERY EVENT
-      ----------------------------- */
-
-      if (row.estimated_delivery) {
-        serviceTrackingEvents.push({
-          id: `delivery-${row.id}`,
-
-          title: `${row.service_name} Delivery`,
-
-          description: row.customer_name
-            ? `Customer: ${row.customer_name}`
-            : null,
-
-          date: row.estimated_delivery,
-
-          start_datetime: null,
-          end_datetime: null,
-
-          type: "service",
-          event_type: "deadline",
-
-          priority: "medium",
-          status: "active",
-
-          visibility: "centre",
-
-          created_at: null,
-          centre_id: row.centre_id,
-
-          related_service_id: row.service_entry_id,
-
-          service_name: row.service_name,
 
           assigned_staff_name: row.staff_name,
 
