@@ -1198,6 +1198,93 @@ const ServiceManagementSuperAdmin = ({ currentStaff }) => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Edit Sub-Category Modal */}
+        <AnimatePresence>
+          {showEditSubcategoryModal && editingSubcategory && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-gray-200"
+              >
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 rounded-t-2xl">
+                  <h2 className="text-xl font-bold text-white">Edit Sub-Category</h2>
+                </div>
+                <form onSubmit={handleEditSubcategory} className="p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2 font-medium">Name *</label>
+                      <input
+                        type="text"
+                        value={editSubcategoryName}
+                        onChange={(e) => setEditSubcategoryName(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-700 mb-2 font-medium">Dept. Charges (₹) *</label>
+                        <input
+                          type="number"
+                          value={editSubcategoryDeptCharges}
+                          onChange={(e) => setEditSubcategoryDeptCharges(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-700 mb-2 font-medium">Service Charges (₹) *</label>
+                        <input
+                          type="number"
+                          value={editSubcategoryServiceCharges}
+                          onChange={(e) => setEditSubcategoryServiceCharges(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2 font-medium">Required Documents (one per line)</label>
+                      <textarea
+                        value={editSubcategoryDocuments}
+                        onChange={(e) => setEditSubcategoryDocuments(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        rows={3}
+                      ></textarea>
+                    </div>
+                  </div>
+                  <div className="mt-8 flex justify-end gap-3 border-t border-gray-200 pt-5">
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="button"
+                      onClick={() => setShowEditSubcategoryModal(false)}
+                      className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium"
+                    >
+                      Cancel
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="submit"
+                      className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium"
+                    >
+                      Save Changes
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
