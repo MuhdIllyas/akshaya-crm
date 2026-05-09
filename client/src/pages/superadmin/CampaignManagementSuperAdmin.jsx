@@ -4,7 +4,7 @@ import {
   FiPlus, FiCalendar, FiTarget, FiCheckCircle, FiTrendingUp, 
   FiEdit2, FiX, FiRefreshCw, FiBarChart2, FiFilter, FiDownload 
 } from 'react-icons/fi';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import { getServices, getAllCentres, getCampaigns, createCampaign, updateCampaign, deleteCampaign, getCampaignReports } from '/src/services/campaignService';
@@ -334,7 +334,6 @@ const CampaignManagementSuperAdmin = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <ToastContainer />
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>

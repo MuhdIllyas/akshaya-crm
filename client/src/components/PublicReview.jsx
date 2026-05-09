@@ -6,7 +6,7 @@ import {
   FiMessageSquare, FiUser, FiAlertCircle, FiClock
 } from 'react-icons/fi';
 import axios from 'axios';
-import { toast, ToastContainer } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import StarRating from './StarRating';
 
@@ -216,7 +216,6 @@ const PublicReview = () => {
   // Main review form
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <ToastContainer position="top-right" autoClose={3000} />
       
       <div className="max-w-2xl mx-auto">
         {/* Header */}

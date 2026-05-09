@@ -7,7 +7,7 @@ import {
   FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
   FiTrendingDown
 } from 'react-icons/fi';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry } from '/src/services/serviceService';
 import api from '@/services/serviceService';
@@ -1271,17 +1271,6 @@ const generateInvoicePDF = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6">
-      <ToastContainer 
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-      />
       
       <motion.div
         initial={{ opacity: 0, y: 20 }}

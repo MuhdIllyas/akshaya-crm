@@ -42,36 +42,6 @@ ChartJS.register(
   Filler
 );
 
-// Custom Toast Container
-const SafeToastContainer = () => {
-  const [ToastContainer, setToastContainer] = useState(null);
-
-  useEffect(() => {
-    import('react-toastify').then((module) => {
-      setToastContainer(() => module.ToastContainer);
-    }).catch((error) => {
-      console.warn('Toast notifications disabled:', error);
-    });
-  }, []);
-
-  if (!ToastContainer) return null;
-
-  return (
-    <ToastContainer 
-      position="top-right"
-      autoClose={5000}
-      hideProgressBar={false}
-      newestOnTop
-      closeOnClick
-      rtl={false}
-      pauseOnFocusLoss
-      draggable
-      pauseOnHover
-      theme="light"
-    />
-  );
-};
-
 // Safe toast function
 const createSafeToast = () => {
   let toast = null;
@@ -1439,7 +1409,6 @@ const SuperAdminServiceLogs = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
-        <SafeToastContainer />
         
         {/* Header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-30">

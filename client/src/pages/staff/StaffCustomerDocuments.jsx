@@ -6,7 +6,7 @@ import {
   FiEdit, FiChevronDown, FiHome, FiMapPin, FiGlobe, FiShield,
   FiMessageSquare, FiAlertCircle
 } from 'react-icons/fi';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { 
   getStaffCustomerDocuments, 
@@ -463,7 +463,6 @@ const fetchCustomerServices = async () => {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <ToastContainer position="top-right" autoClose={3000} />
       
       {/* Header */}
       <div className="mb-8">

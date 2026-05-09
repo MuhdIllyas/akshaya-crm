@@ -9,7 +9,7 @@ import {
 } from 'react-icons/fi';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { toast, ToastContainer } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const ViewServiceDetails = () => {
@@ -952,7 +952,6 @@ const ViewServiceDetails = () => {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <ToastContainer position="top-right" autoClose={3000} />
       
       {/* Header */}
       <div className="mb-8">

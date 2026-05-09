@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { FiUser, FiMail, FiPhone, FiMapPin, FiLock, FiCheck, FiAlertCircle, FiCalendar, FiHome, FiHash } from "react-icons/fi";
 
@@ -220,18 +220,6 @@ const CustomerRegistration = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50 p-4">
-      <ToastContainer
-        position="top-right"
-        autoClose={5000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
       
       <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
         <div className="md:flex">

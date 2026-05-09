@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FiStar, FiCheckCircle, FiAlertCircle, FiMessageSquare, FiUser, FiBriefcase } from 'react-icons/fi';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import StarRating from '@/components/StarRating';
 import { getPublicReviewByToken, submitPublicReview } from '@/services/reviewService';
@@ -113,7 +113,6 @@ const PublicReviewPage = () => {
   if (alreadySubmitted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <ToastContainer position="top-right" autoClose={3000} />
         <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
           <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <FiCheckCircle className="h-10 w-10 text-emerald-600" />
@@ -178,7 +177,6 @@ const PublicReviewPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <ToastContainer position="top-right" autoClose={3000} />
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           {/* Header */}

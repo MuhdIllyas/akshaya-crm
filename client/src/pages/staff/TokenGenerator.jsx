@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown, FiClock, FiAward, FiSearch, FiFileText } from 'react-icons/fi';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getServices, createToken, getTokens, getCampaigns, getStaff, assignToken } from '/src/services/campaignService';
 
@@ -189,7 +189,6 @@ const TokenGenerator = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <ToastContainer position="top-right" autoClose={5000} />
       
       <div className="max-w-7xl mx-auto">
         {/* Header */}

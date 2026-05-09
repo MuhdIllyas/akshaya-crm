@@ -8,7 +8,7 @@ import {
   FiAlertCircle, FiClock, FiCheckCircle, FiDollarSign, FiShield
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useParams, useNavigate } from "react-router-dom";
 import { getAllCustomers, getCustomerById } from "@/services/customerService";
@@ -605,17 +605,6 @@ const CustomerProfileSystem = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
-        <ToastContainer 
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
         
         <header className="bg-white border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-6 py-4">
