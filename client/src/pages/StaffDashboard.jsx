@@ -492,7 +492,6 @@ const StaffDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <ToastContainer position="top-right" autoClose={4000} />
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
       <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
