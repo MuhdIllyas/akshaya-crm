@@ -65,7 +65,7 @@ const buildRoleFilter = (user) => {
 };
 
 /* ======================================================
-   GET EVENTS
+   GET EVENTS (UNIFIED FEED)
 ====================================================== */
 
 router.get("/", async (req, res) => {
@@ -87,9 +87,9 @@ router.get("/", async (req, res) => {
     let values = [...roleFilter.values];
     let idx = values.length + 1;
 
-    /* ======================
+    /* ======================================================
        DATE FILTER
-    ====================== */
+    ====================================================== */
 
     if (start && end) {
       conditions.push(`
@@ -103,9 +103,9 @@ router.get("/", async (req, res) => {
       idx += 2;
     }
 
-    /* ======================
+    /* ======================================================
        TYPE FILTER
-    ====================== */
+    ====================================================== */
 
     if (type) {
       conditions.push(`e.type = $${idx}`);
@@ -136,17 +136,39 @@ router.get("/", async (req, res) => {
         ? `AND ${conditions.join(" AND ")}`
         : "";
 
-    /* ======================
-       MAIN QUERY
-    ====================== */
+    /* ======================================================
+       1. MANUAL EVENTS
+    ====================================================== */
 
-    const query = `
+    const manualEventsQuery = `
       SELECT
-        e.*,
+        e.id,
+
+        e.title,
+        e.description,
+
+        e.date,
+        e.start_datetime,
+        e.end_datetime,
+
+        e.type,
+        e.event_type,
+
+        e.priority,
+        e.status,
+        e.visibility,
+
+        e.created_at,
+        e.centre_id,
+
+        e.related_service_id,
+        e.related_task_id,
 
         s.name AS service_name,
 
-        st.name AS assigned_staff_name
+        st.name AS assigned_staff_name,
+
+        'calendar_event' AS source
 
       FROM calendar_events e
 
@@ -164,9 +186,265 @@ router.get("/", async (req, res) => {
         COALESCE(e.start_datetime, e.date) ASC
     `;
 
-    const result = await client.query(query, values);
+    const manualEventsRes = await client.query(
+      manualEventsQuery,
+      values
+    );
 
-    res.json(result.rows);
+    /* ======================================================
+       2. TASK EVENTS
+    ====================================================== */
+
+    let taskFilter = "";
+    let taskValues = [];
+
+    if (req.user.role === "staff") {
+      taskFilter = `
+        AND t.assigned_to = $1
+      `;
+
+      taskValues.push(req.user.id);
+
+    } else if (req.user.role === "admin") {
+      taskFilter = `
+        AND t.centre_id = $1
+      `;
+
+      taskValues.push(req.user.centre_id);
+    }
+
+    const tasksQuery = `
+      SELECT
+        t.id,
+
+        t.title,
+        t.description,
+
+        t.due_date AS date,
+
+        NULL AS start_datetime,
+        NULL AS end_datetime,
+
+        'task' AS type,
+        'deadline' AS event_type,
+
+        t.priority,
+        t.status,
+
+        'centre' AS visibility,
+
+        t.created_at,
+        t.centre_id,
+
+        t.related_service_id,
+
+        s.name AS service_name,
+
+        st.name AS assigned_staff_name,
+
+        'task' AS source
+
+      FROM tasks t
+
+      LEFT JOIN services s
+        ON s.id = t.related_service_id
+
+      LEFT JOIN staff st
+        ON st.id = t.assigned_to
+
+      WHERE t.due_date IS NOT NULL
+      ${taskFilter}
+    `;
+
+    const taskRes = await client.query(
+      tasksQuery,
+      taskValues
+    );
+
+    /* ======================================================
+       3. SERVICE TRACKING EVENTS
+    ====================================================== */
+
+    let trackingFilter = "";
+    let trackingValues = [];
+
+    // STAFF
+    if (req.user.role === "staff") {
+      trackingFilter = `
+        WHERE se.staff_id = $1
+      `;
+
+      trackingValues.push(req.user.id);
+    }
+
+    // ADMIN
+    else if (req.user.role === "admin") {
+      trackingFilter = `
+        WHERE sf.centre_id = $1
+      `;
+
+      trackingValues.push(req.user.centre_id);
+    }
+
+    const serviceTrackingQuery = `
+      SELECT
+        tr.id,
+
+        se.customer_name,
+
+        sv.name AS service_name,
+
+        se.id AS service_entry_id,
+
+        se.staff_id,
+
+        sf.name AS staff_name,
+
+        sf.centre_id,
+
+        se.expiry_date,
+
+        tr.estimated_delivery
+
+      FROM service_tracking tr
+
+      LEFT JOIN service_entries se
+        ON se.id = tr.service_entry_id
+
+      LEFT JOIN services sv
+        ON sv.id = se.subcategory_id
+
+      LEFT JOIN staff sf
+        ON sf.id = se.staff_id
+
+      ${trackingFilter}
+    `;
+
+    const trackingRes = await client.query(
+      serviceTrackingQuery,
+      trackingValues
+    );
+
+    /* ======================================================
+       BUILD SERVICE EVENTS
+    ====================================================== */
+
+    const serviceTrackingEvents = [];
+
+    trackingRes.rows.forEach((row) => {
+
+      /* -----------------------------
+         EXPIRY EVENT
+      ----------------------------- */
+
+      if (row.expiry_date) {
+        serviceTrackingEvents.push({
+          id: `expiry-${row.id}`,
+
+          title: `${row.service_name} Expiry`,
+
+          description: row.customer_name
+            ? `Customer: ${row.customer_name}`
+            : null,
+
+          date: row.expiry_date,
+
+          start_datetime: null,
+          end_datetime: null,
+
+          type: "service",
+          event_type: "expiry",
+
+          priority: "high",
+          status: "active",
+
+          visibility: "centre",
+
+          created_at: null,
+          centre_id: row.centre_id,
+
+          related_service_id: row.service_entry_id,
+
+          service_name: row.service_name,
+
+          assigned_staff_name: row.staff_name,
+
+          source: "service_tracking_expiry",
+        });
+      }
+
+      /* -----------------------------
+         DELIVERY EVENT
+      ----------------------------- */
+
+      if (row.estimated_delivery) {
+        serviceTrackingEvents.push({
+          id: `delivery-${row.id}`,
+
+          title: `${row.service_name} Delivery`,
+
+          description: row.customer_name
+            ? `Customer: ${row.customer_name}`
+            : null,
+
+          date: row.estimated_delivery,
+
+          start_datetime: null,
+          end_datetime: null,
+
+          type: "service",
+          event_type: "deadline",
+
+          priority: "medium",
+          status: "active",
+
+          visibility: "centre",
+
+          created_at: null,
+          centre_id: row.centre_id,
+
+          related_service_id: row.service_entry_id,
+
+          service_name: row.service_name,
+
+          assigned_staff_name: row.staff_name,
+
+          source: "service_tracking_delivery",
+        });
+      }
+    });
+
+    /* ======================================================
+       COMBINE ALL
+    ====================================================== */
+
+    const combinedEvents = [
+      ...manualEventsRes.rows,
+      ...taskRes.rows,
+      ...serviceTrackingEvents,
+    ];
+
+    /* ======================================================
+       SORT
+    ====================================================== */
+
+    combinedEvents.sort((a, b) => {
+      const aDate = new Date(
+        a.start_datetime || a.date || 0
+      );
+
+      const bDate = new Date(
+        b.start_datetime || b.date || 0
+      );
+
+      return aDate - bDate;
+    });
+
+    /* ======================================================
+       RESPONSE
+    ====================================================== */
+
+    res.json(combinedEvents);
 
   } catch (err) {
     console.error("GET EVENTS ERROR:", err);
