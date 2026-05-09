@@ -365,7 +365,8 @@ router.get("/", async (req, res) => {
         related_service_id: row.id,
 
         service_name: fullServiceName,
-
+        
+        assigned_to: row.staff_id,
         assigned_staff_name: row.staff_name,
 
         source: "service_expiry",
@@ -479,7 +480,8 @@ router.get("/", async (req, res) => {
         related_service_id: row.id,
 
         service_name: fullServiceName,
-
+        
+        assigned_to: row.assigned_to,
         assigned_staff_name: row.staff_name,
 
         source: "service_delivery",

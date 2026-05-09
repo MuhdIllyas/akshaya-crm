@@ -1138,7 +1138,7 @@ function CalendarToolbar({
       type: null,
       priority: "",
       event_type: "",
-      visibility: "global", // default to global
+      visibility: "", 
       service_id: "",
       myEvents: false,
     });
@@ -1509,7 +1509,7 @@ export default function CalendarPage() {
     type: "",
     priority: "",
     event_type: "",
-    visibility: "global", // default to global view
+    visibility: "",
     service_id: "",
     myEvents: false,
   });
