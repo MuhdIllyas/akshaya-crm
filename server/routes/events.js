@@ -262,31 +262,142 @@ router.get("/", async (req, res) => {
     );
 
     /* ======================================================
-    3. SERVICE TRACKING EVENTS
+      3A. EXPIRY EVENTS
     ====================================================== */
 
-    let trackingFilter = "";
-    let trackingValues = [];
+    let expiryFilter = "";
+    let expiryValues = [];
 
-    // STAFF
+    // STAFF → own service entries
     if (req.user.role === "staff") {
-      trackingFilter = `
+      expiryFilter = `
         WHERE se.staff_id = $1
       `;
 
-      trackingValues.push(req.user.id);
+      expiryValues.push(req.user.id);
     }
 
-    // ADMIN
+    // ADMIN → centre entries
     else if (req.user.role === "admin") {
-      trackingFilter = `
+      expiryFilter = `
         WHERE sf.centre_id = $1
       `;
 
-      trackingValues.push(req.user.centre_id);
+      expiryValues.push(req.user.centre_id);
     }
 
-    const serviceTrackingQuery = `
+    const expiryQuery = `
+      SELECT
+        se.id,
+
+        se.customer_name,
+
+        sv.name AS service_name,
+
+        sc.name AS subcategory_name,
+
+        se.staff_id,
+
+        sf.name AS staff_name,
+
+        sf.centre_id,
+
+        se.expiry_date
+
+      FROM service_entries se
+
+      LEFT JOIN services sv
+        ON sv.id = se.category_id
+
+      LEFT JOIN subcategories sc
+        ON sc.id = se.subcategory_id
+
+      LEFT JOIN staff sf
+        ON sf.id = se.staff_id
+
+      ${expiryFilter}
+    `;
+
+    const expiryRes = await client.query(
+      expiryQuery,
+      expiryValues
+    );
+
+    /* ======================================================
+      BUILD EXPIRY EVENTS
+    ====================================================== */
+
+    const expiryEvents = [];
+
+    expiryRes.rows.forEach((row) => {
+
+      if (!row.expiry_date) return;
+
+      const fullServiceName = row.subcategory_name
+        ? `${row.service_name} - ${row.subcategory_name}`
+        : row.service_name;
+
+      expiryEvents.push({
+        id: `expiry-${row.id}`,
+
+        title: `${fullServiceName} Expiry`,
+
+        description: row.customer_name
+          ? `Customer: ${row.customer_name}`
+          : null,
+
+        date: row.expiry_date,
+
+        start_datetime: null,
+        end_datetime: null,
+
+        type: "service",
+        event_type: "expiry",
+
+        priority: "high",
+        status: "active",
+
+        visibility: "centre",
+
+        created_at: null,
+        centre_id: row.centre_id,
+
+        related_service_id: row.id,
+
+        service_name: fullServiceName,
+
+        assigned_staff_name: row.staff_name,
+
+        source: "service_expiry",
+      });
+    });
+
+    /* ======================================================
+      3B. DELIVERY EVENTS
+    ====================================================== */
+
+    let deliveryFilter = "";
+    let deliveryValues = [];
+
+    // STAFF → assigned tracking
+    if (req.user.role === "staff") {
+      deliveryFilter = `
+        WHERE tr.assigned_to = $1
+      `;
+
+      deliveryValues.push(req.user.id);
+    }
+
+    // ADMIN → centre entries
+    else if (req.user.role === "admin") {
+      deliveryFilter = `
+        WHERE sf.centre_id = $1
+      `;
+
+      deliveryValues.push(req.user.centre_id);
+    }
+
+    const deliveryQuery = `
       SELECT
         tr.id,
 
@@ -296,15 +407,11 @@ router.get("/", async (req, res) => {
 
         sc.name AS subcategory_name,
 
-        se.id AS service_entry_id,
-
-        se.staff_id,
+        tr.assigned_to,
 
         sf.name AS staff_name,
 
         sf.centre_id,
-
-        se.expiry_date,
 
         tr.estimated_delivery
 
@@ -320,117 +427,72 @@ router.get("/", async (req, res) => {
         ON sc.id = se.subcategory_id
 
       LEFT JOIN staff sf
-        ON sf.id = se.staff_id
+        ON sf.id = tr.assigned_to
 
-      ${trackingFilter}
+      ${deliveryFilter}
     `;
 
-    const trackingRes = await client.query(
-      serviceTrackingQuery,
-      trackingValues
+    const deliveryRes = await client.query(
+      deliveryQuery,
+      deliveryValues
     );
 
     /* ======================================================
-      BUILD SERVICE EVENTS
+      BUILD DELIVERY EVENTS
     ====================================================== */
 
-    const serviceTrackingEvents = [];
+    const deliveryEvents = [];
 
-    trackingRes.rows.forEach((row) => {
+    deliveryRes.rows.forEach((row) => {
+
+      if (!row.estimated_delivery) return;
 
       const fullServiceName = row.subcategory_name
         ? `${row.service_name} - ${row.subcategory_name}`
         : row.service_name;
 
-      /* -----------------------------
-        EXPIRY EVENT
-      ----------------------------- */
+      deliveryEvents.push({
+        id: `delivery-${row.id}`,
 
-      if (row.expiry_date) {
-        serviceTrackingEvents.push({
-          id: `expiry-${row.id}`,
+        title: `${fullServiceName} Delivery`,
 
-          title: `${fullServiceName} Expiry`,
+        description: row.customer_name
+          ? `Customer: ${row.customer_name}`
+          : null,
 
-          description: row.customer_name
-            ? `Customer: ${row.customer_name}`
-            : null,
+        date: row.estimated_delivery,
 
-          date: row.expiry_date,
+        start_datetime: null,
+        end_datetime: null,
 
-          start_datetime: null,
-          end_datetime: null,
+        type: "service",
+        event_type: "deadline",
 
-          type: "service",
-          event_type: "expiry",
+        priority: "medium",
+        status: "active",
 
-          priority: "high",
-          status: "active",
+        visibility: "centre",
 
-          visibility: "centre",
+        created_at: null,
+        centre_id: row.centre_id,
 
-          created_at: null,
-          centre_id: row.centre_id,
+        related_service_id: row.id,
 
-          related_service_id: row.service_entry_id,
+        service_name: fullServiceName,
 
-          service_name: fullServiceName,
+        assigned_staff_name: row.staff_name,
 
-          assigned_staff_name: row.staff_name,
-
-          source: "service_tracking_expiry",
-        });
-      }
-
-      /* -----------------------------
-        DELIVERY EVENT
-      ----------------------------- */
-
-      if (row.estimated_delivery) {
-        serviceTrackingEvents.push({
-          id: `delivery-${row.id}`,
-
-          title: `${fullServiceName} Delivery`,
-
-          description: row.customer_name
-            ? `Customer: ${row.customer_name}`
-            : null,
-
-          date: row.estimated_delivery,
-
-          start_datetime: null,
-          end_datetime: null,
-
-          type: "service",
-          event_type: "deadline",
-
-          priority: "medium",
-          status: "active",
-
-          visibility: "centre",
-
-          created_at: null,
-          centre_id: row.centre_id,
-
-          related_service_id: row.service_entry_id,
-
-          service_name: fullServiceName,
-
-          assigned_staff_name: row.staff_name,
-
-          source: "service_tracking_delivery",
-        });
-      }
+        source: "service_delivery",
+      });
     });
 
     /* ======================================================
-       COMBINE ALL
+      COMBINE SERVICE EVENTS
     ====================================================== */
 
-    const combinedEvents = [
-      ...manualEventsRes.rows,
-      ...taskRes.rows,
-      ...serviceTrackingEvents,
+    const serviceTrackingEvents = [
+      ...expiryEvents,
+      ...deliveryEvents,
     ];
 
     /* ======================================================
