@@ -216,8 +216,8 @@ const Login = () => {
                 </svg>
               </div>
               <div className="text-center">
-                <h1 className="text-3xl font-bold text-navy-600 mb-2">Akshaya Centre</h1>
-                <p className="text-navy-600 mb-2">Digital Empowerment Initiative</p>
+                <h1 className="text-3xl font-bold text-navy-600 mb-2">Akshaya Sahayi</h1>
+                <p className="text-navy-600 mb-2">Your Trusted Digital Service Companion</p>
               </div>
             </div>
             
@@ -228,13 +228,13 @@ const Login = () => {
               <p className="text-navy-600 mb-2">
                 {isCustomerLogin 
                   ? "Access your account with WhatsApp OTP or register for new services"
-                  : "Akshaya Centres are Kerala's digital access points providing e-governance and citizen services across the state."}
+                  : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
               </p>
             </div>
           </div>
           
           <div className="z-10 mt-8">
-            <p className="text-navy-800 mb-2 text-sm text-center">© 2025 Muhammed Illyas. All rights reserved.</p>
+            <p className="text-navy-800 mb-2 text-sm text-center">© 2026 Muhammed Illyas. All rights reserved.</p>
             <p className="text-navy-800 mb-2 text-sm text-center mt-1">Akshaya e Centre Pukayur</p>
           </div>
         </div>
