@@ -14,6 +14,9 @@ import {
   FiEdit,
   FiTrash2,
   FiStar,
+  FiTrendingUp,
+  FiPieChart,
+  FiCalendar,
 } from "react-icons/fi";
 
 // ----------------------------------------------------------------------
@@ -76,6 +79,15 @@ const TeamManagement = () => {
   const [showManageMembersModal, setShowManageMembersModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
 
+  // Analytics modal state
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [analyticsTeam, setAnalyticsTeam] = useState(null);
+  const [analyticsTab, setAnalyticsTab] = useState("contribution"); // 'contribution' or 'trend'
+  const [contributionData, setContributionData] = useState([]);
+  const [trendData, setTrendData] = useState([]);
+  const [trendYear, setTrendYear] = useState(new Date().getFullYear());
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   // Form for create / edit team
   const [teamForm, setTeamForm] = useState({
     name: "",
@@ -121,13 +133,12 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   const fetchFinancials = async () => {
     try {
-      // All-time summary (no date filters). Add from/to later if needed.
       const response = await fetch(`${API_BASE}/api/teams/analytics/summary`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (response.ok) {
         const data = await response.json();
-        setFinancialData(data); // { totals, teams }
+        setFinancialData(data);
       }
     } catch (error) {
       console.error("Fetch financials failed:", error);
@@ -176,7 +187,7 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Fetch staff (same as CalendarPage)
+  // Fetch staff (same logic as CalendarPage)
   // ------------------------------------------------------------------
   const fetchStaff = async () => {
     try {
@@ -296,7 +307,7 @@ const TeamManagement = () => {
 
       setShowCreateModal(false);
       fetchTeams();
-      fetchFinancials(); // refresh financials as well
+      fetchFinancials();
     } catch (error) {
       alert(error.message || "Error creating team");
     } finally {
@@ -361,7 +372,7 @@ const TeamManagement = () => {
       });
       if (selectedTeam) openManageMembers(selectedTeam);
       fetchTeams();
-      fetchFinancials(); // refresh
+      fetchFinancials();
     } catch (error) {
       console.error("Remove member failed:", error);
     }
@@ -396,7 +407,7 @@ const TeamManagement = () => {
       setSelectedTeam((prev) => ({ ...prev, membersList: updatedMembers }));
       setAddMemberValue("");
       fetchTeams();
-      fetchFinancials(); // member count may change; refresh financials just in case
+      fetchFinancials();
     } catch (error) {
       alert(error.message || "Error adding member");
     } finally {
@@ -427,7 +438,64 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Render (unchanged except financial columns now use real data)
+  // Analytics modal helpers
+  // ------------------------------------------------------------------
+  const fetchContribution = async (teamId) => {
+    setAnalyticsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/teams/${teamId}/contribution`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setContributionData(data);
+      } else {
+        console.error("Failed to load contribution");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const fetchTrend = async (teamId, year) => {
+    setAnalyticsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/teams/${teamId}/trend?year=${year}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTrendData(data);
+      } else {
+        console.error("Failed to load trend");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const openAnalyticsModal = (team) => {
+    setAnalyticsTeam(team);
+    setAnalyticsTab("contribution");
+    setShowAnalyticsModal(true);
+    fetchContribution(team.id);
+  };
+
+  const switchAnalyticsTab = (tab) => {
+    setAnalyticsTab(tab);
+    if (tab === "contribution") {
+      fetchContribution(analyticsTeam.id);
+    } else if (tab === "trend") {
+      fetchTrend(analyticsTeam.id, trendYear);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Render
   // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
@@ -658,6 +726,13 @@ const TeamManagement = () => {
                             title="Manage Members"
                           >
                             <FiUsers size={16} />
+                          </button>
+                          <button
+                            onClick={() => openAnalyticsModal(team)}
+                            className="text-teal-600 hover:text-teal-800 p-1.5 rounded-lg hover:bg-teal-50"
+                            title="View Analytics"
+                          >
+                            <FiTrendingUp size={16} />
                           </button>
                           {isAdmin && (
                             <>
@@ -994,6 +1069,222 @@ const TeamManagement = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- ANALYTICS MODAL ---- */}
+      {showAnalyticsModal && analyticsTeam && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200">
+            {/* Header with tabs */}
+            <div className="bg-gradient-to-r from-teal-600 to-emerald-600 p-6 sticky top-0 rounded-t-2xl">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-white">
+                  {analyticsTeam.name} – Analytics
+                </h2>
+                <button
+                  onClick={() => setShowAnalyticsModal(false)}
+                  className="text-white hover:text-gray-200"
+                >
+                  <FiX size={20} />
+                </button>
+              </div>
+              <div className="flex gap-4 mt-4">
+                <button
+                  onClick={() => switchAnalyticsTab("contribution")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    analyticsTab === "contribution"
+                      ? "bg-white text-teal-700 shadow"
+                      : "bg-teal-500 text-white hover:bg-teal-400"
+                  }`}
+                >
+                  <FiPieChart className="inline mr-1" /> Contribution
+                </button>
+                <button
+                  onClick={() => switchAnalyticsTab("trend")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    analyticsTab === "trend"
+                      ? "bg-white text-teal-700 shadow"
+                      : "bg-teal-500 text-white hover:bg-teal-400"
+                  }`}
+                >
+                  <FiCalendar className="inline mr-1" /> Monthly Trend
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {analyticsLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <div className="animate-spin h-8 w-8 border-4 border-teal-600 border-t-transparent rounded-full mr-3"></div>
+                  Loading...
+                </div>
+              ) : (
+                <>
+                  {analyticsTab === "contribution" && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                        Member Contribution
+                      </h3>
+                      {contributionData.length === 0 ? (
+                        <p className="text-gray-500 text-center py-6">
+                          No contribution data available.
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">
+                                  Staff
+                                </th>
+                                <th className="py-3 px-4 text-center text-sm font-semibold text-gray-600">
+                                  Role
+                                </th>
+                                <th className="py-3 px-4 text-center text-sm font-semibold text-gray-600">
+                                  Primary
+                                </th>
+                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
+                                  Revenue
+                                </th>
+                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
+                                  Expense
+                                </th>
+                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
+                                  Profit
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {contributionData.map((m) => (
+                                <tr
+                                  key={m.id}
+                                  className="border-b border-gray-100"
+                                >
+                                  <td className="py-3 px-4 text-gray-800">
+                                    {m.name}
+                                  </td>
+                                  <td className="py-3 px-4 text-center text-gray-600">
+                                    {m.role}
+                                  </td>
+                                  <td className="py-3 px-4 text-center">
+                                    {m.is_primary && (
+                                      <FiStar className="text-amber-500 inline" />
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-right text-green-700">
+                                    {formatCurrency(m.revenue)}
+                                  </td>
+                                  <td className="py-3 px-4 text-right text-red-600">
+                                    {formatCurrency(m.expense)}
+                                  </td>
+                                  <td
+                                    className="py-3 px-4 text-right font-semibold"
+                                    style={{
+                                      color:
+                                        m.profit >= 0 ? "#15803d" : "#b91c1c",
+                                    }}
+                                  >
+                                    {formatCurrency(m.profit)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {analyticsTab === "trend" && (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-800">
+                          Monthly Trend
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-gray-600">
+                            Year:
+                          </label>
+                          <input
+                            type="number"
+                            value={trendYear}
+                            onChange={(e) => {
+                              const y = Number(e.target.value);
+                              setTrendYear(y);
+                              fetchTrend(analyticsTeam.id, y);
+                            }}
+                            className="border border-gray-200 rounded-lg px-3 py-1.5 w-24 text-sm"
+                          />
+                        </div>
+                      </div>
+                      {trendData.length === 0 ? (
+                        <p className="text-gray-500 text-center py-6">
+                          No trend data for this year.
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">
+                                  Month
+                                </th>
+                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
+                                  Revenue
+                                </th>
+                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
+                                  Expense
+                                </th>
+                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
+                                  Profit
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {trendData.map((row) => {
+                                const monthNames = [
+                                  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+                                ];
+                                return (
+                                  <tr
+                                    key={row.month}
+                                    className="border-b border-gray-100"
+                                  >
+                                    <td className="py-3 px-4 text-gray-800">
+                                      {monthNames[row.month - 1]}
+                                    </td>
+                                    <td className="py-3 px-4 text-right text-green-700">
+                                      {formatCurrency(row.revenue)}
+                                    </td>
+                                    <td className="py-3 px-4 text-right text-red-600">
+                                      {formatCurrency(row.expense)}
+                                    </td>
+                                    <td
+                                      className="py-3 px-4 text-right font-semibold"
+                                      style={{
+                                        color:
+                                          row.profit >= 0
+                                            ? "#15803d"
+                                            : "#b91c1c",
+                                      }}
+                                    >
+                                      {formatCurrency(row.profit)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
