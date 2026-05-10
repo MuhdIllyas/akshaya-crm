@@ -453,6 +453,35 @@ router.get(
 
       const result = await client.query(
         `
+        WITH payment_agg AS (
+
+          SELECT
+            se.staff_id,
+
+            SUM(p.amount)
+            FILTER (
+              WHERE p.status = 'received'
+            ) AS collected_revenue
+
+          FROM payments p
+
+          JOIN service_entries se
+            ON se.id = p.service_entry_id
+
+          WHERE se.team_id = $1
+
+            AND COALESCE(p.is_reversal, FALSE) = FALSE
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM wallet_transactions wt
+              WHERE wt.reference_payment_id = p.id
+              AND COALESCE(wt.is_reversal, FALSE) = TRUE
+            )
+
+          GROUP BY se.staff_id
+        )
+
         SELECT
 
           s.id,
@@ -462,7 +491,7 @@ router.get(
           tm.is_primary,
 
           /* =====================================
-             REVENUE
+             EXPECTED REVENUE
           ===================================== */
 
           COALESCE((
@@ -472,7 +501,14 @@ router.get(
 
             WHERE se.staff_id = s.id
             AND se.team_id = $1
-          ), 0) AS revenue,
+          ), 0) AS expected_revenue,
+
+          /* =====================================
+             COLLECTED REVENUE
+          ===================================== */
+
+          COALESCE(pa.collected_revenue, 0)
+          AS collected_revenue,
 
           /* =====================================
              DEPARTMENT CHARGES
@@ -488,7 +524,7 @@ router.get(
           ), 0) AS department_charges,
 
           /* =====================================
-             SERVICE REVENUE
+             SERVICE PROFIT
           ===================================== */
 
           COALESCE((
@@ -498,57 +534,71 @@ router.get(
 
             WHERE se.staff_id = s.id
             AND se.team_id = $1
-          ), 0) AS service_revenue,
+          ), 0) AS service_profit,
 
           /* =====================================
              EXPENSE
           ===================================== */
 
-        COALESCE((
+          COALESCE((
             SELECT SUM(e.amount)
 
             FROM expenses e
 
             WHERE e.staff_id = s.id
             AND e.team_id = $1
-        ), 0) AS expense
+          ), 0) AS expense
 
         FROM team_members tm
 
         JOIN staff s
           ON s.id = tm.staff_id
 
+        LEFT JOIN payment_agg pa
+          ON pa.staff_id = s.id
+
         WHERE tm.team_id = $1
 
-        ORDER BY revenue DESC
+        ORDER BY collected_revenue DESC
         `,
         [teamId]
       );
 
       const rows = result.rows.map((member) => {
 
-        const revenue =
-          Number(member.revenue || 0);
+        const expectedRevenue =
+          Number(member.expected_revenue || 0);
 
-        const expense =
-          Number(member.expense || 0);
+        const collectedRevenue =
+          Number(member.collected_revenue || 0);
 
         const departmentCharges =
           Number(member.department_charges || 0);
 
-        const serviceRevenue =
-          Number(member.service_revenue || 0);
+        const serviceProfit =
+          Number(member.service_profit || 0);
+
+        const expense =
+          Number(member.expense || 0);
 
         return {
           ...member,
 
-          revenue,
-          expense,
-          department_charges: departmentCharges,
-          service_revenue: serviceRevenue,
+          expected_revenue: expectedRevenue,
 
-          profit:
-            revenue
+          collected_revenue: collectedRevenue,
+
+          pending_revenue:
+            expectedRevenue - collectedRevenue,
+
+          department_charges: departmentCharges,
+
+          service_profit: serviceProfit,
+
+          expense,
+
+          net_profit:
+            collectedRevenue
             - departmentCharges
             - expense,
         };
@@ -605,7 +655,7 @@ router.get(
           m.month,
 
           /* =====================================
-             REVENUE
+             EXPECTED REVENUE
           ===================================== */
 
           COALESCE((
@@ -617,7 +667,36 @@ router.get(
 
             AND EXTRACT(MONTH FROM se.created_at) = m.month
             AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS revenue,
+          ), 0) AS expected_revenue,
+
+          /* =====================================
+             COLLECTED REVENUE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(p.amount)
+
+            FROM payments p
+
+            JOIN service_entries se
+              ON se.id = p.service_entry_id
+
+            WHERE se.team_id = $1
+
+              AND p.status = 'received'
+
+              AND COALESCE(p.is_reversal, FALSE) = FALSE
+
+              AND NOT EXISTS (
+                SELECT 1
+                FROM wallet_transactions wt
+                WHERE wt.reference_payment_id = p.id
+                AND COALESCE(wt.is_reversal, FALSE) = TRUE
+              )
+
+              AND EXTRACT(MONTH FROM p.created_at) = m.month
+              AND EXTRACT(YEAR FROM p.created_at) = $2
+          ), 0) AS collected_revenue,
 
           /* =====================================
              DEPARTMENT CHARGES
@@ -635,7 +714,7 @@ router.get(
           ), 0) AS department_charges,
 
           /* =====================================
-             SERVICE REVENUE
+             SERVICE PROFIT
           ===================================== */
 
           COALESCE((
@@ -647,7 +726,7 @@ router.get(
 
             AND EXTRACT(MONTH FROM se.created_at) = m.month
             AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS service_revenue,
+          ), 0) AS service_profit,
 
           /* =====================================
              EXPENSE
@@ -673,28 +752,39 @@ router.get(
 
       const rows = result.rows.map((row) => {
 
-        const revenue =
-          Number(row.revenue || 0);
+        const expectedRevenue =
+          Number(row.expected_revenue || 0);
 
-        const expense =
-          Number(row.expense || 0);
+        const collectedRevenue =
+          Number(row.collected_revenue || 0);
 
         const departmentCharges =
           Number(row.department_charges || 0);
 
-        const serviceRevenue =
-          Number(row.service_revenue || 0);
+        const serviceProfit =
+          Number(row.service_profit || 0);
+
+        const expense =
+          Number(row.expense || 0);
 
         return {
           month: Number(row.month),
 
-          revenue,
-          expense,
-          department_charges: departmentCharges,
-          service_revenue: serviceRevenue,
+          expected_revenue: expectedRevenue,
 
-          profit:
-            revenue
+          collected_revenue: collectedRevenue,
+
+          pending_revenue:
+            expectedRevenue - collectedRevenue,
+
+          department_charges: departmentCharges,
+
+          service_profit: serviceProfit,
+
+          expense,
+
+          net_profit:
+            collectedRevenue
             - departmentCharges
             - expense,
         };
