@@ -754,13 +754,13 @@ router.get("/analytics/summary", async (req, res) => {
        DATE FILTERS
     ===================================================== */
 
-    let revenueDateFilter = "";
+    let serviceDateFilter = "";
     let expenseDateFilter = "";
 
     if (from) {
 
-      revenueDateFilter += `
-        AND wt.created_at >= $${paramIndex}::date
+      serviceDateFilter += `
+        AND se.created_at >= $${paramIndex}::date
       `;
 
       expenseDateFilter += `
@@ -774,8 +774,8 @@ router.get("/analytics/summary", async (req, res) => {
 
     if (to) {
 
-      revenueDateFilter += `
-        AND wt.created_at <
+      serviceDateFilter += `
+        AND se.created_at <
         ($${paramIndex}::date + INTERVAL '1 day')
       `;
 
@@ -808,26 +808,49 @@ router.get("/analytics/summary", async (req, res) => {
         ) AS member_count,
 
         /* =========================================
-           REVENUE
+           REVENUE (TOTAL CUSTOMER COLLECTION)
         ========================================= */
 
         COALESCE((
-          SELECT SUM(wt.amount)
+          SELECT SUM(se.total_charges)
 
-          FROM wallet_transactions wt
+          FROM service_entries se
 
-          JOIN team_members tm
-            ON tm.staff_id = wt.staff_id
+          WHERE se.team_id = t.id
 
-          WHERE tm.team_id = t.id
-          AND tm.is_primary = true
-
-          AND wt.type = 'credit'
-          AND wt.category = 'Service Payment'
-
-          ${revenueDateFilter}
+          ${serviceDateFilter}
 
         ), 0) AS revenue,
+
+        /* =========================================
+           DEPARTMENT CHARGES
+        ========================================= */
+
+        COALESCE((
+          SELECT SUM(se.department_charges)
+
+          FROM service_entries se
+
+          WHERE se.team_id = t.id
+
+          ${serviceDateFilter}
+
+        ), 0) AS department_charges,
+
+        /* =========================================
+           SERVICE REVENUE
+        ========================================= */
+
+        COALESCE((
+          SELECT SUM(se.service_charges)
+
+          FROM service_entries se
+
+          WHERE se.team_id = t.id
+
+          ${serviceDateFilter}
+
+        ), 0) AS service_revenue,
 
         /* =========================================
            EXPENSE
@@ -863,14 +886,24 @@ router.get("/analytics/summary", async (req, res) => {
       const expense =
         Number(team.expense || 0);
 
+      const departmentCharges =
+        Number(team.department_charges || 0);
+
+      const serviceRevenue =
+        Number(team.service_revenue || 0);
+
       return {
         ...team,
 
         revenue,
         expense,
+        department_charges: departmentCharges,
+        service_revenue: serviceRevenue,
 
         profit:
-          revenue - expense,
+          revenue
+          - departmentCharges
+          - expense,
       };
     });
 
@@ -879,6 +912,8 @@ router.get("/analytics/summary", async (req, res) => {
 
         acc.revenue += row.revenue;
         acc.expense += row.expense;
+        acc.department_charges += row.department_charges;
+        acc.service_revenue += row.service_revenue;
         acc.profit += row.profit;
 
         return acc;
@@ -887,6 +922,8 @@ router.get("/analytics/summary", async (req, res) => {
       {
         revenue: 0,
         expense: 0,
+        department_charges: 0,
+        service_revenue: 0,
         profit: 0,
       }
     );
@@ -939,15 +976,48 @@ router.get(
 
           tm.is_primary,
 
+          /* =====================================
+             REVENUE
+          ===================================== */
+
           COALESCE((
-            SELECT SUM(wt.amount)
+            SELECT SUM(se.total_charges)
 
-            FROM wallet_transactions wt
+            FROM service_entries se
 
-            WHERE wt.staff_id = s.id
-            AND wt.type = 'credit'
-            AND wt.category = 'Service Payment'
+            WHERE se.staff_id = s.id
+            AND se.team_id = $1
           ), 0) AS revenue,
+
+          /* =====================================
+             DEPARTMENT CHARGES
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.department_charges)
+
+            FROM service_entries se
+
+            WHERE se.staff_id = s.id
+            AND se.team_id = $1
+          ), 0) AS department_charges,
+
+          /* =====================================
+             SERVICE REVENUE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.service_charges)
+
+            FROM service_entries se
+
+            WHERE se.staff_id = s.id
+            AND se.team_id = $1
+          ), 0) AS service_revenue,
+
+          /* =====================================
+             EXPENSE
+          ===================================== */
 
           COALESCE((
             SELECT SUM(e.amount)
@@ -978,14 +1048,24 @@ router.get(
         const expense =
           Number(member.expense || 0);
 
+        const departmentCharges =
+          Number(member.department_charges || 0);
+
+        const serviceRevenue =
+          Number(member.service_revenue || 0);
+
         return {
           ...member,
 
           revenue,
           expense,
+          department_charges: departmentCharges,
+          service_revenue: serviceRevenue,
 
           profit:
-            revenue - expense,
+            revenue
+            - departmentCharges
+            - expense,
         };
       });
 
@@ -1039,23 +1119,54 @@ router.get(
 
           m.month,
 
+          /* =====================================
+             REVENUE
+          ===================================== */
+
           COALESCE((
-            SELECT SUM(wt.amount)
+            SELECT SUM(se.total_charges)
 
-            FROM wallet_transactions wt
+            FROM service_entries se
 
-            JOIN team_members tm
-              ON tm.staff_id = wt.staff_id
+            WHERE se.team_id = $1
 
-            WHERE tm.team_id = $1
-            AND tm.is_primary = true
-
-            AND wt.type = 'credit'
-            AND wt.category = 'Service Payment'
-
-            AND EXTRACT(MONTH FROM wt.created_at) = m.month
-            AND EXTRACT(YEAR FROM wt.created_at) = $2
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
           ), 0) AS revenue,
+
+          /* =====================================
+             DEPARTMENT CHARGES
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.department_charges)
+
+            FROM service_entries se
+
+            WHERE se.team_id = $1
+
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
+          ), 0) AS department_charges,
+
+          /* =====================================
+             SERVICE REVENUE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.service_charges)
+
+            FROM service_entries se
+
+            WHERE se.team_id = $1
+
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
+          ), 0) AS service_revenue,
+
+          /* =====================================
+             EXPENSE
+          ===================================== */
 
           COALESCE((
             SELECT SUM(e.amount)
@@ -1083,14 +1194,24 @@ router.get(
         const expense =
           Number(row.expense || 0);
 
+        const departmentCharges =
+          Number(row.department_charges || 0);
+
+        const serviceRevenue =
+          Number(row.service_revenue || 0);
+
         return {
           month: Number(row.month),
 
           revenue,
           expense,
+          department_charges: departmentCharges,
+          service_revenue: serviceRevenue,
 
           profit:
-            revenue - expense,
+            revenue
+            - departmentCharges
+            - expense,
         };
       });
 
