@@ -4,6 +4,19 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+// Array of services for the animation
+const servicesList = [
+  "What We Offer",
+  "Government & e-Governance Services",
+  "Customer Service Management",
+  "Online Application Tracking",
+  "Digital Document Handling",
+  "Financial & Wallet Management",
+  "Staff & Centre Operations",
+  "WhatsApp Notifications & Updates",
+  "Citizen-Friendly Digital Support"
+];
+
 const Login = () => {
   const [user, setUser] = useState({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -14,10 +27,22 @@ const Login = () => {
   const [customerOtp, setCustomerOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpTimer, setOtpTimer] = useState(0);
+  
+  // State for the animated text index
+  const [serviceIndex, setServiceIndex] = useState(0);
+  
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Handle session expired toast from ProtectedRoute redirect
+  // Handle the text animation cycle (changes every 3 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setServiceIndex((prevIndex) => (prevIndex + 1) % servicesList.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle session expired toast from ProtectedRoute redirect
   useEffect(() => {
     if (location.state?.reason === "session_expired") {
       toast.error("Session expired, please log in again", {
@@ -45,7 +70,6 @@ const Login = () => {
       setUser((prev) => ({ ...prev, username: savedUsername }));
       setRememberMe(true);
       
-      // ✅ Delay toast to avoid mount collision
       setTimeout(() => {
         toast.info("Username auto-filled from saved credentials", {
           position: "top-right",
@@ -195,8 +219,6 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      {/* ❌ ToastContainer REMOVED - Now using global container from App.jsx */}
-      
       <div className="w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
         <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
           {/* Background pattern */}
@@ -230,6 +252,21 @@ const Login = () => {
                   ? "Access your account with WhatsApp OTP or register for new services"
                   : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
               </p>
+
+              {/* Animated Services List */}
+              {!isCustomerLogin && (
+                <div className="mt-4 pt-4 border-t border-white/20 h-12 overflow-hidden flex items-center">
+                  <p 
+                    key={serviceIndex} 
+                    className="text-navy-700 font-semibold text-sm animate-fade-slide flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4 text-navy-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    {servicesList[serviceIndex]}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           
@@ -469,6 +506,17 @@ const Login = () => {
         .text-navy-800 { color: #172a45; }
         .focus\\:ring-navy-500:focus { --tw-ring-color: #1e3a5f; }
         .border-navy-500 { border-color: #1e3a5f; }
+        
+        /* New Animation Keyframes */
+        @keyframes fadeSlide {
+          0% { opacity: 0; transform: translateY(10px); }
+          15% { opacity: 1; transform: translateY(0); }
+          85% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-10px); }
+        }
+        .animate-fade-slide {
+          animation: fadeSlide 3s ease-in-out forwards;
+        }
       `}</style>
     </div>
   );
