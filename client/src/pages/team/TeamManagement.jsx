@@ -1,5 +1,5 @@
 // TeamManagement.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from "react";
 import {
   FiUsers,
   FiGlobe,
@@ -14,10 +14,10 @@ import {
   FiEdit,
   FiTrash2,
   FiStar,
-} from 'react-icons/fi';
+} from "react-icons/fi";
 
 // ----------------------------------------------------------------------
-// JWT helper – exactly as in your CalendarPage.jsx
+// JWT helper – exactly as in CalendarPage.jsx
 // ----------------------------------------------------------------------
 function getTokenClaims() {
   const token = localStorage.getItem("token");
@@ -36,7 +36,7 @@ function getTokenClaims() {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 // ----------------------------------------------------------------------
 // TeamManagement Component
@@ -44,9 +44,9 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const TeamManagement = () => {
   // ---- Auth from JWT ----
   const claims = getTokenClaims();
-  const user = claims || { id: null, role: 'staff', centreId: null, name: '' };
-  const isAdmin = ['admin', 'superadmin'].includes(user.role);
-  const isSuperAdmin = user.role === 'superadmin';
+  const user = claims || { id: null, role: "staff", centreId: null, name: "" };
+  const isAdmin = ["admin", "superadmin"].includes(user.role);
+  const isSuperAdmin = user.role === "superadmin";
 
   // ---- State ----
   const [teams, setTeams] = useState([]);
@@ -60,11 +60,11 @@ const TeamManagement = () => {
   });
 
   // Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all'); // all, centre, global
-  const [centreFilter, setCentreFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all"); // all, centre, global
+  const [centreFilter, setCentreFilter] = useState("all");
 
-  // Centres list
+  // Centres list (only used by superadmin)
   const [centres, setCentres] = useState([]);
 
   // Modals
@@ -74,8 +74,8 @@ const TeamManagement = () => {
 
   // Form for create / edit team
   const [teamForm, setTeamForm] = useState({
-    name: '',
-    description: '',
+    name: "",
+    description: "",
     is_global: false,
     centre_id: null,
     members: [],
@@ -83,11 +83,11 @@ const TeamManagement = () => {
 
   // Available staff for member selection
   const [availableStaff, setAvailableStaff] = useState([]);
-  const [staffSearch, setStaffSearch] = useState('');
+  const [staffSearch, setStaffSearch] = useState("");
 
   // Add member search in manage modal
   const [addMemberSearchOpen, setAddMemberSearchOpen] = useState(false);
-  const [addMemberSearch, setAddMemberSearch] = useState('');
+  const [addMemberSearch, setAddMemberSearch] = useState("");
 
   // ------------------------------------------------------------------
   // Fetch teams from backend (now with financial data)
@@ -96,7 +96,7 @@ const TeamManagement = () => {
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE}/api/teams`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await response.json();
       // Backend now returns revenue, expense, profit directly
@@ -111,59 +111,58 @@ const TeamManagement = () => {
       );
       setTotalStats({ total, global, centre, members });
     } catch (error) {
-      console.error('Fetch teams failed:', error);
+      console.error("Fetch teams failed:", error);
     } finally {
       setLoading(false);
     }
   };
 
   // ------------------------------------------------------------------
-  // Fetch centres (for superadmin filter + create team dropdown)
+  // Fetch centres (only for superadmin, like CalendarPage)
   // ------------------------------------------------------------------
   const fetchCentres = async () => {
+    if (!isSuperAdmin) return; // admins don't need the centre list
     try {
-      const response = await fetch(`${API_BASE}/api/centres`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      const response = await fetch(`${API_BASE}/api/wallet/centres`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await response.json();
       setCentres(Array.isArray(data) ? data : data.centres || []);
     } catch (error) {
-      console.error('Fetch centres failed:', error);
+      console.error("Fetch centres failed:", error);
     }
   };
 
   // ------------------------------------------------------------------
-  // Fetch available staff (with role‑based filtering)
+  // Fetch staff (same logic as CalendarPage)
   // ------------------------------------------------------------------
-  const fetchAvailableStaff = async () => {
+  const fetchStaff = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/staff/all`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      let url = `${API_BASE}/api/servicemanagement/staff`;
+      // Admins must scope to their own centre
+      if (!isSuperAdmin) {
+        url += `?centre_id=${user.centreId}`;
+      }
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-      const raw = await response.json();
-      const allStaff = Array.isArray(raw) ? raw : raw.staff || [];
-
-      // Admin can only see staff from own centre
-      const filteredStaff =
-        user.role === 'superadmin'
-          ? allStaff
-          : allStaff.filter(
-              (s) => Number(s.centre_id) === Number(user.centreId)
-            );
-
-      setAvailableStaff(filteredStaff);
+      if (!response.ok) throw new Error("Failed to fetch staff");
+      const data = await response.json();
+      // CalendarPage expects an array directly
+      const staffList = Array.isArray(data) ? data : data.staff || [];
+      setAvailableStaff(staffList);
     } catch (error) {
-      console.error('Fetch staff failed:', error);
+      console.error("Fetch staff failed:", error);
+      setAvailableStaff([]);
     }
   };
 
   useEffect(() => {
     fetchTeams();
+    fetchCentres();
+  }, []);
 
-    if (isSuperAdmin) {
-      fetchCentres();
-    }
-  }, []); 
+  // No longer need separate fetchAvailableStaff – use fetchStaff everywhere
 
   // ------------------------------------------------------------------
   // Filtered teams
@@ -174,11 +173,11 @@ const TeamManagement = () => {
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
       const matchesType =
-        typeFilter === 'all' ||
-        (typeFilter === 'centre' && !team.is_global) ||
-        (typeFilter === 'global' && team.is_global);
+        typeFilter === "all" ||
+        (typeFilter === "centre" && !team.is_global) ||
+        (typeFilter === "global" && team.is_global);
       const matchesCentre =
-        centreFilter === 'all' || String(team.centre_id) === centreFilter;
+        centreFilter === "all" || String(team.centre_id) === centreFilter;
       return matchesSearch && matchesType && matchesCentre;
     });
   }, [teams, searchTerm, typeFilter, centreFilter]);
@@ -187,9 +186,9 @@ const TeamManagement = () => {
   // Currency formatter
   // ------------------------------------------------------------------
   const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
       maximumFractionDigits: 0,
     }).format(value);
   };
@@ -199,19 +198,19 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   const openCreateModal = () => {
     setTeamForm({
-      name: '',
-      description: '',
+      name: "",
+      description: "",
       is_global: false,
-      centre_id: user.role === 'admin' ? user.centreId : null,
+      centre_id: user.role === "admin" ? user.centreId : null,
       members: [],
     });
-    fetchAvailableStaff();
+    fetchStaff(); // refresh staff list before opening
     setShowCreateModal(true);
   };
 
   const handleCreateTeam = async (e) => {
     e.preventDefault();
-    if (!teamForm.name.trim()) return alert('Team name is required');
+    if (!teamForm.name.trim()) return alert("Team name is required");
     if (submitting) return;
 
     setSubmitting(true);
@@ -228,21 +227,21 @@ const TeamManagement = () => {
       };
 
       const response = await fetch(`${API_BASE}/api/teams`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
         body: JSON.stringify(payload),
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to create team');
+      if (!response.ok) throw new Error(data.error || "Failed to create team");
 
       setShowCreateModal(false);
       fetchTeams();
     } catch (error) {
-      alert(error.message || 'Error creating team');
+      alert(error.message || "Error creating team");
     } finally {
       setSubmitting(false);
     }
@@ -262,41 +261,42 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   const openManageMembers = async (team) => {
     setSelectedTeam(team);
+    fetchStaff(); // ensure latest staff list (for adding members)
     try {
       const response = await fetch(`${API_BASE}/api/teams/${team.id}/members`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const membersData = await response.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: membersData }));
       setShowManageMembersModal(true);
     } catch (error) {
-      console.error('Fetch members failed:', error);
+      console.error("Fetch members failed:", error);
     }
   };
 
   const handleSetPrimary = async (memberId) => {
     try {
       await fetch(`${API_BASE}/api/teams/member/${memberId}/primary`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        method: "PUT",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (selectedTeam) openManageMembers(selectedTeam);
     } catch (error) {
-      console.error('Set primary failed:', error);
+      console.error("Set primary failed:", error);
     }
   };
 
   const handleRemoveMember = async (teamId, staffId) => {
-    if (!window.confirm('Remove this member?')) return;
+    if (!window.confirm("Remove this member?")) return;
     try {
       await fetch(`${API_BASE}/api/teams/${teamId}/members/${staffId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (selectedTeam) openManageMembers(selectedTeam);
       fetchTeams();
     } catch (error) {
-      console.error('Remove member failed:', error);
+      console.error("Remove member failed:", error);
     }
   };
 
@@ -307,31 +307,31 @@ const TeamManagement = () => {
       const response = await fetch(
         `${API_BASE}/api/teams/${selectedTeam.id}/members`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify({ staff_id: staffId, is_primary: false }),
         }
       );
-      if (!response.ok) throw new Error('Failed to add member');
+      if (!response.ok) throw new Error("Failed to add member");
       // refresh members
       const updatedRes = await fetch(
         `${API_BASE}/api/teams/${selectedTeam.id}/members`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         }
       );
       const updatedMembers = await updatedRes.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: updatedMembers }));
       setAddMemberSearchOpen(false);
-      setAddMemberSearch('');
+      setAddMemberSearch("");
       fetchTeams();
     } catch (error) {
-      alert(error.message || 'Error adding member');
+      alert(error.message || "Error adding member");
     } finally {
       setSubmitting(false);
     }
@@ -341,25 +341,25 @@ const TeamManagement = () => {
   // Delete team
   // ------------------------------------------------------------------
   const handleDeleteTeam = async (teamId) => {
-    if (!window.confirm('Delete this team? This action cannot be undone.'))
+    if (!window.confirm("Delete this team? This action cannot be undone."))
       return;
     setSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/api/teams/${teamId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-      if (!response.ok) throw new Error('Failed to delete team');
+      if (!response.ok) throw new Error("Failed to delete team");
       fetchTeams();
     } catch (error) {
-      alert(error.message || 'Error deleting team');
+      alert(error.message || "Error deleting team");
     } finally {
       setSubmitting(false);
     }
   };
 
   // ------------------------------------------------------------------
-  // Render
+  // Render (unchanged except centre filter dropdown uses centres state)
   // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
@@ -533,8 +533,8 @@ const TeamManagement = () => {
                           <div
                             className={`p-2 rounded-lg mr-3 ${
                               team.is_global
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-indigo-100 text-indigo-800'
+                                ? "bg-purple-100 text-purple-800"
+                                : "bg-indigo-100 text-indigo-800"
                             }`}
                           >
                             {team.is_global ? <FiGlobe /> : <FiHome />}
@@ -546,7 +546,7 @@ const TeamManagement = () => {
                             <p className="text-xs text-gray-500">
                               {team.centre_id
                                 ? `Centre #${team.centre_id}`
-                                : 'Cross-Centre'}
+                                : "Cross-Centre"}
                             </p>
                           </div>
                         </div>
@@ -555,11 +555,11 @@ const TeamManagement = () => {
                         <span
                           className={`inline-block px-2 py-1 text-xs rounded-full font-medium ${
                             team.is_global
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-blue-100 text-blue-800'
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-blue-100 text-blue-800"
                           }`}
                         >
-                          {team.is_global ? 'Global' : 'Centre'}
+                          {team.is_global ? "Global" : "Centre"}
                         </span>
                       </td>
                       <td className="py-4 px-5 text-center font-medium">
@@ -575,8 +575,8 @@ const TeamManagement = () => {
                         <span
                           className={`font-semibold ${
                             Number(team.profit || 0) >= 0
-                              ? 'text-green-700'
-                              : 'text-red-700'
+                              ? "text-green-700"
+                              : "text-red-700"
                           }`}
                         >
                           {formatCurrency(team.profit || 0)}
@@ -595,9 +595,7 @@ const TeamManagement = () => {
                             <>
                               <button
                                 onClick={() =>
-                                  alert(
-                                    'Edit team (to be implemented)'
-                                  )
+                                  alert("Edit team (to be implemented)")
                                 }
                                 className="text-gray-600 hover:text-gray-800 p-1.5 rounded-lg hover:bg-gray-100"
                                 title="Edit"
@@ -605,9 +603,7 @@ const TeamManagement = () => {
                                 <FiEdit size={16} />
                               </button>
                               <button
-                                onClick={() =>
-                                  handleDeleteTeam(team.id)
-                                }
+                                onClick={() => handleDeleteTeam(team.id)}
                                 disabled={submitting}
                                 className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
                                 title="Delete"
@@ -711,7 +707,7 @@ const TeamManagement = () => {
                     Centre
                   </label>
                   <select
-                    value={teamForm.centre_id || ''}
+                    value={teamForm.centre_id || ""}
                     onChange={(e) =>
                       setTeamForm({
                         ...teamForm,
@@ -751,9 +747,7 @@ const TeamManagement = () => {
                         {staff?.name || `ID ${staffId}`}
                         <button
                           type="button"
-                          onClick={() =>
-                            toggleMemberSelection(staffId)
-                          }
+                          onClick={() => toggleMemberSelection(staffId)}
                           className="ml-2 text-indigo-600 hover:text-indigo-800"
                           disabled={submitting}
                         >
@@ -770,9 +764,7 @@ const TeamManagement = () => {
                     placeholder="Search staff to add..."
                     className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={staffSearch}
-                    onChange={(e) =>
-                      setStaffSearch(e.target.value)
-                    }
+                    onChange={(e) => setStaffSearch(e.target.value)}
                     disabled={submitting}
                   />
                   {staffSearch && (
@@ -782,9 +774,7 @@ const TeamManagement = () => {
                           (s) =>
                             s.name
                               .toLowerCase()
-                              .includes(
-                                staffSearch.toLowerCase()
-                              ) &&
+                              .includes(staffSearch.toLowerCase()) &&
                             !teamForm.members.includes(s.id)
                         )
                         .map((staff) => (
@@ -792,16 +782,12 @@ const TeamManagement = () => {
                             key={staff.id}
                             className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
                             onClick={() => {
-                              toggleMemberSelection(
-                                staff.id
-                              );
-                              setStaffSearch('');
+                              toggleMemberSelection(staff.id);
+                              setStaffSearch("");
                             }}
                           >
                             <div>
-                              <p className="font-medium">
-                                {staff.name}
-                              </p>
+                              <p className="font-medium">{staff.name}</p>
                               <p className="text-xs text-gray-500">
                                 {staff.role}
                               </p>
@@ -892,16 +878,14 @@ const TeamManagement = () => {
                       placeholder="Search staff to add..."
                       className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       value={addMemberSearch}
-                      onChange={(e) =>
-                        setAddMemberSearch(e.target.value)
-                      }
+                      onChange={(e) => setAddMemberSearch(e.target.value)}
                       autoFocus
                       disabled={submitting}
                     />
                     <button
                       onClick={() => {
                         setAddMemberSearchOpen(false);
-                        setAddMemberSearch('');
+                        setAddMemberSearch("");
                       }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
@@ -926,15 +910,11 @@ const TeamManagement = () => {
                               key={staff.id}
                               className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
                               onClick={() =>
-                                handleAddMemberToTeam(
-                                  staff.id
-                                )
+                                handleAddMemberToTeam(staff.id)
                               }
                             >
                               <div>
-                                <p className="font-medium">
-                                  {staff.name}
-                                </p>
+                                <p className="font-medium">{staff.name}</p>
                                 <p className="text-xs text-gray-500">
                                   {staff.role}
                                 </p>
@@ -964,11 +944,7 @@ const TeamManagement = () => {
                           {member.name}
                           {member.is_primary && (
                             <span className="ml-2 inline-flex items-center text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                              <FiStar
-                                className="mr-1"
-                                size={12}
-                              />{' '}
-                              Primary
+                              <FiStar className="mr-1" size={12} /> Primary
                             </span>
                           )}
                         </p>
@@ -980,9 +956,7 @@ const TeamManagement = () => {
                     <div className="flex gap-2">
                       {isAdmin && !member.is_primary && (
                         <button
-                          onClick={() =>
-                            handleSetPrimary(member.id)
-                          }
+                          onClick={() => handleSetPrimary(member.id)}
                           disabled={submitting}
                           className="text-amber-600 hover:text-amber-800 p-1.5 rounded-lg hover:bg-amber-50 disabled:opacity-50"
                           title="Set as primary team"
