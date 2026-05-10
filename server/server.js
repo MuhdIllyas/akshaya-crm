@@ -43,6 +43,8 @@ import webhookRoutes from "./routes/webhook.js";
 import libromiWebhookRoutes from "./routes/libromiWebhook.js";
 import whatsappRoutes from "./routes/whatsapp.js";
 
+import teamRoutes from "./routes/teams.js";
+
 import staffperformanceRoutes from "./routes/staffPerformance.js";
 
 import eventsRoutes from "./routes/events.js";
@@ -282,6 +284,8 @@ app.use("/api/customer/documents", customerDocumentsRoutes);
 app.use("/api/customer/bookings", customerBookingRoutes);
 app.use("/api/customer", customerRoute);
 app.use("/api/staffcustomerdocuments", staffCustomerDocumentsRoutes);
+
+app.use("/api/teams", teamRoutes);
 
 app.use('/api/staffperformance', staffperformanceRoutes);
 
