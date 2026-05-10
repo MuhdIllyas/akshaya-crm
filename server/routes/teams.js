@@ -119,6 +119,561 @@ router.get("/", async (req, res) => {
 });
 
 /* =========================================================
+   TEAM FINANCIAL SUMMARY
+========================================================= */
+
+router.get("/analytics/summary", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+
+    const {
+      from,
+      to,
+      team_id,
+    } = req.query;
+
+    let teamWhere = "";
+    let params = [];
+    let paramIndex = 1;
+
+    /* =====================================================
+       TEAM FILTER
+    ===================================================== */
+
+    if (team_id) {
+
+      teamWhere += `
+        AND t.id = $${paramIndex}
+      `;
+
+      params.push(team_id);
+
+      paramIndex++;
+    }
+
+    /* =====================================================
+       ROLE FILTERS
+    ===================================================== */
+
+    if (req.user.role === "admin") {
+
+      teamWhere += `
+        AND (
+          t.centre_id = $${paramIndex}
+          AND t.is_global = false
+        )
+      `;
+
+      params.push(req.user.centre_id);
+
+      paramIndex++;
+    }
+
+    if (req.user.role === "staff") {
+
+      teamWhere += `
+        AND EXISTS (
+          SELECT 1
+          FROM team_members stm
+          WHERE stm.team_id = t.id
+          AND stm.staff_id = $${paramIndex}
+        )
+      `;
+
+      params.push(req.user.id);
+
+      paramIndex++;
+    }
+
+    /* =====================================================
+       DATE FILTERS
+    ===================================================== */
+
+    let serviceDateFilter = "";
+    let expenseDateFilter = "";
+
+    if (from) {
+
+      serviceDateFilter += `
+        AND se.created_at >= $${paramIndex}::date
+      `;
+
+      expenseDateFilter += `
+        AND e.created_at >= $${paramIndex}::date
+      `;
+
+      params.push(from);
+
+      paramIndex++;
+    }
+
+    if (to) {
+
+      serviceDateFilter += `
+        AND se.created_at <
+        ($${paramIndex}::date + INTERVAL '1 day')
+      `;
+
+      expenseDateFilter += `
+        AND e.created_at <
+        ($${paramIndex}::date + INTERVAL '1 day')
+      `;
+
+      params.push(to);
+
+      paramIndex++;
+    }
+
+    const result = await client.query(
+      `
+      SELECT
+
+        t.id,
+        t.name,
+        t.description,
+        t.is_global,
+        t.centre_id,
+        t.status,
+
+        (
+          SELECT COUNT(*)
+          FROM team_members tm
+          WHERE tm.team_id = t.id
+          AND tm.is_active = true
+        ) AS member_count,
+
+        /* =========================================
+           REVENUE (TOTAL CUSTOMER COLLECTION)
+        ========================================= */
+
+        COALESCE((
+          SELECT SUM(se.total_charges)
+
+          FROM service_entries se
+
+          WHERE se.team_id = t.id
+
+          ${serviceDateFilter}
+
+        ), 0) AS revenue,
+
+        /* =========================================
+           DEPARTMENT CHARGES
+        ========================================= */
+
+        COALESCE((
+          SELECT SUM(se.department_charges)
+
+          FROM service_entries se
+
+          WHERE se.team_id = t.id
+
+          ${serviceDateFilter}
+
+        ), 0) AS department_charges,
+
+        /* =========================================
+           SERVICE REVENUE
+        ========================================= */
+
+        COALESCE((
+          SELECT SUM(se.service_charges)
+
+          FROM service_entries se
+
+          WHERE se.team_id = t.id
+
+          ${serviceDateFilter}
+
+        ), 0) AS service_revenue,
+
+        /* =========================================
+           EXPENSE
+        ========================================= */
+
+        COALESCE((
+          SELECT SUM(e.amount)
+
+          FROM expenses e
+
+          WHERE e.team_id = t.id
+
+          ${expenseDateFilter}
+
+        ), 0) AS expense
+
+      FROM teams t
+
+      WHERE 1=1
+
+      ${teamWhere}
+
+      ORDER BY revenue DESC
+      `,
+      params
+    );
+
+    const teams = result.rows.map((team) => {
+
+      const revenue =
+        Number(team.revenue || 0);
+
+      const expense =
+        Number(team.expense || 0);
+
+      const departmentCharges =
+        Number(team.department_charges || 0);
+
+      const serviceRevenue =
+        Number(team.service_revenue || 0);
+
+      return {
+        ...team,
+
+        revenue,
+        expense,
+        department_charges: departmentCharges,
+        service_revenue: serviceRevenue,
+
+        profit:
+          revenue
+          - departmentCharges
+          - expense,
+      };
+    });
+
+    const totals = teams.reduce(
+      (acc, row) => {
+
+        acc.revenue += row.revenue;
+        acc.expense += row.expense;
+        acc.department_charges += row.department_charges;
+        acc.service_revenue += row.service_revenue;
+        acc.profit += row.profit;
+
+        return acc;
+
+      },
+      {
+        revenue: 0,
+        expense: 0,
+        department_charges: 0,
+        service_revenue: 0,
+        profit: 0,
+      }
+    );
+
+    res.json({
+      totals,
+      teams,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "Team analytics error:",
+      err
+    );
+
+    res.status(500).json({
+      error:
+        "Failed to load team analytics",
+    });
+
+  } finally {
+
+    client.release();
+
+  }
+});
+
+/* =========================================================
+   TEAM MEMBER CONTRIBUTION
+========================================================= */
+
+router.get(
+  "/:teamId/contribution",
+  async (req, res) => {
+
+    const client = await pool.connect();
+
+    try {
+
+      const { teamId } = req.params;
+
+      const result = await client.query(
+        `
+        SELECT
+
+          s.id,
+          s.name,
+          s.role,
+
+          tm.is_primary,
+
+          /* =====================================
+             REVENUE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.total_charges)
+
+            FROM service_entries se
+
+            WHERE se.staff_id = s.id
+            AND se.team_id = $1
+          ), 0) AS revenue,
+
+          /* =====================================
+             DEPARTMENT CHARGES
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.department_charges)
+
+            FROM service_entries se
+
+            WHERE se.staff_id = s.id
+            AND se.team_id = $1
+          ), 0) AS department_charges,
+
+          /* =====================================
+             SERVICE REVENUE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.service_charges)
+
+            FROM service_entries se
+
+            WHERE se.staff_id = s.id
+            AND se.team_id = $1
+          ), 0) AS service_revenue,
+
+          /* =====================================
+             EXPENSE
+          ===================================== */
+
+        COALESCE((
+            SELECT SUM(e.amount)
+
+            FROM expenses e
+
+            WHERE e.staff_id = s.id
+            AND e.team_id = $1
+        ), 0) AS expense
+
+        FROM team_members tm
+
+        JOIN staff s
+          ON s.id = tm.staff_id
+
+        WHERE tm.team_id = $1
+
+        ORDER BY revenue DESC
+        `,
+        [teamId]
+      );
+
+      const rows = result.rows.map((member) => {
+
+        const revenue =
+          Number(member.revenue || 0);
+
+        const expense =
+          Number(member.expense || 0);
+
+        const departmentCharges =
+          Number(member.department_charges || 0);
+
+        const serviceRevenue =
+          Number(member.service_revenue || 0);
+
+        return {
+          ...member,
+
+          revenue,
+          expense,
+          department_charges: departmentCharges,
+          service_revenue: serviceRevenue,
+
+          profit:
+            revenue
+            - departmentCharges
+            - expense,
+        };
+      });
+
+      res.json(rows);
+
+    } catch (err) {
+
+      console.error(
+        "Contribution error:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          "Failed to load contribution",
+      });
+
+    } finally {
+
+      client.release();
+
+    }
+  }
+);
+
+/* =========================================================
+   TEAM MONTHLY TREND
+========================================================= */
+
+router.get(
+  "/:teamId/trend",
+  async (req, res) => {
+
+    const client = await pool.connect();
+
+    try {
+
+      const { teamId } = req.params;
+
+      const year =
+        Number(req.query.year) ||
+        new Date().getFullYear();
+
+      const result = await client.query(
+        `
+        WITH months AS (
+          SELECT generate_series(1, 12) AS month
+        )
+
+        SELECT
+
+          m.month,
+
+          /* =====================================
+             REVENUE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.total_charges)
+
+            FROM service_entries se
+
+            WHERE se.team_id = $1
+
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
+          ), 0) AS revenue,
+
+          /* =====================================
+             DEPARTMENT CHARGES
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.department_charges)
+
+            FROM service_entries se
+
+            WHERE se.team_id = $1
+
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
+          ), 0) AS department_charges,
+
+          /* =====================================
+             SERVICE REVENUE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(se.service_charges)
+
+            FROM service_entries se
+
+            WHERE se.team_id = $1
+
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
+          ), 0) AS service_revenue,
+
+          /* =====================================
+             EXPENSE
+          ===================================== */
+
+          COALESCE((
+            SELECT SUM(e.amount)
+
+            FROM expenses e
+
+            WHERE e.team_id = $1
+
+            AND EXTRACT(MONTH FROM e.created_at) = m.month
+            AND EXTRACT(YEAR FROM e.created_at) = $2
+          ), 0) AS expense
+
+        FROM months m
+
+        ORDER BY m.month
+        `,
+        [teamId, year]
+      );
+
+      const rows = result.rows.map((row) => {
+
+        const revenue =
+          Number(row.revenue || 0);
+
+        const expense =
+          Number(row.expense || 0);
+
+        const departmentCharges =
+          Number(row.department_charges || 0);
+
+        const serviceRevenue =
+          Number(row.service_revenue || 0);
+
+        return {
+          month: Number(row.month),
+
+          revenue,
+          expense,
+          department_charges: departmentCharges,
+          service_revenue: serviceRevenue,
+
+          profit:
+            revenue
+            - departmentCharges
+            - expense,
+        };
+      });
+
+      res.json(rows);
+
+    } catch (err) {
+
+      console.error(
+        "Trend analytics error:",
+        err
+      );
+
+      res.status(500).json({
+        error:
+          "Failed to load trend analytics",
+      });
+
+    } finally {
+
+      client.release();
+
+    }
+  }
+);
+
+/* =========================================================
    CREATE TEAM
 ========================================================= */
 
@@ -681,560 +1236,5 @@ router.delete("/:id", async (req, res) => {
     client.release();
   }
 });
-
-/* =========================================================
-   TEAM FINANCIAL SUMMARY
-========================================================= */
-
-router.get("/analytics/summary", async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-
-    const {
-      from,
-      to,
-      team_id,
-    } = req.query;
-
-    let teamWhere = "";
-    let params = [];
-    let paramIndex = 1;
-
-    /* =====================================================
-       TEAM FILTER
-    ===================================================== */
-
-    if (team_id) {
-
-      teamWhere += `
-        AND t.id = $${paramIndex}
-      `;
-
-      params.push(team_id);
-
-      paramIndex++;
-    }
-
-    /* =====================================================
-       ROLE FILTERS
-    ===================================================== */
-
-    if (req.user.role === "admin") {
-
-      teamWhere += `
-        AND (
-          t.centre_id = $${paramIndex}
-          AND t.is_global = false
-        )
-      `;
-
-      params.push(req.user.centre_id);
-
-      paramIndex++;
-    }
-
-    if (req.user.role === "staff") {
-
-      teamWhere += `
-        AND EXISTS (
-          SELECT 1
-          FROM team_members stm
-          WHERE stm.team_id = t.id
-          AND stm.staff_id = $${paramIndex}
-        )
-      `;
-
-      params.push(req.user.id);
-
-      paramIndex++;
-    }
-
-    /* =====================================================
-       DATE FILTERS
-    ===================================================== */
-
-    let serviceDateFilter = "";
-    let expenseDateFilter = "";
-
-    if (from) {
-
-      serviceDateFilter += `
-        AND se.created_at >= $${paramIndex}::date
-      `;
-
-      expenseDateFilter += `
-        AND e.created_at >= $${paramIndex}::date
-      `;
-
-      params.push(from);
-
-      paramIndex++;
-    }
-
-    if (to) {
-
-      serviceDateFilter += `
-        AND se.created_at <
-        ($${paramIndex}::date + INTERVAL '1 day')
-      `;
-
-      expenseDateFilter += `
-        AND e.created_at <
-        ($${paramIndex}::date + INTERVAL '1 day')
-      `;
-
-      params.push(to);
-
-      paramIndex++;
-    }
-
-    const result = await client.query(
-      `
-      SELECT
-
-        t.id,
-        t.name,
-        t.description,
-        t.is_global,
-        t.centre_id,
-        t.status,
-
-        (
-          SELECT COUNT(*)
-          FROM team_members tm
-          WHERE tm.team_id = t.id
-          AND tm.is_active = true
-        ) AS member_count,
-
-        /* =========================================
-           REVENUE (TOTAL CUSTOMER COLLECTION)
-        ========================================= */
-
-        COALESCE((
-          SELECT SUM(se.total_charges)
-
-          FROM service_entries se
-
-          WHERE se.team_id = t.id
-
-          ${serviceDateFilter}
-
-        ), 0) AS revenue,
-
-        /* =========================================
-           DEPARTMENT CHARGES
-        ========================================= */
-
-        COALESCE((
-          SELECT SUM(se.department_charges)
-
-          FROM service_entries se
-
-          WHERE se.team_id = t.id
-
-          ${serviceDateFilter}
-
-        ), 0) AS department_charges,
-
-        /* =========================================
-           SERVICE REVENUE
-        ========================================= */
-
-        COALESCE((
-          SELECT SUM(se.service_charges)
-
-          FROM service_entries se
-
-          WHERE se.team_id = t.id
-
-          ${serviceDateFilter}
-
-        ), 0) AS service_revenue,
-
-        /* =========================================
-           EXPENSE
-        ========================================= */
-
-        COALESCE((
-          SELECT SUM(e.amount)
-
-          FROM expenses e
-
-          WHERE e.team_id = t.id
-
-          ${expenseDateFilter}
-
-        ), 0) AS expense
-
-      FROM teams t
-
-      WHERE 1=1
-
-      ${teamWhere}
-
-      ORDER BY revenue DESC
-      `,
-      params
-    );
-
-    const teams = result.rows.map((team) => {
-
-      const revenue =
-        Number(team.revenue || 0);
-
-      const expense =
-        Number(team.expense || 0);
-
-      const departmentCharges =
-        Number(team.department_charges || 0);
-
-      const serviceRevenue =
-        Number(team.service_revenue || 0);
-
-      return {
-        ...team,
-
-        revenue,
-        expense,
-        department_charges: departmentCharges,
-        service_revenue: serviceRevenue,
-
-        profit:
-          revenue
-          - departmentCharges
-          - expense,
-      };
-    });
-
-    const totals = teams.reduce(
-      (acc, row) => {
-
-        acc.revenue += row.revenue;
-        acc.expense += row.expense;
-        acc.department_charges += row.department_charges;
-        acc.service_revenue += row.service_revenue;
-        acc.profit += row.profit;
-
-        return acc;
-
-      },
-      {
-        revenue: 0,
-        expense: 0,
-        department_charges: 0,
-        service_revenue: 0,
-        profit: 0,
-      }
-    );
-
-    res.json({
-      totals,
-      teams,
-    });
-
-  } catch (err) {
-
-    console.error(
-      "Team analytics error:",
-      err
-    );
-
-    res.status(500).json({
-      error:
-        "Failed to load team analytics",
-    });
-
-  } finally {
-
-    client.release();
-
-  }
-});
-
-/* =========================================================
-   TEAM MEMBER CONTRIBUTION
-========================================================= */
-
-router.get(
-  "/:teamId/contribution",
-  async (req, res) => {
-
-    const client = await pool.connect();
-
-    try {
-
-      const { teamId } = req.params;
-
-      const result = await client.query(
-        `
-        SELECT
-
-          s.id,
-          s.name,
-          s.role,
-
-          tm.is_primary,
-
-          /* =====================================
-             REVENUE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.total_charges)
-
-            FROM service_entries se
-
-            WHERE se.staff_id = s.id
-            AND se.team_id = $1
-          ), 0) AS revenue,
-
-          /* =====================================
-             DEPARTMENT CHARGES
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.department_charges)
-
-            FROM service_entries se
-
-            WHERE se.staff_id = s.id
-            AND se.team_id = $1
-          ), 0) AS department_charges,
-
-          /* =====================================
-             SERVICE REVENUE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.service_charges)
-
-            FROM service_entries se
-
-            WHERE se.staff_id = s.id
-            AND se.team_id = $1
-          ), 0) AS service_revenue,
-
-          /* =====================================
-             EXPENSE
-          ===================================== */
-
-        COALESCE((
-            SELECT SUM(e.amount)
-
-            FROM expenses e
-
-            WHERE e.staff_id = s.id
-            AND e.team_id = $1
-        ), 0) AS expense
-
-        FROM team_members tm
-
-        JOIN staff s
-          ON s.id = tm.staff_id
-
-        WHERE tm.team_id = $1
-
-        ORDER BY revenue DESC
-        `,
-        [teamId]
-      );
-
-      const rows = result.rows.map((member) => {
-
-        const revenue =
-          Number(member.revenue || 0);
-
-        const expense =
-          Number(member.expense || 0);
-
-        const departmentCharges =
-          Number(member.department_charges || 0);
-
-        const serviceRevenue =
-          Number(member.service_revenue || 0);
-
-        return {
-          ...member,
-
-          revenue,
-          expense,
-          department_charges: departmentCharges,
-          service_revenue: serviceRevenue,
-
-          profit:
-            revenue
-            - departmentCharges
-            - expense,
-        };
-      });
-
-      res.json(rows);
-
-    } catch (err) {
-
-      console.error(
-        "Contribution error:",
-        err
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to load contribution",
-      });
-
-    } finally {
-
-      client.release();
-
-    }
-  }
-);
-
-/* =========================================================
-   TEAM MONTHLY TREND
-========================================================= */
-
-router.get(
-  "/:teamId/trend",
-  async (req, res) => {
-
-    const client = await pool.connect();
-
-    try {
-
-      const { teamId } = req.params;
-
-      const year =
-        Number(req.query.year) ||
-        new Date().getFullYear();
-
-      const result = await client.query(
-        `
-        WITH months AS (
-          SELECT generate_series(1, 12) AS month
-        )
-
-        SELECT
-
-          m.month,
-
-          /* =====================================
-             REVENUE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.total_charges)
-
-            FROM service_entries se
-
-            WHERE se.team_id = $1
-
-            AND EXTRACT(MONTH FROM se.created_at) = m.month
-            AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS revenue,
-
-          /* =====================================
-             DEPARTMENT CHARGES
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.department_charges)
-
-            FROM service_entries se
-
-            WHERE se.team_id = $1
-
-            AND EXTRACT(MONTH FROM se.created_at) = m.month
-            AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS department_charges,
-
-          /* =====================================
-             SERVICE REVENUE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.service_charges)
-
-            FROM service_entries se
-
-            WHERE se.team_id = $1
-
-            AND EXTRACT(MONTH FROM se.created_at) = m.month
-            AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS service_revenue,
-
-          /* =====================================
-             EXPENSE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(e.amount)
-
-            FROM expenses e
-
-            WHERE e.team_id = $1
-
-            AND EXTRACT(MONTH FROM e.created_at) = m.month
-            AND EXTRACT(YEAR FROM e.created_at) = $2
-          ), 0) AS expense
-
-        FROM months m
-
-        ORDER BY m.month
-        `,
-        [teamId, year]
-      );
-
-      const rows = result.rows.map((row) => {
-
-        const revenue =
-          Number(row.revenue || 0);
-
-        const expense =
-          Number(row.expense || 0);
-
-        const departmentCharges =
-          Number(row.department_charges || 0);
-
-        const serviceRevenue =
-          Number(row.service_revenue || 0);
-
-        return {
-          month: Number(row.month),
-
-          revenue,
-          expense,
-          department_charges: departmentCharges,
-          service_revenue: serviceRevenue,
-
-          profit:
-            revenue
-            - departmentCharges
-            - expense,
-        };
-      });
-
-      res.json(rows);
-
-    } catch (err) {
-
-      console.error(
-        "Trend analytics error:",
-        err
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to load trend analytics",
-      });
-
-    } finally {
-
-      client.release();
-
-    }
-  }
-);
 
 export default router;
