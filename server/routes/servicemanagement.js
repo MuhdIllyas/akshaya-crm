@@ -1177,7 +1177,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
        finalCategoryId ? parseInt(finalCategoryId) : null,
        finalSubcategoryId ? parseInt(finalSubcategoryId) : null,
        finalServiceCharge, finalDepartmentCharge, finalTotalCharge,
-       status || 'completed', expiryDate || null, staffId, customerServiceId || null, workSource]
+       status || 'completed', expiryDate || null, staffId, customerServiceId || null, workSource, resolvedTeamId]
     );
 
     const serviceEntryId = result.rows[0].id;
@@ -1204,7 +1204,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
       const deptGroupId = crypto.randomUUID();
       await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2 RETURNING balance', [Number(finalDepartmentCharge), Number(debitWalletId)]);
       await client.query(
-        `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, resolvedTeamId, created_at)
+        `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, team_id, created_at)
          VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, $7, NOW())`,
         [Number(debitWalletId), Number(staffId), Number(finalDepartmentCharge), `Department charge for ${serviceName} (#${serviceEntryId})`, serviceEntryId, deptGroupId, resolvedTeamId]
       );
@@ -1225,7 +1225,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
         const walletType = walletRes.rows[0].wallet_type;
         await client.query('UPDATE wallets SET balance = balance + $1 WHERE id = $2 RETURNING balance', [payment.amount, payment.wallet]);
         await client.query(
-          `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, resolvedTeamId, reference_payment_id, created_at)
+          `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, team_id, reference_payment_id, created_at)
            VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, $8, NOW())`,
           [payment.wallet, staffId, payment.amount, `${walletType === 'cash' ? 'Cash' : 'Online'} payment for ${serviceName} (#${serviceEntryId})`, serviceEntryId, groupId, resolvedTeamId, paymentId]
         );
@@ -1709,7 +1709,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       `INSERT INTO wallet_transactions (
         wallet_id, staff_id, type, amount, description, category,
         reference_id, reference_type, is_reversal, correction_group_id,
-        reference_payment_id, resolvedTeamId, created_at
+        reference_payment_id, team_id, created_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,$11,NOW())`,
       [
         original.wallet_id,
@@ -1769,7 +1769,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       `INSERT INTO wallet_transactions (
         wallet_id, staff_id, type, amount, description, category,
         reference_id, reference_type, correction_group_id,
-        reference_payment_id, resolvedTeamId, created_at
+        reference_payment_id, team_id, created_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW()) RETURNING id`,
       [
         finalWalletId,
@@ -2997,7 +2997,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
         reference_type,
         correction_group_id,
         reference_payment_id,
-        resolvedTeamId,
+        team_id,
         created_at
       )
       VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, $8, NOW())
@@ -3009,7 +3009,8 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
         `Pending payment collected for service #${serviceEntryId}`,
         serviceEntryId,
         groupId,
-        paymentId
+        paymentId,
+        resolvedTeamId
       ]
     );
 
