@@ -652,6 +652,39 @@ router.post('/debit-salary', async (req, res) => {
       INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, created_at)
       VALUES ($1, $2, 'debit', $3, $4, 'Salary', NOW())
     `, [wallet_id, req.user.id, amount, transactionDescription]);
+
+    //Inserted into expense table to view as expense category
+    await client.query(`
+      INSERT INTO expenses (
+        centre_id,
+        staff_id,
+        category,
+        amount,
+        description,
+        wallet_id,
+        payment_method,
+        expense_date,
+        status,
+        requires_approval,
+        submitted_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        CURRENT_DATE,
+        'auto_approved',
+        false,
+        NOW()
+      )
+    `, [
+      wallet.centre_id,
+      req.user.id,
+      'Salary',
+      amount,
+      transactionDescription,
+      wallet_id,
+      'salary'
+    ]);
+
     const performedBy = req.user.username || req.user.name || req.user.email || 'System';
     await client.query(`
       INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
