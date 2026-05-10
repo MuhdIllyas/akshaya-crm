@@ -1019,14 +1019,14 @@ router.get(
              EXPENSE
           ===================================== */
 
-          COALESCE((
+        COALESCE((
             SELECT SUM(e.amount)
 
             FROM expenses e
 
-            WHERE e.created_by = s.id
+            WHERE e.staff_id = s.id
             AND e.team_id = $1
-          ), 0) AS expense
+        ), 0) AS expense
 
         FROM team_members tm
 
