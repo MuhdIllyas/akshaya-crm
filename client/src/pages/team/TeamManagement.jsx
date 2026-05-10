@@ -61,10 +61,10 @@ const TeamManagement = () => {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all"); // all, centre, global
   const [centreFilter, setCentreFilter] = useState("all");
 
-  // Centres list (only for superadmin)
+  // Centres list (only used by superadmin)
   const [centres, setCentres] = useState([]);
 
   // Modals
@@ -83,12 +83,14 @@ const TeamManagement = () => {
 
   // Available staff for member selection
   const [availableStaff, setAvailableStaff] = useState([]);
+  const [staffSearch, setStaffSearch] = useState("");
 
-  // Add member dropdown state (for manage modal)
-  const [addMemberValue, setAddMemberValue] = useState("");
+  // Add member search in manage modal
+  const [addMemberSearchOpen, setAddMemberSearchOpen] = useState(false);
+  const [addMemberSearch, setAddMemberSearch] = useState("");
 
   // ------------------------------------------------------------------
-  // Fetch teams
+  // Fetch teams from backend (now with financial data)
   // ------------------------------------------------------------------
   const fetchTeams = async () => {
     setLoading(true);
@@ -97,12 +99,16 @@ const TeamManagement = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await response.json();
+      // Backend now returns revenue, expense, profit directly
       setTeams(data);
 
       const total = data.length;
       const global = data.filter((t) => t.is_global).length;
       const centre = total - global;
-      const members = data.reduce((sum, t) => sum + Number(t.member_count), 0);
+      const members = data.reduce(
+        (sum, t) => sum + Number(t.member_count),
+        0
+      );
       setTotalStats({ total, global, centre, members });
     } catch (error) {
       console.error("Fetch teams failed:", error);
@@ -112,10 +118,10 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Fetch centres (superadmin only)
+  // Fetch centres (only for superadmin, like CalendarPage)
   // ------------------------------------------------------------------
   const fetchCentres = async () => {
-    if (!isSuperAdmin) return;
+    if (!isSuperAdmin) return; // admins don't need the centre list
     try {
       const response = await fetch(`${API_BASE}/api/wallet/centres`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
@@ -128,11 +134,12 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Fetch staff (same pattern as CalendarPage)
+  // Fetch staff (same logic as CalendarPage)
   // ------------------------------------------------------------------
   const fetchStaff = async () => {
     try {
       let url = `${API_BASE}/api/servicemanagement/staff`;
+      // Admins must scope to their own centre
       if (!isSuperAdmin) {
         url += `?centre_id=${user.centreId}`;
       }
@@ -141,6 +148,7 @@ const TeamManagement = () => {
       });
       if (!response.ok) throw new Error("Failed to fetch staff");
       const data = await response.json();
+      // CalendarPage expects an array directly
       const staffList = Array.isArray(data) ? data : data.staff || [];
       setAvailableStaff(staffList);
     } catch (error) {
@@ -152,9 +160,9 @@ const TeamManagement = () => {
   useEffect(() => {
     fetchTeams();
     fetchCentres();
-    // Fetch staff once on mount; can be refreshed before opening modals
-    fetchStaff();
   }, []);
+
+  // No longer need separate fetchAvailableStaff – use fetchStaff everywhere
 
   // ------------------------------------------------------------------
   // Filtered teams
@@ -186,7 +194,7 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Create team modal handlers
+  // Create team modal
   // ------------------------------------------------------------------
   const openCreateModal = () => {
     setTeamForm({
@@ -196,7 +204,7 @@ const TeamManagement = () => {
       centre_id: user.role === "admin" ? user.centreId : null,
       members: [],
     });
-    fetchStaff(); // refresh staff
+    fetchStaff(); // refresh staff list before opening
     setShowCreateModal(true);
   };
 
@@ -239,37 +247,27 @@ const TeamManagement = () => {
     }
   };
 
-  // Add a member from the dropdown in create modal
-  const addMemberToForm = (staffId) => {
-    if (!staffId) return;
+  const toggleMemberSelection = (staffId) => {
     setTeamForm((prev) => ({
       ...prev,
       members: prev.members.includes(staffId)
-        ? prev.members
+        ? prev.members.filter((id) => id !== staffId)
         : [...prev.members, staffId],
     }));
   };
 
-  const removeMemberFromForm = (staffId) => {
-    setTeamForm((prev) => ({
-      ...prev,
-      members: prev.members.filter((id) => id !== staffId),
-    }));
-  };
-
   // ------------------------------------------------------------------
-  // Manage members modal handlers
+  // Manage members modal
   // ------------------------------------------------------------------
   const openManageMembers = async (team) => {
     setSelectedTeam(team);
-    fetchStaff(); // ensure latest staff
+    fetchStaff(); // ensure latest staff list (for adding members)
     try {
       const response = await fetch(`${API_BASE}/api/teams/${team.id}/members`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const membersData = await response.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: membersData }));
-      setAddMemberValue(""); // reset dropdown
       setShowManageMembersModal(true);
     } catch (error) {
       console.error("Fetch members failed:", error);
@@ -303,7 +301,7 @@ const TeamManagement = () => {
   };
 
   const handleAddMemberToTeam = async (staffId) => {
-    if (!selectedTeam || !staffId) return;
+    if (!selectedTeam) return;
     setSubmitting(true);
     try {
       const response = await fetch(
@@ -318,7 +316,6 @@ const TeamManagement = () => {
         }
       );
       if (!response.ok) throw new Error("Failed to add member");
-
       // refresh members
       const updatedRes = await fetch(
         `${API_BASE}/api/teams/${selectedTeam.id}/members`,
@@ -330,7 +327,8 @@ const TeamManagement = () => {
       );
       const updatedMembers = await updatedRes.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: updatedMembers }));
-      setAddMemberValue(""); // reset dropdown
+      setAddMemberSearchOpen(false);
+      setAddMemberSearch("");
       fetchTeams();
     } catch (error) {
       alert(error.message || "Error adding member");
@@ -361,11 +359,10 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Render
+  // Render (unchanged except centre filter dropdown uses centres state)
   // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      {/* Outer container omitted for brevity, same as before */}
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
@@ -400,12 +397,230 @@ const TeamManagement = () => {
           </div>
         </div>
 
-        {/* Stats cards and filters unchanged */}
-        {/* ... (same as previous version) ... */}
-        {/* Keep the same stats cards and filter section here */}
+        {/* Top Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-600">Total Teams</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">
+                  {totalStats.total}
+                </p>
+              </div>
+              <div className="bg-indigo-100 p-3 rounded-xl">
+                <FiUsers className="text-indigo-600 text-xl" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-600">Global Teams</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">
+                  {totalStats.global}
+                </p>
+              </div>
+              <div className="bg-purple-100 p-3 rounded-xl">
+                <FiGlobe className="text-purple-600 text-xl" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-600">Centre Teams</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">
+                  {totalStats.centre}
+                </p>
+              </div>
+              <div className="bg-blue-100 p-3 rounded-xl">
+                <FiHome className="text-blue-600 text-xl" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-600">Total Members</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">
+                  {totalStats.members}
+                </p>
+              </div>
+              <div className="bg-green-100 p-3 rounded-xl">
+                <FiBarChart2 className="text-green-600 text-xl" />
+              </div>
+            </div>
+          </div>
+        </div>
 
-        {/* Teams Table unchanged except profit chip */}
-        {/* ... (same as before) ... */}
+        {/* Filters */}
+        <div className="flex flex-wrap gap-4 mb-6">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Types</option>
+            <option value="centre">Centre Teams</option>
+            <option value="global">Global Teams</option>
+          </select>
+          {isSuperAdmin && (
+            <select
+              value={centreFilter}
+              onChange={(e) => setCentreFilter(e.target.value)}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Centres</option>
+              {centres.map((centre) => (
+                <option key={centre.id} value={centre.id}>
+                  {centre.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Teams Table */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="py-4 px-5 text-left text-sm font-semibold text-gray-600">
+                    Team
+                  </th>
+                  <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
+                    Type
+                  </th>
+                  <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
+                    Members
+                  </th>
+                  <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
+                    Revenue
+                  </th>
+                  <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
+                    Expense
+                  </th>
+                  <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
+                    Profit
+                  </th>
+                  <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="7" className="py-10 text-center text-gray-500">
+                      Loading teams...
+                    </td>
+                  </tr>
+                ) : filteredTeams.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-10 text-center text-gray-500">
+                      No teams found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTeams.map((team) => (
+                    <tr
+                      key={team.id}
+                      className="border-b border-gray-100 hover:bg-gray-50"
+                    >
+                      <td className="py-4 px-5">
+                        <div className="flex items-center">
+                          <div
+                            className={`p-2 rounded-lg mr-3 ${
+                              team.is_global
+                                ? "bg-purple-100 text-purple-800"
+                                : "bg-indigo-100 text-indigo-800"
+                            }`}
+                          >
+                            {team.is_global ? <FiGlobe /> : <FiHome />}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-800">
+                              {team.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {team.centre_id
+                                ? `Centre #${team.centre_id}`
+                                : "Cross-Centre"}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-5 text-center">
+                        <span
+                          className={`inline-block px-2 py-1 text-xs rounded-full font-medium ${
+                            team.is_global
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-blue-100 text-blue-800"
+                          }`}
+                        >
+                          {team.is_global ? "Global" : "Centre"}
+                        </span>
+                      </td>
+                      <td className="py-4 px-5 text-center font-medium">
+                        {team.member_count}
+                      </td>
+                      <td className="py-4 px-5 text-right text-green-700">
+                        {formatCurrency(team.revenue || 0)}
+                      </td>
+                      <td className="py-4 px-5 text-right text-red-600">
+                        {formatCurrency(team.expense || 0)}
+                      </td>
+                      <td className="py-4 px-5 text-right">
+                        <span
+                          className={`font-semibold ${
+                            Number(team.profit || 0) >= 0
+                              ? "text-green-700"
+                              : "text-red-700"
+                          }`}
+                        >
+                          {formatCurrency(team.profit || 0)}
+                        </span>
+                      </td>
+                      <td className="py-4 px-5 text-center">
+                        <div className="flex justify-center gap-2">
+                          <button
+                            onClick={() => openManageMembers(team)}
+                            className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded-lg hover:bg-indigo-50"
+                            title="Manage Members"
+                          >
+                            <FiUsers size={16} />
+                          </button>
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() =>
+                                  alert("Edit team (to be implemented)")
+                                }
+                                className="text-gray-600 hover:text-gray-800 p-1.5 rounded-lg hover:bg-gray-100"
+                                title="Edit"
+                              >
+                                <FiEdit size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTeam(team.id)}
+                                disabled={submitting}
+                                className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                                title="Delete"
+                              >
+                                <FiTrash2 size={16} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       {/* ---- CREATE TEAM MODAL ---- */}
@@ -426,18 +641,104 @@ const TeamManagement = () => {
               </div>
             </div>
             <form onSubmit={handleCreateTeam} className="p-6 space-y-5">
-              {/* Name, Description, Global toggle, Centre (if superadmin) unchanged */}
-              {/* ... */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Team Name *
+                </label>
+                <input
+                  type="text"
+                  value={teamForm.name}
+                  onChange={(e) =>
+                    setTeamForm({ ...teamForm, name: e.target.value })
+                  }
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                  disabled={submitting}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={teamForm.description}
+                  onChange={(e) =>
+                    setTeamForm({
+                      ...teamForm,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  rows={2}
+                  disabled={submitting}
+                />
+              </div>
 
-              {/* Member selector – now a dropdown */}
+              {isSuperAdmin && (
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="is_global"
+                    checked={teamForm.is_global}
+                    onChange={(e) => {
+                      setTeamForm({
+                        ...teamForm,
+                        is_global: e.target.checked,
+                        centre_id: e.target.checked
+                          ? null
+                          : teamForm.centre_id,
+                      });
+                    }}
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                    disabled={submitting}
+                  />
+                  <label
+                    htmlFor="is_global"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Global (Cross-Centre) Team
+                  </label>
+                </div>
+              )}
+
+              {!teamForm.is_global && isSuperAdmin && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Centre
+                  </label>
+                  <select
+                    value={teamForm.centre_id || ""}
+                    onChange={(e) =>
+                      setTeamForm({
+                        ...teamForm,
+                        centre_id: e.target.value
+                          ? Number(e.target.value)
+                          : null,
+                      })
+                    }
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={submitting}
+                  >
+                    <option value="">Select centre</option>
+                    {centres.map((centre) => (
+                      <option key={centre.id} value={centre.id}>
+                        {centre.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Member selector */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Initial Members
                 </label>
-                {/* Show selected members as tags */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {teamForm.members.map((staffId) => {
-                    const staff = availableStaff.find((s) => s.id === staffId);
+                    const staff = availableStaff.find(
+                      (s) => s.id === staffId
+                    );
                     return (
                       <span
                         key={staffId}
@@ -446,7 +747,7 @@ const TeamManagement = () => {
                         {staff?.name || `ID ${staffId}`}
                         <button
                           type="button"
-                          onClick={() => removeMemberFromForm(staffId)}
+                          onClick={() => toggleMemberSelection(staffId)}
                           className="ml-2 text-indigo-600 hover:text-indigo-800"
                           disabled={submitting}
                         >
@@ -456,25 +757,47 @@ const TeamManagement = () => {
                     );
                   })}
                 </div>
-                {/* Dropdown to add members */}
-                <select
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value=""
-                  onChange={(e) => {
-                    const staffId = Number(e.target.value);
-                    if (staffId) addMemberToForm(staffId);
-                  }}
-                  disabled={submitting}
-                >
-                  <option value="">-- Add a staff --</option>
-                  {availableStaff
-                    .filter((s) => !teamForm.members.includes(s.id))
-                    .map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} {staff.role ? `(${staff.role})` : ""}
-                      </option>
-                    ))}
-                </select>
+                <div className="relative">
+                  <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search staff to add..."
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={staffSearch}
+                    onChange={(e) => setStaffSearch(e.target.value)}
+                    disabled={submitting}
+                  />
+                  {staffSearch && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                      {availableStaff
+                        .filter(
+                          (s) =>
+                            s.name
+                              .toLowerCase()
+                              .includes(staffSearch.toLowerCase()) &&
+                            !teamForm.members.includes(s.id)
+                        )
+                        .map((staff) => (
+                          <div
+                            key={staff.id}
+                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+                            onClick={() => {
+                              toggleMemberSelection(staff.id);
+                              setStaffSearch("");
+                            }}
+                          >
+                            <div>
+                              <p className="font-medium">{staff.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {staff.role}
+                              </p>
+                            </div>
+                            <FiPlus className="text-indigo-600" />
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
@@ -538,35 +861,71 @@ const TeamManagement = () => {
               </div>
             </div>
             <div className="p-6">
-              {/* Add member section – now a dropdown */}
-              <div className="mb-6 flex items-center gap-3">
-                <select
-                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={addMemberValue}
-                  onChange={(e) => setAddMemberValue(e.target.value)}
-                  disabled={submitting}
-                >
-                  <option value="">-- Select staff to add --</option>
-                  {availableStaff
-                    .filter(
-                      (s) =>
-                        !selectedTeam.membersList?.some(
-                          (m) => m.staff_id === s.id
-                        )
-                    )
-                    .map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} {staff.role ? `(${staff.role})` : ""}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  onClick={() => handleAddMemberToTeam(Number(addMemberValue))}
-                  disabled={!addMemberValue || submitting}
-                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <FiUserPlus /> Add
-                </button>
+              {/* Add member section */}
+              <div className="mb-4">
+                {!addMemberSearchOpen ? (
+                  <button
+                    onClick={() => setAddMemberSearchOpen(true)}
+                    className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 flex items-center"
+                  >
+                    <FiUserPlus className="mr-2" /> Add Member
+                  </button>
+                ) : (
+                  <div className="relative">
+                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search staff to add..."
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={addMemberSearch}
+                      onChange={(e) => setAddMemberSearch(e.target.value)}
+                      autoFocus
+                      disabled={submitting}
+                    />
+                    <button
+                      onClick={() => {
+                        setAddMemberSearchOpen(false);
+                        setAddMemberSearch("");
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <FiX size={16} />
+                    </button>
+                    {addMemberSearch && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                        {availableStaff
+                          .filter(
+                            (s) =>
+                              s.name
+                                .toLowerCase()
+                                .includes(
+                                  addMemberSearch.toLowerCase()
+                                ) &&
+                              !selectedTeam.membersList?.some(
+                                (m) => m.staff_id === s.id
+                              )
+                          )
+                          .map((staff) => (
+                            <div
+                              key={staff.id}
+                              className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+                              onClick={() =>
+                                handleAddMemberToTeam(staff.id)
+                              }
+                            >
+                              <div>
+                                <p className="font-medium">{staff.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {staff.role}
+                                </p>
+                              </div>
+                              <FiPlus className="text-indigo-600" />
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Members list */}
