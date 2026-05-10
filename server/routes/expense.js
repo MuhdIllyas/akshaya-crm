@@ -279,12 +279,14 @@ router.get("/", async (req, res) => {
 
     const result = await req.db.query(
       `SELECT e.*,
-              TO_CHAR(e.expense_date, 'YYYY-MM-DD') AS expense_date,
-              s.name AS staff_name,
-              w.name AS wallet_name
+          TO_CHAR(e.expense_date, 'YYYY-MM-DD') AS expense_date,
+          s.name AS staff_name,
+          w.name AS wallet_name,
+          t.name AS team_name
        FROM expenses e
        JOIN staff s ON e.staff_id = s.id
        JOIN wallets w ON e.wallet_id = w.id
+       LEFT JOIN teams t ON e.team_id = t.id
        WHERE e.centre_id = $1
          AND COALESCE(e.is_reversal, FALSE) = FALSE
        ORDER BY e.expense_date DESC`,
@@ -309,6 +311,11 @@ router.put("/:id/approve", async (req, res) => {
   try {
     await client.query("BEGIN");
 
+    const {
+      team_id,
+      assignment_notes
+    } = req.body;
+
     const expRes = await client.query(
       `SELECT * FROM expenses WHERE id = $1 AND status = 'pending' FOR UPDATE`,
       [req.params.id]
@@ -317,6 +324,8 @@ router.put("/:id/approve", async (req, res) => {
       throw new Error("Expense not found or already processed");
     }
     const exp = expRes.rows[0];
+
+    const finalTeamId = team_id || exp.team_id || null;
 
     const walletCheck = await client.query(
       `SELECT balance FROM wallets WHERE id = $1`,
@@ -353,7 +362,7 @@ router.put("/:id/approve", async (req, res) => {
         exp.staff_id,
         exp.amount,
         exp.description || `${exp.category} Expense`,
-        exp.team_id,
+        finalTeamId,
         exp.id,
         exp.correction_group_id
       ]
@@ -365,8 +374,22 @@ router.put("/:id/approve", async (req, res) => {
     );
 
     await client.query(
-      `UPDATE expenses SET status = 'approved', approved_at = NOW(), approved_by = $1 WHERE id = $2`,
-      [req.user.id, req.params.id]
+      `
+      UPDATE expenses
+      SET
+        status = 'approved',
+        approved_at = NOW(),
+        approved_by = $1,
+        team_id = $2,
+        remarks = COALESCE($3, remarks)
+      WHERE id = $4
+      `,
+      [
+        req.user.id,
+        finalTeamId,
+        assignment_notes || null,
+        req.params.id
+      ]
     );
 
     await client.query("COMMIT");
