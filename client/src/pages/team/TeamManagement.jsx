@@ -59,15 +59,16 @@ const TeamManagement = () => {
     members: 0,
   });
 
+  // Financial data from analytics endpoint
+  const [financialData, setFinancialData] = useState({ teams: [], totals: {} });
+
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("all"); // all, centre, global
   const [centreFilter, setCentreFilter] = useState("all");
 
-  // Centres list (only used by superadmin)
+  // Centres list (superadmin) + admin's own centre name
   const [centres, setCentres] = useState([]);
-
-  // Extra state for admin’s own centre name
   const [adminCentreName, setAdminCentreName] = useState("");
 
   // Modals
@@ -86,12 +87,10 @@ const TeamManagement = () => {
 
   // Available staff for member selection
   const [availableStaff, setAvailableStaff] = useState([]);
-
-  // Add member dropdown value (for manage modal)
   const [addMemberValue, setAddMemberValue] = useState("");
 
   // ------------------------------------------------------------------
-  // Fetch teams from backend (now with financial data)
+  // Fetch teams
   // ------------------------------------------------------------------
   const fetchTeams = async () => {
     setLoading(true);
@@ -100,7 +99,6 @@ const TeamManagement = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await response.json();
-      // Backend now returns revenue, expense, profit directly
       setTeams(data);
 
       const total = data.length;
@@ -119,7 +117,25 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Fetch centres (superadmin = all centres, admin = own centre name)
+  // Fetch financial summary
+  // ------------------------------------------------------------------
+  const fetchFinancials = async () => {
+    try {
+      // All-time summary (no date filters). Add from/to later if needed.
+      const response = await fetch(`${API_BASE}/api/teams/analytics/summary`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFinancialData(data); // { totals, teams }
+      }
+    } catch (error) {
+      console.error("Fetch financials failed:", error);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Fetch centres (superadmin = all, admin = own)
   // ------------------------------------------------------------------
   const fetchCentres = async () => {
     if (isSuperAdmin) {
@@ -133,14 +149,10 @@ const TeamManagement = () => {
         console.error("Fetch centres failed:", error);
       }
     } else if (isAdmin) {
-      // Admin only needs their own centre name
       try {
-        const response = await fetch(
-          `${API_BASE}/api/centres/${user.centreId}`,
-          {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-          }
-        );
+        const response = await fetch(`${API_BASE}/api/centres/${user.centreId}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
         if (response.ok) {
           const centre = await response.json();
           setAdminCentreName(centre.name || "");
@@ -164,12 +176,11 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Fetch staff (same logic as CalendarPage)
+  // Fetch staff (same as CalendarPage)
   // ------------------------------------------------------------------
   const fetchStaff = async () => {
     try {
       let url = `${API_BASE}/api/servicemanagement/staff`;
-      // Admins must scope to their own centre
       if (!isSuperAdmin) {
         url += `?centre_id=${user.centreId}`;
       }
@@ -178,7 +189,6 @@ const TeamManagement = () => {
       });
       if (!response.ok) throw new Error("Failed to fetch staff");
       const data = await response.json();
-      // CalendarPage expects an array directly
       const staffList = Array.isArray(data) ? data : data.staff || [];
       setAvailableStaff(staffList);
     } catch (error) {
@@ -187,17 +197,34 @@ const TeamManagement = () => {
     }
   };
 
+  // Initial load
   useEffect(() => {
     fetchTeams();
     fetchCentres();
     fetchStaff();
+    fetchFinancials();
   }, []);
+
+  // ------------------------------------------------------------------
+  // Merge team list with financials
+  // ------------------------------------------------------------------
+  const mergedTeams = useMemo(() => {
+    return teams.map((team) => {
+      const fin = financialData.teams.find((t) => t.id === team.id);
+      return {
+        ...team,
+        revenue: fin ? fin.revenue : 0,
+        expense: fin ? fin.expense : 0,
+        profit: fin ? fin.profit : 0,
+      };
+    });
+  }, [teams, financialData]);
 
   // ------------------------------------------------------------------
   // Filtered teams
   // ------------------------------------------------------------------
   const filteredTeams = useMemo(() => {
-    return teams.filter((team) => {
+    return mergedTeams.filter((team) => {
       const matchesSearch = team.name
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
@@ -209,7 +236,7 @@ const TeamManagement = () => {
         centreFilter === "all" || String(team.centre_id) === centreFilter;
       return matchesSearch && matchesType && matchesCentre;
     });
-  }, [teams, searchTerm, typeFilter, centreFilter]);
+  }, [mergedTeams, searchTerm, typeFilter, centreFilter]);
 
   // ------------------------------------------------------------------
   // Currency formatter
@@ -233,7 +260,7 @@ const TeamManagement = () => {
       centre_id: user.role === "admin" ? user.centreId : null,
       members: [],
     });
-    fetchStaff(); // refresh staff list before opening
+    fetchStaff();
     setShowCreateModal(true);
   };
 
@@ -269,6 +296,7 @@ const TeamManagement = () => {
 
       setShowCreateModal(false);
       fetchTeams();
+      fetchFinancials(); // refresh financials as well
     } catch (error) {
       alert(error.message || "Error creating team");
     } finally {
@@ -276,7 +304,6 @@ const TeamManagement = () => {
     }
   };
 
-  // Add a member from the dropdown in create modal
   const addMemberToForm = (staffId) => {
     if (!staffId) return;
     setTeamForm((prev) => ({
@@ -299,14 +326,14 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   const openManageMembers = async (team) => {
     setSelectedTeam(team);
-    fetchStaff(); // ensure latest staff list (for adding members)
+    fetchStaff();
     try {
       const response = await fetch(`${API_BASE}/api/teams/${team.id}/members`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const membersData = await response.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: membersData }));
-      setAddMemberValue(""); // reset dropdown
+      setAddMemberValue("");
       setShowManageMembersModal(true);
     } catch (error) {
       console.error("Fetch members failed:", error);
@@ -334,6 +361,7 @@ const TeamManagement = () => {
       });
       if (selectedTeam) openManageMembers(selectedTeam);
       fetchTeams();
+      fetchFinancials(); // refresh
     } catch (error) {
       console.error("Remove member failed:", error);
     }
@@ -356,7 +384,6 @@ const TeamManagement = () => {
       );
       if (!response.ok) throw new Error("Failed to add member");
 
-      // refresh members
       const updatedRes = await fetch(
         `${API_BASE}/api/teams/${selectedTeam.id}/members`,
         {
@@ -367,8 +394,9 @@ const TeamManagement = () => {
       );
       const updatedMembers = await updatedRes.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: updatedMembers }));
-      setAddMemberValue(""); // reset dropdown
+      setAddMemberValue("");
       fetchTeams();
+      fetchFinancials(); // member count may change; refresh financials just in case
     } catch (error) {
       alert(error.message || "Error adding member");
     } finally {
@@ -390,6 +418,7 @@ const TeamManagement = () => {
       });
       if (!response.ok) throw new Error("Failed to delete team");
       fetchTeams();
+      fetchFinancials();
     } catch (error) {
       alert(error.message || "Error deleting team");
     } finally {
@@ -398,7 +427,7 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Render
+  // Render (unchanged except financial columns now use real data)
   // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
@@ -583,7 +612,9 @@ const TeamManagement = () => {
                               {team.name}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {team.centre_id ? getCentreName(team.centre_id) : 'Cross-Centre'}
+                              {team.centre_id
+                                ? getCentreName(team.centre_id)
+                                : "Cross-Centre"}
                             </p>
                           </div>
                         </div>
