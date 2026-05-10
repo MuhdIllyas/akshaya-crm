@@ -133,9 +133,13 @@ router.get("/analytics/summary", async (req, res) => {
       team_id,
     } = req.query;
 
-    let teamWhere = "";
     let params = [];
     let paramIndex = 1;
+
+    let teamWhere = "";
+    let serviceDateFilter = "";
+    let paymentDateFilter = "";
+    let expenseDateFilter = "";
 
     /* =====================================================
        TEAM FILTER
@@ -159,10 +163,8 @@ router.get("/analytics/summary", async (req, res) => {
     if (req.user.role === "admin") {
 
       teamWhere += `
-        AND (
-          t.centre_id = $${paramIndex}
-          AND t.is_global = false
-        )
+        AND t.centre_id = $${paramIndex}
+        AND t.is_global = false
       `;
 
       params.push(req.user.centre_id);
@@ -190,13 +192,14 @@ router.get("/analytics/summary", async (req, res) => {
        DATE FILTERS
     ===================================================== */
 
-    let serviceDateFilter = "";
-    let expenseDateFilter = "";
-
     if (from) {
 
       serviceDateFilter += `
         AND se.created_at >= $${paramIndex}::date
+      `;
+
+      paymentDateFilter += `
+        AND p.created_at >= $${paramIndex}::date
       `;
 
       expenseDateFilter += `
@@ -212,6 +215,11 @@ router.get("/analytics/summary", async (req, res) => {
 
       serviceDateFilter += `
         AND se.created_at <
+        ($${paramIndex}::date + INTERVAL '1 day')
+      `;
+
+      paymentDateFilter += `
+        AND p.created_at <
         ($${paramIndex}::date + INTERVAL '1 day')
       `;
 
@@ -244,7 +252,7 @@ router.get("/analytics/summary", async (req, res) => {
         ) AS member_count,
 
         /* =========================================
-           REVENUE (TOTAL CUSTOMER COLLECTION)
+           EXPECTED REVENUE
         ========================================= */
 
         COALESCE((
@@ -256,7 +264,35 @@ router.get("/analytics/summary", async (req, res) => {
 
           ${serviceDateFilter}
 
-        ), 0) AS revenue,
+        ), 0) AS expected_revenue,
+
+        /* =========================================
+           COLLECTED REVENUE
+        ========================================= */
+
+        COALESCE((
+          SELECT SUM(p.amount)
+
+          FROM payments p
+
+          JOIN service_entries se
+            ON se.id = p.service_entry_id
+
+          WHERE se.team_id = t.id
+            AND p.status = 'received'
+
+            AND COALESCE(p.is_reversal, FALSE) = FALSE
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM wallet_transactions wt
+              WHERE wt.reference_payment_id = p.id
+              AND COALESCE(wt.is_reversal, FALSE) = TRUE
+            )
+
+            ${paymentDateFilter}
+
+        ), 0) AS collected_revenue,
 
         /* =========================================
            DEPARTMENT CHARGES
@@ -274,7 +310,7 @@ router.get("/analytics/summary", async (req, res) => {
         ), 0) AS department_charges,
 
         /* =========================================
-           SERVICE REVENUE
+           SERVICE PROFIT
         ========================================= */
 
         COALESCE((
@@ -286,10 +322,10 @@ router.get("/analytics/summary", async (req, res) => {
 
           ${serviceDateFilter}
 
-        ), 0) AS service_revenue,
+        ), 0) AS service_profit,
 
         /* =========================================
-           EXPENSE
+           EXPENSES
         ========================================= */
 
         COALESCE((
@@ -309,35 +345,44 @@ router.get("/analytics/summary", async (req, res) => {
 
       ${teamWhere}
 
-      ORDER BY revenue DESC
+      ORDER BY collected_revenue DESC
       `,
       params
     );
 
     const teams = result.rows.map((team) => {
 
-      const revenue =
-        Number(team.revenue || 0);
+      const expectedRevenue =
+        Number(team.expected_revenue || 0);
 
-      const expense =
-        Number(team.expense || 0);
+      const collectedRevenue =
+        Number(team.collected_revenue || 0);
 
       const departmentCharges =
         Number(team.department_charges || 0);
 
-      const serviceRevenue =
-        Number(team.service_revenue || 0);
+      const serviceProfit =
+        Number(team.service_profit || 0);
+
+      const expense =
+        Number(team.expense || 0);
 
       return {
         ...team,
 
-        revenue,
-        expense,
-        department_charges: departmentCharges,
-        service_revenue: serviceRevenue,
+        expected_revenue: expectedRevenue,
+        collected_revenue: collectedRevenue,
+        pending_revenue:
+          expectedRevenue - collectedRevenue,
 
-        profit:
-          revenue
+        department_charges: departmentCharges,
+
+        service_profit: serviceProfit,
+
+        expense,
+
+        net_profit:
+          collectedRevenue
           - departmentCharges
           - expense,
       };
@@ -346,21 +391,25 @@ router.get("/analytics/summary", async (req, res) => {
     const totals = teams.reduce(
       (acc, row) => {
 
-        acc.revenue += row.revenue;
-        acc.expense += row.expense;
+        acc.expected_revenue += row.expected_revenue;
+        acc.collected_revenue += row.collected_revenue;
+        acc.pending_revenue += row.pending_revenue;
         acc.department_charges += row.department_charges;
-        acc.service_revenue += row.service_revenue;
-        acc.profit += row.profit;
+        acc.service_profit += row.service_profit;
+        acc.expense += row.expense;
+        acc.net_profit += row.net_profit;
 
         return acc;
 
       },
       {
-        revenue: 0,
-        expense: 0,
+        expected_revenue: 0,
+        collected_revenue: 0,
+        pending_revenue: 0,
         department_charges: 0,
-        service_revenue: 0,
-        profit: 0,
+        service_profit: 0,
+        expense: 0,
+        net_profit: 0,
       }
     );
 
