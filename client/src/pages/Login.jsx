@@ -17,6 +17,12 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // ✅ Page‑load fade‑in animation (does not affect size)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // ✅ Handle session expired toast from ProtectedRoute redirect
   useEffect(() => {
     if (location.state?.reason === "session_expired") {
@@ -195,16 +201,18 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      {/* ❌ ToastContainer REMOVED - Now using global container from App.jsx */}
-      
-      <div className="w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+      <div
+        className={`w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200 transition-opacity duration-700 ${
+          mounted ? "opacity-100" : "opacity-0"
+        }`}
+      >
         <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
-          {/* Background pattern */}
+          {/* Background pattern with subtle pulse animation */}
           <div className="absolute inset-0 opacity-10">
             <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
               <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
-              <circle cx="20" cy="80" r="15" fill="#fff" />
-              <circle cx="80" cy="20" r="10" fill="#fff" />
+              <circle cx="20" cy="80" r="15" fill="#fff" className="animate-pulse" />
+              <circle cx="80" cy="20" r="10" fill="#fff" className="animate-pulse" style={{ animationDelay: "0.5s" }} />
             </svg>
           </div>
           
@@ -469,6 +477,14 @@ const Login = () => {
         .text-navy-800 { color: #172a45; }
         .focus\\:ring-navy-500:focus { --tw-ring-color: #1e3a5f; }
         .border-navy-500 { border-color: #1e3a5f; }
+        /* Pulse animation for SVG circles – safe, no size change */
+        @keyframes pulse {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 0.4; }
+        }
+        .animate-pulse {
+          animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
       `}</style>
     </div>
   );
