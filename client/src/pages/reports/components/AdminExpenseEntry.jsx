@@ -22,20 +22,21 @@ const AdminExpenseEntry = ({
 }) => {
   // Default expense categories (can be overridden via props)
   const defaultCategories = [
-    { id: 1, name: "Salary Advance", color: "#3B82F6", icon: "💰", requires_approval: true },
-    { id: 2, name: "Rent Payment", color: "#10B981", icon: "🏠", requires_approval: true },
-    { id: 3, name: "Electricity Bill", color: "#EF4444", icon: "⚡", requires_approval: false },
-    { id: 4, name: "Maintenance", color: "#F59E0B", icon: "🔧", requires_approval: false },
-    { id: 5, name: "Ink Purchase", color: "#8B5CF6", icon: "🖨️", requires_approval: false },
-    { id: 6, name: "Paper Purchase", color: "#8B5CF6", icon: "📄", requires_approval: false },
-    { id: 7, name: "Internet Bill", color: "#EC4899", icon: "🌐", requires_approval: false },
-    { id: 8, name: "Transportation", color: "#14B8A6", icon: "🚗", requires_approval: false },
-    { id: 9, name: "Office Supplies", color: "#84CC16", icon: "📦", requires_approval: false },
-    { id: 10, name: "Cleaning Supplies", color: "#84CC16", icon: "🧹", requires_approval: false },
-    { id: 11, name: "Stationery", color: "#84CC16", icon: "✏️", requires_approval: false },
-    { id: 12, name: "Bank / CDM Charges", color: "#64748B", icon: "🏦", requires_approval: false },
-    { id: 13, name: "Other Expenses", color: "#6B7280", icon: "📝", requires_approval: false },
-    { id: 14, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true }
+    { id: 1, name: "Salary", color: "#3B82F6", icon: "💰", requires_approval: true },
+    { id: 2, name: "Salary Advance", color: "#3B82F6", icon: "💰", requires_approval: true },
+    { id: 3, name: "Rent Payment", color: "#10B981", icon: "🏠", requires_approval: true },
+    { id: 4, name: "Electricity Bill", color: "#EF4444", icon: "⚡", requires_approval: false },
+    { id: 5, name: "Maintenance", color: "#F59E0B", icon: "🔧", requires_approval: false },
+    { id: 6, name: "Ink Purchase", color: "#8B5CF6", icon: "🖨️", requires_approval: false },
+    { id: 7, name: "Paper Purchase", color: "#8B5CF6", icon: "📄", requires_approval: false },
+    { id: 8, name: "Internet Bill", color: "#EC4899", icon: "🌐", requires_approval: false },
+    { id: 9, name: "Transportation", color: "#14B8A6", icon: "🚗", requires_approval: false },
+    { id: 10, name: "Office Supplies", color: "#84CC16", icon: "📦", requires_approval: false },
+    { id: 11, name: "Cleaning Supplies", color: "#84CC16", icon: "🧹", requires_approval: false },
+    { id: 12, name: "Stationery", color: "#84CC16", icon: "✏️", requires_approval: false },
+    { id: 13, name: "Bank / CDM Charges", color: "#64748B", icon: "🏦", requires_approval: false },
+    { id: 14, name: "Other Expenses", color: "#6B7280", icon: "📝", requires_approval: false },
+    { id: 15, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true }
   ];
 
   // Default payment methods
