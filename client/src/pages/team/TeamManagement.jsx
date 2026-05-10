@@ -224,9 +224,27 @@ const TeamManagement = () => {
       const fin = financialData.teams.find((t) => t.id === team.id);
       return {
         ...team,
-        revenue: fin ? fin.revenue : 0,
-        expense: fin ? fin.expense : 0,
-        profit: fin ? fin.profit : 0,
+
+        expected_revenue:
+          fin ? fin.expected_revenue : 0,
+
+        collected_revenue:
+          fin ? fin.collected_revenue : 0,
+
+        pending_revenue:
+          fin ? fin.pending_revenue : 0,
+
+        department_charges:
+          fin ? fin.department_charges : 0,
+
+        service_profit:
+          fin ? fin.service_profit : 0,
+
+        expense:
+          fin ? fin.expense : 0,
+
+        net_profit:
+          fin ? fin.net_profit : 0,
       };
     });
   }, [teams, financialData]);
@@ -1175,7 +1193,7 @@ const TeamManagement = () => {
                                     )}
                                   </td>
                                   <td className="py-3 px-4 text-right text-green-700">
-                                    {formatCurrency(m.revenue)}
+                                    {formatCurrency(m.collected_revenue || 0)}
                                   </td>
                                   <td className="py-3 px-4 text-right text-red-600">
                                     {formatCurrency(m.expense)}
@@ -1184,10 +1202,10 @@ const TeamManagement = () => {
                                     className="py-3 px-4 text-right font-semibold"
                                     style={{
                                       color:
-                                        m.profit >= 0 ? "#15803d" : "#b91c1c",
+                                        m.net_profit >= 0 ? "#15803d" : "#b91c1c",
                                     }}
                                   >
-                                    {formatCurrency(m.profit)}
+                                    {formatCurrency(m.net_profit || 0)}
                                   </td>
                                 </tr>
                               ))}
@@ -1267,7 +1285,7 @@ const TeamManagement = () => {
                                       className="py-3 px-4 text-right font-semibold"
                                       style={{
                                         color:
-                                          row.profit >= 0
+                                          row.net_profit >= 0
                                             ? "#15803d"
                                             : "#b91c1c",
                                       }}
