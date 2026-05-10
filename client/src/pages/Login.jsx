@@ -17,34 +17,6 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // --- Feature carousel state (admin side) ---
-  const [currentFeature, setCurrentFeature] = useState(0);
-  const [fade, setFade] = useState(true);
-
-  const features = [
-    "Government & e‑Governance Services",
-    "Customer Service Management",
-    "Online Application Tracking",
-    "Digital Document Handling",
-    "Financial & Wallet Management",
-    "Staff & Centre Operations",
-    "WhatsApp Notifications & Updates",
-    "Citizen‑Friendly Digital Support",
-  ];
-
-  // Auto‑rotate features every 3.5 seconds
-  useEffect(() => {
-    if (isCustomerLogin) return; // stop rotation on customer tab
-    const interval = setInterval(() => {
-      setFade(false);
-      setTimeout(() => {
-        setCurrentFeature((prev) => (prev + 1) % features.length);
-        setFade(true);
-      }, 300); // half of transition duration
-    }, 3500);
-    return () => clearInterval(interval);
-  }, [isCustomerLogin, features.length]);
-
   // ✅ Handle session expired toast from ProtectedRoute redirect
   useEffect(() => {
     if (location.state?.reason === "session_expired") {
@@ -73,6 +45,7 @@ const Login = () => {
       setUser((prev) => ({ ...prev, username: savedUsername }));
       setRememberMe(true);
       
+      // ✅ Delay toast to avoid mount collision
       setTimeout(() => {
         toast.info("Username auto-filled from saved credentials", {
           position: "top-right",
@@ -222,86 +195,50 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      {/* ToastContainer is now global from App.jsx */}
+      {/* ❌ ToastContainer REMOVED - Now using global container from App.jsx */}
       
       <div className="w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-        {/* ======== LEFT PANEL (Navy Branding) ======== */}
-        <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative overflow-hidden">
-          {/* Background animation */}
+        <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
+          {/* Background pattern */}
           <div className="absolute inset-0 opacity-10">
             <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
               <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
-              <circle cx="20" cy="80" r="15" fill="#fff" className="animate-pulse" />
-              <circle cx="80" cy="20" r="10" fill="#fff" className="animate-pulse" style={{ animationDelay: "1s" }} />
+              <circle cx="20" cy="80" r="15" fill="#fff" />
+              <circle cx="80" cy="20" r="10" fill="#fff" />
             </svg>
           </div>
-
-          {/* Branding block (same for admin & customer) */}
+          
           <div className="z-10">
             <div className="flex flex-col items-center mb-12">
-              <div className="bg-white p-4 rounded-2xl shadow-lg mb-6 animate-fade-in">
+              <div className="bg-white p-4 rounded-2xl shadow-lg mb-6">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-navy-800" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
               </div>
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-navy-600 mb-2">Akshaya Sahayi</h1>
-                <p className="text-navy-600 mb-2 font-light">Your Trusted Digital Service Companion</p>
+                <p className="text-navy-600 mb-2">Your Trusted Digital Service Companion</p>
               </div>
             </div>
-
-            {/* ===== ADMIN-SPECIFIC CONTENT (carousel + philosophy) ===== */}
-            {!isCustomerLogin ? (
-              <>
-                {/* Description + tagline */}
-                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 mb-6">
-                  <h2 className="text-xl font-bold text-navy-600 mb-2">
-                    Empowering Digital Service Centres
-                  </h2>
-                  <p className="text-navy-600 mb-2">
-                    Akshaya Sahayi simplifies government services, document management, online applications,
-                    payments, tracking, and customer support — all in one connected platform designed for modern
-                    Akshaya Centres.
-                  </p>
-                  <p className="text-navy-600 font-medium italic">Simple. Reliable. Digital.</p>
-                </div>
-
-                {/* Animated feature carousel */}
-                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-                  <h3 className="text-lg font-semibold text-navy-600 mb-4 flex items-center">
-                    <span className="mr-2">✨</span> What We Offer
-                  </h3>
-                  <div
-                    className="h-20 flex items-center justify-center transition-opacity duration-300"
-                    style={{ opacity: fade ? 1 : 0, transform: fade ? "translateY(0)" : "translateY(10px)" }}
-                  >
-                    <p className="text-navy-600 text-center font-medium px-6 leading-relaxed">
-                      {features[currentFeature]}
-                    </p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              /* Customer specific content (kept unchanged) */
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-                <h2 className="text-xl font-bold text-navy-600 mb-2">
-                  Customer Portal
-                </h2>
-                <p className="text-navy-600 mb-2">
-                  Access your account with WhatsApp OTP or register for new services
-                </p>
-              </div>
-            )}
+            
+            <div className="mt-16 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+              <h2 className="text-xl font-bold text-navy-600 mb-2">
+                {isCustomerLogin ? "Customer Portal" : "Empowering Digital Kerala"}
+              </h2>
+              <p className="text-navy-600 mb-2">
+                {isCustomerLogin 
+                  ? "Access your account with WhatsApp OTP or register for new services"
+                  : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
+              </p>
+            </div>
           </div>
-
-          {/* Footer */}
+          
           <div className="z-10 mt-8">
             <p className="text-navy-800 mb-2 text-sm text-center">© 2026 Muhammed Illyas. All rights reserved.</p>
             <p className="text-navy-800 mb-2 text-sm text-center mt-1">Akshaya e Centre Pukayur</p>
           </div>
         </div>
 
-        {/* ======== RIGHT PANEL (Login Form) ======== */}
         <div className="w-full md:w-3/5 p-8 md:p-10">
           <div className="max-w-md mx-auto">
             {/* Toggle Switch */}
@@ -532,14 +469,6 @@ const Login = () => {
         .text-navy-800 { color: #172a45; }
         .focus\\:ring-navy-500:focus { --tw-ring-color: #1e3a5f; }
         .border-navy-500 { border-color: #1e3a5f; }
-        /* Additional animation keyframes */
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.8s ease-out forwards;
-        }
       `}</style>
     </div>
   );
