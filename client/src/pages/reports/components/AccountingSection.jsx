@@ -1967,7 +1967,7 @@ const ExpenseManagement = ({
                             {expense.paymentMethod}
                           </span>
                           <span className="text-xs text-gray-600">•</span>
-                          <span className="text-xs text-gray-600">by {expense.submittedBy}</span>
+                          <span className="text-xs text-gray-600">by {expense.staff_name || 'Staff'}</span>
                           <span className="text-xs text-gray-600">•</span>
                           <span className="text-xs text-gray-600">{expense.date}</span>
                         </div>
