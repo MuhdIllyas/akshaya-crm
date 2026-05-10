@@ -83,11 +83,9 @@ const TeamManagement = () => {
 
   // Available staff for member selection
   const [availableStaff, setAvailableStaff] = useState([]);
-  const [staffSearch, setStaffSearch] = useState("");
 
-  // Add member search in manage modal
-  const [addMemberSearchOpen, setAddMemberSearchOpen] = useState(false);
-  const [addMemberSearch, setAddMemberSearch] = useState("");
+  // Add member dropdown value (for manage modal)
+  const [addMemberValue, setAddMemberValue] = useState("");
 
   // ------------------------------------------------------------------
   // Fetch teams from backend (now with financial data)
@@ -160,9 +158,8 @@ const TeamManagement = () => {
   useEffect(() => {
     fetchTeams();
     fetchCentres();
+    fetchStaff();
   }, []);
-
-  // No longer need separate fetchAvailableStaff – use fetchStaff everywhere
 
   // ------------------------------------------------------------------
   // Filtered teams
@@ -194,7 +191,7 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Create team modal
+  // Create team modal helpers
   // ------------------------------------------------------------------
   const openCreateModal = () => {
     setTeamForm({
@@ -247,17 +244,26 @@ const TeamManagement = () => {
     }
   };
 
-  const toggleMemberSelection = (staffId) => {
+  // Add a member from the dropdown in create modal
+  const addMemberToForm = (staffId) => {
+    if (!staffId) return;
     setTeamForm((prev) => ({
       ...prev,
       members: prev.members.includes(staffId)
-        ? prev.members.filter((id) => id !== staffId)
+        ? prev.members
         : [...prev.members, staffId],
     }));
   };
 
+  const removeMemberFromForm = (staffId) => {
+    setTeamForm((prev) => ({
+      ...prev,
+      members: prev.members.filter((id) => id !== staffId),
+    }));
+  };
+
   // ------------------------------------------------------------------
-  // Manage members modal
+  // Manage members modal helpers
   // ------------------------------------------------------------------
   const openManageMembers = async (team) => {
     setSelectedTeam(team);
@@ -268,6 +274,7 @@ const TeamManagement = () => {
       });
       const membersData = await response.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: membersData }));
+      setAddMemberValue(""); // reset dropdown
       setShowManageMembersModal(true);
     } catch (error) {
       console.error("Fetch members failed:", error);
@@ -301,7 +308,7 @@ const TeamManagement = () => {
   };
 
   const handleAddMemberToTeam = async (staffId) => {
-    if (!selectedTeam) return;
+    if (!selectedTeam || !staffId) return;
     setSubmitting(true);
     try {
       const response = await fetch(
@@ -316,6 +323,7 @@ const TeamManagement = () => {
         }
       );
       if (!response.ok) throw new Error("Failed to add member");
+
       // refresh members
       const updatedRes = await fetch(
         `${API_BASE}/api/teams/${selectedTeam.id}/members`,
@@ -327,8 +335,7 @@ const TeamManagement = () => {
       );
       const updatedMembers = await updatedRes.json();
       setSelectedTeam((prev) => ({ ...prev, membersList: updatedMembers }));
-      setAddMemberSearchOpen(false);
-      setAddMemberSearch("");
+      setAddMemberValue(""); // reset dropdown
       fetchTeams();
     } catch (error) {
       alert(error.message || "Error adding member");
@@ -359,7 +366,7 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Render (unchanged except centre filter dropdown uses centres state)
+  // Render
   // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
@@ -729,7 +736,7 @@ const TeamManagement = () => {
                 </div>
               )}
 
-              {/* Member selector */}
+              {/* Member selector – dropdown style */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Initial Members
@@ -747,7 +754,7 @@ const TeamManagement = () => {
                         {staff?.name || `ID ${staffId}`}
                         <button
                           type="button"
-                          onClick={() => toggleMemberSelection(staffId)}
+                          onClick={() => removeMemberFromForm(staffId)}
                           className="ml-2 text-indigo-600 hover:text-indigo-800"
                           disabled={submitting}
                         >
@@ -757,47 +764,24 @@ const TeamManagement = () => {
                     );
                   })}
                 </div>
-                <div className="relative">
-                  <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search staff to add..."
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={staffSearch}
-                    onChange={(e) => setStaffSearch(e.target.value)}
-                    disabled={submitting}
-                  />
-                  {staffSearch && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                      {availableStaff
-                        .filter(
-                          (s) =>
-                            s.name
-                              .toLowerCase()
-                              .includes(staffSearch.toLowerCase()) &&
-                            !teamForm.members.includes(s.id)
-                        )
-                        .map((staff) => (
-                          <div
-                            key={staff.id}
-                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
-                            onClick={() => {
-                              toggleMemberSelection(staff.id);
-                              setStaffSearch("");
-                            }}
-                          >
-                            <div>
-                              <p className="font-medium">{staff.name}</p>
-                              <p className="text-xs text-gray-500">
-                                {staff.role}
-                              </p>
-                            </div>
-                            <FiPlus className="text-indigo-600" />
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
+                <select
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value=""
+                  onChange={(e) => {
+                    const staffId = Number(e.target.value);
+                    if (staffId) addMemberToForm(staffId);
+                  }}
+                  disabled={submitting}
+                >
+                  <option value="">-- Add a staff --</option>
+                  {availableStaff
+                    .filter((s) => !teamForm.members.includes(s.id))
+                    .map((staff) => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.name} {staff.role ? `(${staff.role})` : ""}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
@@ -861,71 +845,37 @@ const TeamManagement = () => {
               </div>
             </div>
             <div className="p-6">
-              {/* Add member section */}
-              <div className="mb-4">
-                {!addMemberSearchOpen ? (
-                  <button
-                    onClick={() => setAddMemberSearchOpen(true)}
-                    className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 flex items-center"
-                  >
-                    <FiUserPlus className="mr-2" /> Add Member
-                  </button>
-                ) : (
-                  <div className="relative">
-                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search staff to add..."
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      value={addMemberSearch}
-                      onChange={(e) => setAddMemberSearch(e.target.value)}
-                      autoFocus
-                      disabled={submitting}
-                    />
-                    <button
-                      onClick={() => {
-                        setAddMemberSearchOpen(false);
-                        setAddMemberSearch("");
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <FiX size={16} />
-                    </button>
-                    {addMemberSearch && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                        {availableStaff
-                          .filter(
-                            (s) =>
-                              s.name
-                                .toLowerCase()
-                                .includes(
-                                  addMemberSearch.toLowerCase()
-                                ) &&
-                              !selectedTeam.membersList?.some(
-                                (m) => m.staff_id === s.id
-                              )
-                          )
-                          .map((staff) => (
-                            <div
-                              key={staff.id}
-                              className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
-                              onClick={() =>
-                                handleAddMemberToTeam(staff.id)
-                              }
-                            >
-                              <div>
-                                <p className="font-medium">{staff.name}</p>
-                                <p className="text-xs text-gray-500">
-                                  {staff.role}
-                                </p>
-                              </div>
-                              <FiPlus className="text-indigo-600" />
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+              {/* Add member section – dropdown + button */}
+              <div className="mb-6 flex items-center gap-3">
+                <select
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={addMemberValue}
+                  onChange={(e) => setAddMemberValue(e.target.value)}
+                  disabled={submitting}
+                >
+                  <option value="">-- Select staff to add --</option>
+                  {availableStaff
+                    .filter(
+                      (s) =>
+                        !selectedTeam.membersList?.some(
+                          (m) => m.staff_id === s.id
+                        )
+                    )
+                    .map((staff) => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.name} {staff.role ? `(${staff.role})` : ""}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  onClick={() =>
+                    handleAddMemberToTeam(Number(addMemberValue))
+                  }
+                  disabled={!addMemberValue || submitting}
+                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <FiUserPlus /> Add
+                </button>
               </div>
 
               {/* Members list */}
