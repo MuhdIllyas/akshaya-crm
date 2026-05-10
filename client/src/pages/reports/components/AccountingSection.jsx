@@ -2343,30 +2343,54 @@ const AccountingSection = ({
   });
 
   const handleMiscIncomeSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/misc-income`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(miscIncomeForm)
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to add misc income');
+      e.preventDefault();
+      try {
+        // 1. Extract the selected Year, Month, and Day
+        const [year, month, day] = miscIncomeForm.date.split('-');
+        
+        // 2. Get the exact current time right now
+        const now = new Date();
+        
+        // 3. Combine the selected date with the current time
+        const submissionDate = new Date(
+          year, 
+          month - 1, // JavaScript months are 0-indexed (0-11)
+          day, 
+          now.getHours(), 
+          now.getMinutes(), 
+          now.getSeconds()
+        );
+
+        // 4. Create a new payload with the full Date + Time string
+        const payload = {
+          ...miscIncomeForm,
+          date: submissionDate.toISOString() 
+        };
+
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/misc-income`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(payload) // <-- Send the combined payload here
+        });
+        
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Failed to add misc income');
+        }
+        
+        toast.success('Misc Income recorded successfully!');
+        setShowMiscIncomeModal(false);
+        setMiscIncomeForm({ amount: '', wallet_id: '', description: '', date: new Date().toISOString().split('T')[0] });
+        
+        // Force a full refresh so Wallet balances and the Ledger update instantly
+        handleRefreshAllData(); 
+      } catch (err) {
+        toast.error(err.message);
       }
-      toast.success('Misc Income recorded successfully!');
-      setShowMiscIncomeModal(false);
-      setMiscIncomeForm({ amount: '', wallet_id: '', description: '', date: new Date().toISOString().split('T')[0] });
-      
-      // Force a full refresh so Wallet balances and the Ledger update instantly
-      handleRefreshAllData(); 
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
+    };
   const [loading, setLoading] = useState(false);
 
   const [ledgerFilters, setLedgerFilters] = useState({
