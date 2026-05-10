@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import AdminExpenseEntry from './AdminExpenseEntry';
 
-// Compact StatCard Component
+// Compact StatCard Component (unchanged)
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
@@ -44,7 +44,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
   </motion.div>
 );
 
-// Nightly Accounting Checklist Component (unchanged - full code)
+// NightlyAccountingChecklist Component (unchanged)
 const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
   const [checklist, setChecklist] = useState(
     existingData?.checklist || {
@@ -126,7 +126,6 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
       </div>
 
       <div className="space-y-4">
-        {/* Checklist Items */}
         <div className="grid grid-cols-2 gap-3">
           {[
             { key: 'incomeEntryVerified', label: 'Income Entry Verified', description: 'Service charges & fees' },
@@ -157,7 +156,6 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
           ))}
         </div>
 
-        {/* Cash Reconciliation */}
         <div className="pt-4 border-t border-gray-200">
           <h4 className="font-medium text-gray-900 text-sm mb-3 flex items-center">
             <FiDollarSign className="h-3 w-3 mr-2 text-emerald-600" />
@@ -202,7 +200,6 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
           )}
         </div>
 
-        {/* Notes */}
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-2 flex items-center">
             <FiMessageSquare className="h-3 w-3 mr-1 text-gray-500" />
@@ -217,7 +214,6 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
           />
         </div>
 
-        {/* Complete Button */}
         <div className="flex justify-end">
           <button
             onClick={handleCompleteAccounting}
@@ -238,7 +234,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
   );
 };
 
-// Daily Summary Component (unchanged - full code)
+// DailySummaryComponent (unchanged)
 const DailySummaryComponent = ({ summaryData, onUpdate }) => {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -350,7 +346,6 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
         </div>
       </div>
 
-      {/* Summary Stats */}
       <div className="grid gap-3 mb-4 grid-cols-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <p className="text-xs text-blue-700 mb-1">Total Inflow</p>
@@ -385,7 +380,6 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
         </div>
       </div>
 
-      {/* Summary Table */}
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="w-full min-w-full">
           <thead>
@@ -465,7 +459,7 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
   );
 };
 
-// Income View Component (unchanged - full code)
+// IncomeViewComponent (unchanged)
 const IncomeViewComponent = ({ transactions = [] }) => {
   const rows = Array.isArray(transactions)
     ? transactions
@@ -995,7 +989,7 @@ const IncomeViewComponent = ({ transactions = [] }) => {
   );
 };
 
-// Ledger View Component (unchanged - full code)
+// LedgerView Component (unchanged)
 const LedgerView = ({ ledger, onLedgerRowClick }) => {
   const totalCredits = ledger.reduce((sum, tx) => 
     sum + (tx.type === 'credit' ? Number(tx.amount || 0) : 0), 0);
@@ -1410,7 +1404,7 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
   );
 };
 
-// Wallet Reconciliation Component (unchanged - full code)
+// WalletReconciliation Component (unchanged)
 const WalletReconciliation = ({ wallets, onRefreshWallets }) => {
   const [walletBalances, setWalletBalances] = useState({});
   const [isReconciling, setIsReconciling] = useState(false);
@@ -1812,7 +1806,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets }) => {
 };
 
 /* ======================================================
-   EXPENSE MANAGEMENT – UPDATED WITH CORRECTION SUPPORT
+   EXPENSE MANAGEMENT – UPDATED WITH TEAM ASSIGNMENT ON APPROVAL
 ====================================================== */
 const ExpenseManagement = ({
   expenses,
@@ -1842,6 +1836,36 @@ const ExpenseManagement = ({
     reason: ''
   });
 
+  // ---------- TEAM ASSIGNMENT (NEW) ----------
+  const [teams, setTeams] = useState([]);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [assignmentNotes, setAssignmentNotes] = useState('');
+  const [approvingExpense, setApprovingExpense] = useState(null);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+
+  const fetchTeams = async () => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/teams`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+
+      const data = await res.json();
+      setTeams(data || []);
+    } catch (err) {
+      console.error("Failed to fetch teams", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchTeams();
+  }, []);
+
+  // ---------- DATA SPLIT ----------
   const pendingExpenses = expenses.filter(exp => exp.status === 'pending');
   const nonPendingExpenses = expenses.filter(exp => exp.status !== 'pending');
   const approvedExpenses = nonPendingExpenses.filter(exp => exp.status === 'approved' || exp.status === 'auto_approved');
@@ -1872,10 +1896,6 @@ const ExpenseManagement = ({
     }
     setShowCorrectModal(false);
     setCorrectingExpense(null);
-  };
-
-  const handleSubmitExpense = () => {
-    // not used in admin context
   };
 
   const expenseCategories = [
@@ -1960,7 +1980,15 @@ const ExpenseManagement = ({
                         {category && React.createElement(category.icon, { className: "h-3 w-3 text-yellow-600" })}
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{expense.description}</p>
+                        <p className="font-medium text-gray-900 text-sm flex items-center">
+                          {expense.description}
+                          {expense.status === 'pending' && !expense.team_id && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 ml-2">
+                              <FiAlertCircle className="h-3 w-3 mr-1" />
+                              Team Not Assigned
+                            </span>
+                          )}
+                        </p>
                         <div className="flex flex-wrap items-center gap-1 mt-0.5">
                           <span className="text-xs text-gray-600 flex items-center">
                             <PaymentIcon className="h-2 w-2 mr-1" />
@@ -1987,8 +2015,14 @@ const ExpenseManagement = ({
                       })}
                     </p>
                     <div className="flex space-x-1">
+                      {/* CHANGED APPROVE BUTTON */}
                       <button
-                        onClick={() => onApprove(expense.id)}
+                        onClick={() => {
+                          setApprovingExpense(expense);
+                          setSelectedTeam(expense.team_id || '');
+                          setAssignmentNotes('');
+                          setShowApproveModal(true);
+                        }}
                         className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-xs flex items-center space-x-1"
                       >
                         <FiCheck className="h-2 w-2" />
@@ -2010,102 +2044,124 @@ const ExpenseManagement = ({
         </div>
       )}
 
-      {/* Non‑Pending with correct option */}
+      {/* Non‑Pending with correct option – NOW AS TABLES */}
       {nonPendingExpenses.length > 0 && (
-        <div className="space-y-2">
-          {/* Approved / Auto‑Approved */}
+        <div className="space-y-4">
+          {/* Approved / Auto‑Approved TABLE */}
           {approvedExpenses.length > 0 && (
             <div className="bg-white rounded-lg border border-emerald-200 p-4">
               <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
                 <FiCheckCircle className="h-4 w-4 mr-2 text-emerald-600" />
                 Approved / Auto‑Approved ({approvedExpenses.length})
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {approvedExpenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="p-3 rounded-lg border border-emerald-100 bg-emerald-50 flex items-center justify-between"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {expense.description || expense.category}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        <span>{expense.date}</span>
-                        <span>•</span>
-                        <span>{expense.staff_name || 'Staff'}</span>
-                        <span>•</span>
-                        <span>{expense.wallet_name || 'Wallet'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-emerald-700 text-sm whitespace-nowrap">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                      {onCorrect && (
-                        <button
-                          onClick={() => openCorrection(expense)}
-                          className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                          title="Correct this expense"
-                        >
-                          <FiRefreshCw className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                      <th className="py-2 px-3">Description</th>
+                      <th className="py-2 px-3">Date</th>
+                      <th className="py-2 px-3">Staff</th>
+                      <th className="py-2 px-3">Wallet</th>
+                      <th className="py-2 px-3">Amount</th>
+                      <th className="py-2 px-3">Team</th>
+                      <th className="py-2 px-3">Assigned By</th>
+                      <th className="py-2 px-3">Status</th>
+                      <th className="py-2 px-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {approvedExpenses.map((expense) => (
+                      <tr key={expense.id} className="hover:bg-gray-50">
+                        <td className="py-2 px-3 text-xs font-medium text-gray-900">{expense.description || expense.category}</td>
+                        <td className="py-2 px-3 text-xs text-gray-600">{expense.date}</td>
+                        <td className="py-2 px-3 text-xs text-gray-600">{expense.staff_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs text-gray-600">{expense.wallet_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs font-semibold text-emerald-700">{formatCurrency(expense.amount)}</td>
+                        <td className="py-2 px-3 text-xs">{expense.team_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs">{expense.assigned_by_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                            {expense.status === 'approved' ? 'Approved' : 'Auto-Approved'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-xs">
+                          {onCorrect && (
+                            <button
+                              onClick={() => openCorrection(expense)}
+                              className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                              title="Correct this expense"
+                            >
+                              <FiRefreshCw className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
 
-          {/* Rejected */}
+          {/* Rejected TABLE */}
           {rejectedExpenses.length > 0 && (
             <div className="bg-white rounded-lg border border-rose-200 p-4">
               <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
                 <FiXCircle className="h-4 w-4 mr-2 text-rose-600" />
                 Rejected ({rejectedExpenses.length})
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {rejectedExpenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="p-3 rounded-lg border border-rose-100 bg-rose-50 flex items-center justify-between"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {expense.description || expense.category}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        <span>{expense.date}</span>
-                        <span>•</span>
-                        <span>{expense.staff_name || 'Staff'}</span>
-                        <span>•</span>
-                        <span>{expense.wallet_name || 'Wallet'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-rose-700 text-sm whitespace-nowrap">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                      {onCorrect && (
-                        <button
-                          onClick={() => openCorrection(expense)}
-                          className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                          title="Correct this expense"
-                        >
-                          <FiRefreshCw className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                      <th className="py-2 px-3">Description</th>
+                      <th className="py-2 px-3">Date</th>
+                      <th className="py-2 px-3">Staff</th>
+                      <th className="py-2 px-3">Wallet</th>
+                      <th className="py-2 px-3">Amount</th>
+                      <th className="py-2 px-3">Team</th>
+                      <th className="py-2 px-3">Assigned By</th>
+                      <th className="py-2 px-3">Status</th>
+                      <th className="py-2 px-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {rejectedExpenses.map((expense) => (
+                      <tr key={expense.id} className="hover:bg-gray-50">
+                        <td className="py-2 px-3 text-xs font-medium text-gray-900">{expense.description || expense.category}</td>
+                        <td className="py-2 px-3 text-xs text-gray-600">{expense.date}</td>
+                        <td className="py-2 px-3 text-xs text-gray-600">{expense.staff_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs text-gray-600">{expense.wallet_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs font-semibold text-rose-700">{formatCurrency(expense.amount)}</td>
+                        <td className="py-2 px-3 text-xs">{expense.team_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs">{expense.assigned_by_name || '—'}</td>
+                        <td className="py-2 px-3 text-xs">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700">
+                            Rejected
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-xs">
+                          {onCorrect && (
+                            <button
+                              onClick={() => openCorrection(expense)}
+                              className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                              title="Correct this expense"
+                            >
+                              <FiRefreshCw className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Expense Summary Cards */}
+      {/* Expense Summary Cards – unchanged */}
       <div className="grid gap-3 grid-cols-3">
         <div className="bg-white rounded-lg border border-emerald-200 p-3 hover:shadow-sm transition-all">
           <div className="flex items-center justify-between mb-1">
@@ -2168,7 +2224,7 @@ const ExpenseManagement = ({
         </div>
       </div>
 
-      {/* Add Expense Button */}
+      {/* Add Expense Button – unchanged */}
       {allowAdd && !showAddForm && onAddClick && (
         <div className="flex justify-center">
           <motion.button
@@ -2183,7 +2239,7 @@ const ExpenseManagement = ({
         </div>
       )}
 
-      {/* Correction Modal */}
+      {/* Correction Modal – unchanged */}
       <AnimatePresence>
         {showCorrectModal && correctingExpense && (
           <motion.div
@@ -2205,30 +2261,20 @@ const ExpenseManagement = ({
                 </p>
               </div>
               <form onSubmit={handleCorrectionSubmit} className="p-6 space-y-4">
-                {/* New Amount */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    New Amount (₹) *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">New Amount (₹) *</label>
                   <input
                     type="number"
                     value={correctionForm.amount}
-                    onChange={(e) =>
-                      setCorrectionForm((prev) => ({ ...prev, amount: e.target.value }))
-                    }
+                    onChange={(e) => setCorrectionForm((prev) => ({ ...prev, amount: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                    min="0"
-                    step="0.01"
+                    required min="0" step="0.01"
                   />
                 </div>
 
-                {/* New Wallet */}
                 {wallets.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      New Wallet *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Wallet *</label>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {wallets.map((wallet) => (
                         <label
@@ -2246,10 +2292,7 @@ const ExpenseManagement = ({
                               value={wallet.id.toString()}
                               checked={correctionForm.wallet_id === wallet.id.toString()}
                               onChange={(e) =>
-                                setCorrectionForm((prev) => ({
-                                  ...prev,
-                                  wallet_id: e.target.value,
-                                }))
+                                setCorrectionForm((prev) => ({ ...prev, wallet_id: e.target.value }))
                               }
                               className="sr-only"
                               required
@@ -2269,16 +2312,11 @@ const ExpenseManagement = ({
                   </div>
                 )}
 
-                {/* Reason */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reason for Correction
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Correction</label>
                   <textarea
                     value={correctionForm.reason}
-                    onChange={(e) =>
-                      setCorrectionForm((prev) => ({ ...prev, reason: e.target.value }))
-                    }
+                    onChange={(e) => setCorrectionForm((prev) => ({ ...prev, reason: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     rows="3"
                     placeholder="Explain why you are correcting this expense..."
@@ -2306,12 +2344,68 @@ const ExpenseManagement = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ====== APPROVAL MODAL (NEW) ====== */}
+      {showApproveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-semibold mb-4">Approve Expense</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Assign Team</label>
+                <select
+                  value={selectedTeam}
+                  onChange={(e) => setSelectedTeam(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">No Team</option>
+                  {teams.map(team => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Assignment Notes</label>
+                <textarea
+                  value={assignmentNotes}
+                  onChange={(e) => setAssignmentNotes(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  rows={3}
+                  placeholder="Optional notes"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowApproveModal(false)}
+                className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await onApprove(approvingExpense.id, selectedTeam, assignmentNotes);
+                  setShowApproveModal(false);
+                }}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700"
+              >
+                Approve Expense
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 /* ======================================================
-   MAIN ACCOUNTING SECTION
+   MAIN ACCOUNTING SECTION – UPDATED APPROVE HANDLER
 ====================================================== */
 const AccountingSection = ({ 
   user,
@@ -2373,7 +2467,7 @@ const AccountingSection = ({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${localStorage.getItem('token')}`
           },
-          body: JSON.stringify(payload) // <-- Send the combined payload here
+          body: JSON.stringify(payload) 
         });
         
         if (!res.ok) {
@@ -2760,21 +2854,38 @@ const AccountingSection = ({
     );
   };
 
-  const handleApproveExpense = async (expenseId) => {
+  // ---------- UPDATED APPROVE HANDLER ----------
+  const handleApproveExpense = async (expenseId, teamId, assignmentNotes) => {
     await fetch(
       `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/approve`,
       {
         method: 'PUT',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
+        },
+        body: JSON.stringify({
+          team_id: teamId || null,
+          assignment_notes: assignmentNotes || null
+        })
       }
     );
 
+    // Refresh expenses after approval
     const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     });
-    onUpdateAccounting('expenses', await res.json());
+    const rawData = await res.json();
+    const mappedData = rawData.map(item => ({
+      ...item,
+      date: item.expense_date
+        ? item.expense_date.slice(0, 10)
+        : item.date,
+      status: item.status === 'auto_approved'
+        ? 'approved'
+        : item.status?.toLowerCase()
+    }));
+    onUpdateAccounting('expenses', mappedData);
   };
 
   const handleRejectExpense = async (expenseId) => {
@@ -2791,7 +2902,17 @@ const AccountingSection = ({
     const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     });
-    onUpdateAccounting('expenses', await res.json());
+    const rawData = await res.json();
+    const mappedData = rawData.map(item => ({
+      ...item,
+      date: item.expense_date
+        ? item.expense_date.slice(0, 10)
+        : item.date,
+      status: item.status === 'auto_approved'
+        ? 'approved'
+        : item.status?.toLowerCase()
+    }));
+    onUpdateAccounting('expenses', mappedData);
   };
 
   // ---------- CORRECTION HANDLER ----------
