@@ -1147,13 +1147,13 @@ const TeamManagement = () => {
                                   Primary
                                 </th>
                                 <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Revenue
+                                  Collected Revenue
                                 </th>
                                 <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
                                   Expense
                                 </th>
                                 <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Profit
+                                  Net Profit
                                 </th>
                               </tr>
                             </thead>
