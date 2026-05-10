@@ -27,6 +27,40 @@ const authenticateToken = (req, res, next) => {
 router.use(authenticateToken);
 
 /* ======================================================
+   TEAM RESOLUTION HELPER
+====================================================== */
+
+const resolveFinancialTeam = async ({
+  client,
+  staffId,
+  role,
+  selectedTeamId
+}) => {
+
+  // Admin / Superadmin manual selection
+  if (
+    selectedTeamId &&
+    ["admin", "superadmin"].includes(role)
+  ) {
+    return selectedTeamId;
+  }
+
+  // Staff automatic primary team
+  const result = await client.query(
+    `
+    SELECT team_id
+    FROM team_members
+    WHERE staff_id = $1
+      AND is_primary = true
+    LIMIT 1
+    `,
+    [staffId]
+  );
+
+  return result.rows[0]?.team_id || null;
+};
+
+/* ======================================================
    CREATE EXPENSE
 ====================================================== */
 router.post("/", async (req, res) => {
@@ -44,6 +78,7 @@ router.post("/", async (req, res) => {
       receipt_number,
       expense_date,
       requires_approval = false,
+      team_id,
     } = req.body;
 
     if (!category || !amount || !wallet_id || !expense_date) {
@@ -55,6 +90,14 @@ router.post("/", async (req, res) => {
     const status = requires_approval ? "pending" : "auto_approved";
     const groupId = crypto.randomUUID();
 
+    const resolvedTeamId =
+      await resolveFinancialTeam({
+        client,
+        staffId,
+        role: req.user.role,
+        selectedTeamId: team_id,
+    });
+
     await client.query("BEGIN");
 
     const walletRes = await client.query(
@@ -65,28 +108,50 @@ router.post("/", async (req, res) => {
       throw new Error("Invalid wallet for your centre");
     }
 
-    const expenseRes = await client.query(
-      `INSERT INTO expenses (
-         centre_id, staff_id, category, category_id, amount,
-         description, remarks, wallet_id, payment_method,
-         receipt_number, expense_date, status, requires_approval,
-         correction_group_id, original_expense_id, is_reversal,
-         submitted_at
-       )
-       VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-         $14, NULL, FALSE,
-         NOW()
-       )
-       RETURNING *`,
-      [
-        centreId, staffId, category, category_id || null, amount,
-        description || null, remarks || null, wallet_id,
-        payment_method || null, receipt_number || null,
-        expense_date, status, requires_approval,
-        groupId
-      ]
-    );
+  const expenseRes = await client.query(
+    `INSERT INTO expenses (
+      centre_id,
+      staff_id,
+      team_id,
+      category,
+      category_id,
+      amount,
+      description,
+      remarks,
+      wallet_id,
+      payment_method,
+      receipt_number,
+      expense_date,
+      status,
+      requires_approval,
+      correction_group_id,
+      original_expense_id,
+      is_reversal,
+      submitted_at
+    )
+    VALUES (
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+      $11,$12,$13,$14,$15,NULL,FALSE,NOW()
+    )
+    RETURNING *`,
+    [
+      centreId,
+      staffId,
+      resolvedTeamId,
+      category,
+      category_id || null,
+      amount,
+      description || null,
+      remarks || null,
+      wallet_id,
+      payment_method || null,
+      receipt_number || null,
+      expense_date,
+      status,
+      requires_approval,
+      groupId
+    ]
+  );  
 
     if (!requires_approval) {
       if (Number(walletRes.rows[0].balance) < Number(amount)) {
@@ -96,16 +161,29 @@ router.post("/", async (req, res) => {
       // 🔥 FIX: Added reference_id, reference_type, and correction_group_id to link it properly
       await client.query(
         `INSERT INTO wallet_transactions (
-          wallet_id, staff_id, type, amount, description, category, 
-          reference_id, reference_type, correction_group_id, created_at
+          wallet_id,
+          staff_id,
+          type,
+          amount,
+          description,
+          category,
+          team_id,
+          reference_id,
+          reference_type,
+          correction_group_id,
+          created_at
         )
-         VALUES ($1,$2,'debit',$3,$4,'Expense',$5,'expense',$6,NOW())`,
+        VALUES (
+          $1,$2,'debit',$3,$4,'Expense',
+          $5,$6,'expense',$7,NOW()
+        )`,
         [
-          wallet_id, 
-          staffId, 
-          amount, 
-          description || `${category} Expense`, 
-          expenseRes.rows[0].id, 
+          wallet_id,
+          staffId,
+          amount,
+          description || `${category} Expense`,
+          resolvedTeamId,
+          expenseRes.rows[0].id,
           groupId
         ]
       );
@@ -254,16 +332,29 @@ router.put("/:id/approve", async (req, res) => {
     // 🔥 FIX: Added reference_id, reference_type, and correction_group_id to link it properly
     await client.query(
       `INSERT INTO wallet_transactions (
-        wallet_id, staff_id, type, amount, description, category, 
-        reference_id, reference_type, correction_group_id, created_at
+        wallet_id,
+        staff_id,
+        type,
+        amount,
+        description,
+        category,
+        team_id,
+        reference_id,
+        reference_type,
+        correction_group_id,
+        created_at
       )
-       VALUES ($1,$2,'debit',$3,$4,'Expense',$5,'expense',$6,NOW())`,
+      VALUES (
+        $1,$2,'debit',$3,$4,'Expense',
+        $5,$6,'expense',$7,NOW()
+      )`,
       [
-        exp.wallet_id, 
-        exp.staff_id, 
-        exp.amount, 
-        exp.description || `${exp.category} Expense`, 
-        exp.id, 
+        exp.wallet_id,
+        exp.staff_id,
+        exp.amount,
+        exp.description || `${exp.category} Expense`,
+        exp.team_id,
+        exp.id,
         exp.correction_group_id
       ]
     );
@@ -371,15 +462,29 @@ router.put("/:id/correct", async (req, res) => {
     // 🔁 STEP 1: Reverse old wallet debit (credit back)
     await client.query(
       `INSERT INTO wallet_transactions (
-         wallet_id, staff_id, type, amount, description, category,
-         is_reversal, correction_group_id, reference_id, reference_type, created_at
-       )
-       VALUES ($1,$2,'credit',$3,$4,'Expense',TRUE,$5,$6,'expense',NOW())`,
+        wallet_id,
+        staff_id,
+        type,
+        amount,
+        description,
+        category,
+        team_id,
+        is_reversal,
+        correction_group_id,
+        reference_id,
+        reference_type,
+        created_at
+      )
+      VALUES (
+        $1,$2,'credit',$3,$4,'Expense',
+        $5,TRUE,$6,$7,'expense',NOW()
+      )`,
       [
         original.wallet_id,
         req.user.id,
         original.amount,
         `Expense correction reversal: ${original.category} (Original ID: ${expenseId})`,
+        original.team_id,
         groupId,
         expenseId
       ]
@@ -398,20 +503,21 @@ router.put("/:id/correct", async (req, res) => {
     // 🔥 STEP 3: Create corrected expense (auto‑approved)
     const newExp = await client.query(
       `INSERT INTO expenses (
-         centre_id, staff_id, category, category_id, amount,
+         centre_id, staff_id,team_id, category, category_id, amount,
          description, remarks, wallet_id, payment_method,
          receipt_number, expense_date, status,
          correction_group_id, original_expense_id, is_reversal,
          submitted_at
        )
        VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'auto_approved',
-         $12,$13,FALSE,NOW()
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'auto_approved',
+         $13,$14,FALSE,NOW()
        )
        RETURNING *`,
       [
         original.centre_id,
         original.staff_id,
+        original.team_id,
         original.category,
         original.category_id,
         amount,
@@ -429,15 +535,28 @@ router.put("/:id/correct", async (req, res) => {
     // 🔁 STEP 4: Debit the new wallet
     await client.query(
       `INSERT INTO wallet_transactions (
-         wallet_id, staff_id, type, amount, description, category,
-         correction_group_id, reference_id, reference_type, created_at
-       )
-       VALUES ($1,$2,'debit',$3,$4,'Expense',$5,$6,'expense',NOW())`,
+        wallet_id,
+        staff_id,
+        type,
+        amount,
+        description,
+        category,
+        team_id,
+        correction_group_id,
+        reference_id,
+        reference_type,
+        created_at
+      )
+      VALUES (
+        $1,$2,'debit',$3,$4,'Expense',
+        $5,$6,$7,'expense',NOW()
+      )`,
       [
         wallet_id,
         req.user.id,
         amount,
         `Corrected expense: ${original.category} (Original ID: ${expenseId})`,
+        original.team_id,
         groupId,
         newExp.rows[0].id
       ]
