@@ -329,11 +329,13 @@ router.get("/analytics/summary", async (req, res) => {
         ========================================= */
 
         COALESCE((
-          SELECT SUM(e.amount)
 
-          FROM expenses e
+        SELECT SUM(e.amount)
 
-          WHERE e.team_id = t.id
+        FROM expenses e
+
+        WHERE e.team_id = t.id
+        AND e.status IN ('approved', 'auto_approved')
 
           ${expenseDateFilter}
 
@@ -547,6 +549,7 @@ router.get(
 
             WHERE e.staff_id = s.id
             AND e.team_id = $1
+            AND e.status IN ('approved', 'auto_approved')
           ), 0) AS expense
 
         FROM team_members tm
@@ -738,6 +741,7 @@ router.get(
             FROM expenses e
 
             WHERE e.team_id = $1
+            AND e.status IN ('approved', 'auto_approved')
 
             AND EXTRACT(MONTH FROM e.created_at) = m.month
             AND EXTRACT(YEAR FROM e.created_at) = $2
