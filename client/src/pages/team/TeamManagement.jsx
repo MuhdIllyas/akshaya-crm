@@ -137,7 +137,7 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   const fetchAvailableStaff = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/staff`, {
+      const response = await fetch(`${API_BASE}/api/staff/all`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       const raw = await response.json();
