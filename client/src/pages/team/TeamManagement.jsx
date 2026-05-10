@@ -67,6 +67,9 @@ const TeamManagement = () => {
   // Centres list (only used by superadmin)
   const [centres, setCentres] = useState([]);
 
+  // Extra state for admin’s own centre name
+  const [adminCentreName, setAdminCentreName] = useState("");
+
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showManageMembersModal, setShowManageMembersModal] = useState(false);
@@ -116,19 +119,48 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Fetch centres (only for superadmin, like CalendarPage)
+  // Fetch centres (superadmin = all centres, admin = own centre name)
   // ------------------------------------------------------------------
   const fetchCentres = async () => {
-    if (!isSuperAdmin) return; // admins don't need the centre list
-    try {
-      const response = await fetch(`${API_BASE}/api/wallet/centres`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const data = await response.json();
-      setCentres(Array.isArray(data) ? data : data.centres || []);
-    } catch (error) {
-      console.error("Fetch centres failed:", error);
+    if (isSuperAdmin) {
+      try {
+        const response = await fetch(`${API_BASE}/api/wallet/centres`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const data = await response.json();
+        setCentres(Array.isArray(data) ? data : data.centres || []);
+      } catch (error) {
+        console.error("Fetch centres failed:", error);
+      }
+    } else if (isAdmin) {
+      // Admin only needs their own centre name
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/centres/${user.centreId}`,
+          {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          }
+        );
+        if (response.ok) {
+          const centre = await response.json();
+          setAdminCentreName(centre.name || "");
+        }
+      } catch (error) {
+        console.error("Fetch admin centre failed:", error);
+      }
     }
+  };
+
+  // Helper to get centre name by ID
+  const getCentreName = (centreId) => {
+    if (isSuperAdmin) {
+      const centre = centres.find((c) => c.id === centreId);
+      return centre?.name || `Centre #${centreId}`;
+    }
+    if (isAdmin) {
+      return adminCentreName || `Centre #${centreId}`;
+    }
+    return `Centre #${centreId}`;
   };
 
   // ------------------------------------------------------------------
@@ -551,9 +583,7 @@ const TeamManagement = () => {
                               {team.name}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {team.centre_id
-                                ? `Centre #${team.centre_id}`
-                                : "Cross-Centre"}
+                              {team.centre_id ? getCentreName(team.centre_id) : 'Cross-Centre'}
                             </p>
                           </div>
                         </div>
