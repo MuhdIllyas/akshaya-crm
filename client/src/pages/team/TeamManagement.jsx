@@ -17,7 +17,7 @@ import {
 } from 'react-icons/fi';
 
 // ----------------------------------------------------------------------
-// JWT helper – exactly as in CalendarPage.jsx
+// JWT helper – exactly as in your CalendarPage.jsx
 // ----------------------------------------------------------------------
 function getTokenClaims() {
   const token = localStorage.getItem("token");
@@ -36,6 +36,8 @@ function getTokenClaims() {
   }
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 // ----------------------------------------------------------------------
 // TeamManagement Component
 // ----------------------------------------------------------------------
@@ -49,6 +51,7 @@ const TeamManagement = () => {
   // ---- State ----
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [totalStats, setTotalStats] = useState({
     total: 0,
     global: 0,
@@ -60,6 +63,9 @@ const TeamManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all'); // all, centre, global
   const [centreFilter, setCentreFilter] = useState('all');
+
+  // Centres list
+  const [centres, setCentres] = useState([]);
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -75,35 +81,31 @@ const TeamManagement = () => {
     members: [],
   });
 
-  // Available staff for member selector (would come from API)
+  // Available staff for member selection
   const [availableStaff, setAvailableStaff] = useState([]);
   const [staffSearch, setStaffSearch] = useState('');
 
-  // ---- Fetch teams ----
+  // Add member search in manage modal
+  const [addMemberSearchOpen, setAddMemberSearchOpen] = useState(false);
+  const [addMemberSearch, setAddMemberSearch] = useState('');
+
+  // ------------------------------------------------------------------
+  // Fetch teams from backend (now with financial data)
+  // ------------------------------------------------------------------
   const fetchTeams = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/teams', {
+      const response = await fetch(`${API_BASE}/api/teams`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       const data = await response.json();
+      // Backend now returns revenue, expense, profit directly
+      setTeams(data);
 
-      // Placeholder financial data – replace with a real endpoint
-      const teamsWithFinance = data.map((team) => ({
-        ...team,
-        revenue: Math.floor(Math.random() * 50000) + 10000,
-        expense: Math.floor(Math.random() * 30000) + 5000,
-        profit: 0,
-      }));
-      teamsWithFinance.forEach((t) => (t.profit = t.revenue - t.expense));
-
-      setTeams(teamsWithFinance);
-
-      // Update stats
-      const total = teamsWithFinance.length;
-      const global = teamsWithFinance.filter((t) => t.is_global).length;
+      const total = data.length;
+      const global = data.filter((t) => t.is_global).length;
       const centre = total - global;
-      const members = teamsWithFinance.reduce(
+      const members = data.reduce(
         (sum, t) => sum + Number(t.member_count),
         0
       );
@@ -115,24 +117,54 @@ const TeamManagement = () => {
     }
   };
 
-  useEffect(() => {
-    fetchTeams();
-  }, []);
-
-  // ---- Fetch available staff (for member selection) ----
-  const fetchAvailableStaff = async () => {
+  // ------------------------------------------------------------------
+  // Fetch centres (for superadmin filter + create team dropdown)
+  // ------------------------------------------------------------------
+  const fetchCentres = async () => {
     try {
-      const response = await fetch('/api/staff', {
+      const response = await fetch(`${API_BASE}/api/centres`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
-      const staffList = await response.json();
-      setAvailableStaff(staffList);
+      const data = await response.json();
+      setCentres(Array.isArray(data) ? data : data.centres || []);
+    } catch (error) {
+      console.error('Fetch centres failed:', error);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Fetch available staff (with role‑based filtering)
+  // ------------------------------------------------------------------
+  const fetchAvailableStaff = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/staff`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      const raw = await response.json();
+      const allStaff = Array.isArray(raw) ? raw : raw.staff || [];
+
+      // Admin can only see staff from own centre
+      const filteredStaff =
+        user.role === 'superadmin'
+          ? allStaff
+          : allStaff.filter(
+              (s) => Number(s.centre_id) === Number(user.centreId)
+            );
+
+      setAvailableStaff(filteredStaff);
     } catch (error) {
       console.error('Fetch staff failed:', error);
     }
   };
 
-  // ---- Filtered teams ----
+  useEffect(() => {
+    fetchTeams();
+    fetchCentres();
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Filtered teams
+  // ------------------------------------------------------------------
   const filteredTeams = useMemo(() => {
     return teams.filter((team) => {
       const matchesSearch = team.name
@@ -148,7 +180,9 @@ const TeamManagement = () => {
     });
   }, [teams, searchTerm, typeFilter, centreFilter]);
 
-  // ---- Format currency ----
+  // ------------------------------------------------------------------
+  // Currency formatter
+  // ------------------------------------------------------------------
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -157,7 +191,9 @@ const TeamManagement = () => {
     }).format(value);
   };
 
-  // ---- Create team handler ----
+  // ------------------------------------------------------------------
+  // Create team modal
+  // ------------------------------------------------------------------
   const openCreateModal = () => {
     setTeamForm({
       name: '',
@@ -173,10 +209,12 @@ const TeamManagement = () => {
   const handleCreateTeam = async (e) => {
     e.preventDefault();
     if (!teamForm.name.trim()) return alert('Team name is required');
+    if (submitting) return;
 
+    setSubmitting(true);
     try {
       const payload = {
-        name: teamForm.name,
+        name: teamForm.name.trim(),
         description: teamForm.description,
         is_global: teamForm.is_global,
         centre_id: teamForm.centre_id,
@@ -186,7 +224,7 @@ const TeamManagement = () => {
         })),
       };
 
-      await fetch('/api/teams', {
+      const response = await fetch(`${API_BASE}/api/teams`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -194,14 +232,19 @@ const TeamManagement = () => {
         },
         body: JSON.stringify(payload),
       });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to create team');
+
       setShowCreateModal(false);
       fetchTeams();
     } catch (error) {
-      console.error('Create team failed:', error);
+      alert(error.message || 'Error creating team');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  // ---- Member selection toggle ----
   const toggleMemberSelection = (staffId) => {
     setTeamForm((prev) => ({
       ...prev,
@@ -211,11 +254,13 @@ const TeamManagement = () => {
     }));
   };
 
-  // ---- Manage members modal ----
+  // ------------------------------------------------------------------
+  // Manage members modal
+  // ------------------------------------------------------------------
   const openManageMembers = async (team) => {
     setSelectedTeam(team);
     try {
-      const response = await fetch(`/api/teams/${team.id}/members`, {
+      const response = await fetch(`${API_BASE}/api/teams/${team.id}/members`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       const membersData = await response.json();
@@ -228,7 +273,7 @@ const TeamManagement = () => {
 
   const handleSetPrimary = async (memberId) => {
     try {
-      await fetch(`/api/teams/member/${memberId}/primary`, {
+      await fetch(`${API_BASE}/api/teams/member/${memberId}/primary`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
@@ -241,7 +286,7 @@ const TeamManagement = () => {
   const handleRemoveMember = async (teamId, staffId) => {
     if (!window.confirm('Remove this member?')) return;
     try {
-      await fetch(`/api/teams/${teamId}/members/${staffId}`, {
+      await fetch(`${API_BASE}/api/teams/${teamId}/members/${staffId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
@@ -253,38 +298,66 @@ const TeamManagement = () => {
   };
 
   const handleAddMemberToTeam = async (staffId) => {
+    if (!selectedTeam) return;
+    setSubmitting(true);
     try {
-      await fetch(`/api/teams/${selectedTeam.id}/members`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ staff_id: staffId, is_primary: false }),
-      });
-      if (selectedTeam) openManageMembers(selectedTeam);
+      const response = await fetch(
+        `${API_BASE}/api/teams/${selectedTeam.id}/members`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+          body: JSON.stringify({ staff_id: staffId, is_primary: false }),
+        }
+      );
+      if (!response.ok) throw new Error('Failed to add member');
+      // refresh members
+      const updatedRes = await fetch(
+        `${API_BASE}/api/teams/${selectedTeam.id}/members`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+        }
+      );
+      const updatedMembers = await updatedRes.json();
+      setSelectedTeam((prev) => ({ ...prev, membersList: updatedMembers }));
+      setAddMemberSearchOpen(false);
+      setAddMemberSearch('');
       fetchTeams();
     } catch (error) {
-      console.error('Add member failed:', error);
+      alert(error.message || 'Error adding member');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  // ---- Delete team ----
+  // ------------------------------------------------------------------
+  // Delete team
+  // ------------------------------------------------------------------
   const handleDeleteTeam = async (teamId) => {
     if (!window.confirm('Delete this team? This action cannot be undone.'))
       return;
+    setSubmitting(true);
     try {
-      await fetch(`/api/teams/${teamId}`, {
+      const response = await fetch(`${API_BASE}/api/teams/${teamId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
+      if (!response.ok) throw new Error('Failed to delete team');
       fetchTeams();
     } catch (error) {
-      console.error('Delete team failed:', error);
+      alert(error.message || 'Error deleting team');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  // ---- Render ----
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
@@ -312,7 +385,8 @@ const TeamManagement = () => {
             {isAdmin && (
               <button
                 onClick={openCreateModal}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all shadow-md hover:shadow-lg"
+                disabled={submitting}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all shadow-md hover:shadow-lg"
               >
                 <FiPlus className="mr-2" /> Create Team
               </button>
@@ -394,10 +468,11 @@ const TeamManagement = () => {
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="all">All Centres</option>
-              {/* Dynamically load centre options from API if needed */}
-              <option value="1">Kochi</option>
-              <option value="2">Kozhikode</option>
-              {/* ... */}
+              {centres.map((centre) => (
+                <option key={centre.id} value={centre.id}>
+                  {centre.name}
+                </option>
+              ))}
             </select>
           )}
         </div>
@@ -488,19 +563,21 @@ const TeamManagement = () => {
                         {team.member_count}
                       </td>
                       <td className="py-4 px-5 text-right text-green-700">
-                        {formatCurrency(team.revenue)}
+                        {formatCurrency(team.revenue || 0)}
                       </td>
                       <td className="py-4 px-5 text-right text-red-600">
-                        {formatCurrency(team.expense)}
+                        {formatCurrency(team.expense || 0)}
                       </td>
-                      <td
-                        className={`py-4 px-5 text-right font-medium ${
-                          team.profit >= 0
-                            ? 'text-green-700'
-                            : 'text-red-600'
-                        }`}
-                      >
-                        {formatCurrency(team.profit)}
+                      <td className="py-4 px-5 text-right">
+                        <span
+                          className={`font-semibold ${
+                            Number(team.profit || 0) >= 0
+                              ? 'text-green-700'
+                              : 'text-red-700'
+                          }`}
+                        >
+                          {formatCurrency(team.profit || 0)}
+                        </span>
                       </td>
                       <td className="py-4 px-5 text-center">
                         <div className="flex justify-center gap-2">
@@ -528,7 +605,8 @@ const TeamManagement = () => {
                                 onClick={() =>
                                   handleDeleteTeam(team.id)
                                 }
-                                className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50"
+                                disabled={submitting}
+                                className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
                                 title="Delete"
                               >
                                 <FiTrash2 size={16} />
@@ -576,6 +654,7 @@ const TeamManagement = () => {
                   }
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   required
+                  disabled={submitting}
                 />
               </div>
               <div>
@@ -592,6 +671,7 @@ const TeamManagement = () => {
                   }
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   rows={2}
+                  disabled={submitting}
                 />
               </div>
 
@@ -611,6 +691,7 @@ const TeamManagement = () => {
                       });
                     }}
                     className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                    disabled={submitting}
                   />
                   <label
                     htmlFor="is_global"
@@ -637,11 +718,14 @@ const TeamManagement = () => {
                       })
                     }
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={submitting}
                   >
                     <option value="">Select centre</option>
-                    {/* Replace with actual centre list from API */}
-                    <option value="1">Kochi</option>
-                    <option value="2">Kozhikode</option>
+                    {centres.map((centre) => (
+                      <option key={centre.id} value={centre.id}>
+                        {centre.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}
@@ -668,6 +752,7 @@ const TeamManagement = () => {
                             toggleMemberSelection(staffId)
                           }
                           className="ml-2 text-indigo-600 hover:text-indigo-800"
+                          disabled={submitting}
                         >
                           <FiX size={14} />
                         </button>
@@ -685,6 +770,7 @@ const TeamManagement = () => {
                     onChange={(e) =>
                       setStaffSearch(e.target.value)
                     }
+                    disabled={submitting}
                   />
                   {staffSearch && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
@@ -729,14 +815,37 @@ const TeamManagement = () => {
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200"
+                  className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 disabled:opacity-50"
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700"
+                  disabled={submitting}
+                  className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-60 flex items-center"
                 >
+                  {submitting ? (
+                    <svg
+                      className="animate-spin h-4 w-4 mr-2"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                  ) : null}
                   Create Team
                 </button>
               </div>
@@ -763,19 +872,80 @@ const TeamManagement = () => {
               </div>
             </div>
             <div className="p-6">
-              <button
-                onClick={() => {
-                  const staffId = prompt(
-                    'Enter staff ID to add:'
-                  );
-                  if (staffId)
-                    handleAddMemberToTeam(Number(staffId));
-                }}
-                className="mb-4 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 flex items-center"
-              >
-                <FiUserPlus className="mr-2" /> Add Member
-              </button>
+              {/* Add member section */}
+              <div className="mb-4">
+                {!addMemberSearchOpen ? (
+                  <button
+                    onClick={() => setAddMemberSearchOpen(true)}
+                    className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 flex items-center"
+                  >
+                    <FiUserPlus className="mr-2" /> Add Member
+                  </button>
+                ) : (
+                  <div className="relative">
+                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search staff to add..."
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={addMemberSearch}
+                      onChange={(e) =>
+                        setAddMemberSearch(e.target.value)
+                      }
+                      autoFocus
+                      disabled={submitting}
+                    />
+                    <button
+                      onClick={() => {
+                        setAddMemberSearchOpen(false);
+                        setAddMemberSearch('');
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <FiX size={16} />
+                    </button>
+                    {addMemberSearch && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                        {availableStaff
+                          .filter(
+                            (s) =>
+                              s.name
+                                .toLowerCase()
+                                .includes(
+                                  addMemberSearch.toLowerCase()
+                                ) &&
+                              !selectedTeam.membersList?.some(
+                                (m) => m.staff_id === s.id
+                              )
+                          )
+                          .map((staff) => (
+                            <div
+                              key={staff.id}
+                              className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+                              onClick={() =>
+                                handleAddMemberToTeam(
+                                  staff.id
+                                )
+                              }
+                            >
+                              <div>
+                                <p className="font-medium">
+                                  {staff.name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {staff.role}
+                                </p>
+                              </div>
+                              <FiPlus className="text-indigo-600" />
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
+              {/* Members list */}
               <div className="divide-y divide-gray-100">
                 {selectedTeam.membersList?.map((member) => (
                   <div
@@ -810,7 +980,8 @@ const TeamManagement = () => {
                           onClick={() =>
                             handleSetPrimary(member.id)
                           }
-                          className="text-amber-600 hover:text-amber-800 p-1.5 rounded-lg hover:bg-amber-50"
+                          disabled={submitting}
+                          className="text-amber-600 hover:text-amber-800 p-1.5 rounded-lg hover:bg-amber-50 disabled:opacity-50"
                           title="Set as primary team"
                         >
                           <FiStar size={16} />
@@ -824,7 +995,8 @@ const TeamManagement = () => {
                               member.staff_id
                             )
                           }
-                          className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50"
+                          disabled={submitting}
+                          className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
                           title="Remove"
                         >
                           <FiTrash2 size={16} />
