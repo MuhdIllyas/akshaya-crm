@@ -632,13 +632,13 @@ const TeamManagement = () => {
                     Members
                   </th>
                   <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
-                    Revenue
+                    Collected Revenue
                   </th>
                   <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
                     Expense
                   </th>
                   <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
-                    Profit
+                    Net Profit
                   </th>
                   <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
                     Actions
@@ -702,7 +702,7 @@ const TeamManagement = () => {
                         {team.member_count}
                       </td>
                       <td className="py-4 px-5 text-right text-green-700">
-                        {formatCurrency(team.revenue || 0)}
+                        {formatCurrency(team.collected_revenue || 0)}
                       </td>
                       <td className="py-4 px-5 text-right text-red-600">
                         {formatCurrency(team.expense || 0)}
@@ -710,12 +710,12 @@ const TeamManagement = () => {
                       <td className="py-4 px-5 text-right">
                         <span
                           className={`font-semibold ${
-                            Number(team.profit || 0) >= 0
+                            Number(team.net_profit || 0) >= 0
                               ? "text-green-700"
                               : "text-red-700"
                           }`}
                         >
-                          {formatCurrency(team.profit || 0)}
+                          {formatCurrency(team.net_profit || 0)}
                         </span>
                       </td>
                       <td className="py-4 px-5 text-center">
@@ -1258,7 +1258,7 @@ const TeamManagement = () => {
                                       {monthNames[row.month - 1]}
                                     </td>
                                     <td className="py-3 px-4 text-right text-green-700">
-                                      {formatCurrency(row.revenue)}
+                                      {formatCurrency(row.collected_revenue)}
                                     </td>
                                     <td className="py-3 px-4 text-right text-red-600">
                                       {formatCurrency(row.expense)}
@@ -1272,7 +1272,7 @@ const TeamManagement = () => {
                                             : "#b91c1c",
                                       }}
                                     >
-                                      {formatCurrency(row.profit)}
+                                      {formatCurrency(row.net_profit)}
                                     </td>
                                   </tr>
                                 );
