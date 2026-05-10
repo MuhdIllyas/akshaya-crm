@@ -159,8 +159,11 @@ const TeamManagement = () => {
 
   useEffect(() => {
     fetchTeams();
-    fetchCentres();
-  }, []);
+
+    if (isSuperAdmin) {
+      fetchCentres();
+    }
+  }, []); 
 
   // ------------------------------------------------------------------
   // Filtered teams
