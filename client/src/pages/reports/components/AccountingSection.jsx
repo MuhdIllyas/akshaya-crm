@@ -2334,6 +2334,35 @@ const AccountingSection = ({
   const [activeAccountingTab, setActiveAccountingTab] = useState('daily');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAdminExpenseModal, setShowAdminExpenseModal] = useState(false);
+
+  // Teams related state
+  const [teams, setTeams] = useState([]);
+
+  //  Add the fetch function here
+  const fetchTeams = async () => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/teams`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+      const data = await res.json();
+      setTeams(data || []);
+    } catch (err) {
+      console.error("Failed to load teams", err);
+    }
+  };
+
+  //  Add a useEffect to trigger the fetch when the modal opens
+  useEffect(() => {
+    if (showAdminExpenseModal && teams.length === 0) {
+      fetchTeams();
+    }
+  }, [showAdminExpenseModal]);
+
   const [showMiscIncomeModal, setShowMiscIncomeModal] = useState(false);
   const [miscIncomeForm, setMiscIncomeForm] = useState({
     amount: '',
@@ -4138,6 +4167,7 @@ const AccountingSection = ({
                 <AdminExpenseEntry
                   wallets={wallets}
                   categories={[]}
+                  teams={teams}
                   onSubmit={handleAdminExpenseSubmit}
                   onCancel={() => setShowAdminExpenseModal(false)}
                   submitButtonText="Add Expense"
