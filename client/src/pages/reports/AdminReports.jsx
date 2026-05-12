@@ -116,27 +116,27 @@ const AdminReports = () => {
     if (activeSection !== 'transactions') return;
 
     const params = new URLSearchParams({
-        search: searchTerm || "",
-        sort_by: sortBy,
-        sort_order: sortOrder,
+     search: searchTerm || "",
+     sort_by: sortBy,
+     sort_order: sortOrder,
         page: transactionPage, // 👈 ADDED: Send current page
         limit: 50              // 👈 ADDED: Send limit
-      });
+    });
 
-      if (dateFilter.fromDate) params.append("from", dateFilter.fromDate);
-      if (dateFilter.toDate) params.append("to", dateFilter.toDate);
+    if (dateFilter.fromDate) params.append("from", dateFilter.fromDate);
+    if (dateFilter.toDate) params.append("to", dateFilter.toDate);
 
-      fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      })
-        .then(res => res.json())
-        .then(data => setTransactionsData(data))
-        .catch(err => console.error("Failed to load transactions", err));
-        
+    fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions?${params.toString()}`, {
+     headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`
+     }
+    })
+     .then(res => res.json())
+     .then(data => setTransactionsData(data))
+     .catch(err => console.error("Failed to load transactions", err));
+     
       // 👈 ADDED transactionPage to the dependency array below so it refetches on click
-    }, [activeSection, searchTerm, sortBy, sortOrder, dateFilter, transactionPage]);
+   }, [activeSection, searchTerm, sortBy, sortOrder, dateFilter, transactionPage]);
 
   // Statistics calculation
   const stats = useMemo(() => {
