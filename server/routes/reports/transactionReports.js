@@ -135,24 +135,27 @@ router.get("/transactions", async (req, res) => {
           wt.amount::NUMERIC,
           wt.type::TEXT               AS transaction_type,
           wt.category::TEXT,
-          COALESCE(se.status, 'Completed')::TEXT AS status,
+          -- 🔥 FIXED: Pull status from payments, not service_entries
+          COALESCE(p.status, 'Completed')::TEXT AS status,
           wt.reference_id::INTEGER,
           wt.description::TEXT,
-          wt.created_at::TIMESTAMPTZ, -- 🔥 CHANGED TO TIMESTAMPTZ
+          wt.created_at::TIMESTAMPTZ,
           wt.staff_id::INTEGER,
           se.customer_name::TEXT
         FROM (
-          -- 🔥 FIXED: Only get latest non-reversal transaction per correction group
-          SELECT DISTINCT ON (correction_group_id)
+          -- 🔥 FIXED: COALESCE stops NULL correction groups from collapsing into 1 row
+          SELECT DISTINCT ON (COALESCE(correction_group_id::text, id::text))
             *
           FROM wallet_transactions
           WHERE (is_reversal IS NULL OR is_reversal = FALSE)
-          ORDER BY correction_group_id, created_at DESC
+          ORDER BY COALESCE(correction_group_id::text, id::text), created_at DESC
         ) wt
         JOIN wallets w ON w.id = wt.wallet_id
+        -- 🔥 NEW: Join payments to get accurate financial status
+        LEFT JOIN payments p
+          ON p.id = wt.reference_payment_id
         LEFT JOIN service_entries se
           ON se.id = wt.reference_id
-         AND wt.category = 'Service Payment'
         WHERE wt.category <> 'Transfer'
         AND w.centre_id = $1
       ),
@@ -164,7 +167,7 @@ router.get("/transactions", async (req, res) => {
           MAX(CASE WHEN wt.type = 'debit'  THEN wt.wallet_id END)::INTEGER AS from_wallet_id,
           MAX(CASE WHEN wt.type = 'credit' THEN wt.wallet_id END)::INTEGER AS to_wallet_id,
           MAX(wt.amount)::NUMERIC     AS amount,
-          MAX(wt.created_at)::TIMESTAMPTZ AS created_at, -- 🔥 CHANGED TO TIMESTAMPTZ
+          MAX(wt.created_at)::TIMESTAMPTZ AS created_at,
           MAX(wt.staff_id)::INTEGER   AS staff_id,
           'transfer'::TEXT            AS transaction_type,
           'Transfer'::TEXT            AS category,
@@ -175,7 +178,6 @@ router.get("/transactions", async (req, res) => {
         FROM wallet_transactions wt
         JOIN wallets w ON w.id = wt.wallet_id
         WHERE wt.category = 'Transfer'
-        -- 🔥 FIXED: Exclude reversals (transfers shouldn't have them, but safe)
         AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
         AND w.centre_id = $1
         GROUP BY wt.reference_id
@@ -184,21 +186,10 @@ router.get("/transactions", async (req, res) => {
       -- 3️⃣ Combine both with staff and wallet info
       all_transactions AS (
         SELECT
-          nt.id,
-          nt.from_wallet_id,
-          nt.to_wallet_id,
-          nt.amount,
-          nt.transaction_type,
-          nt.category,
-          nt.status,
-          nt.reference_id,
-          nt.description,
-          nt.created_at,
-          nt.staff_id,
-          s.name AS staff_name,
-          nt.customer_name,
-          w1.name AS from_wallet_name,
-          w2.name AS to_wallet_name
+          nt.id, nt.from_wallet_id, nt.to_wallet_id, nt.amount,
+          nt.transaction_type, nt.category, nt.status, nt.reference_id,
+          nt.description, nt.created_at, nt.staff_id, s.name AS staff_name,
+          nt.customer_name, w1.name AS from_wallet_name, w2.name AS to_wallet_name
         FROM normal_transactions nt
         LEFT JOIN staff s ON nt.staff_id = s.id
         LEFT JOIN wallets w1 ON nt.from_wallet_id = w1.id
@@ -207,21 +198,10 @@ router.get("/transactions", async (req, res) => {
         UNION ALL
         
         SELECT
-          gt.id,
-          gt.from_wallet_id,
-          gt.to_wallet_id,
-          gt.amount,
-          gt.transaction_type,
-          gt.category,
-          gt.status,
-          gt.reference_id,
-          gt.description,
-          gt.created_at,
-          gt.staff_id,
-          s.name AS staff_name,
-          gt.customer_name,
-          w1.name AS from_wallet_name,
-          w2.name AS to_wallet_name
+          gt.id, gt.from_wallet_id, gt.to_wallet_id, gt.amount,
+          gt.transaction_type, gt.category, gt.status, gt.reference_id,
+          gt.description, gt.created_at, gt.staff_id, s.name AS staff_name,
+          gt.customer_name, w1.name AS from_wallet_name, w2.name AS to_wallet_name
         FROM grouped_transfers gt
         LEFT JOIN staff s ON gt.staff_id = s.id
         LEFT JOIN wallets w1 ON gt.from_wallet_id = w1.id
@@ -235,57 +215,30 @@ router.get("/transactions", async (req, res) => {
       ORDER BY ${dbSortBy} ${sort_order}
       LIMIT $${filterIndex} OFFSET $${filterIndex + 1}`;
 
-    // Count query (FIXED to exclude reversals and duplicates)
+    // Count query (FIXED to match the logic above)
     const countQuery = `
       WITH
       normal_transactions AS (
         SELECT
-          wt.id::INTEGER,
-          wt.wallet_id::INTEGER       AS from_wallet_id,
-          NULL::INTEGER               AS to_wallet_id,
-          wt.amount::NUMERIC,
-          wt.type::TEXT               AS transaction_type,
-          wt.category::TEXT,
-          COALESCE(se.status, 'Completed')::TEXT AS status,
-          wt.reference_id::INTEGER,
-          wt.description::TEXT,
-          wt.created_at::TIMESTAMPTZ, -- 🔥 CHANGED TO TIMESTAMPTZ
-          wt.staff_id::INTEGER,
-          se.customer_name::TEXT
+          wt.id::INTEGER
         FROM (
-          -- 🔥 FIXED: Only get latest non-reversal transaction per correction group
-          SELECT DISTINCT ON (correction_group_id)
+          -- 🔥 FIXED: COALESCE stops NULL collapse
+          SELECT DISTINCT ON (COALESCE(correction_group_id::text, id::text))
             *
           FROM wallet_transactions
           WHERE (is_reversal IS NULL OR is_reversal = FALSE)
-          ORDER BY correction_group_id, created_at DESC
+          ORDER BY COALESCE(correction_group_id::text, id::text), created_at DESC
         ) wt
         JOIN wallets w ON w.id = wt.wallet_id
-        LEFT JOIN service_entries se
-          ON se.id = wt.reference_id
-         AND wt.category = 'Service Payment'
         WHERE wt.category <> 'Transfer'
         AND w.centre_id = $1
       ),
       
       grouped_transfers AS (
-        SELECT
-          wt.reference_id::INTEGER    AS id,
-          MAX(CASE WHEN wt.type = 'debit'  THEN wt.wallet_id END)::INTEGER AS from_wallet_id,
-          MAX(CASE WHEN wt.type = 'credit' THEN wt.wallet_id END)::INTEGER AS to_wallet_id,
-          MAX(wt.amount)::NUMERIC     AS amount,
-          MAX(wt.created_at)::TIMESTAMPTZ AS created_at, -- 🔥 CHANGED TO TIMESTAMPTZ
-          MAX(wt.staff_id)::INTEGER   AS staff_id,
-          'transfer'::TEXT            AS transaction_type,
-          'Transfer'::TEXT            AS category,
-          'Completed'::TEXT           AS status,
-          wt.reference_id::INTEGER    AS reference_id,
-          'Wallet Transfer'::TEXT     AS description,
-          NULL::TEXT                  AS customer_name
+        SELECT wt.reference_id::INTEGER AS id
         FROM wallet_transactions wt
         JOIN wallets w ON w.id = wt.wallet_id
         WHERE wt.category = 'Transfer'
-        -- 🔥 FIXED: Exclude reversals
         AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
         AND w.centre_id = $1
         GROUP BY wt.reference_id
@@ -314,15 +267,12 @@ router.get("/transactions", async (req, res) => {
       total,
       totalPages: Math.ceil(total / limit),
       transactions: rows.map(r => {
-        // Convert to IST explicitly to fix the timezone offset
         let localDate = null;
         let localTime = null;
         
         if (r.created_at) {
           const dateObj = new Date(r.created_at);
-          // en-CA natively formats to YYYY-MM-DD
           localDate = dateObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-          // en-GB natively formats to 24-hour HH:mm
           localTime = dateObj.toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
         }
 
