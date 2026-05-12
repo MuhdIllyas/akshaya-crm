@@ -20,13 +20,12 @@ const authenticateToken = (req, res, next) => {
 
 router.use(authenticateToken);
 
-// ========== DAILY SUMMARY (FIXED) ==========
+// ========== DAILY SUMMARY ==========
 router.get('/daily-summary', async (req, res) => {
   const client = await req.db.connect();
 
   try {
     const { date, centreId: queryCentreId } = req.query;
-
     const isSuperAdmin = req.user.role === "superadmin";
 
     let centreId = req.user.centre_id;
@@ -46,7 +45,7 @@ router.get('/daily-summary', async (req, res) => {
     await client.query('BEGIN');
 
     /* --------------------------------------------------
-       1️⃣ OPENING BALANCE (yesterday closing)
+       1. OPENING BALANCE (yesterday closing)
     -------------------------------------------------- */
     const openingRes = await client.query(
       `
@@ -63,7 +62,7 @@ router.get('/daily-summary', async (req, res) => {
     const openingBalance = Number(openingRes.rows[0].opening_balance);
 
     /* --------------------------------------------------
-       2️⃣ TODAY TRANSACTIONS (EXCLUDE TRANSFERS AND REVERSALS)
+       2. TODAY TRANSACTIONS 
     -------------------------------------------------- */
     const txRes = await client.query(
       `
@@ -83,17 +82,11 @@ router.get('/daily-summary', async (req, res) => {
       [centreId, date]
     );
 
-    let cashInflow = 0;
-    let digitalInflow = 0;
-    let bankInflow = 0;
-
-    let cashOutflow = 0;
-    let digitalOutflow = 0;
-    let bankOutflow = 0;
+    let cashInflow = 0, digitalInflow = 0, bankInflow = 0;
+    let cashOutflow = 0, digitalOutflow = 0, bankOutflow = 0;
 
     txRes.rows.forEach(row => {
       const amount = Number(row.amount);
-
       const walletType = row.wallet_type;
       const isCash = walletType === 'cash';
       const isBank = walletType === 'bank';
@@ -124,11 +117,9 @@ router.get('/daily-summary', async (req, res) => {
       date,
       derived: {
         openingBalance,
-
         cashInflow,
         digitalInflow,
         bankInflow,
-
         cashOutflow,
         digitalOutflow,
         bankOutflow
@@ -153,7 +144,6 @@ router.post('/daily-summary/actual-cash', async (req, res) => {
     const centreId = req.user.centre_id;
     const userId = req.user.id;
 
-    // Upsert the actual cash into the closure table
     await client.query(
       `INSERT INTO daily_accounting_closure 
         (centre_id, accounting_date, opening_balance, closing_balance, actual_cash, cash_variance, closed_by)
@@ -189,7 +179,6 @@ router.post('/misc-income', async (req, res) => {
 
     await client.query('BEGIN');
 
-    // 1. Verify the wallet exists and belongs to the centre
     const walletRes = await client.query(
       `SELECT id FROM wallets WHERE id = $1 AND centre_id = $2`,
       [wallet_id, centreId]
@@ -201,13 +190,11 @@ router.post('/misc-income', async (req, res) => {
 
     const groupId = crypto.randomUUID();
 
-    // 2. Add the money to the wallet directly
     await client.query(
       `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
       [amount, wallet_id]
     );
 
-    // 3. Record it in the wallet_transactions ledger
     await client.query(
       `INSERT INTO wallet_transactions (
         wallet_id, staff_id, type, amount, description, category, 
@@ -236,7 +223,7 @@ router.post('/misc-income', async (req, res) => {
   }
 });
 
-// ========== LEDGER (FIXED - Shows only latest non-reversal transactions AND chronologically sorted) ==========
+// ========== LEDGER (FIXED - COALESCE to prevent NULL collapse) ==========
 router.get('/ledger', async (req, res) => {
   const client = await req.db.connect();
 
@@ -267,50 +254,34 @@ router.get('/ledger', async (req, res) => {
 
     if (from) {
       params.push(from);
-      whereClause += `
-        AND wt.created_at >= $${params.length}::date
-      `;
+      whereClause += ` AND wt.created_at >= $${params.length}::date `;
     }
-
     if (to) {
       params.push(to);
-      whereClause += `
-        AND wt.created_at < ($${params.length}::date + INTERVAL '1 day')
-      `;
+      whereClause += ` AND wt.created_at < ($${params.length}::date + INTERVAL '1 day') `;
     }
-
     if (staff_id) {
       params.push(staff_id);
-      whereClause += `
-        AND wt.staff_id = $${params.length}
-      `;
+      whereClause += ` AND wt.staff_id = $${params.length} `;
     }
-
     if (wallet_id) {
       params.push(wallet_id);
-      whereClause += `
-        AND wt.wallet_id = $${params.length}
-      `;
+      whereClause += ` AND wt.wallet_id = $${params.length} `;
     }
-
     if (category) {
       params.push(category);
-      whereClause += `
-        AND wt.category = $${params.length}
-      `;
+      whereClause += ` AND wt.category = $${params.length} `;
     }
-
     if (service_id) {
       params.push(service_id);
-      whereClause += `
-        AND se.category_id = $${params.length}
-      `;
+      whereClause += ` AND se.category_id = $${params.length} `;
     }
 
     const ledgerRes = await client.query(
       `
       SELECT * FROM (
-        SELECT DISTINCT ON (wt.correction_group_id)
+        -- 🔥 FIXED: COALESCE stops NULL correction groups from collapsing into 1 row
+        SELECT DISTINCT ON (COALESCE(wt.correction_group_id::text, wt.id::text))
           wt.id,
           wt.created_at,
           wt.type,
@@ -333,7 +304,6 @@ router.get('/ledger', async (req, res) => {
         LEFT JOIN staff s
           ON s.id = wt.staff_id
 
-        -- 🔥 CRITICAL FIX: Removed reference_type entirely and allowed Department Payment category
         LEFT JOIN service_entries se
           ON se.id = wt.reference_id
           AND wt.category IN ('Service Payment', 'Department Payment', 'Service Charge')
@@ -344,7 +314,7 @@ router.get('/ledger', async (req, res) => {
         ${whereClause}
           AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
 
-        ORDER BY wt.correction_group_id, wt.created_at DESC
+        ORDER BY COALESCE(wt.correction_group_id::text, wt.id::text), wt.created_at DESC
       ) AS distinct_transactions
       ORDER BY created_at DESC
       LIMIT 500
@@ -365,7 +335,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-// ========== INCOME REPORT (FIXED - Critical) ==========
+// ========== INCOME REPORT (FIXED - COALESCE to prevent NULL collapse) ==========
 router.get('/income', async (req, res) => {
   const client = await req.db.connect();
 
@@ -385,54 +355,34 @@ router.get('/income', async (req, res) => {
     const { date, from, to, staff_id, wallet_id } = req.query;
 
     const params = [centreId];
-    let whereClause = `
-      WHERE s.centre_id = $1
-    `;
+    let whereClause = `WHERE s.centre_id = $1`;
 
-    // single day (payment date)
     if (date) {
       params.push(date);
-      whereClause += `
-        AND wt.created_at::date = $${params.length}
-      `;
+      whereClause += ` AND wt.created_at::date = $${params.length} `;
     }
-
-    // date range (payment date)
     if (from) {
       params.push(from);
-      whereClause += `
-        AND wt.created_at >= $${params.length}::date
-      `;
+      whereClause += ` AND wt.created_at >= $${params.length}::date `;
     }
-
     if (to) {
       params.push(to);
-      whereClause += `
-        AND wt.created_at < ($${params.length}::date + INTERVAL '1 day')
-      `;
+      whereClause += ` AND wt.created_at < ($${params.length}::date + INTERVAL '1 day') `;
     }
-
-    // optional staff filter
     if (staff_id) {
       params.push(staff_id);
-      whereClause += `
-        AND se.staff_id = $${params.length}
-      `;
+      whereClause += ` AND se.staff_id = $${params.length} `;
     }
-
-    // optional wallet filter
     if (wallet_id) {
       params.push(wallet_id);
-      whereClause += `
-        AND wt.wallet_id = $${params.length}
-      `;
+      whereClause += ` AND wt.wallet_id = $${params.length} `;
     }
 
-    // 🔥 FIXED: Include all needed columns in CTE
     const incomeRes = await client.query(
       `
       WITH latest_transactions AS (
-        SELECT DISTINCT ON (correction_group_id)
+        -- 🔥 FIXED: COALESCE to properly separate unrelated transactions
+        SELECT DISTINCT ON (COALESCE(correction_group_id::text, id::text))
           id,
           wallet_id,
           amount,
@@ -448,7 +398,7 @@ router.get('/income', async (req, res) => {
           AND type = 'credit'
           AND reference_type = 'payment'
           AND (is_reversal IS NULL OR is_reversal = FALSE)
-        ORDER BY correction_group_id, created_at DESC
+        ORDER BY COALESCE(correction_group_id::text, id::text), created_at DESC
       )
       SELECT
         se.id AS service_entry_id,
@@ -507,7 +457,7 @@ router.get('/income', async (req, res) => {
   }
 });
 
-// ========== WALLET BALANCES (FIXED - Exclude reversals) ==========
+// ========== WALLET BALANCES (FIXED - Now directly reads current live balance) ==========
 router.get('/wallet-balances', async (req, res) => {
   const client = await req.db.connect();
   try {
@@ -526,18 +476,13 @@ router.get('/wallet-balances', async (req, res) => {
 
     const result = await client.query(`
       SELECT
-        w.id,
-        COALESCE(SUM(
-          CASE
-            WHEN wt.type = 'credit' THEN wt.amount
-            WHEN wt.type = 'debit' THEN -wt.amount
-          END
-        ), 0) AS current_balance
-      FROM wallets w
-      LEFT JOIN wallet_transactions wt ON wt.wallet_id = w.id
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-      WHERE w.centre_id = $1
-      GROUP BY w.id
+        id,
+        name,
+        wallet_type,
+        balance AS current_balance
+      FROM wallets
+      WHERE centre_id = $1
+      ORDER BY name ASC
     `, [centreId]);
 
     res.json(result.rows);
@@ -563,13 +508,7 @@ router.post('/wallet-reconcile', async (req, res) => {
           (wallet_id, book_balance, actual_balance, variance, reconciled_by)
         VALUES ($1, $2, $3, $4, $5)
         `,
-        [
-          r.wallet_id,
-          r.book_balance,
-          r.actual_balance,
-          r.variance,
-          userId
-        ]
+        [r.wallet_id, r.book_balance, r.actual_balance, r.variance, userId]
       );
     }
 
@@ -585,7 +524,7 @@ router.post('/wallet-reconcile', async (req, res) => {
   }
 });
 
-// ========== WALLET BOOK BALANCES (FIXED - Exclude reversals) ==========
+// ========== WALLET BOOK BALANCES (FIXED - Stop calculating, use actual balance) ==========
 router.get('/wallet-book-balances', async (req, res) => {
   const client = await req.db.connect();
 
@@ -609,42 +548,14 @@ router.get('/wallet-book-balances', async (req, res) => {
         w.name,
         w.wallet_type,
         COALESCE(wdb.opening_balance, 0) AS opening_balance,
-        COALESCE(
-          SUM(
-            CASE
-              WHEN wt.type = 'credit' THEN wt.amount
-              WHEN wt.type = 'debit' THEN -wt.amount
-              ELSE 0
-            END
-          ),
-          0
-        ) AS net_movement,
-        COALESCE(wdb.opening_balance, 0) +
-        COALESCE(
-          SUM(
-            CASE
-              WHEN wt.type = 'credit' THEN wt.amount
-              WHEN wt.type = 'debit' THEN -wt.amount
-              ELSE 0
-            END
-          ),
-          0
-        ) AS book_balance
+        (w.balance - COALESCE(wdb.opening_balance, 0)) AS net_movement,
+        w.balance AS book_balance
       FROM wallets w
       LEFT JOIN wallet_daily_balances wdb
         ON wdb.wallet_id = w.id
        AND wdb.date = CURRENT_DATE
-      LEFT JOIN wallet_transactions wt
-        ON wt.wallet_id = w.id
-       AND wt.created_at::date = CURRENT_DATE
-       AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
       WHERE w.centre_id = $1
-      GROUP BY
-        w.id,
-        w.name,
-        w.wallet_type,
-        wdb.opening_balance
-      ORDER BY w.name
+      ORDER BY w.name ASC
     `, [centreId]);
 
     res.json(result.rows);
@@ -657,7 +568,7 @@ router.get('/wallet-book-balances', async (req, res) => {
   }
 });
 
-// ========== WALLET LEDGER BALANCES (FIXED - Exclude reversals) ==========
+// ========== WALLET LEDGER BALANCES (FIXED - Use direct table data) ==========
 router.get('/wallet-ledger-balances', async (req, res) => {
   const client = await req.db.connect();
 
@@ -678,26 +589,13 @@ router.get('/wallet-ledger-balances', async (req, res) => {
     const result = await client.query(
       `
       SELECT
-        w.id,
-        w.name,
-        w.wallet_type,
-        COALESCE(
-          SUM(
-            CASE
-              WHEN wt.type = 'credit' THEN wt.amount
-              WHEN wt.type = 'debit' THEN -wt.amount
-              ELSE 0
-            END
-          ),
-          0
-        ) AS book_balance
-      FROM wallets w
-      LEFT JOIN wallet_transactions wt
-        ON wt.wallet_id = w.id
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-      WHERE w.centre_id = $1
-      GROUP BY w.id, w.name, w.wallet_type
-      ORDER BY w.name
+        id,
+        name,
+        wallet_type,
+        balance AS book_balance
+      FROM wallets
+      WHERE centre_id = $1
+      ORDER BY name ASC
       `,
       [centreId]
     );
@@ -720,13 +618,8 @@ router.post('/nightly-close', async (req, res) => {
     const userId = req.user.id;
 
     const {
-      date,
-      opening_balance,
-      closing_balance,
-      actual_cash,
-      cash_variance,
-      checklist,
-      notes
+      date, opening_balance, closing_balance,
+      actual_cash, cash_variance, checklist, notes
     } = req.body;
 
     await client.query(
@@ -745,17 +638,7 @@ router.post('/nightly-close', async (req, res) => {
         closed_by = EXCLUDED.closed_by,
         closed_at = NOW()
       `,
-      [
-        centreId,
-        date,
-        opening_balance,
-        closing_balance,
-        actual_cash,
-        cash_variance,
-        checklist,
-        notes,
-        userId
-      ]
+      [ centreId, date, opening_balance, closing_balance, actual_cash, cash_variance, checklist, notes, userId ]
     );
 
     res.json({ success: true });
