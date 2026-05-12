@@ -16,6 +16,7 @@ const AdminExpenseEntry = ({
   onCancel,
   wallets = [],
   categories = [],
+  teams = [] ,
   title = "New Expense Entry",
   submitButtonText = "Submit Expense",
   isLoading = false,
@@ -66,6 +67,7 @@ const AdminExpenseEntry = ({
     description: initialData.description || "",
     payment_method: initialData.payment_method || "cash",
     wallet_id: initialData.wallet_id || "",
+    team_id: initialData.team_id || "",
     expense_date: initialData.expense_date || new Date().toISOString().split('T')[0],
     receipt_number: initialData.receipt_number || "",
     remarks: initialData.remarks || "",
@@ -217,6 +219,38 @@ const AdminExpenseEntry = ({
                   </label>
                 ))}
               </div>
+            </div>
+
+            {/* Team Assignment */}      
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Assign Team
+              </label>
+
+              <select
+                value={formData.team_id}
+                onChange={(e) =>
+                  setFormData(prev => ({
+                    ...prev,
+                    team_id: e.target.value
+                  }))
+                }
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">
+                  No Team (General Expense)
+                </option>
+
+                {teams.map(team => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+
+              <p className="text-xs text-gray-500 mt-1">
+                Optional — assign this expense to a specific team
+              </p>
             </div>
 
             {/* Amount */}
