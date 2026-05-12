@@ -101,11 +101,12 @@ const AdminExpenseEntry = ({
       cat => cat.id === parseInt(formData.category_id)
     );
 
-    // Prepare payload
+// Prepare payload
     const payload = {
       ...formData,
       amount: Number(formData.amount),
       wallet_id: Number(formData.wallet_id),
+      team_id: formData.team_id ? Number(formData.team_id) : null, 
       category: selectedCategory?.name,
       
       // 🔥 ADMIN OVERRIDE
