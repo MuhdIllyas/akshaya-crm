@@ -18,6 +18,7 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
     const [sortBy, setSortBy] = useState('date');
     const [sortOrder, setSortOrder] = useState('desc');
     const [viewMode, setViewMode] = useState('grid');
+    const [transactionPage, setTransactionPage] = useState(1);
     const resetFilters = () => {
         setSearchTerm('');
         alert('Filters reset');
@@ -49,9 +50,11 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
     });
 
     const params = new URLSearchParams({
-    sort_by: sortBy,
-    sort_order: sortOrder,
-    centreId
+      sort_by: sortBy,
+      sort_order: sortOrder,
+      centreId,
+      page: transactionPage, // 👈 ADDED
+      limit: 50              // 👈 ADDED
     });
 
     if (searchTerm) params.append("search", searchTerm);
@@ -80,7 +83,7 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
 
     // 🧹 Cleanup: cancel previous request
     return () => controller.abort();
-}, [centreId, searchTerm, sortBy, sortOrder, dateFilter]);
+}, [centreId, searchTerm, sortBy, sortOrder, dateFilter, transactionPage]);
 
   return (
     <TransactionsSection
@@ -100,6 +103,10 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
       resetFilters={resetFilters}
       dateFilter={dateFilter}
       setDateFilter={setDateFilter}
+
+      currentPage={transactionsData?.page || 1}
+      totalPages={transactionsData?.totalPages || 1}
+      onPageChange={(newPage) => setTransactionPage(newPage)}
     />
   );
 };
