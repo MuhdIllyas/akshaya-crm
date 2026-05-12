@@ -36,7 +36,7 @@ router.use(authenticateToken);
 router.use(requireAdmin);
 
 /* ================================
-   TRANSACTION REPORTS (FIXED FOR CORRECTION SYSTEM)
+   TRANSACTION REPORTS (FIXED FOR CORRECTION SYSTEM & PAGINATION)
 ================================ */
 router.get("/transactions", async (req, res) => {
   const {
@@ -123,10 +123,10 @@ router.get("/transactions", async (req, res) => {
   const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
 
   try {
-    // Build the main query
-    const query = `
+    // 1️⃣ Store the heavy CTE logic in a string so both queries can share it perfectly
+    const baseCTE = `
       WITH
-      -- 1️⃣ All non-transfer transactions (ONLY LATEST NON-REVERSAL)
+      -- All non-transfer transactions (ONLY LATEST NON-REVERSAL)
       normal_transactions AS (
         SELECT
           wt.id::INTEGER,
@@ -135,7 +135,6 @@ router.get("/transactions", async (req, res) => {
           wt.amount::NUMERIC,
           wt.type::TEXT               AS transaction_type,
           wt.category::TEXT,
-          -- 🔥 FIXED: Pull status from payments, not service_entries
           COALESCE(p.status, 'Completed')::TEXT AS status,
           wt.reference_id::INTEGER,
           wt.description::TEXT,
@@ -143,7 +142,6 @@ router.get("/transactions", async (req, res) => {
           wt.staff_id::INTEGER,
           se.customer_name::TEXT
         FROM (
-          -- 🔥 FIXED: COALESCE stops NULL correction groups from collapsing into 1 row
           SELECT DISTINCT ON (COALESCE(correction_group_id::text, id::text))
             *
           FROM wallet_transactions
@@ -151,16 +149,13 @@ router.get("/transactions", async (req, res) => {
           ORDER BY COALESCE(correction_group_id::text, id::text), created_at DESC
         ) wt
         JOIN wallets w ON w.id = wt.wallet_id
-        -- 🔥 NEW: Join payments to get accurate financial status
-        LEFT JOIN payments p
-          ON p.id = wt.reference_payment_id
-        LEFT JOIN service_entries se
-          ON se.id = wt.reference_id
+        LEFT JOIN payments p ON p.id = wt.reference_payment_id
+        LEFT JOIN service_entries se ON se.id = wt.reference_id
         WHERE wt.category <> 'Transfer'
         AND w.centre_id = $1
       ),
       
-      -- 2️⃣ Group transfer debit + credit into one logical row (exclude reversals)
+      -- Group transfer debit + credit into one logical row (exclude reversals)
       grouped_transfers AS (
         SELECT
           wt.reference_id::INTEGER    AS id,
@@ -183,7 +178,7 @@ router.get("/transactions", async (req, res) => {
         GROUP BY wt.reference_id
       ),
       
-      -- 3️⃣ Combine both with staff and wallet info
+      -- Combine both with staff and wallet info
       all_transactions AS (
         SELECT
           nt.id, nt.from_wallet_id, nt.to_wallet_id, nt.amount,
@@ -207,60 +202,34 @@ router.get("/transactions", async (req, res) => {
         LEFT JOIN wallets w1 ON gt.from_wallet_id = w1.id
         LEFT JOIN wallets w2 ON gt.to_wallet_id = w2.id
       )
-      
-      -- 4️⃣ Apply filters, sorting and pagination
+    `;
+
+    // 2️⃣ Count Query: Now it properly applies the WHERE clause so the total matches reality!
+    const countQuery = `
+      ${baseCTE}
+      SELECT COUNT(*) as total
+      FROM all_transactions t
+      ${whereClause}
+    `;
+
+    // Get total count using the shared filters
+    const { rows: countRows } = await pool.query(countQuery, values);
+    const total = parseInt(countRows[0].total);
+
+    // 3️⃣ Data Query: Add the limit/offset constraints and run the fetch
+    values.push(limit, offset);
+    const dataQuery = `
+      ${baseCTE}
       SELECT *
       FROM all_transactions t
       ${whereClause}
       ORDER BY ${dbSortBy} ${sort_order}
-      LIMIT $${filterIndex} OFFSET $${filterIndex + 1}`;
+      LIMIT $${filterIndex} OFFSET $${filterIndex + 1}
+    `;
 
-    // Count query (FIXED to match the logic above)
-    const countQuery = `
-      WITH
-      normal_transactions AS (
-        SELECT
-          wt.id::INTEGER
-        FROM (
-          -- 🔥 FIXED: COALESCE stops NULL collapse
-          SELECT DISTINCT ON (COALESCE(correction_group_id::text, id::text))
-            *
-          FROM wallet_transactions
-          WHERE (is_reversal IS NULL OR is_reversal = FALSE)
-          ORDER BY COALESCE(correction_group_id::text, id::text), created_at DESC
-        ) wt
-        JOIN wallets w ON w.id = wt.wallet_id
-        WHERE wt.category <> 'Transfer'
-        AND w.centre_id = $1
-      ),
-      
-      grouped_transfers AS (
-        SELECT wt.reference_id::INTEGER AS id
-        FROM wallet_transactions wt
-        JOIN wallets w ON w.id = wt.wallet_id
-        WHERE wt.category = 'Transfer'
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-        AND w.centre_id = $1
-        GROUP BY wt.reference_id
-      )
-      
-      SELECT COUNT(*) as total
-      FROM (
-        SELECT id FROM normal_transactions
-        UNION ALL
-        SELECT id FROM grouped_transfers
-      ) AS combined_ids`;
+    const { rows } = await pool.query(dataQuery, values);
 
-    // Get total count
-    const { rows: countRows } = await pool.query(countQuery, [centreId]);
-    const total = parseInt(countRows[0].total);
-
-    // Add limit and offset to values array for main query
-    values.push(limit, offset);
-
-    // Get paginated data
-    const { rows } = await pool.query(query, values);
-
+    // 4️⃣ Send back perfectly matching pagination details
     res.json({
       page: Number(page),
       limit: Number(limit),
