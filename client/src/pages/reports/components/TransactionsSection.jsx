@@ -79,7 +79,12 @@ const TransactionsSection = ({
   resetFilters,
   staffList = [], // Add staff list prop
   dateFilter = { fromDate: '', toDate: '' }, // Add date filter prop with default
-  setDateFilter // Add set date filter prop
+  setDateFilter, // Add set date filter prop
+  // 🆕 NEW PROPS FOR PAGINATION
+  currentPage = 1,
+  totalPages = 1,
+  onPageChange
+
 }) => {
   const transactions = data?.transactions || [];
   const [expandedRow, setExpandedRow] = useState(null);
@@ -766,27 +771,49 @@ const TransactionsSection = ({
                     <div>
                       <span className="text-gray-600">Showing:</span>
                       <span className="font-bold text-gray-900 ml-1">
-                        {sortedTransactions.length} of {totalTransactions}
+                        {sortedTransactions.length} items on this page
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-600">Total Amount:</span>
+                      <span className="text-gray-600">Page Total:</span>
                       <span className="font-bold text-emerald-600 ml-1">
                         ₹{totalAmount.toLocaleString()}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-gray-600">Filtered:</span>
-                      <span className={`font-bold ml-1 ${
-                        filteredTransactions.length === totalTransactions ? 'text-gray-600' : 'text-indigo-600'
-                      }`}>
-                        {filteredTransactions.length} transactions
+                  </div>
+                  
+                  {/* 🆕 NEW PAGINATION CONTROLS */}
+                  {onPageChange && (
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => onPageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                        className={`px-3 py-1.5 border rounded flex items-center transition-colors ${
+                          currentPage <= 1 
+                            ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' 
+                            : 'border-gray-300 text-gray-700 hover:bg-white hover:text-indigo-600'
+                        }`}
+                      >
+                        Previous
+                      </button>
+                      
+                      <span className="text-gray-600 font-medium">
+                        Page {currentPage} of {totalPages}
                       </span>
+                      
+                      <button
+                        onClick={() => onPageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                        className={`px-3 py-1.5 border rounded flex items-center transition-colors ${
+                          currentPage >= totalPages 
+                            ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' 
+                            : 'border-gray-300 text-gray-700 hover:bg-white hover:text-indigo-600'
+                        }`}
+                      >
+                        Next
+                      </button>
                     </div>
-                  </div>
-                  <div className="text-gray-600">
-                    Last updated: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
+                  )}
                 </div>
               </div>
             )}
