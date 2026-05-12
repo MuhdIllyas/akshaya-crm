@@ -51,9 +51,7 @@ router.get("/wallets/summary", async (req, res) => {
 
     const isSuperAdmin = req.user.role === "superadmin";
 
-    // 🔑 Decide centreId source
     let centreId = req.user.centre_id;
-
     if (isSuperAdmin && queryCentreId) {
       centreId = Number(queryCentreId);
     }
@@ -66,20 +64,34 @@ router.get("/wallets/summary", async (req, res) => {
 
     const params = [from, to, centreId];
 
+    // 🔥 FIXED: Grab exactly the first day's opening balance, and the last day's closing balance.
     const query = `
+      WITH period_summary AS (
+        SELECT
+          wallet_id,
+          MIN(date) AS first_date,
+          MAX(date) AS last_date,
+          SUM(total_credit) AS total_credit,
+          SUM(total_debit) AS total_debit
+        FROM wallet_daily_balances
+        WHERE date BETWEEN $1 AND $2
+        GROUP BY wallet_id
+      )
       SELECT
-        w.id   AS wallet_id,
+        w.id AS wallet_id,
         w.name AS wallet_name,
         w.wallet_type,
-        MIN(d.opening_balance)  AS opening_balance,
-        SUM(d.total_credit)     AS total_credit,
-        SUM(d.total_debit)      AS total_debit,
-        MAX(d.closing_balance)  AS closing_balance
-      FROM wallet_daily_balances d
-      JOIN wallets w ON w.id = d.wallet_id
-      WHERE d.date BETWEEN $1 AND $2
-        AND w.centre_id = $3
-      GROUP BY w.id, w.name, w.wallet_type
+        d_first.opening_balance AS opening_balance,
+        p.total_credit,
+        p.total_debit,
+        d_last.closing_balance AS closing_balance
+      FROM period_summary p
+      JOIN wallets w ON w.id = p.wallet_id
+      JOIN wallet_daily_balances d_first 
+        ON d_first.wallet_id = p.wallet_id AND d_first.date = p.first_date
+      JOIN wallet_daily_balances d_last 
+        ON d_last.wallet_id = p.wallet_id AND d_last.date = p.last_date
+      WHERE w.centre_id = $3
       ORDER BY w.name ASC
     `;
 
