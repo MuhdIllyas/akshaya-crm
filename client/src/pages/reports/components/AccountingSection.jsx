@@ -257,9 +257,10 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
     });
   }, [summaryData]);
 
-  const calculateTotals = () => {
+const calculateTotals = () => {
     const {
       openingBalance = 0,
+      cashOpening = 0, // Ensure this is pulled from derived
       cashInflow = 0,
       digitalInflow = 0,
       bankInflow = 0,
@@ -268,10 +269,18 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
       bankOutflow = 0
     } = formData.derived || {};
 
-    const totalInflow = cashInflow + digitalInflow + bankInflow;
-    const totalOutflow = cashOutflow + digitalOutflow + bankOutflow;
+    const actualCashInHand = formData.manual?.actualCashInHand || 0;
+
+    // Calculate Total Business Balance (for the overall summary)
+    const totalInflow = cashInflow + bankInflow + digitalInflow;
+    const totalOutflow = cashOutflow + bankOutflow + digitalOutflow;
     const closingBalance = openingBalance + totalInflow - totalOutflow;
-    const variance = closingBalance - (formData.manual.actualCashInHand || 0);
+
+    // 🔥 Calculate strictly the PHYSICAL CASH in the drawer
+    const expectedCash = cashOpening + cashInflow - cashOutflow;
+
+    // The variance is Expected Cash minus the Actual Cash the staff counted
+    const variance = expectedCash - actualCashInHand;
 
     return {
       totalInflow,
