@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   FiFileText, FiCalendar, FiTrendingUp, FiTrendingDown,
   FiSmartphone, FiCheckCircle, FiAlertCircle, FiDollarSign,
@@ -44,7 +45,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
   </motion.div>
 );
 
-// Nightly Accounting Checklist Component (unchanged - full code)
+// Nightly Accounting Checklist Component
 const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
   const [checklist, setChecklist] = useState(
     existingData?.checklist || {
@@ -238,7 +239,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
   );
 };
 
-// Daily Summary Component (unchanged - full code)
+// Daily Summary Component
 const DailySummaryComponent = ({ summaryData, onUpdate }) => {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -257,9 +258,10 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
     });
   }, [summaryData]);
 
-  const calculateTotals = () => {
+const calculateTotals = () => {
     const {
       openingBalance = 0,
+      cashOpening = 0, // Ensure this is pulled from derived
       cashInflow = 0,
       digitalInflow = 0,
       bankInflow = 0,
@@ -268,10 +270,18 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
       bankOutflow = 0
     } = formData.derived || {};
 
-    const totalInflow = cashInflow + digitalInflow + bankInflow;
-    const totalOutflow = cashOutflow + digitalOutflow + bankOutflow;
+    const actualCashInHand = formData.manual?.actualCashInHand || 0;
+
+    // Calculate Total Business Balance (for the overall summary)
+    const totalInflow = cashInflow + bankInflow + digitalInflow;
+    const totalOutflow = cashOutflow + bankOutflow + digitalOutflow;
     const closingBalance = openingBalance + totalInflow - totalOutflow;
-    const variance = closingBalance - (formData.manual.actualCashInHand || 0);
+
+    // 🔥 Calculate strictly the PHYSICAL CASH in the drawer
+    const expectedCash = cashOpening + cashInflow - cashOutflow;
+
+    // The variance is Expected Cash minus the Actual Cash the staff counted
+    const variance = expectedCash - actualCashInHand;
 
     return {
       totalInflow,
@@ -465,7 +475,7 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
   );
 };
 
-// Income View Component (unchanged - full code)
+// Income View Component
 const IncomeViewComponent = ({ transactions = [] }) => {
   const rows = Array.isArray(transactions)
     ? transactions
@@ -995,7 +1005,7 @@ const IncomeViewComponent = ({ transactions = [] }) => {
   );
 };
 
-// Ledger View Component (unchanged - full code)
+// Ledger View Component
 const LedgerView = ({ ledger, onLedgerRowClick }) => {
   const totalCredits = ledger.reduce((sum, tx) => 
     sum + (tx.type === 'credit' ? Number(tx.amount || 0) : 0), 0);
@@ -1410,7 +1420,7 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
   );
 };
 
-// Wallet Reconciliation Component (unchanged - full code)
+// Wallet Reconciliation Component
 const WalletReconciliation = ({ wallets, onRefreshWallets }) => {
   const [walletBalances, setWalletBalances] = useState({});
   const [isReconciling, setIsReconciling] = useState(false);
@@ -2311,7 +2321,7 @@ const ExpenseManagement = ({
 };
 
 /* ======================================================
-   MAIN ACCOUNTING SECTION
+   MAIN ACCOUNTING SECTION (with Excel export)
 ====================================================== */
 const AccountingSection = ({ 
   user,
@@ -2338,7 +2348,6 @@ const AccountingSection = ({
   // Teams related state
   const [teams, setTeams] = useState([]);
 
-  //  Add the fetch function here
   const fetchTeams = async () => {
     try {
       const res = await fetch(
@@ -2356,7 +2365,6 @@ const AccountingSection = ({
     }
   };
 
-  //  Add a useEffect to trigger the fetch when the modal opens
   useEffect(() => {
     if (showAdminExpenseModal && teams.length === 0) {
       fetchTeams();
@@ -2374,23 +2382,17 @@ const AccountingSection = ({
   const handleMiscIncomeSubmit = async (e) => {
       e.preventDefault();
       try {
-        // 1. Extract the selected Year, Month, and Day
         const [year, month, day] = miscIncomeForm.date.split('-');
-        
-        // 2. Get the exact current time right now
         const now = new Date();
-        
-        // 3. Combine the selected date with the current time
         const submissionDate = new Date(
           year, 
-          month - 1, // JavaScript months are 0-indexed (0-11)
+          month - 1,
           day, 
           now.getHours(), 
           now.getMinutes(), 
           now.getSeconds()
         );
 
-        // 4. Create a new payload with the full Date + Time string
         const payload = {
           ...miscIncomeForm,
           date: submissionDate.toISOString() 
@@ -2402,7 +2404,7 @@ const AccountingSection = ({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${localStorage.getItem('token')}`
           },
-          body: JSON.stringify(payload) // <-- Send the combined payload here
+          body: JSON.stringify(payload)
         });
         
         if (!res.ok) {
@@ -2414,7 +2416,6 @@ const AccountingSection = ({
         setShowMiscIncomeModal(false);
         setMiscIncomeForm({ amount: '', wallet_id: '', description: '', date: new Date().toISOString().split('T')[0] });
         
-        // Force a full refresh so Wallet balances and the Ledger update instantly
         handleRefreshAllData(); 
       } catch (err) {
         toast.error(err.message);
@@ -2484,8 +2485,6 @@ const AccountingSection = ({
     );
 
     const data = await res.json();
-    
-    console.log("Raw wallet data from backend:", data);
 
     const merged = data.map(item => ({
       id: item.id,
@@ -2495,8 +2494,6 @@ const AccountingSection = ({
       currentBalance: Number(item.book_balance || 0),
       book_balance: Number(item.book_balance || 0)
     }));
-
-    console.log("Processed wallet data:", merged);
 
     onUpdateAccounting("wallets", merged);
   };
@@ -2526,7 +2523,6 @@ const AccountingSection = ({
     const fetchAllInitialData = async () => {
       setLoading(true);
       try {
-        // Fetch daily summary
         const dailyRes = await fetch(
           `${import.meta.env.VITE_API_URL}/api/accounting/daily-summary?${buildQueryString({ date })}`,
           {
@@ -2540,7 +2536,6 @@ const AccountingSection = ({
           onUpdateAccounting("dailySummary", dailyData);
         }
         
-        // Fetch income
         const incomeRes = await fetch(
           `${import.meta.env.VITE_API_URL}/api/accounting/income?${buildQueryString({ date })}`,
           {
@@ -2555,7 +2550,6 @@ const AccountingSection = ({
           onUpdateAccounting?.("income", incomeData);
         }
 
-        // Fetch ledger data
         const ledgerRes = await fetch(
           `${import.meta.env.VITE_API_URL}/api/accounting/ledger?${buildQueryString({
             from: date,
@@ -2572,7 +2566,6 @@ const AccountingSection = ({
           onUpdateAccounting('ledger', ledgerData);
         }
 
-        // Fetch expenses
         const expenseRes = await fetch(
           `${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`,
           {
@@ -2597,10 +2590,8 @@ const AccountingSection = ({
           onUpdateAccounting?.('expenses', mappedExpenseData);
         }
 
-        // Refresh wallet balances
         await refreshWalletBookBalances();
 
-        // Fetch nightly closure data
         const nightlyRes = await fetch(
           `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close?${buildQueryString({ date })}`,
           {
@@ -2732,7 +2723,6 @@ const AccountingSection = ({
         date: item.expense_date
           ? item.expense_date.slice(0, 10)
           : item.date,
-
         status: item.status === 'auto_approved'
           ? 'approved'
           : item.status?.toLowerCase()
@@ -2823,7 +2813,6 @@ const AccountingSection = ({
     onUpdateAccounting('expenses', await res.json());
   };
 
-  // ---------- CORRECTION HANDLER ----------
   const handleCorrectExpense = async (expenseId, payload) => {
     try {
       const res = await fetch(
@@ -2842,7 +2831,6 @@ const AccountingSection = ({
         throw new Error(err.error || 'Correction failed');
       }
       toast.success('Expense corrected successfully');
-      // Refresh both expenses and wallets
       await fetchExpenses();
       await refreshWalletBookBalances();
     } catch (error) {
@@ -2867,12 +2855,8 @@ const AccountingSection = ({
         throw new Error(data.error || "Failed to create expense");
       }
 
-      // 🔥 FIX: Use your existing fetchExpenses function so the data gets mapped correctly!
       await fetchExpenses();
-      
-      // 🔥 FIX: Also refresh wallet balances so the UI updates the deducted amount instantly
       await refreshWalletBookBalances();
-      
       toast.success("Expense added successfully!");
       setShowAdminExpenseModal(false);
       
@@ -2882,13 +2866,11 @@ const AccountingSection = ({
   };
 
   const handleUpdateDailySummary = async (summary) => {
-      // 1. Update UI instantly
       onUpdateAccounting('dailySummary', {
         ...accountingData.dailySummary,
         ...summary
       });
 
-      // 2. 🔥 Send the new value to our newly created backend route
       if (summary.actualCashInHand !== undefined) {
         try {
           await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/daily-summary/actual-cash`, {
@@ -2999,7 +2981,6 @@ const AccountingSection = ({
         Authorization: `Bearer ${localStorage.getItem("token")}`
       };
 
-      // 1. Refresh Daily Summary
       const dailyRes = await fetch(
         `${import.meta.env.VITE_API_URL}/api/accounting/daily-summary?${buildQueryString({ date })}`,
         { headers }
@@ -3009,7 +2990,6 @@ const AccountingSection = ({
         onUpdateAccounting("dailySummary", dailyData);
       }
 
-      // 2. Refresh Income
       const incomeRes = await fetch(
         `${import.meta.env.VITE_API_URL}/api/accounting/income?${buildQueryString({ date })}`,
         { headers }
@@ -3019,7 +2999,6 @@ const AccountingSection = ({
         onUpdateAccounting('income', incomeData);
       }
 
-      // 3. Refresh Wallet Balances
       await refreshWalletBookBalances();
 
       toast.success("All data refreshed!");
@@ -3028,6 +3007,160 @@ const AccountingSection = ({
       toast.error("Failed to refresh data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ---------- NEW: Excel export handler ----------
+const handleExportExcel = () => {
+    try {
+      const formatAmount = (val) => val ? Number(val).toLocaleString('en-IN') : '0';
+      
+      const incomeRows = (accountingData.income?.rows || []).map(row => ({
+        'Date': row.received_at ? new Date(row.received_at).toLocaleDateString() : '',
+        'Time': row.received_at ? new Date(row.received_at).toLocaleTimeString() : '',
+        'Customer': row.customer_name || '',
+        'Service': row.service_name || '',
+        'Staff': row.staff_name || '',
+        'Received Amount (₹)': formatAmount(row.received_amount),
+        'Service Charges (₹)': formatAmount(row.service_charges),
+        'Department Charges (₹)': formatAmount(row.department_charges),
+        'Status': 'Completed'
+      }));
+      
+      const expensesForDate = accountingData.expenses.filter(e => e.date === date && e.status !== 'rejected');
+      const expenseRows = expensesForDate.map(exp => ({
+        'Date': exp.date || '',
+        'Description': exp.description || '',
+        'Category': exp.category || '',
+        'Amount (₹)': formatAmount(exp.amount),
+        'Payment Method': exp.payment_method || '',
+        'Wallet': exp.wallet_name || '',
+        'Staff': exp.staff_name || '',
+        'Status': exp.status || '',
+        'Notes': exp.notes || ''
+      }));
+      
+      const ledgerRows = (accountingData.ledger?.rows || []).map(tx => ({
+        'Date': tx.created_at ? new Date(tx.created_at).toLocaleDateString() : '',
+        'Time': tx.created_at ? new Date(tx.created_at).toLocaleTimeString() : '',
+        'Wallet': tx.wallet_name || '',
+        'Type': tx.type || '',
+        'Amount (₹)': formatAmount(tx.amount),
+        'Category': tx.category || '',
+        'Staff': tx.staff_name || '',
+        'Customer': tx.customer_name || '',
+        'Service': tx.service_name || ''
+      }));
+      
+      const walletsData = derivedWallets.map(w => ({
+        'Wallet Name': w.name,
+        'Type': w.type || w.wallet_type,
+        'Book Balance (₹)': formatAmount(w.book_balance),
+        'Current Balance (₹)': formatAmount(w.currentBalance),
+        'Variance (₹)': formatAmount((w.currentBalance || 0) - (w.book_balance || 0)),
+        'Reconciled': Math.abs((w.currentBalance || 0) - (w.book_balance || 0)) <= 10 ? 'Yes' : 'No'
+      }));
+      
+      const derived = accountingData.dailySummary?.derived || {};
+      const manual = accountingData.dailySummary?.manual || {};
+      const summaryRows = [{
+        'Date': date,
+        'Opening Balance (₹)': formatAmount(derived.openingBalance),
+        'Cash Opening (₹)': formatAmount(derived.cashOpening),
+        'Cash Inflow (₹)': formatAmount(derived.cashInflow),
+        'Digital Inflow (₹)': formatAmount(derived.digitalInflow),
+        'Bank Inflow (₹)': formatAmount(derived.bankInflow),
+        'Cash Outflow (₹)': formatAmount(derived.cashOutflow),
+        'Digital Outflow (₹)': formatAmount(derived.digitalOutflow),
+        'Bank Outflow (₹)': formatAmount(derived.bankOutflow),
+        'Actual Cash in Hand (₹)': formatAmount(manual.actualCashInHand),
+        'Total Inflow (₹)': formatAmount((derived.cashInflow||0)+(derived.digitalInflow||0)+(derived.bankInflow||0)),
+        'Total Outflow (₹)': formatAmount((derived.cashOutflow||0)+(derived.digitalOutflow||0)+(derived.bankOutflow||0)),
+        'Closing Balance (₹)': formatAmount((derived.openingBalance||0) + (derived.cashInflow||0)+(derived.digitalInflow||0)+(derived.bankInflow||0) - ((derived.cashOutflow||0)+(derived.digitalOutflow||0)+(derived.bankOutflow||0))),
+        'Cash Variance (₹)': formatAmount(((derived.cashOpening||0)+(derived.cashInflow||0)-(derived.cashOutflow||0)) - (manual.actualCashInHand||0))
+      }];
+      
+      const nightly = accountingData.nightlyAccounting?.[date] || {};
+      const nightlyRows = [{
+        'Date': date,
+        'Closing Cash (Calculated) (₹)': formatAmount(nightly.closingCash),
+        'Actual Cash Count (₹)': formatAmount(nightly.actualCashCount),
+        'Cash Variance (₹)': formatAmount((nightly.closingCash||0) - (nightly.actualCashCount||0)),
+        'Income Entry Verified': nightly.checklist?.incomeEntryVerified ? 'Yes' : 'No',
+        'Expense Entry Verified': nightly.checklist?.expenseEntryVerified ? 'Yes' : 'No',
+        'Bank Entry Reconciled': nightly.checklist?.bankEntryReconciled ? 'Yes' : 'No',
+        'Daily Summary Completed': nightly.checklist?.dailySummaryCompleted ? 'Yes' : 'No',
+        'Cash Reconciled': nightly.checklist?.cashReconciled ? 'Yes' : 'No',
+        'Wallet Balances Verified': nightly.checklist?.walletBalancesVerified ? 'Yes' : 'No',
+        'Notes': nightly.notes || '',
+        'Closed Timestamp': nightly.timestamp ? new Date(nightly.timestamp).toLocaleString() : ''
+      }];
+      
+      const wb = XLSX.utils.book_new();
+      const wsIncome = XLSX.utils.json_to_sheet(incomeRows);
+      const wsExpenses = XLSX.utils.json_to_sheet(expenseRows);
+      const wsLedger = XLSX.utils.json_to_sheet(ledgerRows);
+      const wsWallets = XLSX.utils.json_to_sheet(walletsData);
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      const wsNightly = XLSX.utils.json_to_sheet(nightlyRows);
+      
+      const autoSizeColumns = (ws) => {
+        if (!ws['!cols']) ws['!cols'] = [];
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          let maxLen = 0;
+          for (let R = range.s.r; R <= range.e.r; ++R) {
+            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (cell && cell.v) {
+              let len = String(cell.v).length;
+              if (len > maxLen) maxLen = len;
+            }
+          }
+          ws['!cols'][C] = { wch: Math.min(maxLen + 2, 40) };
+        }
+      };
+      
+      autoSizeColumns(wsIncome);
+      autoSizeColumns(wsExpenses);
+      autoSizeColumns(wsLedger);
+      autoSizeColumns(wsWallets);
+      autoSizeColumns(wsSummary);
+      autoSizeColumns(wsNightly);
+      
+      XLSX.utils.book_append_sheet(wb, wsIncome, 'Income');
+      XLSX.utils.book_append_sheet(wb, wsExpenses, 'Expenses');
+      XLSX.utils.book_append_sheet(wb, wsLedger, 'Ledger');
+      XLSX.utils.book_append_sheet(wb, wsWallets, 'Wallets');
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Daily Summary');
+      XLSX.utils.book_append_sheet(wb, wsNightly, 'Nightly Accounting');
+      
+      const fileName = `Accounting_Report_${date}.xlsx`;
+      
+      // --- BROWSER-SAFE EXPORT LOGIC ---
+      // Generate the Excel file as an array buffer
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      
+      // Create a Blob from the array buffer
+      const dataBlob = new Blob([excelBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' 
+      });
+      
+      // Create a temporary download link and click it
+      const url = window.URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up the DOM and URL object
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success(`Report exported as ${fileName}`);
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Failed to generate Excel report');
     }
   };
 
@@ -3176,7 +3309,6 @@ const AccountingSection = ({
             {/* Ledger View */}
             {activeAccountingTab === 'ledger' && (
               <div className="space-y-4">
-                {/* Ledger Filters */}
                 <div className="grid grid-cols-6 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
                   <input
                     type="date"
@@ -3221,7 +3353,7 @@ const AccountingSection = ({
                     className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="">All Wallets</option>
-                      {derivedWallets?.map(w => (   // <--- UPDATED LINE
+                      {derivedWallets?.map(w => (
                       <option key={w.id} value={w.id}>{w.name}</option>
                       ))}
                   </select>
@@ -3259,7 +3391,6 @@ const AccountingSection = ({
                   </button>
                 </div>
 
-                {/* Ledger Table */}
                 <LedgerView
                   ledger={accountingData.ledger?.rows || []}
                   onLedgerRowClick={handleLedgerRowClick}
@@ -3267,7 +3398,7 @@ const AccountingSection = ({
               </div>
             )}
 
-            {/* Expenses (with correction) */}
+            {/* Expenses */}
             {activeAccountingTab === 'expenses' && (
               <>
                 <div className="flex justify-between items-center mb-4">
@@ -3305,10 +3436,9 @@ const AccountingSection = ({
               />
             )}
 
-{/* Reports */}
+            {/* Reports */}
             {activeAccountingTab === 'reports' && (
               <div className="space-y-6">
-                {/* Report Header with Export Options */}
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-bold text-gray-900 flex items-center">
@@ -3329,7 +3459,10 @@ const AccountingSection = ({
                         <option>Custom Range</option>
                       </select>
                     </div>
-                    <button className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm">
+                    <button 
+                      onClick={handleExportExcel}
+                      className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                    >
                       <FiDownload className="h-4 w-4" />
                       <span>Export Report</span>
                     </button>
@@ -3338,7 +3471,6 @@ const AccountingSection = ({
 
                 {/* Key Performance Indicators */}
                 <div className="grid grid-cols-4 gap-4">
-                  {/* Revenue KPI */}
                   <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <div className="p-2 bg-emerald-100 rounded-lg">
@@ -3355,7 +3487,6 @@ const AccountingSection = ({
                     </div>
                   </div>
 
-                  {/* Expenses KPI */}
                   <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <div className="p-2 bg-rose-100 rounded-lg">
@@ -3372,7 +3503,6 @@ const AccountingSection = ({
                     </div>
                   </div>
 
-                  {/* Profit KPI */}
                   <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <div className="p-2 bg-indigo-100 rounded-lg">
@@ -3389,7 +3519,6 @@ const AccountingSection = ({
                     </div>
                   </div>
 
-                  {/* Cash Flow KPI */}
                   <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <div className="p-2 bg-blue-100 rounded-lg">
@@ -3405,7 +3534,7 @@ const AccountingSection = ({
                   </div>
                 </div>
 
-                {/* Detailed Reports Grid */}
+                {/* Detailed Reports Grid (collapsed for brevity, same as original) */}
                 <div className="grid grid-cols-2 gap-6">
                   {/* Income Breakdown */}
                   <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
@@ -3421,7 +3550,6 @@ const AccountingSection = ({
                     </div>
                     
                     <div className="space-y-4">
-                      {/* Service Charges vs Department Charges */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
@@ -3486,7 +3614,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Progress Bar */}
                       <div className="pt-2">
                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                           <div 
@@ -3501,7 +3628,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Top Services by Profit */}
                       <div className="pt-4 border-t border-gray-100">
                         <h4 className="text-xs font-semibold text-gray-700 mb-3">Top 5 Services by Profit</h4>
                         <div className="space-y-2">
@@ -3573,7 +3699,7 @@ const AccountingSection = ({
                     </div>
                   </div>
 
-                  {/* Expense Analysis */}
+                  {/* Expense Analysis - same as original, omitted for brevity */}
                   <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-bold text-gray-900 text-sm flex items-center">
@@ -3587,7 +3713,6 @@ const AccountingSection = ({
                     </div>
                     
                     <div className="space-y-4">
-                      {/* Expense Status */}
                       <div className="grid grid-cols-3 gap-3">
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
                           <p className="text-xs text-emerald-700 mb-1">Approved</p>
@@ -3629,7 +3754,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Expense Categories */}
                       <div className="pt-4">
                         <h4 className="text-xs font-semibold text-gray-700 mb-3">Expense by Category</h4>
                         <div className="space-y-2">
@@ -3691,7 +3815,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Payment Methods */}
                       <div className="pt-4 border-t border-gray-100">
                         <h4 className="text-xs font-semibold text-gray-700 mb-3">Payment Methods</h4>
                         <div className="grid grid-cols-3 gap-3">
@@ -3736,7 +3859,7 @@ const AccountingSection = ({
                     </div>
                   </div>
 
-                  {/* Performance Metrics */}
+                  {/* Performance Metrics - omitted for brevity, same as original */}
                   <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-bold text-gray-900 text-sm flex items-center">
@@ -3750,7 +3873,6 @@ const AccountingSection = ({
                     </div>
                     
                     <div className="space-y-4">
-                      {/* Efficiency Metrics */}
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
                           <div className="flex items-center justify-between mb-2">
@@ -3789,7 +3911,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Staff Performance */}
                       <div className="pt-4">
                         <h4 className="text-xs font-semibold text-gray-700 mb-3">Top Staff by Service Profit</h4>
                         <div className="space-y-2">
@@ -3864,7 +3985,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Transaction Stats */}
                       <div className="pt-4 border-t border-gray-100">
                         <h4 className="text-xs font-semibold text-gray-700 mb-3">Transaction Statistics</h4>
                         <div className="grid grid-cols-3 gap-3">
@@ -3894,7 +4014,7 @@ const AccountingSection = ({
                     </div>
                   </div>
 
-                  {/* Cash Flow & Wallet Summary */}
+                  {/* Cash Flow & Wallet Summary - omitted for brevity, same as original */}
                   <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-bold text-gray-900 text-sm flex items-center">
@@ -3908,7 +4028,6 @@ const AccountingSection = ({
                     </div>
                     
                     <div className="space-y-4">
-                      {/* Wallet Summary Cards */}
                       <div className="grid grid-cols-3 gap-3">
                         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                           <div className="flex items-center justify-between mb-2">
@@ -3968,7 +4087,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Wallet Distribution */}
                       <div className="pt-4">
                         <h4 className="text-xs font-semibold text-gray-700 mb-3">Wallet Distribution</h4>
                         <div className="space-y-2">
@@ -4012,7 +4130,6 @@ const AccountingSection = ({
                         </div>
                       </div>
 
-                      {/* Quick Stats */}
                       <div className="pt-4 border-t border-gray-100">
                         <div className="grid grid-cols-2 gap-3">
                           <div className="text-center p-3 border border-gray-200 rounded-lg">
@@ -4039,7 +4156,6 @@ const AccountingSection = ({
                   </div>
                 </div>
 
-                {/* Report Summary & Notes */}
                 <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                   <h3 className="font-bold text-gray-900 text-sm flex items-center mb-3">
                     <FiMessageSquare className="h-4 w-4 mr-2 text-gray-600" />
