@@ -44,22 +44,36 @@ router.get('/daily-summary', async (req, res) => {
 
     await client.query('BEGIN');
 
-    /* --------------------------------------------------
-       1. OPENING BALANCE (yesterday closing)
+/* --------------------------------------------------
+       1. OPENING BALANCES (yesterday closing)
     -------------------------------------------------- */
     const openingRes = await client.query(
       `
       SELECT
+        w.wallet_type,
         COALESCE(SUM(wdb.closing_balance), 0) AS opening_balance
       FROM wallet_daily_balances wdb
       JOIN wallets w ON w.id = wdb.wallet_id
       WHERE w.centre_id = $1
         AND wdb.date = ($2::date - INTERVAL '1 day')
+      GROUP BY w.wallet_type
       `,
       [centreId, date]
     );
 
-    const openingBalance = Number(openingRes.rows[0].opening_balance);
+    let cashOpening = 0;
+    let bankOpening = 0;
+    let digitalOpening = 0;
+
+    openingRes.rows.forEach(row => {
+      const amt = Number(row.opening_balance);
+      if (row.wallet_type === 'cash') cashOpening += amt;
+      else if (row.wallet_type === 'bank') bankOpening += amt;
+      else digitalOpening += amt;
+    });
+    
+    // Total opening balance is the sum of all three
+    const totalOpeningBalance = cashOpening + bankOpening + digitalOpening;
 
     /* --------------------------------------------------
        2. TODAY TRANSACTIONS 
@@ -114,18 +128,23 @@ router.get('/daily-summary', async (req, res) => {
     const actualCashInHand = closureRes.rows.length > 0 ? Number(closureRes.rows[0].actual_cash) : 0;
 
     res.json({
-      date,
-      derived: {
-        openingBalance,
-        cashInflow,
-        digitalInflow,
-        bankInflow,
-        cashOutflow,
-        digitalOutflow,
-        bankOutflow
-      },
-      actualCashInHand: actualCashInHand
-    });
+          date,
+          derived: {
+            openingBalance: totalOpeningBalance,
+            cashOpening,      // 🔥 ADD THIS
+            bankOpening,      // 🔥 ADD THIS
+            digitalOpening,   // 🔥 ADD THIS
+
+            cashInflow,
+            digitalInflow,
+            bankInflow,
+
+            cashOutflow,
+            digitalOutflow,
+            bankOutflow
+          },
+          actualCashInHand: actualCashInHand
+        });
 
   } catch (err) {
     await client.query('ROLLBACK');
