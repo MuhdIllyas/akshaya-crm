@@ -387,11 +387,11 @@ const App = () => {
             />
             <Route
               path="staff/track_service"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><TrackService /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><TrackService /></ProtectedRoute>}
             />
             <Route
               path="staff/track_service/:id"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><TrackService /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><TrackService /></ProtectedRoute>}
             />
             <Route
               path="staff/service-workspace/:selectedServiceId"
