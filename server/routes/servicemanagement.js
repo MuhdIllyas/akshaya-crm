@@ -1468,6 +1468,19 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Dismiss Expiry - for calendar events- to clear the expiry notification for a service entry. This does NOT change the actual expiry date or status, just marks that the user has acknowledged it.
+router.put('/entry/:id/dismiss-expiry', authenticateToken, async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE service_entries SET is_expiry_dismissed = TRUE WHERE id = $1', 
+      [req.params.id]
+    );
+    res.json({ message: "Expiry dismissed" });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to dismiss expiry" });
+  }
+});
+
 // ========== UNIFIED TRANSACTION CORRECTION ENGINE ==========
 
 // 🔥 UPDATED: GET /api/servicemanagement/transactions/:id/correction-status
