@@ -303,6 +303,7 @@ const calculateTotals = () => {
 
   const fields = [
     { key: 'openingBalance', label: 'Opening Balance', type: 'balance', category: 'system' },
+    { key: 'cashOpening', label: 'Cash Opening Balance', type: 'cash', category: 'system' },
     { key: 'cashInflow', label: 'Cash Collections', type: 'cash', category: 'inflow' },
     { key: 'digitalInflow', label: 'Digital Collections', type: 'digital', category: 'inflow' },
     { key: 'bankInflow', label: 'Bank Collections', type: 'bank', category: 'inflow' },
@@ -1421,9 +1422,41 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
 };
 
 // Wallet Reconciliation Component
-const WalletReconciliation = ({ wallets, onRefreshWallets }) => {
+const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
   const [walletBalances, setWalletBalances] = useState({});
   const [isReconciling, setIsReconciling] = useState(false);
+
+  // 🔥 ADD THIS USE-EFFECT TO FETCH PREVIOUSLY SAVED BALANCES
+  useEffect(() => {
+    const loadSavedBalances = async () => {
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconciliations?date=${date}`,
+          {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+          }
+        );
+        
+        if (res.ok) {
+          const savedData = await res.json();
+          const restoredBalances = {};
+          
+          // Map the saved actual_balances back into our React state
+          savedData.forEach(row => {
+            restoredBalances[row.wallet_id] = Number(row.actual_balance);
+          });
+          
+          setWalletBalances(restoredBalances);
+        }
+      } catch (error) {
+        console.error("Failed to load saved reconciliations", error);
+      }
+    };
+
+    if (date) {
+      loadSavedBalances();
+    }
+  }, [date]);
 
   const reconciledWallets = wallets.filter(w => 
     walletBalances[w.id] !== undefined && 
@@ -3433,6 +3466,7 @@ const handleExportExcel = () => {
                 wallets={derivedWallets}
                 onReconcile={handleReconcileWallets}
                 onRefreshWallets={refreshWalletBookBalances}
+                date={date}
               />
             )}
 
