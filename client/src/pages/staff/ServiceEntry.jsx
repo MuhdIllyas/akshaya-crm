@@ -58,6 +58,13 @@ const ServiceEntry = () => {
     loading: false,
     transactionType: ''
   });
+
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
   
   const [correctionStatus, setCorrectionStatus] = useState({});
   
@@ -247,66 +254,87 @@ const ServiceEntry = () => {
       toast.error('Please provide a reason (at least 5 characters)');
       return;
     }
+
+    // Build payload (only changed fields)
+    const payload = {
+      reason: reason.trim()
+    };
     
-    setCorrectionModal(prev => ({ ...prev, loading: true }));
-    
-    try {
-      // 🔥 FIX: Only send changed fields
-      const payload = {
-        reason: reason.trim()
-      };
-      
-      // Only include amount if it changed (with small tolerance for floating point)
-      const originalAmount = parseFloat(transaction.originalAmount);
-      if (Math.abs(parsedAmount - originalAmount) > 0.001) {
-        payload.new_amount = parsedAmount;
-      }
-      
-      // Only include wallet if it changed
-      const originalWalletId = transaction.wallet_id || transaction.wallet;
-      if (parsedWalletId !== parseInt(originalWalletId)) {
-        payload.new_wallet_id = parsedWalletId;
-      }
-      
-      // 🔥 SAFETY: Send correction_group_id for backend verification
-      if (transaction.correction_group_id) {
-        payload.correction_group_id = transaction.correction_group_id;
-      }
-      
-      console.log('📤 Correction API Payload:', payload);
-      console.log('📤 Correcting Transaction ID:', transaction.id);
-      
-      // 🔥 API call uses wallet_transactions.id
-      await api.put(`/transactions/${transaction.id}/correct`, payload);
-      
-      toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
-      
-      const entriesRes = await getServiceEntries(true);
-      setServiceEntries(entriesRes.data);
-      
-      setCorrectionStatus(prev => {
-        const updated = { ...prev };
-        delete updated[transaction.id];
-        return updated;
-      });
-      
-      setCorrectionModal({ 
-        isOpen: false, 
-        transaction: null, 
-        loading: false, 
-        newAmount: '', 
-        newWalletId: '', 
-        reason: '',
-        transactionType: '' 
-      });
-    } catch (err) {
-      console.error('❌ Correction error:', err);
-      console.error('❌ Error response:', err.response?.data);
-      console.error('❌ Transaction ID used:', transaction.id);
-      toast.error(err.response?.data?.error || 'Failed to correct transaction');
-    } finally {
-      setCorrectionModal(prev => ({ ...prev, loading: false }));
+    // Only include amount if it changed (with small tolerance for floating point)
+    const originalAmount = parseFloat(transaction.originalAmount);
+    if (Math.abs(parsedAmount - originalAmount) > 0.001) {
+      payload.new_amount = parsedAmount;
     }
+    
+    // Only include wallet if it changed
+    const originalWalletId = transaction.wallet_id || transaction.wallet;
+    if (parsedWalletId !== parseInt(originalWalletId)) {
+      payload.new_wallet_id = parsedWalletId;
+    }
+    
+    // 🔥 SAFETY: Send correction_group_id for backend verification
+    if (transaction.correction_group_id) {
+      payload.correction_group_id = transaction.correction_group_id;
+    }
+
+    // Prepare the actual API call
+    const executeCorrectionApi = async () => {
+      setCorrectionModal(prev => ({ ...prev, loading: true }));
+      try {
+        console.log('📤 Correction API Payload:', payload);
+        console.log('📤 Correcting Transaction ID:', transaction.id);
+        
+        await api.put(`/transactions/${transaction.id}/correct`, payload);
+        
+        toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
+        
+        const entriesRes = await getServiceEntries(true);
+        setServiceEntries(entriesRes.data);
+        
+        setCorrectionStatus(prev => {
+          const updated = { ...prev };
+          delete updated[transaction.id];
+          return updated;
+        });
+        
+        setCorrectionModal({ 
+          isOpen: false, 
+          transaction: null, 
+          loading: false, 
+          newAmount: '', 
+          newWalletId: '', 
+          reason: '',
+          transactionType: '' 
+        });
+      } catch (err) {
+        console.error('❌ Correction error:', err);
+        console.error('❌ Error response:', err.response?.data);
+        console.error('❌ Transaction ID used:', transaction.id);
+        toast.error(err.response?.data?.error || 'Failed to correct transaction');
+      } finally {
+        setCorrectionModal(prev => ({ ...prev, loading: false }));
+      }
+    };
+
+    // 🛑 Personal wallet check with modal
+    const allWallets = [...wallets.offline, ...wallets.online];
+    const targetWallet = allWallets.find(w => w.id === parsedWalletId);
+    
+    if (targetWallet && targetWallet.is_shared === false && targetWallet.assigned_staff_id !== null) {
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Correction Verification',
+        message: `You are processing this correction using a personal wallet (${targetWallet.name}). Do you want to proceed?`,
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          executeCorrectionApi();
+        }
+      });
+      return;
+    }
+
+    // No personal wallet involved – execute immediately
+    executeCorrectionApi();
   };
 
   const viewTransactionHistory = async (transactionId, type) => {
@@ -947,8 +975,7 @@ const generateInvoicePDF = () => {
     }
   };
 
-  const handlePaymentChange = (index, field, value) => {
-    console.log(`ServiceEntry.jsx: Handle payment change: index=${index}, field=${field}, value=${value}`);
+  const updatePaymentState = (index, field, value) => {
     const updatedPayments = [...formData.payments];
     updatedPayments[index] = { ...updatedPayments[index], [field]: value };
 
@@ -975,6 +1002,28 @@ const generateInvoicePDF = () => {
     }
 
     setFormData(prev => ({ ...prev, payments: updatedPayments }));
+  };
+
+  const handlePaymentChange = (index, field, value) => {
+    if (field === 'wallet' && value) {
+      const allWallets = [...wallets.offline, ...wallets.online];
+      const selectedWallet = allWallets.find(w => w.id === parseInt(value));
+      
+      if (selectedWallet && selectedWallet.is_shared === false && selectedWallet.assigned_staff_id !== null) {
+        setConfirmDialog({
+          isOpen: true,
+          title: 'Personal Wallet Selected',
+          message: `You are selecting a personal wallet (${selectedWallet.name}). Do you want to proceed?`,
+          onConfirm: () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            updatePaymentState(index, field, value);
+          }
+        });
+        return; // Wait for user to confirm via modal
+      }
+    }
+    // Proceed normally if no warning is needed
+    updatePaymentState(index, field, value);
   };
 
   const addPayment = () => {
@@ -1084,6 +1133,7 @@ const generateInvoicePDF = () => {
       return;
     }
 
+    // Build submission data
     const submissionData = {
       tokenId: formData.tokenId || null,
       customerName: formData.customerName.trim(),
@@ -1108,68 +1158,97 @@ const generateInvoicePDF = () => {
       }));
     }
 
-    console.log(
-      `ServiceEntry.jsx: ${editingEntryId ? 'Updating' : 'Creating'} service entry`,
-      JSON.stringify(submissionData, null, 2)
-    );
+    // Prepare the actual API call
+    const executeFinalSubmit = async () => {
+      console.log(`ServiceEntry.jsx: ${editingEntryId ? 'Updating' : 'Creating'} service entry`, JSON.stringify(submissionData, null, 2));
+      try {
+        if (editingEntryId) {
+          await updateServiceEntry(editingEntryId, submissionData);
+          toast.success('Service entry updated successfully!', { autoClose: 3500 });
+        } else {
+          await createServiceEntry({
+            ...submissionData,
+            customerServiceId
+          });
+          toast.success('Service entry created successfully!', { autoClose: 3500 });
+        }
+        setTimeout(() => {
+          navigate('/dashboard/staff');
+        }, 3500);
 
-    try {
-      if (editingEntryId) {
-        await updateServiceEntry(editingEntryId, submissionData);
-        toast.success('Service entry updated successfully!', { autoClose: 3500 });
-      } else {
-        await createServiceEntry({
-          ...submissionData,
-          customerServiceId
+        setEditingEntryId(null);
+        setFormData({
+          tokenId: '',
+          customerName: '',
+          phone: '',
+          category: '',
+          subcategory: '',
+          serviceCharge: '',
+          departmentCharge: '',
+          totalCharge: '',
+          status: 'pending',
+          expiryDate: '',
+          payments: [],
+          serviceWalletId: null,
+          requiresWallet: false,
+          hasExpiry: false,
         });
-        toast.success('Service entry created successfully!', { autoClose: 3500 });
-      }
-      setTimeout(() => {
-        navigate('/dashboard/staff');
-      }, 3500);
 
-      setEditingEntryId(null);
-      setFormData({
-        tokenId: '',
-        customerName: '',
-        phone: '',
-        category: '',
-        subcategory: '',
-        serviceCharge: '',
-        departmentCharge: '',
-        totalCharge: '',
-        status: 'pending',
-        expiryDate: '',
-        payments: [],
-        serviceWalletId: null,
-        requiresWallet: false,
-        hasExpiry: false,
+        setFilteredSubcategories([]);
+        setSelectedSubcategory(null);
+        setSelectedCategoryDocuments([]);
+        setSelectedSubcategoryDocuments([]);
+        setSelectedWebsite(null);
+        setTotalCharge(0);
+        setPaidAmount(0);
+        setPendingAmount(0);
+        setBalanceAmount(0);
+        setDaysRemaining(null);
+      } catch (err) {
+        console.error('ServiceEntry.jsx: Submission error:', err.response?.data || err.message);
+
+        if (err.response?.data?.details) {
+          err.response.data.details.forEach(d =>
+            toast.error(d, { position: 'top-right', autoClose: 5000 })
+          );
+        } else {
+          toast.error(err.response?.data?.error || 'Failed to submit service entry', {
+            position: 'top-right',
+            autoClose: 5000,
+          });
+        }
+      }
+    };
+
+    // 🛑 Personal wallet check with modal
+    const allWallets = [...wallets.offline, ...wallets.online];
+    
+    // Check both payment wallets and the service department wallet
+    const selectedWalletIds = [
+      ...formData.payments.map(p => parseInt(p.wallet)),
+      parseInt(formData.serviceWalletId)
+    ].filter(id => !isNaN(id));
+
+    const personalWalletUsed = selectedWalletIds.some(id => {
+      const w = allWallets.find(wallet => wallet.id === id);
+      return w && w.is_shared === false && w.assigned_staff_id !== null;
+    });
+
+    if (personalWalletUsed) {
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Personal Wallet Verification',
+        message: 'A personal wallet is currently selected for this transaction. Are you sure you want to proceed?',
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          executeFinalSubmit();
+        }
       });
-
-      setFilteredSubcategories([]);
-      setSelectedSubcategory(null);
-      setSelectedCategoryDocuments([]);
-      setSelectedSubcategoryDocuments([]);
-      setSelectedWebsite(null);
-      setTotalCharge(0);
-      setPaidAmount(0);
-      setPendingAmount(0);
-      setBalanceAmount(0);
-      setDaysRemaining(null);
-    } catch (err) {
-      console.error('ServiceEntry.jsx: Submission error:', err.response?.data || err.message);
-
-      if (err.response?.data?.details) {
-        err.response.data.details.forEach(d =>
-          toast.error(d, { position: 'top-right', autoClose: 5000 })
-        );
-      } else {
-        toast.error(err.response?.data?.error || 'Failed to submit service entry', {
-          position: 'top-right',
-          autoClose: 5000,
-        });
-      }
+      return;
     }
+
+    // No personal wallet – submit directly
+    executeFinalSubmit();
   };
 
   const getCategoryName = (categoryId) => {
@@ -2011,9 +2090,38 @@ const generateInvoicePDF = () => {
         )}
       </div>
 
-      {/* ========== ENTRY DETAILS MODAL ========== */}
+      {/* ========== CUSTOM CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-amber-100 p-2 rounded-full">
+                <FiAlertCircle className="h-6 w-6 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">{confirmDialog.title}</h3>
+            </div>
+            <p className="text-gray-600 text-sm mb-6">{confirmDialog.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDialog.onConfirm}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium text-sm shadow-sm"
+              >
+                Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== ENTRY DETAILS MODAL (BLURRED BACKGROUND) ========== */}
       {selectedEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-40">
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Service Entry Details</h2>
@@ -2045,9 +2153,9 @@ const generateInvoicePDF = () => {
         </div>
       )}
 
-      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL ========== */}
+      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL (BLURRED BACKGROUND) ========== */}
       {correctionModal.isOpen && correctionModal.transaction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
@@ -2108,7 +2216,27 @@ const generateInvoicePDF = () => {
                 </label>
                 <select
                   value={correctionModal.newWalletId}
-                  onChange={(e) => setCorrectionModal(prev => ({ ...prev, newWalletId: e.target.value }))}
+                  onChange={(e) => {
+                  const value = e.target.value;
+                  if (value) {
+                    const allWallets = [...wallets.offline, ...wallets.online];
+                    const selectedWallet = allWallets.find(w => w.id === parseInt(value));
+                    
+                    if (selectedWallet && selectedWallet.is_shared === false && selectedWallet.assigned_staff_id !== null) {
+                      setConfirmDialog({
+                        isOpen: true,
+                        title: 'Personal Wallet Selected',
+                        message: `You are selecting a personal wallet (${selectedWallet.name}). Do you want to use it for this correction?`,
+                        onConfirm: () => {
+                          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                          setCorrectionModal(prev => ({ ...prev, newWalletId: value }));
+                        }
+                      });
+                      return;
+                    }
+                  }
+                  setCorrectionModal(prev => ({ ...prev, newWalletId: value }));
+                }}
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select wallet</option>
@@ -2181,9 +2309,9 @@ const generateInvoicePDF = () => {
         </div>
       )}
 
-      {/* ========== UNIFIED TRANSACTION HISTORY MODAL ========== */}
+      {/* ========== UNIFIED TRANSACTION HISTORY MODAL (BLURRED BACKGROUND) ========== */}
       {historyModal.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
@@ -2212,13 +2340,10 @@ const generateInvoicePDF = () => {
                 </div>
                 
                 {[...historyModal.history]
-                  .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)) // ✅ FIX ORDER
+                  .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
                   .map((entry, idx, arr) => {
-                
-                    // 🔥 FIX LABELING LOGIC (IGNORE backend entry_type)
                     const nonReversal = arr.filter(t => !t.is_reversal);
                     const oldest = nonReversal[0];
-                
                     let type = "correction";
                     if (entry.id === oldest?.id) type = "original";
                     else if (entry.is_reversal) type = "reversal";
@@ -2235,8 +2360,6 @@ const generateInvoicePDF = () => {
                     };
                 
                     const styles = getEntryStyles(type);
-                
-                    // ✅ FIX CURRENT BADGE (latest non-reversal)
                     const latestNonReversal = [...nonReversal].pop();
                     const isLatest = entry.id === latestNonReversal?.id;
                 
@@ -2257,17 +2380,13 @@ const generateInvoicePDF = () => {
                               <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${styles.badge}`}>
                                 {styles.icon} {styles.label}
                               </span>
-                
                               {isLatest && type !== 'original' && (
                                 <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                   Current
                                 </span>
                               )}
                             </div>
-                
-                            <span className="text-xs text-gray-500">
-                              {formatDate(entry.created_at)}
-                            </span>
+                            <span className="text-xs text-gray-500">{formatDate(entry.created_at)}</span>
                           </div>
                 
                           <div className="ml-1 space-y-1.5">
@@ -2276,19 +2395,16 @@ const generateInvoicePDF = () => {
                               <span className="text-gray-500 mx-2">→</span>
                               <span className="font-medium">{entry.wallet_name || 'Unknown Wallet'}</span>
                             </p>
-                
                             <p className="text-xs text-gray-500">
                               Type: <span className={entry.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}>
                                 {entry.type === 'credit' ? 'Credit (Money In)' : 'Debit (Money Out)'}
                               </span>
                             </p>
-                
                             {entry.description && entry.description.includes('Reason:') && (
                               <p className="text-sm text-gray-600 bg-white/50 p-2 rounded">
                                 <strong>Reason:</strong> {entry.description.split('Reason:')[1]?.split('(Was:')[0]?.trim()}
                               </p>
                             )}
-                
                             {entry.staff_name && (
                               <p className="text-xs text-gray-500 flex items-center gap-1">
                                 <FiUser className="h-3 w-3" />
@@ -2315,9 +2431,9 @@ const generateInvoicePDF = () => {
         </div>
       )}
 
-      {/* ========== INVOICE GENERATOR MODAL ========== */}
+      {/* ========== INVOICE GENERATOR MODAL (BLURRED BACKGROUND) ========== */}
       {invoiceModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Edit Invoice</h2>
