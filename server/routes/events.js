@@ -271,7 +271,7 @@ router.get("/", async (req, res) => {
     // STAFF → own service entries
     if (req.user.role === "staff") {
       expiryFilter = `
-        WHERE se.staff_id = $1
+        WHERE se.staff_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE
       `;
 
       expiryValues.push(req.user.id);
@@ -280,7 +280,7 @@ router.get("/", async (req, res) => {
     // ADMIN → centre entries
     else if (req.user.role === "admin") {
       expiryFilter = `
-        WHERE sf.centre_id = $1
+        WHERE sf.centre_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE
       `;
 
       expiryValues.push(req.user.centre_id);
@@ -289,32 +289,16 @@ router.get("/", async (req, res) => {
     const expiryQuery = `
       SELECT
         se.id,
-
         se.customer_name,
-
         sv.name AS service_name,
-
-        sc.name AS subcategory_name,
-
-        se.staff_id,
-
+        se.expiry_date,
+        se.staff_id AS assigned_to,
         sf.name AS staff_name,
-
-        sf.centre_id,
-
-        se.expiry_date
-
+        -- 🔥 ADD THIS LINE: Fetch the most recent tracking ID for this service entry
+        (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) AS tracking_id
       FROM service_entries se
-
-      LEFT JOIN services sv
-        ON sv.id = se.category_id
-
-      LEFT JOIN subcategories sc
-        ON sc.id = se.subcategory_id
-
-      LEFT JOIN staff sf
-        ON sf.id = se.staff_id
-
+      LEFT JOIN services sv ON sv.id = se.category_id
+      LEFT JOIN staff sf ON sf.id = se.staff_id
       ${expiryFilter}
     `;
 
@@ -339,36 +323,26 @@ router.get("/", async (req, res) => {
 
       expiryEvents.push({
         id: `expiry-${row.id}`,
-
         title: `${fullServiceName} Expiry`,
-
-        description: row.customer_name
-          ? `Customer: ${row.customer_name}`
-          : null,
-
+        description: row.customer_name ? `Customer: ${row.customer_name}` : null,
         date: row.expiry_date,
-
         start_datetime: null,
         end_datetime: null,
-
         type: "service",
         event_type: "expiry",
-
         priority: "high",
         status: "active",
-
         visibility: "centre",
-
         created_at: null,
         centre_id: row.centre_id,
-
         related_service_id: row.id,
+        
+        // 🔥 FIX 1: Send the tracking ID to the frontend!
+        tracking_id: row.tracking_id, 
 
         service_name: fullServiceName,
-        
         assigned_to: row.staff_id,
         assigned_staff_name: row.staff_name,
-
         source: "service_expiry",
       });
     });
@@ -377,66 +351,48 @@ router.get("/", async (req, res) => {
       3B. DELIVERY EVENTS
     ====================================================== */
 
-    let deliveryFilter = "";
-    let deliveryValues = [];
+      // 🔥 Added status filter to exclude completed/paid from flooding the calendar
+      let deliveryFilter = "WHERE tr.status NOT IN ('completed', 'paid', 'delivered')";
+      let deliveryValues = [];
 
-    // STAFF → assigned tracking
-    if (req.user.role === "staff") {
-      deliveryFilter = `
-        WHERE tr.assigned_to = $1
+      // STAFF → assigned tracking
+      if (req.user.role === "staff") {
+        deliveryFilter += ` AND tr.assigned_to = $1`;
+        deliveryValues.push(req.user.id);
+      }
+      // ADMIN → centre entries
+      else if (req.user.role === "admin") {
+        deliveryFilter += ` AND sf.centre_id = $1`;
+        deliveryValues.push(req.user.centre_id);
+      }
+
+      const deliveryQuery = `
+        SELECT
+          tr.id,
+          tr.service_entry_id,
+          se.customer_name,
+          sv.name AS service_name,
+          sc.name AS subcategory_name,
+          tr.assigned_to,
+          sf.name AS staff_name,
+          sf.centre_id,
+          tr.estimated_delivery
+        FROM service_tracking tr
+        LEFT JOIN service_entries se
+          ON se.id = tr.service_entry_id
+        LEFT JOIN services sv
+          ON sv.id = se.category_id
+        LEFT JOIN subcategories sc
+          ON sc.id = se.subcategory_id
+        LEFT JOIN staff sf
+          ON sf.id = tr.assigned_to
+        ${deliveryFilter}
       `;
 
-      deliveryValues.push(req.user.id);
-    }
-
-    // ADMIN → centre entries
-    else if (req.user.role === "admin") {
-      deliveryFilter = `
-        WHERE sf.centre_id = $1
-      `;
-
-      deliveryValues.push(req.user.centre_id);
-    }
-
-    const deliveryQuery = `
-      SELECT
-        tr.id,
-
-        se.customer_name,
-
-        sv.name AS service_name,
-
-        sc.name AS subcategory_name,
-
-        tr.assigned_to,
-
-        sf.name AS staff_name,
-
-        sf.centre_id,
-
-        tr.estimated_delivery
-
-      FROM service_tracking tr
-
-      LEFT JOIN service_entries se
-        ON se.id = tr.service_entry_id
-
-      LEFT JOIN services sv
-        ON sv.id = se.category_id
-
-      LEFT JOIN subcategories sc
-        ON sc.id = se.subcategory_id
-
-      LEFT JOIN staff sf
-        ON sf.id = tr.assigned_to
-
-      ${deliveryFilter}
-    `;
-
-    const deliveryRes = await client.query(
-      deliveryQuery,
-      deliveryValues
-    );
+      const deliveryRes = await client.query(
+        deliveryQuery,
+        deliveryValues
+      );
 
     /* ======================================================
       BUILD DELIVERY EVENTS
@@ -454,36 +410,26 @@ router.get("/", async (req, res) => {
 
       deliveryEvents.push({
         id: `delivery-${row.id}`,
-
         title: `${fullServiceName} Delivery`,
-
-        description: row.customer_name
-          ? `Customer: ${row.customer_name}`
-          : null,
-
+        description: row.customer_name ? `Customer: ${row.customer_name}` : null,
         date: row.estimated_delivery,
-
         start_datetime: null,
         end_datetime: null,
-
         type: "service",
         event_type: "deadline",
-
         priority: "medium",
         status: "active",
-
         visibility: "centre",
-
         created_at: null,
         centre_id: row.centre_id,
-
-        related_service_id: row.id,
+        
+        // 🔥 FIX 2: Explicitly pass the IDs
+        related_service_id: row.service_entry_id,
+        tracking_id: row.id, 
 
         service_name: fullServiceName,
-        
         assigned_to: row.assigned_to,
         assigned_staff_name: row.staff_name,
-
         source: "service_delivery",
       });
     });
