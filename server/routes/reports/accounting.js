@@ -80,18 +80,30 @@ router.get('/daily-summary', async (req, res) => {
     -------------------------------------------------- */
     const txRes = await client.query(
       `
+      WITH latest_transactions AS (
+        -- Group corrections together and ONLY grab the absolute latest state
+        SELECT DISTINCT ON (COALESCE(NULLIF(wt.correction_group_id::text, ''), wt.id::text))
+          wt.type,
+          wt.amount,
+          wt.is_reversal,
+          w.wallet_type
+        FROM wallet_transactions wt
+        JOIN wallets w ON w.id = wt.wallet_id
+        WHERE w.centre_id = $1
+          AND wt.created_at >= $2::date
+          AND wt.created_at < ($2::date + INTERVAL '1 day')
+          AND (wt.category IS NULL OR wt.category != 'Transfer')
+        -- 🔥 FIXED: Added 'wt.id DESC' to perfectly resolve millisecond timestamp ties!
+        ORDER BY COALESCE(NULLIF(wt.correction_group_id::text, ''), wt.id::text), wt.created_at DESC, wt.id DESC
+      )
       SELECT
-        wt.type,
-        w.wallet_type,
-        SUM(wt.amount) AS amount
-      FROM wallet_transactions wt
-      JOIN wallets w ON w.id = wt.wallet_id
-      WHERE w.centre_id = $1
-        AND wt.created_at >= $2::date
-        AND wt.created_at < ($2::date + INTERVAL '1 day')
-        AND (wt.category IS NULL OR wt.category != 'Transfer')
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-      GROUP BY wt.type, w.wallet_type
+        lt.type,
+        lt.wallet_type,
+        SUM(lt.amount) AS amount
+      FROM latest_transactions lt
+      -- Filter out the row ONLY if the final state is a reversal
+      WHERE (lt.is_reversal IS NULL OR lt.is_reversal = FALSE)
+      GROUP BY lt.type, lt.wallet_type
       `,
       [centreId, date]
     );
@@ -510,7 +522,48 @@ router.get('/wallet-balances', async (req, res) => {
   }
 });
 
-//Reconcile Wallets
+// ========== GET WALLET RECONCILIATIONS ==========
+router.get('/wallet-reconciliations', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { date, centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId || !date) {
+      return res.status(400).json({ error: "centreId and date are required" });
+    }
+
+    // Grab the LATEST actual_balance for each wallet for the selected date
+    const result = await client.query(`
+      SELECT DISTINCT ON (wr.wallet_id)
+        wr.wallet_id, 
+        wr.actual_balance, 
+        wr.variance
+      FROM wallet_reconciliations wr
+      JOIN wallets w ON w.id = wr.wallet_id
+      WHERE w.centre_id = $1 
+        AND wr.reconciled_at::date = $2::date
+      ORDER BY wr.wallet_id, wr.reconciled_at DESC
+    `, [centreId, date]);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error("Error fetching reconciliations:", err);
+    res.status(500).json({ error: 'Failed to fetch wallet reconciliations' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== WALLET RECONCILIATION (Diagnostic Only) ==========
 router.post('/wallet-reconcile', async (req, res) => {
   const client = await req.db.connect();
 
@@ -521,6 +574,8 @@ router.post('/wallet-reconcile', async (req, res) => {
     await client.query('BEGIN');
 
     for (const r of reconciliations) {
+      // ONLY log the snapshot of the variance for auditing purposes.
+      // Do NOT alter the wallets table or wallet_transactions here!
       await client.query(
         `
         INSERT INTO wallet_reconciliations
