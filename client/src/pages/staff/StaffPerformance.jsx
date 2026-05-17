@@ -5,7 +5,7 @@ import {
   FiBarChart2, FiPieChart, FiCheckCircle, FiAlertCircle,
   FiRefreshCw, FiDownload, FiFilter, FiChevronRight, FiChevronLeft,
   FiUser, FiPhone, FiMail, FiMapPin, FiActivity, FiSmile,
-  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo, FiEye, FiZap, FiHeart, FiGift
+  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo, FiEye, FiZap, FiHeart, FiGift, FiX
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -259,7 +259,7 @@ const AchievementCard = ({ achievement, index }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: index * 0.1 }}
+    transition={{ delay: index * 0.05 }}
     className={`bg-white rounded-xl border p-4 ${
       achievement.earned ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200'
     }`}
@@ -502,7 +502,7 @@ const StaffPerformance = () => {
     }
   };
   
-  // Category breakdown chart
+  // Category breakdown chart - FIXED: Added responsive wrapper with proper height
   const categoryChartData = useMemo(() => {
     if (!serviceBreakdown?.length) return null;
     
@@ -514,10 +514,34 @@ const StaffPerformance = () => {
       datasets: [{
         data: top5.map(c => c.total_revenue),
         backgroundColor: colors,
-        borderWidth: 0
+        borderWidth: 0,
+        hoverOffset: 10
       }]
     };
   }, [serviceBreakdown]);
+  
+  const doughnutOptions = {
+    responsive: true,
+    maintainAspectRatio: true,
+    cutout: '60%',
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { font: { size: 10 }, boxWidth: 10 }
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const label = context.label || '';
+            const value = context.raw;
+            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+            const percentage = ((value / total) * 100).toFixed(1);
+            return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+          }
+        }
+      }
+    }
+  };
   
   // Monthly trends chart
   const monthlyTrendsChart = useMemo(() => {
@@ -798,8 +822,8 @@ const StaffPerformance = () => {
                   />
                 </div>
                 
-                {/* Second Row */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* Second Row - Enhanced Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <StatCard
                     title="Avg Daily Revenue"
                     value={formatCurrency(summary.avg_daily_revenue)}
@@ -817,11 +841,19 @@ const StaffPerformance = () => {
                     loading={loading}
                   />
                   <StatCard
-                    title="Active Days"
-                    value={summary.active_days || 0}
-                    subtitle={`Out of ${data?.period?.total_days || 0} days`}
-                    icon={FiCalendar}
-                    color="bg-teal-600"
+                    title="Repeat Customer Rate"
+                    value={`${summary.repeat_customer_rate || 0}%`}
+                    subtitle="Returning customers"
+                    icon={FiUsers}
+                    color="bg-pink-600"
+                    loading={loading}
+                  />
+                  <StatCard
+                    title="CSAT Score"
+                    value={`${summary.csat_score || 0}%`}
+                    subtitle="Customer satisfaction"
+                    icon={FiSmile}
+                    color="bg-orange-600"
                     loading={loading}
                   />
                 </div>
@@ -955,7 +987,7 @@ const StaffPerformance = () => {
             {/* Services Tab */}
             {activeTab === 'services' && (
               <>
-                {/* Category Breakdown */}
+                {/* Category Breakdown - FIXED Responsive Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-5">
                     <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
@@ -963,16 +995,18 @@ const StaffPerformance = () => {
                       Revenue by Service Category
                     </h3>
                     {categoryChartData && serviceBreakdown?.length > 0 ? (
-                      <div className="flex items-center h-64">
-                        <div className="w-1/2">
-                          <Doughnut data={categoryChartData} options={{ cutout: '60%' }} />
+                      <div className="flex flex-col md:flex-row items-center h-auto md:h-80">
+                        <div className="w-full md:w-1/2 flex justify-center">
+                          <div className="w-48 h-48 md:w-56 md:h-56">
+                            <Doughnut data={categoryChartData} options={doughnutOptions} />
+                          </div>
                         </div>
-                        <div className="w-1/2 pl-4">
+                        <div className="w-full md:w-1/2 pl-0 md:pl-4 mt-4 md:mt-0">
                           <div className="space-y-2 max-h-56 overflow-y-auto">
                             {serviceBreakdown.slice(0, 5).map((cat, idx) => (
                               <div key={idx} className="flex items-center justify-between text-sm">
                                 <div className="flex items-center">
-                                  <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: categoryChartData.datasets[0].backgroundColor[idx] }} />
+                                  <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: categoryChartData.datasets[0].backgroundColor[idx] }} />
                                   <span className="text-gray-700 truncate max-w-[120px]">{cat.service_name}</span>
                                 </div>
                                 <div className="text-right">
@@ -998,7 +1032,7 @@ const StaffPerformance = () => {
                       Service Performance Metrics
                     </h3>
                     {serviceBreakdown?.length > 0 ? (
-                      <div className="space-y-4 max-h-64 overflow-y-auto">
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
                         {serviceBreakdown.map((service, idx) => (
                           <div key={idx} className="border-b border-gray-100 pb-3 last:border-0">
                             <div className="flex items-center justify-between mb-2">
@@ -1096,6 +1130,26 @@ const StaffPerformance = () => {
                   </div>
                 </div>
                 
+                {/* Additional Lifetime Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+                    <p className="text-xs text-gray-500">Collection Rate</p>
+                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.lifetime_collection_rate?.toFixed(1) || 0}%</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+                    <p className="text-xs text-gray-500">Weekly Streak</p>
+                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.weekly_streak || 0} weeks</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+                    <p className="text-xs text-gray-500">Revenue Streak</p>
+                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.daily_revenue_streak || 0} days</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+                    <p className="text-xs text-gray-500">Categories Mastered</p>
+                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.distinct_categories || 0}</p>
+                  </div>
+                </div>
+                
                 {/* Best Day & Top Customer */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   {achievements.best_day && (
@@ -1149,7 +1203,7 @@ const StaffPerformance = () => {
                     <FiAward className="h-4 w-4 mr-2 text-yellow-500" />
                     Your Achievements
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {achievements.achievements?.map((achievement, idx) => (
                       <AchievementCard key={idx} achievement={achievement} index={idx} />
                     ))}
