@@ -1,6 +1,6 @@
 // pages/CalendarPage.jsx
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiExternalLink } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -25,6 +25,7 @@ import {
 } from "react-icons/fi";
 import useEvents from "../hooks/useEvents";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 // ----------------------------------------------------------------------
 //  Tooltip Card
@@ -598,7 +599,7 @@ function CalendarView({
 // ----------------------------------------------------------------------
 //  EventModal (Staff Name Fix)
 // ----------------------------------------------------------------------
-function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
+function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService }) {
   if (!event) return null;
 
   const eventTypeLabel = {
@@ -710,9 +711,24 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
               </div>
             )}
             {event.service_name && (
-              <div className="flex items-center gap-2 text-gray-700">
-                <span className="text-gray-500">Service:</span>
-                <span>{event.service_name}</span>
+              <div className="flex items-center justify-between text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-100 mt-2">
+                <div className="flex flex-col">
+                  <span className="text-gray-500 text-xs">Linked Service:</span>
+                  <span className="font-medium">{event.service_name}</span>
+                </div>
+                
+                {/* 🔥 The new View Service shortcut button */}
+                {onViewService && (
+                  <button
+                    onClick={() => {
+                      onViewService(event);
+                      onClose();
+                    }}
+                    className="flex items-center gap-1 text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-md hover:bg-indigo-200 transition font-semibold"
+                  >
+                    View Details <FiExternalLink />
+                  </button>
+                )}
               </div>
             )}
             {event.assigned_staff_name && (
@@ -734,10 +750,12 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
                 <FiEdit className="inline mr-1" /> Edit
               </button>
             )}
+            
+            {/* 🔥 FIX: Check event_type and pass the FULL 'event' object to onUpdate */}
             {event.status !== "completed" && (
               <button
                 onClick={() => {
-                  onUpdate(event.id, { status: "completed" });
+                  onUpdate(event, { status: "completed" }); // <-- Removed .id here
                   onClose();
                 }}
                 className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm"
@@ -745,6 +763,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit }) {
                 Complete
               </button>
             )}
+            
             <button
               onClick={() => {
                 onDelete(event.id);
@@ -925,7 +944,7 @@ function CreateEventModal({
                   <input
                     type="time"
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
-                    value={form.start_datetime.split("T")[1] || "09:00"}
+                    value={form.start_datetime?.split("T")[1] || "09:00"}
                     onChange={(e) =>
                       setForm({
                         ...form,
@@ -941,7 +960,7 @@ function CreateEventModal({
                   <input
                     type="time"
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
-                    value={form.end_datetime.split("T")[1] || "17:00"}
+                    value={form.end_datetime?.split("T")[1] || "17:00"}
                     onChange={(e) =>
                       setForm({
                         ...form,
@@ -1414,6 +1433,7 @@ function getTokenClaims() {
 // ----------------------------------------------------------------------
 export default function CalendarPage() {
   // ---------- Auth ----------
+  const navigate = useNavigate();
   const claims = getTokenClaims();
   const userRole = claims?.role || "staff";
   const userId = claims?.id;
@@ -1623,6 +1643,71 @@ export default function CalendarPage() {
     }
   };
 
+
+  // 🔥 Smart handler to complete different types of events directly from the calendar
+  const handleCompleteAction = async (eventObj, updateData) => {
+    try {
+      // Convert ID to string safely so we can check it
+      const eventIdStr = String(eventObj.id || "");
+
+      // 1. HANDLE EXPIRIES
+      if (eventIdStr.startsWith("expiry-")) {
+        const entryId = eventIdStr.replace("expiry-", "");
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/servicemanagement/entry/${entryId}/dismiss-expiry`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        if (!res.ok) throw new Error("Failed to dismiss expiry");
+        toast.success("Expiry marked as completed!");
+        setHookFilters((prev) => ({ ...prev, _refresh: Date.now() })); 
+        return; // Stop execution here
+      } 
+      
+      // 2. HANDLE DELIVERIES
+      else if (eventIdStr.startsWith("delivery-")) {
+        const trackingId = eventIdStr.replace("delivery-", "");
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/entries/${trackingId}/update-status`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ status: "completed" }),
+        });
+        
+        if (!res.ok) throw new Error("Failed to update delivery status");
+        toast.success("Delivery marked as completed!");
+        setHookFilters((prev) => ({ ...prev, _refresh: Date.now() })); 
+        
+      } 
+      // 3. HANDLE TASKS
+      else if (eventObj.type === "task" || eventObj.event_type === "task") {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${eventObj.id}/status`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+            body: JSON.stringify({ status: "completed" }),
+          });
+          if (!res.ok) throw new Error();
+          toast.success("Task completed!");
+          setHookFilters((prev) => ({ ...prev, _refresh: Date.now() }));
+        } catch {
+           await hookUpdateEvent(eventObj.id, updateData);
+        }
+      } 
+      // 4. NORMAL CALENDAR EVENTS
+      else {
+        await hookUpdateEvent(eventObj.id, updateData);
+        toast.success("Event completed!");
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to complete event");
+    }
+  };
+
   // ---------- Render ----------
   const isLoading = loading;
   const hasEvents = filteredEvents.length > 0;
@@ -1731,8 +1816,36 @@ export default function CalendarPage() {
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
           onDelete={handleDeleteEvent}
-          onUpdate={hookUpdateEvent}
+          onUpdate={handleCompleteAction}
           onEdit={openEditModal}
+
+          // 🔥 Updated Unified Navigation Handler
+          onViewService={(event) => {
+            const eventIdStr = String(event.id || "");
+            let targetTrackingId;
+            
+            // 1. FOR EXPIRIES
+            if (eventIdStr.startsWith("expiry-")) {
+              // We MUST use the tracking_id fetched from the backend!
+              targetTrackingId = event.tracking_id; 
+            } 
+            // 2. FOR DELIVERIES
+            else if (eventIdStr.startsWith("delivery-")) {
+              // The event ID itself contains the tracking ID
+              targetTrackingId = eventIdStr.replace("delivery-", ""); 
+            } 
+            // 3. FALLBACK FOR CUSTOM TASKS
+            else if (event.tracking_id) {
+              targetTrackingId = event.tracking_id;
+            }
+
+            // 4. NAVIGATE
+            if (targetTrackingId) {
+              navigate(`/dashboard/staff/track_service/${targetTrackingId}`); 
+            } else {
+              toast.error("Cannot open: No tracking steps exist for this service yet.");
+            }
+          }}
         />
       )}
 
