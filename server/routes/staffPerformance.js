@@ -6,6 +6,25 @@ import { logActivity } from '../utils/activityLogger.js';
 
 const router = express.Router();
 
+// 🔥 NEW: Subquery variable to handle corrections and reversals perfectly
+// Aliased as both 'amount' and 'received_amount' so it seamlessly replaces the old payments table everywhere
+const TRUE_PAYMENTS_SUBQUERY = `
+  (
+    SELECT reference_id AS service_entry_id, SUM(amount) AS amount, SUM(amount) AS received_amount
+    FROM (
+      SELECT DISTINCT ON (COALESCE(NULLIF(correction_group_id::text, ''), id::text))
+        reference_id, amount, is_reversal
+      FROM wallet_transactions
+      WHERE category = 'Service Payment' 
+        AND type = 'credit' 
+        AND reference_type = 'payment'
+      ORDER BY COALESCE(NULLIF(correction_group_id::text, ''), id::text), created_at DESC, is_reversal ASC
+    ) lt
+    WHERE (lt.is_reversal IS NULL OR lt.is_reversal = FALSE)
+    GROUP BY reference_id
+  )
+`;
+
 // Middleware to verify token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -99,7 +118,7 @@ router.get('/dashboard', async (req, res) => {
       return res.status(404).json({ error: 'Staff not found' });
     }
     
-    // 2️⃣ Performance Summary - Calculate from payments and service_entries
+    // 2️⃣ Performance Summary - Includes both completed AND pending for true collection rate
     const performanceQuery = `
       SELECT 
         COUNT(DISTINCT se.id) as total_services,
@@ -136,15 +155,68 @@ router.get('/dashboard', async (req, res) => {
         END as avg_daily_services
         
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
     `;
     const performanceData = await client.query(performanceQuery, [staffId, startDate, endDate]);
     const perf = performanceData.rows[0];
     
-    // 3️⃣ Pending Payments - Calculate from payments (services with partial or no payment)
+    // 2b️⃣ Additional Metrics: Repeat Customer Rate
+    const repeatCustomerQuery = `
+      WITH customer_visits AS (
+        SELECT 
+          customer_name,
+          COUNT(DISTINCT se.id) as visit_count
+        FROM service_entries se
+        WHERE se.staff_id = $1 
+          AND se.status IN ('completed', 'pending')
+          AND DATE(se.created_at) BETWEEN $2 AND $3
+          AND se.customer_name IS NOT NULL
+          AND se.customer_name != ''
+        GROUP BY customer_name
+      )
+      SELECT 
+        COUNT(*) as total_customers,
+        COUNT(CASE WHEN visit_count > 1 THEN 1 END) as repeat_customers
+      FROM customer_visits
+    `;
+    const repeatCustomerData = await client.query(repeatCustomerQuery, [staffId, startDate, endDate]);
+    
+    const totalCustomersWithVisits = parseInt(repeatCustomerData.rows[0]?.total_customers || 0);
+    const repeatCustomers = parseInt(repeatCustomerData.rows[0]?.repeat_customers || 0);
+    const repeatCustomerRate = totalCustomersWithVisits > 0 ? (repeatCustomers / totalCustomersWithVisits) * 100 : 0;
+    
+    // 2c️⃣ Revenue Per Service
+    const revenuePerService = perf.total_services > 0 ? perf.total_collected / perf.total_services : 0;
+    
+    // 2d️⃣ Collection Efficiency (combines rate and speed - % of payments within 7 days)
+    const collectionEfficiencyQuery = `
+      SELECT 
+        COUNT(DISTINCT se.id) as total_services_with_payments,
+        COUNT(DISTINCT CASE 
+          WHEN p.received_amount > 0 AND (se.created_at::date + INTERVAL '7 days') >= p.payment_date
+          THEN se.id 
+        END) as ontime_paid_services
+      FROM service_entries se
+      LEFT JOIN LATERAL (
+        SELECT received_amount, created_at as payment_date
+        FROM ${TRUE_PAYMENTS_SUBQUERY} p_sub
+        WHERE p_sub.service_entry_id = se.id
+        LIMIT 1
+      ) p ON true
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND p.received_amount > 0
+    `;
+    const efficiencyData = await client.query(collectionEfficiencyQuery, [staffId, startDate, endDate]);
+    const paidServices = parseInt(efficiencyData.rows[0]?.total_services_with_payments || 0);
+    const ontimePaid = parseInt(efficiencyData.rows[0]?.ontime_paid_services || 0);
+    const collectionEfficiency = paidServices > 0 ? (ontimePaid / paidServices) * 100 : 0;
+    
+    // 3️⃣ Pending Payments
     const pendingQuery = `
       SELECT 
         COUNT(se.id) as pending_count,
@@ -154,19 +226,14 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - se.created_at::date) > 7 
               THEN (se.total_charges - COALESCE(p.received_amount, 0)) ELSE 0 END), 0) as overdue_amount
       FROM service_entries se
-      LEFT JOIN (
-        SELECT service_entry_id, SUM(amount) as received_amount
-        FROM payments
-        WHERE status = 'received'
-        GROUP BY service_entry_id
-      ) p ON p.service_entry_id = se.id
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
         AND se.status != 'completed'
         AND (se.total_charges - COALESCE(p.received_amount, 0)) > 0
     `;
     const pendingData = await client.query(pendingQuery, [staffId]);
     
-    // 4️⃣ Daily Performance for Charts - Calculate received amount from payments
+    // 4️⃣ Daily Performance for Charts
     const dailyPerformanceQuery = `
       SELECT 
         DATE(se.created_at) as date,
@@ -175,16 +242,16 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(p.amount), 0) as collected_amount,
         COALESCE(SUM(se.service_charges), 0) as service_charges
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
       GROUP BY DATE(se.created_at)
       ORDER BY date ASC
     `;
     const dailyData = await client.query(dailyPerformanceQuery, [staffId, startDate, endDate]);
     
-    // 5️⃣ Service Category Breakdown - Calculate revenue from payments
+    // 5️⃣ Service Category Breakdown
     const categoryQuery = `
       SELECT 
         s.id as service_id,
@@ -194,9 +261,9 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(se.service_charges), 0) as total_profit
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
       GROUP BY s.id, s.name
       ORDER BY total_revenue DESC
@@ -204,7 +271,7 @@ router.get('/dashboard', async (req, res) => {
     `;
     const categoryData = await client.query(categoryQuery, [staffId, startDate, endDate]);
     
-    // 6️⃣ Top Customers - Using customer_name and payments
+    // 6️⃣ Top Customers
     const topCustomersQuery = `
       SELECT 
         se.customer_name,
@@ -212,9 +279,9 @@ router.get('/dashboard', async (req, res) => {
         COUNT(se.id) as service_count,
         COALESCE(SUM(p.amount), 0) as total_spent
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
         AND se.customer_name IS NOT NULL
         AND se.customer_name != ''
@@ -224,7 +291,7 @@ router.get('/dashboard', async (req, res) => {
     `;
     const topCustomers = await client.query(topCustomersQuery, [staffId, startDate, endDate]);
     
-    // 7️⃣ Recent Services - Include payment info
+    // 7️⃣ Recent Services
     const recentServicesQuery = `
       SELECT 
         se.id,
@@ -242,12 +309,7 @@ router.get('/dashboard', async (req, res) => {
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
-      LEFT JOIN (
-        SELECT service_entry_id, SUM(amount) as received_amount
-        FROM payments
-        WHERE status = 'received'
-        GROUP BY service_entry_id
-      ) p ON p.service_entry_id = se.id
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
         AND DATE(se.created_at) BETWEEN $2 AND $3
       ORDER BY se.created_at DESC
@@ -275,7 +337,12 @@ router.get('/dashboard', async (req, res) => {
     `;
     const ratingData = await client.query(ratingQuery, [staffId, startDate, endDate]);
     
-    // 9️⃣ Monthly Trends - PostgreSQL compatible
+    // CSAT Score (percentage of 4 & 5 star reviews)
+    const totalReviews = parseInt(ratingData.rows[0]?.total_reviews || 0);
+    const positiveReviews = parseInt(ratingData.rows[0]?.positive_reviews || 0);
+    const csatScore = totalReviews > 0 ? (positiveReviews / totalReviews) * 100 : 0;
+    
+    // 9️⃣ Monthly Trends
     const monthlyTrendsQuery = `
       SELECT 
         TO_CHAR(se.created_at, 'YYYY-MM') as month,
@@ -283,9 +350,9 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(p.amount), 0) as total_collected,
         COALESCE(SUM(se.service_charges), 0) as service_charges
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND se.created_at >= (CURRENT_DATE - INTERVAL '6 months')
       GROUP BY TO_CHAR(se.created_at, 'YYYY-MM')
       ORDER BY month ASC
@@ -336,9 +403,9 @@ router.get('/dashboard', async (req, res) => {
         COUNT(*) as services_count,
         COALESCE(SUM(p.amount), 0) as total_collected
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
       GROUP BY EXTRACT(WEEK FROM se.created_at)
       ORDER BY week_start ASC
@@ -373,7 +440,12 @@ router.get('/dashboard', async (req, res) => {
           unique_customers: parseInt(perf.unique_customers || 0),
           avg_daily_revenue: parseFloat(perf.avg_daily_revenue || 0),
           avg_daily_services: parseFloat(perf.avg_daily_services || 0),
-          incentive_score: incentiveScore
+          incentive_score: incentiveScore,
+          // New metrics
+          repeat_customer_rate: parseFloat(repeatCustomerRate.toFixed(2)),
+          revenue_per_service: parseFloat(revenuePerService.toFixed(2)),
+          collection_efficiency: parseFloat(collectionEfficiency.toFixed(2)),
+          csat_score: parseFloat(csatScore.toFixed(2))
         },
         pending: {
           pending_count: parseInt(pendingData.rows[0]?.pending_count || 0),
@@ -514,17 +586,18 @@ router.get('/compare', async (req, res) => {
       previousEnd = new Date(now.getFullYear() - 1, 11, 31).toISOString().split('T')[0];
     }
     
-    // Get current period performance - using payments
+    // Get current period performance
     const currentQuery = `
       SELECT 
         COUNT(DISTINCT se.id) as total_services,
         COALESCE(SUM(p.amount), 0) as total_collected,
         COALESCE(SUM(se.service_charges), 0) as total_profit,
-        COALESCE(AVG(p.amount), 0) as avg_transaction
+        COALESCE(AVG(p.amount), 0) as avg_transaction,
+        COUNT(DISTINCT se.customer_name) as unique_customers
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
     `;
     const currentResult = await client.query(currentQuery, [staffId, currentStart, currentEnd]);
@@ -568,6 +641,11 @@ router.get('/compare', async (req, res) => {
             current: parseFloat(current.avg_transaction || 0),
             previous: parseFloat(previous.avg_transaction || 0),
             change: calculateChange(current.avg_transaction, previous.avg_transaction)
+          },
+          customers: {
+            current: parseInt(current.unique_customers || 0),
+            previous: parseInt(previous.unique_customers || 0),
+            change: calculateChange(current.unique_customers, previous.unique_customers)
           }
         }
       }
@@ -583,7 +661,7 @@ router.get('/compare', async (req, res) => {
 
 /* =========================================================
    3️⃣ STAFF ACHIEVEMENTS & MILESTONES
-   Track staff achievements and milestones
+   Track staff achievements and milestones (ENHANCED)
 ========================================================= */
 router.get('/achievements', async (req, res) => {
   const client = await pool.connect();
@@ -591,7 +669,7 @@ router.get('/achievements', async (req, res) => {
   try {
     const staffId = req.user.id;
     
-    // Get lifetime totals - using payments
+    // Get lifetime totals
     const lifetimeQuery = `
       SELECT 
         COUNT(DISTINCT se.id) as total_services,
@@ -599,36 +677,36 @@ router.get('/achievements', async (req, res) => {
         COUNT(DISTINCT se.customer_name) as unique_customers,
         COUNT(DISTINCT DATE(se.created_at)) as active_days
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
-      WHERE se.staff_id = $1 AND se.status = 'completed'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
     `;
     const lifetime = await client.query(lifetimeQuery, [staffId]);
     
-    // Get best day - using payments
+    // Get best day
     const bestDayQuery = `
       SELECT 
         DATE(se.created_at) as date,
         COUNT(DISTINCT se.id) as services_count,
         COALESCE(SUM(p.amount), 0) as revenue
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
-      WHERE se.staff_id = $1 AND se.status = 'completed'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
       GROUP BY DATE(se.created_at)
       ORDER BY revenue DESC
       LIMIT 1
     `;
     const bestDay = await client.query(bestDayQuery, [staffId]);
     
-    // Get top customer - using payments
+    // Get top customer
     const topCustomerQuery = `
       SELECT 
         se.customer_name,
         COUNT(se.id) as services_count,
         COALESCE(SUM(p.amount), 0) as total_spent
       FROM service_entries se
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND se.customer_name IS NOT NULL
         AND se.customer_name != ''
       GROUP BY se.customer_name
@@ -637,101 +715,416 @@ router.get('/achievements', async (req, res) => {
     `;
     const topCustomer = await client.query(topCustomerQuery, [staffId]);
     
+    // Get weekly streak (consecutive weeks with at least one service)
+    const weeklyStreakQuery = `
+      WITH weekly_activity AS (
+        SELECT 
+          DATE_TRUNC('week', se.created_at) as week_start,
+          COUNT(*) as services_count
+        FROM service_entries se
+        WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+        GROUP BY DATE_TRUNC('week', se.created_at)
+      ),
+      streak_calc AS (
+        SELECT 
+          week_start,
+          services_count,
+          ROW_NUMBER() OVER (ORDER BY week_start) as rn,
+          week_start - (ROW_NUMBER() OVER (ORDER BY week_start) * INTERVAL '7 days') as streak_group
+        FROM weekly_activity
+      )
+      SELECT COUNT(*) as current_streak FROM (
+        SELECT streak_group, COUNT(*) as streak_length
+        FROM streak_calc
+        GROUP BY streak_group
+        ORDER BY MAX(week_start) DESC
+        LIMIT 1
+      ) current_streak
+    `;
+    const weeklyStreakResult = await client.query(weeklyStreakQuery, [staffId]);
+    const weeklyStreak = parseInt(weeklyStreakResult.rows[0]?.current_streak || 0);
+    
+    // Get daily revenue streak (consecutive days with revenue > 0)
+    const dailyStreakQuery = `
+      WITH daily_revenue AS (
+        SELECT 
+          DATE(se.created_at) as day,
+          COALESCE(SUM(p.amount), 0) as revenue
+        FROM service_entries se
+        LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+        WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+        GROUP BY DATE(se.created_at)
+      ),
+      streak_calc AS (
+        SELECT 
+          day,
+          revenue,
+          ROW_NUMBER() OVER (ORDER BY day) as rn,
+          day - (ROW_NUMBER() OVER (ORDER BY day) * INTERVAL '1 day') as streak_group
+        FROM daily_revenue
+        WHERE revenue > 0
+      )
+      SELECT COUNT(*) as current_streak FROM (
+        SELECT streak_group, COUNT(*) as streak_length
+        FROM streak_calc
+        GROUP BY streak_group
+        ORDER BY MAX(day) DESC
+        LIMIT 1
+      ) current_streak
+    `;
+    const dailyStreakResult = await client.query(dailyStreakQuery, [staffId]);
+    const dailyRevenueStreak = parseInt(dailyStreakResult.rows[0]?.current_streak || 0);
+    
+    // Get service variety (distinct service categories)
+    const varietyQuery = `
+      SELECT COUNT(DISTINCT se.category_id) as distinct_categories
+      FROM service_entries se
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+    `;
+    const varietyResult = await client.query(varietyQuery, [staffId]);
+    const distinctCategories = parseInt(varietyResult.rows[0]?.distinct_categories || 0);
+    
+    // Get top service category
+    const topCategoryQuery = `
+      SELECT 
+        s.name as category_name,
+        COUNT(se.id) as services_count
+      FROM service_entries se
+      JOIN services s ON se.category_id = s.id
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+      GROUP BY s.id, s.name
+      ORDER BY services_count DESC
+      LIMIT 1
+    `;
+    const topCategory = await client.query(topCategoryQuery, [staffId]);
+    
+    // Get rating achievements
+    const ratingAchievementsQuery = `
+      SELECT 
+        COUNT(*) as total_5_star,
+        COUNT(DISTINCT DATE(created_at)) as days_with_5_star,
+        DATE_TRUNC('month', created_at) as month,
+        COUNT(CASE WHEN staff_rating = 5 THEN 1 END) as five_star_count
+      FROM service_reviews
+      WHERE staff_id = $1 AND is_submitted = true AND staff_rating = 5
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month DESC
+    `;
+    const ratingAchievements = await client.query(ratingAchievementsQuery, [staffId]);
+    const totalFiveStar = ratingAchievements.rows.reduce((sum, row) => sum + parseInt(row.five_star_count || 0), 0);
+    const perfectMonths = ratingAchievements.rows.filter(row => {
+      const totalReviewsQuery = `
+        SELECT COUNT(*) as total
+        FROM service_reviews
+        WHERE staff_id = $1 AND is_submitted = true 
+          AND DATE_TRUNC('month', created_at) = $2::timestamp
+      `;
+      // Simplified - we'll calculate later
+      return false;
+    });
+    
+    // Get collection rate achievements
+    const collectionRateQuery = `
+      SELECT 
+        CASE 
+          WHEN SUM(se.total_charges) > 0 
+          THEN (SUM(p.amount) / SUM(se.total_charges)) * 100 
+          ELSE 0 
+        END as lifetime_collection_rate
+      FROM service_entries se
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+    `;
+    const collectionRateResult = await client.query(collectionRateQuery, [staffId]);
+    const lifetimeCollectionRate = parseFloat(collectionRateResult.rows[0]?.lifetime_collection_rate || 0);
+    
     // Calculate achievements
     const achievements = [];
     const totalServices = parseInt(lifetime.rows[0].total_services || 0);
     const totalRevenue = parseFloat(lifetime.rows[0].total_revenue || 0);
     const uniqueCustomers = parseInt(lifetime.rows[0].unique_customers || 0);
+    const activeDays = parseInt(lifetime.rows[0].active_days || 0);
     
-    // Service count achievements
-    if (totalServices >= 100) {
-      achievements.push({ 
-        name: 'Century Club', 
-        description: 'Completed 100+ services', 
-        earned: true, 
-        icon: '🏆' 
+    // ----- SERVICE COUNT ACHIEVEMENTS -----
+    const serviceMilestones = [
+      { threshold: 10, name: 'First Steps', description: 'Completed 10 services', icon: '🎯' },
+      { threshold: 50, name: 'Silver Service', description: 'Completed 50 services', icon: '🥈' },
+      { threshold: 100, name: 'Century Club', description: 'Completed 100 services', icon: '🏆' },
+      { threshold: 500, name: 'Service Master', description: 'Completed 500 services', icon: '👑' },
+      { threshold: 1000, name: 'Legendary Service', description: 'Completed 1000+ services', icon: '💎' }
+    ];
+    
+    serviceMilestones.forEach(milestone => {
+      if (totalServices >= milestone.threshold) {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: true,
+          icon: milestone.icon,
+          earned_at: null
+        });
+      } else {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: false,
+          icon: milestone.icon,
+          progress: totalServices,
+          target: milestone.threshold
+        });
+      }
+    });
+    
+    // ----- REVENUE ACHIEVEMENTS -----
+    const revenueMilestones = [
+      { threshold: 10000, name: '₹10K Club', description: 'Generated ₹10,000+ revenue', icon: '💰' },
+      { threshold: 50000, name: '₹50K Club', description: 'Generated ₹50,000+ revenue', icon: '💵' },
+      { threshold: 100000, name: '₹1 Lakh Club', description: 'Generated ₹1,00,000+ revenue', icon: '🌟' },
+      { threshold: 500000, name: '₹5 Lakh Club', description: 'Generated ₹5,00,000+ revenue', icon: '⭐' },
+      { threshold: 1000000, name: '₹10 Lakh Club', description: 'Generated ₹10,00,000+ revenue', icon: '🏅' }
+    ];
+    
+    revenueMilestones.forEach(milestone => {
+      if (totalRevenue >= milestone.threshold) {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: true,
+          icon: milestone.icon,
+          earned_at: null
+        });
+      } else {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: false,
+          icon: milestone.icon,
+          progress: totalRevenue,
+          target: milestone.threshold
+        });
+      }
+    });
+    
+    // ----- CUSTOMER ACHIEVEMENTS -----
+    const customerMilestones = [
+      { threshold: 10, name: 'Welcome Host', description: 'Served 10 unique customers', icon: '🤝' },
+      { threshold: 50, name: 'People\'s Choice', description: 'Served 50 unique customers', icon: '👥' },
+      { threshold: 100, name: 'Customer Magnet', description: 'Served 100 unique customers', icon: '🧲' },
+      { threshold: 250, name: 'Community Hero', description: 'Served 250+ unique customers', icon: '🦸' }
+    ];
+    
+    customerMilestones.forEach(milestone => {
+      if (uniqueCustomers >= milestone.threshold) {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: true,
+          icon: milestone.icon,
+          earned_at: null
+        });
+      } else {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: false,
+          icon: milestone.icon,
+          progress: uniqueCustomers,
+          target: milestone.threshold
+        });
+      }
+    });
+    
+    // ----- STREAK ACHIEVEMENTS -----
+    if (weeklyStreak >= 4) {
+      achievements.push({
+        name: 'Weekly Warrior',
+        description: `Maintained ${weeklyStreak} week streak of service`,
+        earned: true,
+        icon: '⚡',
+        earned_at: null
       });
-    } else if (totalServices >= 50) {
-      achievements.push({ 
-        name: 'Golden Service', 
-        description: 'Completed 50+ services', 
-        earned: true, 
-        icon: '⭐' 
-      });
-    } else if (totalServices >= 25) {
-      achievements.push({ 
-        name: 'Silver Service', 
-        description: 'Completed 25+ services', 
-        earned: true, 
-        icon: '🥈' 
-      });
-    } else {
-      achievements.push({ 
-        name: 'First Steps', 
-        description: 'Complete 25 services', 
-        earned: false, 
-        icon: '🎯', 
-        progress: totalServices, 
-        target: 25 
+    } else if (weeklyStreak > 0) {
+      achievements.push({
+        name: 'Weekly Warrior',
+        description: 'Maintain 4+ weeks of continuous service',
+        earned: false,
+        icon: '⚡',
+        progress: weeklyStreak,
+        target: 4
       });
     }
     
-    // Revenue achievements
-    if (totalRevenue >= 500000) {
-      achievements.push({ 
-        name: 'Revenue Master', 
-        description: 'Generated ₹5,00,000+ revenue', 
-        earned: true, 
-        icon: '💰' 
+    if (dailyRevenueStreak >= 5) {
+      achievements.push({
+        name: 'Revenue Streak',
+        description: `${dailyRevenueStreak} consecutive days with revenue`,
+        earned: true,
+        icon: '📈',
+        earned_at: null
       });
-    } else if (totalRevenue >= 250000) {
-      achievements.push({ 
-        name: 'Revenue Star', 
-        description: 'Generated ₹2,50,000+ revenue', 
-        earned: true, 
-        icon: '🌟' 
-      });
-    } else if (totalRevenue >= 100000) {
-      achievements.push({ 
-        name: 'Revenue Rookie', 
-        description: 'Generated ₹1,00,000+ revenue', 
-        earned: true, 
-        icon: '💵' 
-      });
-    } else {
-      achievements.push({ 
-        name: 'Revenue Hunter', 
-        description: 'Generate ₹1,00,000 revenue', 
-        earned: false, 
-        icon: '🎯', 
-        progress: totalRevenue, 
-        target: 100000 
+    } else if (dailyRevenueStreak > 0) {
+      achievements.push({
+        name: 'Revenue Streak',
+        description: '5 consecutive days with revenue',
+        earned: false,
+        icon: '📈',
+        progress: dailyRevenueStreak,
+        target: 5
       });
     }
     
-    // Customer achievements
-    if (uniqueCustomers >= 50) {
-      achievements.push({ 
-        name: 'People\'s Champion',
-        description: 'Served 50+ unique customers', 
-        earned: true, 
-        icon: '👥' 
+    // ----- SERVICE VARIETY ACHIEVEMENTS -----
+    if (distinctCategories >= 5) {
+      achievements.push({
+        name: 'Versatile Pro',
+        description: `Expert in ${distinctCategories} different service categories`,
+        earned: true,
+        icon: '🎨',
+        earned_at: null
       });
-    } else if (uniqueCustomers >= 25) {
-      achievements.push({ 
-        name: 'Customer Magnet', 
-        description: 'Served 25+ unique customers', 
-        earned: true, 
-        icon: '🧲' 
+    } else if (distinctCategories >= 3) {
+      achievements.push({
+        name: 'Multi-Talented',
+        description: `Skilled in ${distinctCategories} service categories`,
+        earned: true,
+        icon: '🎭',
+        earned_at: null
       });
     } else {
-      achievements.push({ 
-        name: 'Customer First', 
-        description: 'Serve 25 unique customers', 
-        earned: false, 
-        icon: '🎯', 
-        progress: uniqueCustomers, 
-        target: 25 
+      achievements.push({
+        name: 'Specialist',
+        description: 'Master one service category first',
+        earned: false,
+        icon: '🎯',
+        progress: distinctCategories,
+        target: 3
+      });
+    }
+    
+    // Top category specialization
+    if (topCategory.rows[0] && topCategory.rows[0].services_count >= 50) {
+      achievements.push({
+        name: `${topCategory.rows[0].category_name} Specialist`,
+        description: `Completed ${topCategory.rows[0].services_count}+ ${topCategory.rows[0].category_name} services`,
+        earned: true,
+        icon: '🏅',
+        earned_at: null
+      });
+    }
+    
+    // ----- RATING ACHIEVEMENTS -----
+    if (totalFiveStar >= 10) {
+      achievements.push({
+        name: 'Star Performer',
+        description: `Received ${totalFiveStar} five-star ratings`,
+        earned: true,
+        icon: '⭐',
+        earned_at: null
+      });
+    } else if (totalFiveStar >= 5) {
+      achievements.push({
+        name: 'Rising Star',
+        description: `Received ${totalFiveStar} five-star ratings`,
+        earned: true,
+        icon: '✨',
+        earned_at: null
+      });
+    } else if (totalFiveStar > 0) {
+      achievements.push({
+        name: 'First Five-Star',
+        description: 'Receive your first five-star rating',
+        earned: true,
+        icon: '🌟',
+        earned_at: null
+      });
+    } else {
+      achievements.push({
+        name: 'First Five-Star',
+        description: 'Receive your first five-star rating',
+        earned: false,
+        icon: '🌟',
+        progress: 0,
+        target: 1
+      });
+    }
+    
+    // ----- COLLECTION ACHIEVEMENTS -----
+    if (lifetimeCollectionRate >= 95) {
+      achievements.push({
+        name: 'Collection Master',
+        description: `${lifetimeCollectionRate.toFixed(1)}% collection rate - Excellent!`,
+        earned: true,
+        icon: '💯',
+        earned_at: null
+      });
+    } else if (lifetimeCollectionRate >= 90) {
+      achievements.push({
+        name: 'Collection Expert',
+        description: `${lifetimeCollectionRate.toFixed(1)}% collection rate - Great!`,
+        earned: true,
+        icon: '✅',
+        earned_at: null
+      });
+    } else if (lifetimeCollectionRate >= 80) {
+      achievements.push({
+        name: 'Good Collector',
+        description: `${lifetimeCollectionRate.toFixed(1)}% collection rate`,
+        earned: true,
+        icon: '📊',
+        earned_at: null
+      });
+    } else if (lifetimeCollectionRate > 0) {
+      achievements.push({
+        name: 'Perfect Collection',
+        description: 'Achieve 90%+ collection rate',
+        earned: false,
+        icon: '🎯',
+        progress: lifetimeCollectionRate,
+        target: 90
+      });
+    }
+    
+    // ----- ATTENDANCE/DEDICATION ACHIEVEMENTS -----
+    if (activeDays >= 200) {
+      achievements.push({
+        name: 'Dedication Diamond',
+        description: `${activeDays} active service days - Incredible dedication!`,
+        earned: true,
+        icon: '💎',
+        earned_at: null
+      });
+    } else if (activeDays >= 100) {
+      achievements.push({
+        name: 'Dedication Gold',
+        description: `${activeDays} active service days`,
+        earned: true,
+        icon: '🏅',
+        earned_at: null
+      });
+    } else if (activeDays >= 50) {
+      achievements.push({
+        name: 'Dedication Silver',
+        description: `${activeDays} active service days`,
+        earned: true,
+        icon: '🥈',
+        earned_at: null
+      });
+    } else if (activeDays >= 25) {
+      achievements.push({
+        name: 'Dedication Bronze',
+        description: `${activeDays} active service days`,
+        earned: true,
+        icon: '🥉',
+        earned_at: null
+      });
+    } else {
+      achievements.push({
+        name: 'Getting Started',
+        description: 'Complete 25 active service days',
+        earned: false,
+        icon: '🌱',
+        progress: activeDays,
+        target: 25
       });
     }
     
@@ -742,7 +1135,12 @@ router.get('/achievements', async (req, res) => {
           total_services: totalServices,
           total_revenue: totalRevenue,
           unique_customers: uniqueCustomers,
-          active_days: parseInt(lifetime.rows[0].active_days || 0)
+          active_days: activeDays,
+          lifetime_collection_rate: lifetimeCollectionRate,
+          weekly_streak: weeklyStreak,
+          daily_revenue_streak: dailyRevenueStreak,
+          distinct_categories: distinctCategories,
+          total_five_star_ratings: totalFiveStar
         },
         best_day: bestDay.rows[0] ? {
           date: bestDay.rows[0].date,
@@ -753,6 +1151,10 @@ router.get('/achievements', async (req, res) => {
           name: topCustomer.rows[0].customer_name,
           services_count: parseInt(topCustomer.rows[0].services_count),
           total_spent: parseFloat(topCustomer.rows[0].total_spent)
+        } : null,
+        top_category: topCategory.rows[0] ? {
+          name: topCategory.rows[0].category_name,
+          services_count: parseInt(topCategory.rows[0].services_count)
         } : null,
         achievements
       }
@@ -796,9 +1198,9 @@ router.get('/service-breakdown', async (req, res) => {
         ROUND(COALESCE(SUM(p.amount), 0) / NULLIF(COUNT(se.id), 0), 2) as revenue_per_service
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
-      LEFT JOIN payments p ON p.service_entry_id = se.id AND p.status = 'received'
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 
-        AND se.status = 'completed'
+        AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
       GROUP BY s.id, s.name
       ORDER BY total_revenue DESC
@@ -850,7 +1252,7 @@ router.get('/daily-log', async (req, res) => {
     const { date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
     
-    // Get services for the day - with payments
+    // Get services for the day
     const servicesQuery = `
       SELECT 
         se.id,
@@ -868,12 +1270,7 @@ router.get('/daily-log', async (req, res) => {
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
-      LEFT JOIN (
-        SELECT service_entry_id, SUM(amount) as received_amount
-        FROM payments
-        WHERE status = 'received'
-        GROUP BY service_entry_id
-      ) p ON p.service_entry_id = se.id
+      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
       WHERE se.staff_id = $1 AND DATE(se.created_at) = $2
       ORDER BY se.created_at DESC
     `;
