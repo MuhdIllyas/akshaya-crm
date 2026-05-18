@@ -359,7 +359,7 @@ const App = () => {
             />
             <Route
               path="staff/service_entry"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><ServiceEntry /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceEntry /></ProtectedRoute>}
             />
             <Route
               path="staff/token/:tokenId/service"
