@@ -1671,8 +1671,8 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     const finalAmount = new_amount !== undefined ? parseFloat(new_amount) : parseFloat(original.amount);
     const finalWalletId = new_wallet_id !== undefined ? parseInt(new_wallet_id) : original.wallet_id;
 
-    if (isNaN(finalAmount) || finalAmount <= 0) {
-      throw new Error('Invalid amount');
+    if (isNaN(finalAmount) || finalAmount < 0) { 
+      throw new Error('Invalid amount. Must be 0 or greater.');
     }
 
     // 🔥 LOCK NEW WALLET IF CHANGED
