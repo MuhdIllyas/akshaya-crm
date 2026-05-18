@@ -238,8 +238,8 @@ const ServiceEntry = () => {
     
     // Validate amount
     const parsedAmount = parseFloat(newAmount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      toast.error('Please enter a valid amount');
+    if (isNaN(parsedAmount) || parsedAmount < 0) {
+      toast.error('Please enter a valid amount (can be 0 to cancel the charge)');
       return;
     }
     
@@ -853,19 +853,23 @@ const generateInvoicePDF = () => {
     setPendingAmount(pending);
     setBalanceAmount(total - received);
 
-    if (received >= total && total > 0) {
-      setFormData(prev => ({ ...prev, status: 'completed' }));
-    } else {
-      setFormData(prev => ({ ...prev, status: 'pending' }));
+    // 🔥 FIX FOR ISSUE 2: Only auto-switch the application status if creating a NEW entry!
+    // If the Admin is Editing an entry, leave the Application Status exactly as it is.
+    if (!isEditMode) {
+      if (received >= total && total > 0) {
+        setFormData(prev => ({ ...prev, status: 'completed' }));
+      } else {
+        setFormData(prev => ({ ...prev, status: 'pending' }));
+      }
     }
+    
     console.log('ServiceEntry.jsx: Updated totals:', {
       totalCharge: total,
       paidAmount: received,
       pendingAmount: pending,
       balanceAmount: total - received,
-      status: received >= total && total > 0 ? 'completed' : 'pending',
     });
-  }, [formData.serviceCharge, formData.departmentCharge, formData.payments]);
+  }, [formData.serviceCharge, formData.departmentCharge, formData.payments, isEditMode]); 
 
   useEffect(() => {
     if (formData.hasExpiry && formData.category && !formData.expiryDate) {
@@ -892,6 +896,47 @@ const generateInvoicePDF = () => {
     const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
     setDaysRemaining(days);
   };
+
+  // 🔥 CATCH ADMIN EDIT FROM SERVICE LOGS
+  useEffect(() => {
+    if (location.state && location.state.adminEditEntry && categories.length > 0) {
+      const adminEntry = location.state.adminEditEntry;
+      
+      console.log("Catching Admin Edit Entry:", adminEntry);
+
+      // Map the ServiceLogs data format to match what ServiceEntry expects
+      const mappedEntry = {
+        // Critical: ServiceLogs uses serviceEntryId, but ServiceEntry expects id
+        id: adminEntry.serviceEntryId || adminEntry.id, 
+        tokenId: adminEntry.tokenId || '',
+        customerName: adminEntry.customerName || '',
+        phone: adminEntry.customerPhone || adminEntry.phone || '',
+        category: adminEntry.categoryId || adminEntry.category || '',
+        subcategory: adminEntry.subcategoryId || adminEntry.subcategory || '',
+        serviceCharge: adminEntry.serviceCharge || 0,
+        departmentCharge: adminEntry.departmentCharge || 0,
+        totalCharge: adminEntry.totalCharge || 0,
+        // Normalize the status string
+        status: adminEntry.status?.toLowerCase() === 'completed' ? 'completed' : 
+                adminEntry.status?.toLowerCase() === 'pending' ? 'pending' : 
+                reverseStatusMap ? reverseStatusMap[adminEntry.status] : 'pending',
+        expiryDate: adminEntry.expiryDate && adminEntry.expiryDate !== 'Not set' 
+                    ? adminEntry.expiryDate.split('T')[0] : '',
+        payments: adminEntry.payments || [],
+        serviceWalletId: adminEntry.serviceWalletId || null,
+        requiresWallet: adminEntry.requiresWallet || false,
+      };
+
+      // Slight delay to ensure wallets and categories have finished rendering
+      setTimeout(() => {
+        handleEditEntry(mappedEntry);
+        toast.info("Admin Override Mode Activated", { icon: "🔓" });
+      }, 500);
+      
+      // Clear the router state so it doesn't get stuck in a loop if the page refreshes
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, categories.length]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -1172,8 +1217,13 @@ const generateInvoicePDF = () => {
           });
           toast.success('Service entry created successfully!', { autoClose: 3500 });
         }
+        
         setTimeout(() => {
-          navigate('/dashboard/staff');
+          if (userRole === 'admin' || userRole === 'superadmin') {
+            navigate(-1); 
+          } else {
+            navigate('/dashboard/staff');
+          }
         }, 3500);
 
         setEditingEntryId(null);
@@ -2066,16 +2116,17 @@ const generateInvoicePDF = () => {
                         >
                           <FiEye className="h-5 w-5" />
                         </button>
-                        {isToday(entry.created_at) && !entry.is_edited && (
+                        {/* 🔥 FIXED: Admin can always edit, staff can only edit if it hasn't been edited yet */}
+                        {isToday(entry.created_at) && (!entry.is_edited || userRole === 'admin' || userRole === 'superadmin') && (
                           <button
                             onClick={() => handleEditEntry(entry)}
-                            className="text-emerald-600 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-50"
-                            title="Edit this entry (once only)"
+                            className={`p-1.5 rounded-lg ${entry.is_edited ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
+                            title={entry.is_edited ? "Admin Override Edit" : "Edit this entry (once only)"}
                           >
                             ✏️
                           </button>
                         )}
-                        {isToday(entry.created_at) && entry.is_edited && (
+                        {isToday(entry.created_at) && entry.is_edited && userRole === 'staff' && (
                           <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700">
                             Edited
                           </span>
