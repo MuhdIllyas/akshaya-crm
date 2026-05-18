@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   FiSearch, FiFilter, FiDownload, FiEye, FiMessageSquare,
   FiClock, FiUser, FiPhone, FiMapPin, FiDollarSign, FiCheckCircle,
@@ -6,7 +7,7 @@ import {
   FiBarChart2, FiPieChart, FiCalendar, FiShoppingBag, FiAward, FiX,
   FiMail, FiTag, FiFlag, FiArchive, FiStar, FiShare2, FiPrinter,
   FiArrowLeft, FiArrowRight, FiDownloadCloud, FiCopy, FiLink,
-  FiList, FiGrid, FiUsers, FiUserCheck, FiUserPlus, FiCreditCard
+  FiList, FiGrid, FiUsers, FiUserCheck, FiUserPlus, FiCreditCard, FiEdit3
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId } from '/src/services/serviceService';
@@ -714,6 +715,10 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
 );
 
 const ServiceLogs = () => {
+  const navigate = useNavigate(); 
+  const userRole = localStorage.getItem('role') || 'staff'; 
+  const isAdmin = userRole === 'admin' || userRole === 'superadmin'; 
+
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1404,6 +1409,23 @@ const ServiceLogs = () => {
             >
               <FiEye className="h-4 w-4 text-gray-600" />
             </button>
+            
+            {/* 🔥 NEW: Admin Override Edit Button */}
+            {isAdmin && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Note: Adjust this URL path if your Service Entry page is located elsewhere!
+                  navigate('/dashboard/staff/service_entry', { 
+                    state: { adminEditEntry: service } 
+                  });
+                }}
+                className="p-2 hover:bg-amber-50 rounded-lg transition-colors"
+                title="Admin Override Edit"
+              >
+                <FiEdit3 className="h-4 w-4 text-amber-600" />
+              </button>
+            )}
           </div>
         </td>
       </motion.tr>
@@ -1833,6 +1855,13 @@ const ServiceLogs = () => {
               onStatusUpdate={handleStatusUpdate}
               onServiceUpdate={handleServiceUpdate}
               onNotifyCustomer={handleNotifyCustomer}
+
+              isAdmin={isAdmin}
+              onAdminEdit={(serviceToEdit) => {
+                navigate('/dashboard/staff/service_entry', { 
+                  state: { adminEditEntry: serviceToEdit } 
+                });
+              }}
             />
           )}
         </AnimatePresence>
@@ -1853,7 +1882,9 @@ const ServiceDetailsPanel = ({
   toast,
   onStatusUpdate,
   onServiceUpdate,
-  onNotifyCustomer
+  onNotifyCustomer,
+  isAdmin,
+  onAdminEdit
 }) => {
   const status = statusConfig[service.status] || statusConfig['Pending'];
   const priority = priorityConfig[service.priority] || priorityConfig['medium'];
@@ -1921,6 +1952,17 @@ const ServiceDetailsPanel = ({
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            {/* 🔥 NEW: Admin Override Edit Button */}
+            {isAdmin && (
+              <button
+                onClick={() => onAdminEdit(service)}
+                className="p-2 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                title="Admin Override Edit"
+              >
+                <FiEdit3 className="h-5 w-5 text-amber-700" />
+              </button>
+            )}
+            
             <button
               onClick={() => handleAction('Share')}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
