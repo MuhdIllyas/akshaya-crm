@@ -2501,19 +2501,20 @@ const AccountingSection = ({
       sum + (Number(wallet.currentBalance) || 0), 0);
   };
 
-  const refreshWalletBookBalances = async () => {
+  const refreshWalletBookBalances = async (targetDate) => { 
     const walletParams = new URLSearchParams();
     
     if (isSuperAdmin && centreId) {
       walletParams.append("centreId", centreId);
     }
+    if (targetDate) {
+      walletParams.append("date", targetDate);
+    }
 
     const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/accounting/wallet-book-balances?${walletParams.toString()}`,
+      `${import.meta.env.VITE_API_URL}/api/accounting/wallet-book-balances?${walletParams.toString()}`, 
       {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       }
     );
 
@@ -2623,7 +2624,7 @@ const AccountingSection = ({
           onUpdateAccounting?.('expenses', mappedExpenseData);
         }
 
-        await refreshWalletBookBalances();
+        await refreshWalletBookBalances(date);
 
         const nightlyRes = await fetch(
           `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close?${buildQueryString({ date })}`,
@@ -2694,7 +2695,7 @@ const AccountingSection = ({
     if (activeAccountingTab === 'wallets') {
       refreshWalletBookBalances();
     }
-  }, [activeAccountingTab]);
+  }, [activeAccountingTab, date]);
 
   const fetchIncome = async () => {
     const res = await fetch(
