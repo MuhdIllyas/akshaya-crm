@@ -598,45 +598,39 @@ router.post('/wallet-reconcile', async (req, res) => {
   }
 });
 
-// ========== WALLET BOOK BALANCES (FIXED - Stop calculating, use actual balance) ==========
 router.get('/wallet-book-balances', async (req, res) => {
   const client = await req.db.connect();
 
   try {
-    const { centreId: queryCentreId } = req.query;
+    const { centreId: queryCentreId, date } = req.query; 
     const isSuperAdmin = req.user.role === "superadmin";
 
     let centreId = req.user.centre_id;
-
-    if (isSuperAdmin && queryCentreId) {
-      centreId = Number(queryCentreId);
-    }
-
-    if (!centreId) {
-      return res.status(400).json({ error: "centreId is required" });
-    }
+    if (isSuperAdmin && queryCentreId) centreId = Number(queryCentreId);
+    
+    // Default to today if no date is provided
+    const targetDate = date || new Date().toISOString().split('T')[0];
 
     const result = await client.query(`
       SELECT
         w.id,
         w.name,
         w.wallet_type,
-        COALESCE(wdb.opening_balance, 0) AS opening_balance,
-        (w.balance - COALESCE(wdb.opening_balance, 0)) AS net_movement,
-        w.balance AS book_balance
+        -- 🔥 Use the daily snapshot if it exists, otherwise fallback to current live balance
+        COALESCE(wdb.closing_balance, w.balance) AS book_balance
       FROM wallets w
-      LEFT JOIN wallet_daily_balances wdb
-        ON wdb.wallet_id = w.id
-       AND wdb.date = CURRENT_DATE
+      LEFT JOIN wallet_daily_balances wdb 
+        ON w.id = wdb.wallet_id 
+        AND wdb.date = $2
       WHERE w.centre_id = $1
       ORDER BY w.name ASC
-    `, [centreId]);
+    `, [centreId, targetDate]);
 
     res.json(result.rows);
 
   } catch (err) {
-    console.error('Wallet book balance error:', err);
-    res.status(500).json({ error: 'Failed to load wallet book balances' });
+    console.error('Error fetching book balances:', err);
+    res.status(500).json({ error: 'Failed to fetch book balances' });
   } finally {
     client.release();
   }
