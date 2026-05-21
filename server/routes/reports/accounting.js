@@ -543,7 +543,8 @@ router.get('/wallet-reconciliations', async (req, res) => {
     // Grab the LATEST actual_balance for each wallet for the selected date
     const result = await client.query(`
       SELECT DISTINCT ON (wr.wallet_id)
-        wr.wallet_id, 
+        wr.wallet_id,
+        wr.book_balance, 
         wr.actual_balance, 
         wr.variance
       FROM wallet_reconciliations wr
