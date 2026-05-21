@@ -1424,9 +1424,9 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
 // Wallet Reconciliation Component
 const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
   const [walletBalances, setWalletBalances] = useState({});
+  const [historicalBookBalances, setHistoricalBookBalances] = useState({}); // 🔥 New state for history
   const [isReconciling, setIsReconciling] = useState(false);
 
-  // 🔥 ADD THIS USE-EFFECT TO FETCH PREVIOUSLY SAVED BALANCES
   useEffect(() => {
     const loadSavedBalances = async () => {
       try {
@@ -1440,13 +1440,17 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
         if (res.ok) {
           const savedData = await res.json();
           const restoredBalances = {};
+          const restoredBooks = {};
           
-          // Map the saved actual_balances back into our React state
           savedData.forEach(row => {
             restoredBalances[row.wallet_id] = Number(row.actual_balance);
+            if (row.book_balance !== undefined && row.book_balance !== null) {
+              restoredBooks[row.wallet_id] = Number(row.book_balance);
+            }
           });
           
           setWalletBalances(restoredBalances);
+          setHistoricalBookBalances(restoredBooks);
         }
       } catch (error) {
         console.error("Failed to load saved reconciliations", error);
@@ -1454,20 +1458,32 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
     };
 
     if (date) {
+      setWalletBalances({});
+      setHistoricalBookBalances({});
       loadSavedBalances();
     }
   }, [date]);
 
-  const reconciledWallets = wallets.filter(w => 
-    walletBalances[w.id] !== undefined && 
-    Math.abs((walletBalances[w.id] || 0) - (w.book_balance || 0)) <= 10
-  ).length;
+  // 🔥 Process wallets to guarantee UI perfectly matches the math
+  const processedWallets = useMemo(() => {
+    return wallets.map(w => {
+      const actual = walletBalances[String(w.id)] ?? w.currentBalance ?? 0;
+      // Override book balance with historical save if it exists
+      const book = historicalBookBalances[String(w.id)] ?? w.book_balance ?? 0;
+      const variance = actual - book;
+      
+      return {
+        ...w,
+        displayActual: actual,
+        displayBook: book,
+        variance: variance,
+        isReconciled: Math.abs(variance) <= 10
+      };
+    });
+  }, [wallets, walletBalances, historicalBookBalances]);
 
-  const totalVariance = wallets.reduce((sum, w) => {
-    const actual = walletBalances[w.id] || 0;
-    const book = w.book_balance || 0;
-    return sum + Math.abs(actual - book);
-  }, 0);
+  const reconciledWallets = processedWallets.filter(w => w.isReconciled).length;
+  const totalVariance = processedWallets.reduce((sum, w) => sum + Math.abs(w.variance), 0);
 
   const handleBalanceChange = (walletId, balance) => {
     setWalletBalances(prev => ({
@@ -1479,32 +1495,13 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
   const handleReconcileWallets = async () => {
     setIsReconciling(true);
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/accounting/wallet-ledger-balances`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          }
-        }
-      );
-
-      const ledgerBalances = await res.json();
-
-      const reconciliations = wallets.map(w => {
-        const ledger = ledgerBalances.find(
-          lb => Number(lb.id) === Number(w.id)
-        );
-
-        const bookBalance = Number(ledger?.book_balance ?? 0);
-        const actualBalance = Number(walletBalances[String(w.id)] ?? 0);
-
-        return {
-          wallet_id: w.id,
-          book_balance: bookBalance,
-          actual_balance: actualBalance,
-          variance: actualBalance - bookBalance
-        };
-      });
+      // 🔥 Build payload explicitly from exactly what is displayed on screen
+      const reconciliations = processedWallets.map(w => ({
+        wallet_id: w.id,
+        book_balance: w.displayBook,
+        actual_balance: w.displayActual,
+        variance: w.variance
+      }));
 
       await fetch(
         `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconcile`,
@@ -1518,7 +1515,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
         }
       );
       
-      await onRefreshWallets();
+      await onRefreshWallets(date);
       toast.success('Wallets reconciled successfully!');
     } catch (error) {
       toast.error('Failed to reconcile wallets');
@@ -1716,13 +1713,9 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
               </thead>
 
               <tbody>
-                {wallets.map((wallet, index) => {
+                {processedWallets.map((wallet, index) => {
                   const walletType = wallet.wallet_type || wallet.type || 'unknown';
                   const WalletIcon = walletIcons[wallet.name] || walletIcons[walletType] || FiSmartphone;
-                  const actualBalance = walletBalances[String(wallet.id)] ?? wallet.currentBalance ?? 0;
-                  const bookBalance = wallet.book_balance ?? 0;
-                  const variance = actualBalance - bookBalance;
-                  const isReconciled = Math.abs(variance) <= 10;
                   
                   return (
                     <tr key={wallet.id} className="hover:bg-gray-50">
@@ -1754,7 +1747,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
                       <td className="py-3 px-3">
                         <div className="text-left">
                           <p className="text-xs font-bold text-gray-900">
-                            ₹{Number(bookBalance).toLocaleString('en-IN')}
+                            ₹{Number(wallet.displayBook).toLocaleString('en-IN')}
                           </p>
                           <p className="text-xs text-gray-500 flex items-center">
                             <FiBook className="h-2 w-2 mr-1" />
@@ -1768,10 +1761,10 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
                             <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">₹</span>
                             <input
                               type="number"
-                              value={actualBalance}
+                              value={wallet.displayActual}
                               onChange={e => handleBalanceChange(String(wallet.id), e.target.value)}
                               className="pl-6 pr-2 py-1 border border-gray-300 rounded text-sm w-32 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                              placeholder="Enter actual balance"
+                              placeholder="Actual"
                             />
                           </div>
                           <p className="text-xs text-gray-500 mt-1 flex items-center">
@@ -1782,23 +1775,23 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
                       </td>
                       <td className="py-3 px-3">
                         <div className={`text-center ${
-                          isReconciled ? 'text-emerald-600' : 'text-rose-600'
+                          wallet.isReconciled ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
-                          <p className={`text-xs font-bold ${isReconciled ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {variance >= 0 ? '+' : ''}₹{variance.toFixed(2)}
+                          <p className={`text-xs font-bold ${wallet.isReconciled ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {wallet.variance >= 0 ? '+' : ''}₹{wallet.variance.toFixed(2)}
                           </p>
                           <p className="text-xs">
-                            {isReconciled ? 'Within Limit' : 'Review Needed'}
+                            {wallet.isReconciled ? 'Within Limit' : 'Review Needed'}
                           </p>
                         </div>
                       </td>
                       <td className="py-3 px-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          isReconciled 
+                          wallet.isReconciled 
                             ? 'bg-emerald-50 text-emerald-700' 
                             : 'bg-rose-50 text-rose-700'
                         }`}>
-                          {isReconciled ? (
+                          {wallet.isReconciled ? (
                             <>
                               <FiCheck className="h-2 w-2 mr-1" />
                               Reconciled
