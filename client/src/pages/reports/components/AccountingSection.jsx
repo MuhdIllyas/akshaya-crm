@@ -2806,21 +2806,40 @@ const AccountingSection = ({
     );
   };
 
-  const handleApproveExpense = async (expenseId) => {
-    await fetch(
-      `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/approve`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
+const handleApproveExpense = async (expenseId) => {
+    try {
+      const approveRes = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/approve`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
         }
-      }
-    );
+      );
 
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-    });
-    onUpdateAccounting('expenses', await res.json());
+      // 🔥 FIX: Read the exact error message from your backend!
+      if (!approveRes.ok) {
+        const errorData = await approveRes.json();
+        toast.error(errorData.error || 'Failed to approve expense');
+        return; // Stop the function here so it doesn't refresh blindly
+      }
+
+      toast.success('Expense approved successfully!');
+
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      onUpdateAccounting('expenses', await res.json());
+      
+      // Refresh wallets since money just left the account!
+      await refreshWalletBookBalances(date); 
+      
+    } catch (err) {
+      console.error("Approval error:", err);
+      toast.error('Network error while trying to approve expense.');
+    }
   };
 
   const handleRejectExpense = async (expenseId) => {
