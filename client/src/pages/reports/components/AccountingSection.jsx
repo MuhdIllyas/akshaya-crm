@@ -261,26 +261,28 @@ const DailySummaryComponent = ({ summaryData, onUpdate }) => {
 const calculateTotals = () => {
     const {
       openingBalance = 0,
-      cashOpening = 0, // Ensure this is pulled from derived
+      cashOpening = 0,
       cashInflow = 0,
       digitalInflow = 0,
       bankInflow = 0,
       cashOutflow = 0,
       digitalOutflow = 0,
-      bankOutflow = 0
+      bankOutflow = 0,
+      cashTransferIn = 0,   
+      cashTransferOut = 0
     } = formData.derived || {};
 
     const actualCashInHand = formData.manual?.actualCashInHand || 0;
 
-    // Calculate Total Business Balance (for the overall summary)
+    // Business Inflow/Outflow (strictly revenue and expenses)
     const totalInflow = cashInflow + bankInflow + digitalInflow;
     const totalOutflow = cashOutflow + bankOutflow + digitalOutflow;
     const closingBalance = openingBalance + totalInflow - totalOutflow;
 
-    // 🔥 Calculate strictly the PHYSICAL CASH in the drawer
-    const expectedCash = cashOpening + cashInflow - cashOutflow;
+    // 🔥 Physical Cash Calculation: Opening + Inflow + TransfersIn - Outflow - TransfersOut
+    const expectedCash = cashOpening + cashInflow + cashTransferIn - cashOutflow - cashTransferOut;
 
-    // The variance is Expected Cash minus the Actual Cash the staff counted
+    // Variance = Expected Physical Cash - Actual Count
     const variance = expectedCash - actualCashInHand;
 
     return {
@@ -310,6 +312,8 @@ const calculateTotals = () => {
     { key: 'cashOutflow', label: 'Cash Outflow', type: 'cash', category: 'outflow' },
     { key: 'digitalOutflow', label: 'Digital Outflow', type: 'digital', category: 'outflow' },
     { key: 'bankOutflow', label: 'Bank Outflow', type: 'bank', category: 'outflow' },
+    { key: 'cashTransferIn', label: 'Cash Transfer In', type: 'cash', category: 'transfer' },
+    { key: 'cashTransferOut', label: 'Cash Transfer Out', type: 'cash', category: 'transfer' },
     { key: 'actualCashInHand', label: 'Actual Cash in Hand', type: 'cash', category: 'manual' }
   ];
 
