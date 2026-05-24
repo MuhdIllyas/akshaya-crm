@@ -701,23 +701,51 @@ const TrackServicePage = () => {
     }
   };
 
-  const handleInlineAppNumberUpdate = async (serviceId, newAppNumber) => {
+  const handleInlineTrackingUpdate = async (service, updates) => {
     try {
-      await updateTrackingEntry(serviceId, { applicationNumber: newAppNumber });
-      toast.success('Application number updated');
-      
-      const updatedServices = services.map(service => 
-        service.id === serviceId ? { ...service, applicationNumber: newAppNumber } : service
-      );
+      // Build the full payload needed for the backend tracking update
+      const payload = {
+        applicationNumber: updates.applicationNumber !== undefined ? updates.applicationNumber : service.applicationNumber,
+        currentStep: updates.currentStep !== undefined ? updates.currentStep : service.currentStep,
+        estimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : service.rawEstimatedDelivery,
+        averageTime: service.averageTime || '7 days',
+        notes: service.notes || null,
+        assignedTo: updates.assignedTo !== undefined ? (updates.assignedTo ? parseInt(updates.assignedTo) : null) : service.assignedToId,
+        aadhaar: service.aadhaar || null,
+        email: service.email || null,
+        priority: updates.priority !== undefined ? updates.priority : service.priority,
+        progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
+      };
+
+      await updateTrackingEntry(service.id, payload);
+      toast.success('Details updated successfully');
+
+      // Update the local state instantly
+      const updatedServices = services.map(s => {
+        if (s.id === service.id) {
+          return {
+            ...s,
+            ...updates,
+            assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
+            assignedToId: updates.assignedTo !== undefined ? parseInt(updates.assignedTo) : s.assignedToId,
+            rawEstimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : s.rawEstimatedDelivery,
+            estimatedDelivery: updates.estimatedDelivery !== undefined ? formatDate(updates.estimatedDelivery) : s.estimatedDelivery,
+            progress: payload.progress
+          };
+        }
+        return s;
+      });
       setServices(updatedServices);
       
-      if (selectedService?.id === serviceId) {
-        setSelectedService(prev => ({ ...prev, applicationNumber: newAppNumber }));
-        setTrackingFormData(prev => ({ ...prev, applicationNumber: newAppNumber }));
+      // Update selected service if it's currently open
+      if (selectedService?.id === service.id) {
+        const updatedSelected = updatedServices.find(s => s.id === service.id);
+        setSelectedService(updatedSelected);
+        setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
     } catch (error) {
-      console.error('Error updating application number:', error);
-      toast.error('Failed to update application number');
+      console.error('Error updating details:', error);
+      toast.error('Failed to update tracking details');
     }
   };
 
@@ -824,7 +852,7 @@ const TrackServicePage = () => {
     }
   };
 
-  const handleServiceSelect = (service) => {
+  const handleServiceSelect = (service, preventNav = false) => {
     console.log('TrackServicePage: Selected service:', service);
     setSelectedService(service);
     setTrackingFormData({
@@ -840,8 +868,8 @@ const TrackServicePage = () => {
     });
     setActiveTab('overview');
     
-    // Update URL to reflect selected service (optional)
-    if (!id) {
+    // ONLY navigate if we aren't preventing it (prevents dropdown from jumping pages)
+    if (!id && !preventNav && viewMode === 'list') {
       navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
     }
   };
@@ -1648,8 +1676,8 @@ const TrackServicePage = () => {
                           <th className="px-4 py-3 font-medium">Customer</th>
                           <th className="px-4 py-3 font-medium">Service</th>
                           <th className="px-4 py-3 font-medium w-48">App Number</th>
-                          <th className="px-4 py-3 font-medium w-36">Status</th>
-                          <th className="px-4 py-3 font-medium">Timeline</th>
+                          <th className="px-4 py-3 font-medium w-40">Status & Step</th>
+                          <th className="px-4 py-3 font-medium w-48">Staff & Delivery</th>
                           <th className="px-4 py-3 font-medium text-right">Actions</th>
                         </tr>
                       </thead>
@@ -1657,42 +1685,45 @@ const TrackServicePage = () => {
                         {services.map(service => (
                           <React.Fragment key={service.id}>
                             <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
-                              {/* 2-Line Customer Info */}
+                              {/* 1. Two-Line Customer Info */}
                               <td className="px-4 py-3">
                                 <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
                                 <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                                   <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
                                 </div>
                               </td>
-                              {/* 2-Line Service Info */}
+
+                              {/* 2. Two-Line Service Info */}
                               <td className="px-4 py-3">
-                                <div className="text-sm text-gray-900 font-medium truncate max-w-xs" title={service.serviceType}>
+                                <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
                                   {service.serviceType}
                                 </div>
-                                <div className="text-xs text-gray-500 truncate max-w-xs mt-0.5" title={service.subcategoryName}>
+                                <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
                                   {service.subcategoryName || '-'}
                                 </div>
                               </td>
-                              {/* Inline App Number Edit */}
+
+                              {/* 3. Inline App Number Edit */}
                               <td className="px-4 py-3">
                                 <input 
                                   type="text"
                                   defaultValue={service.applicationNumber || ''}
                                   onBlur={(e) => {
                                       if(e.target.value !== service.applicationNumber) {
-                                          handleInlineAppNumberUpdate(service.id, e.target.value);
+                                          handleInlineTrackingUpdate(service, { applicationNumber: e.target.value });
                                       }
                                   }}
                                   className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
                                   placeholder="App No..."
                                 />
                               </td>
-                              {/* Inline Status Edit Dropdown */}
-                              <td className="px-4 py-3">
+
+                              {/* 4. Two-Line Status & Step Edits */}
+                              <td className="px-4 py-3 space-y-1.5">
                                 <select 
                                   value={service.status}
                                   onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
-                                  className={`text-[11px] font-bold rounded-full px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
+                                  className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
                                       statusConfig[service.status]?.bg || 'bg-gray-100'
                                   } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
                                 >
@@ -1700,27 +1731,50 @@ const TrackServicePage = () => {
                                       <option key={statusKey} value={statusKey}>{statusKey}</option>
                                   ))}
                                 </select>
+                                
+                                <select
+                                  value={service.currentStep || 'Submitted'}
+                                  onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
+                                  className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                >
+                                  {stepOptions.map(step => (
+                                      <option key={step.value} value={step.value}>{step.label}</option>
+                                  ))}
+                                </select>
                               </td>
-                              {/* 2-Line Dates Info */}
-                              <td className="px-4 py-3">
-                                <div className="text-xs text-gray-700 whitespace-nowrap">
-                                  <span className="font-medium">Upd:</span> {formatDate(service.updatedAt)}
-                                </div>
-                                <div className="text-[11px] text-gray-500 whitespace-nowrap mt-0.5">
-                                  <span className="font-medium">Est:</span> {service.estimatedDelivery || '-'}
-                                </div>
+
+                              {/* 5. Two-Line Staff & Est Delivery Edits */}
+                              <td className="px-4 py-3 space-y-1.5">
+                                <select
+                                  value={service.assignedToId || ''}
+                                  onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
+                                  className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                >
+                                  <option value="">Unassigned Staff</option>
+                                  {staffList.map(staff => (
+                                      <option key={staff.id} value={staff.id}>{staff.name}</option>
+                                  ))}
+                                </select>
+                                
+                                <input 
+                                  type="date"
+                                  value={formatDateForInput(service.rawEstimatedDelivery)}
+                                  onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
+                                  className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                />
                               </td>
-                              {/* Expand Button */}
-                              <td className="px-4 py-3 text-right">
+
+                              {/* 6. Expand Button (Page-jump blocked!) */}
+                              <td className="px-4 py-3 text-right align-top">
                                 <button 
                                   onClick={() => {
                                       if (selectedService?.id === service.id) {
-                                          setSelectedService(null); // Collapse
+                                          setSelectedService(null); // Collapse instantly
                                       } else {
-                                          handleServiceSelect(service); // Expand
+                                          handleServiceSelect(service, true); // Expand AND prevent navigation jump
                                       }
                                   }} 
-                                  className={`p-1.5 rounded-lg transition-colors border shadow-sm ${
+                                  className={`mt-1 p-1.5 rounded-lg transition-colors border shadow-sm ${
                                     selectedService?.id === service.id 
                                       ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
                                       : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
@@ -1743,6 +1797,7 @@ const TrackServicePage = () => {
                             )}
                           </React.Fragment>
                         ))}
+                        
                         {services.length === 0 && (
                           <tr>
                             <td colSpan="6" className="text-center py-16 text-gray-500">
