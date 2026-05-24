@@ -350,7 +350,6 @@ const getSavedFilters = () => {
       const serviceEntry = serviceEntries.find(entry => Number(entry.id) === Number(serviceEntryId));
       
       if (!serviceEntry) {
-        console.warn(`No service entry found for serviceEntryId: ${serviceEntryId}`);
         return { 
           payments: [], 
           totalCharge: 0, 
