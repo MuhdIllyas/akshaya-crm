@@ -5,7 +5,8 @@ import {
   FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
-  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft   // FiGrid added
+  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiChevronRight,
+  FiStar, FiX
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -102,16 +103,17 @@ const formatTimelineDate = (dateString) => {
 };
 
 const TrackServicePage = () => {
-  const { id } = useParams(); // Get ID from URL params
+  const { id } = useParams();
   const navigate = useNavigate();
   
   const [services, setServices] = useState([]);
   const [entryServices, setEntryServices] = useState([]);
-const [selectedService, setSelectedService] = useState(null);
+  const [selectedService, setSelectedService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
+  const [expandedRowId, setExpandedRowId] = useState(null); // Track expanded row
 
-  // --- UPGRADED FILTER STATES & LOCAL STORAGE ---
+  // Filter states & local storage
   const getSavedFilters = () => {
     try {
       const saved = localStorage.getItem('staffServiceSavedView');
@@ -148,7 +150,7 @@ const [selectedService, setSelectedService] = useState(null);
     setSearchTerm('');
     setAadhaarSearch('');
   };
-  // ----------------------------------------------
+
   const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [trackingFormData, setTrackingFormData] = useState({
@@ -163,8 +165,11 @@ const [selectedService, setSelectedService] = useState(null);
     priority: 'medium'
   });
   const [timeRange, setTimeRange] = useState('week');
-  const [viewMode, setViewMode] = useState('list');
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [viewMode, setViewMode] = useState('table'); // 'table' or 'grid'
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false); // Hide old sidebar
+
+  // Inline edit states
+  const [editingCell, setEditingCell] = useState({ id: null, field: null });
 
   // Map backend status to frontend status
   const statusMap = {
@@ -276,20 +281,13 @@ const [selectedService, setSelectedService] = useState(null);
 
   // Enhanced progress calculation function - BASED ON CURRENT_STEP
   const calculateProgress = (status, currentStep) => {
-    console.log('Calculating progress for:', { status, currentStep });
-    
-    // Map steps to progress percentages - always based on current_step
     const stepProgress = {
       'Submitted': 25,
       'Initial Review': 50,
       'Document Verification': 75,
       'Final Approval': 100
     };
-
-    // If status is completed or paid, show 100%
     if (status === 'Completed' || status === 'Paid') return 100;
-    
-    // For all other statuses, progress is based on current_step
     return stepProgress[currentStep] || 25;
   };
 
@@ -321,7 +319,6 @@ const [selectedService, setSelectedService] = useState(null);
       const serviceEntry = serviceEntries.find(entry => entry.id === serviceEntryId);
       
       if (!serviceEntry) {
-        console.warn(`No service entry found for serviceEntryId: ${serviceEntryId}`);
         return { 
           payments: [], 
           totalCharge: 0, 
@@ -380,89 +377,57 @@ const [selectedService, setSelectedService] = useState(null);
       const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
-      // Calculate progress based on current_step, not status
       const calculatedProgress = calculateProgress(
         statusMap[trackingEntry.status] || 'Pending',
         trackingEntry.current_step || 'Submitted'
       );
 
-      // Always use calculated progress based on current_step
       const finalProgress = calculatedProgress;
 
-      console.log('Progress calculation:', {
-        backendProgress: trackingEntry.progress,
-        calculatedProgress,
-        finalProgress,
-        status: trackingEntry.status,
-        currentStep: trackingEntry.current_step
-      });
-
-      // Determine work source
       const workSource = trackingEntry.work_source || 
                         (trackingEntry.customer_service_id ? 'online' : 'offline');
 
       transformed.push({
-        // Core identifiers
         id: trackingEntry.id.toString(),
         serviceEntryId: trackingEntry.service_entry_id?.toString(),
         trackingId: `TR-${trackingEntry.id}`,
         applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
-        
-        // Customer information
         customerName: trackingEntry.customer_name || 'Unknown',
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
-        
-        // Service information
         serviceType: trackingEntry.service_name || 'Unknown',
         serviceName: trackingEntry.service_name || 'Unknown',
         subcategoryName: trackingEntry.subcategory_name || 'N/A',
         categoryId: trackingEntry.category_id,
         subcategoryId: trackingEntry.subcategory_id,
-        
-        // Staff information
         staffName: trackingEntry.assigned_to_name || 'Unassigned',
         staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
-        
-        // Financial information
         serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
         departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
         totalCharge: paymentData.totalCharge || 0,
         cost: paymentData.totalCharge || 0,
-        
-        // Status and progress
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
         progress: finalProgress,
         priority: trackingEntry.priority || 'medium',
-        
-        // Dates (formatted for display)
         date: dateStr,
         time: timeStr,
         estimatedDelivery: formatDate(trackingEntry.estimated_delivery),
         expiryDate: formatDate(trackingEntry.expiry_date),
         createdAt: trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
-        
-        // Additional fields
         duration: null,
         notes: trackingEntry.notes || 'No notes available',
         rating: null,
         followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
-        
-        // Payment information
         paymentStatus: paymentData.paymentStatus,
         paymentDetails: paymentData.paymentDetails,
         payments: paymentData.payments,
-        
-        // Contact information
         phone: trackingEntry.phone || 'N/A',
         email: trackingEntry.email || '',
         aadhaar: trackingEntry.aadhaar || '',
-        
-        // Steps
         steps: Array.isArray(trackingEntry.steps) ? trackingEntry.steps.map(step => ({
           id: step.id,
           name: step.name,
@@ -472,17 +437,10 @@ const [selectedService, setSelectedService] = useState(null);
           step_order: step.step_order,
           estimated_days: step.estimated_days
         })) : [],
-
         averageTime: trackingEntry.average_time || '7 days',
-
-        // Raw dates for form inputs
         rawEstimatedDelivery: trackingEntry.estimated_delivery,
         rawExpiryDate: trackingEntry.expiry_date,
-
-        // Source information
         workSource: workSource,
-
-        // Review information
         serviceRating: trackingEntry.service_rating,
         staffRating: trackingEntry.staff_rating,
         reviewText: trackingEntry.review_text,
@@ -496,32 +454,26 @@ const [selectedService, setSelectedService] = useState(null);
   // Fetch single tracking entry by ID
   const fetchSingleTrackingEntry = async (entryId) => {
     try {
-      console.log('Fetching single tracking entry:', entryId);
       const [response, staffResponse] = await Promise.all([
         getTrackingEntryById(entryId),
-        getStaff() // Fetch staff list as well
+        getStaff()
       ]);
       
-      console.log('Single entry response:', response);
-      
-      // Fetch service entries for payment details
       const entryResponse = await getServiceEntries();
       const entryData = Array.isArray(entryResponse) ? entryResponse : 
                       Array.isArray(entryResponse?.data) ? entryResponse.data : [];
       
-      // Set staff list in state
       const staffData = Array.isArray(staffResponse) ? staffResponse : 
                       Array.isArray(staffResponse?.data) ? staffResponse.data : [];
       setStaffList(staffData);
       
-      // Transform the single record
       const transformed = await transformBackendData([response], entryData);
       
       if (transformed.length > 0) {
         setServices(transformed);
         setSelectedService(transformed[0]);
+        setExpandedRowId(transformed[0].id);
         
-        // Find the staff name from staffData
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
         setTrackingFormData({
@@ -536,7 +488,6 @@ const [selectedService, setSelectedService] = useState(null);
           priority: transformed[0].priority || 'medium',
         });
         
-        // Update the selected service with proper staff name if available
         if (assignedStaff) {
           setSelectedService(prev => ({
             ...prev,
@@ -544,14 +495,10 @@ const [selectedService, setSelectedService] = useState(null);
             assignedToId: assignedStaff.id
           }));
         }
-        
-        // Hide sidebar when viewing single application
-        setIsSidebarVisible(false);
       }
     } catch (error) {
       console.error('Error fetching single tracking entry:', error);
       toast.error('Failed to load the specific application');
-      // Fall back to loading all entries
       await fetchAllTrackingEntries();
     }
   };
@@ -559,7 +506,6 @@ const [selectedService, setSelectedService] = useState(null);
   // Fetch all tracking entries
   const fetchAllTrackingEntries = async () => {
     try {
-      console.log('Fetching all tracking entries...');
       const [trackingResponse, entryResponse, staffResponse, categoriesResponse] = await Promise.all([
         getTrackingEntries(),
         getServiceEntries(),
@@ -567,9 +513,6 @@ const [selectedService, setSelectedService] = useState(null);
         getCategories()
       ]);
 
-      console.log('TrackServicePage: Raw trackingResponse:', trackingResponse);
-
-      // Process data
       const staffData = Array.isArray(staffResponse) ? staffResponse : 
                        Array.isArray(staffResponse?.data) ? staffResponse.data : [];
       
@@ -583,7 +526,6 @@ const [selectedService, setSelectedService] = useState(null);
                          Array.isArray(trackingResponse?.data) ? trackingResponse.data : [];
 
       if (trackingData.length === 0) {
-        console.warn('TrackServicePage: No tracking data found');
         toast.warn('No service tracking entries found');
       }
 
@@ -591,31 +533,23 @@ const [selectedService, setSelectedService] = useState(null);
       setCategories(categoriesData);
       setEntryServices(entryData);
 
-      // Transform the data
       const transformedServices = await transformBackendData(trackingData, entryData);
-      console.log('TrackServicePage: Transformed services:', transformedServices);
-
       setServices(transformedServices);
 
-      // Set initial selected service if available
-      if (transformedServices.length > 0) {
-        const firstService = transformedServices[0];
-        setSelectedService(firstService);
+      if (transformedServices.length > 0 && !selectedService) {
+        setSelectedService(transformedServices[0]);
         setTrackingFormData({
-          applicationNumber: firstService.applicationNumber || `APP${firstService.serviceEntryId}`,
-          currentStep: firstService.currentStep || 'Submitted',
-          estimatedDelivery: formatDateForInput(firstService.rawEstimatedDelivery) || '',
-          averageTime: firstService.averageTime || '7 days',
-          notes: firstService.notes || '',
-          assignedTo: firstService.assignedToId || '',
-          aadhaar: firstService.aadhaar || '',
-          email: firstService.email || '',
-          priority: firstService.priority || 'medium',
+          applicationNumber: transformedServices[0].applicationNumber || `APP${transformedServices[0].serviceEntryId}`,
+          currentStep: transformedServices[0].currentStep || 'Submitted',
+          estimatedDelivery: formatDateForInput(transformedServices[0].rawEstimatedDelivery) || '',
+          averageTime: transformedServices[0].averageTime || '7 days',
+          notes: transformedServices[0].notes || '',
+          assignedTo: transformedServices[0].assignedToId || '',
+          aadhaar: transformedServices[0].aadhaar || '',
+          email: transformedServices[0].email || '',
+          priority: transformedServices[0].priority || 'medium',
         });
       }
-      
-      // Show sidebar when in list view
-      setIsSidebarVisible(true);
       
       toast.success(`Loaded ${transformedServices.length} service tracking entries`);
     } catch (error) {
@@ -632,10 +566,8 @@ const [selectedService, setSelectedService] = useState(null);
       setLoading(true);
       try {
         if (id) {
-          // If ID is provided in URL, fetch just that one record
           await fetchSingleTrackingEntry(id);
         } else {
-          // No ID, fetch all records
           await fetchAllTrackingEntries();
         }
       } catch (error) {
@@ -646,11 +578,10 @@ const [selectedService, setSelectedService] = useState(null);
     };
 
     loadData();
-  }, [id]); // Re-run when ID changes
+  }, [id]);
 
   const filteredServices = useMemo(() => {
     return services.filter(service => {
-      // 1. Text Search
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
         (service.customerName?.toLowerCase().includes(searchLower)) ||
@@ -659,16 +590,10 @@ const [selectedService, setSelectedService] = useState(null);
         (service.applicationNumber?.toLowerCase().includes(searchLower)) ||
         (service.email?.toLowerCase().includes(searchLower));
       
-      // 2. Aadhaar Search
       const matchesAadhaarSearch = !aadhaarSearch || (service.aadhaar?.includes(aadhaarSearch));
-      
-      // 3. Status Filter
       const matchesStatus = statusFilter === 'all' || service.status === statusFilter;
-
-      // 4. Staff Name Filter
       const matchesStaff = staffFilter === 'all' || service.assignedToId?.toString() === staffFilter.toString();
 
-      // 5. Expiry Date Logic
       let matchesExpiry = true;
       if (expiryFilter !== 'all') {
         if (!service.rawExpiryDate) {
@@ -676,7 +601,7 @@ const [selectedService, setSelectedService] = useState(null);
         } else {
           const expiryDate = new Date(service.rawExpiryDate);
           const today = new Date();
-          today.setHours(0, 0, 0, 0); // Reset time to compare just dates
+          today.setHours(0, 0, 0, 0);
           
           if (expiryFilter === 'upcoming') {
             matchesExpiry = expiryDate >= today && service.status !== 'Completed';
@@ -694,40 +619,24 @@ const [selectedService, setSelectedService] = useState(null);
     try {
       const apiStatus = reverseStatusMap[newStatus] || newStatus;
       const service = services.find(s => s.id === serviceId);
-      
-      // Calculate new progress based on current_step, not status
       const newProgress = calculateProgress(newStatus, service.currentStep);
-      
-      console.log('Updating status only:', {
-        serviceId,
-        newStatus,
-        apiStatus,
-        currentStep: service.currentStep,
-        newProgress
-      });
       
       await updateTrackingStatus(serviceId, apiStatus);
       toast.success(`Status updated to ${newStatus}`);
       
-      // Update only status and progress in the state
       const updatedServices = services.map(service =>
         service.id === serviceId 
-          ? { 
-              ...service, 
-              status: newStatus, 
-              progress: newProgress,
-            } 
+          ? { ...service, status: newStatus, progress: newProgress } 
           : service
       );
       
       setServices(updatedServices);
       
       if (selectedService?.id === serviceId) {
-        setSelectedService({ 
-          ...selectedService, 
-          status: newStatus, 
-          progress: newProgress,
-        });
+        setSelectedService({ ...selectedService, status: newStatus, progress: newProgress });
+      }
+      if (expandedRowId === serviceId) {
+        setExpandedRowId(serviceId); // force re-render of expanded row
       }
     } catch (error) {
       console.error('TrackServicePage: Error updating status:', error);
@@ -735,16 +644,74 @@ const [selectedService, setSelectedService] = useState(null);
     }
   };
 
+  const handleInlineEdit = async (serviceId, field, value) => {
+    try {
+      const service = services.find(s => s.id === serviceId);
+      if (!service) return;
+
+      // Validate
+      if (field === 'aadhaar' && value && !/^\d{12}$/.test(value)) {
+        toast.error('Aadhaar number must be exactly 12 digits');
+        return;
+      }
+      if (field === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        toast.error('Please enter a valid email address');
+        return;
+      }
+
+      let updatePayload = {};
+      let updatedFieldValue = value;
+
+      // Handle special fields
+      if (field === 'status') {
+        const apiStatus = reverseStatusMap[value] || value;
+        await updateTrackingStatus(serviceId, apiStatus);
+        updatePayload = { status: value, progress: calculateProgress(value, service.currentStep) };
+      } else if (field === 'priority') {
+        updatePayload = { priority: value };
+      } else if (field === 'currentStep') {
+        updatePayload = { currentStep: value, progress: calculateProgress(service.status, value) };
+      } else if (field === 'assignedTo') {
+        updatePayload = { assignedTo: parseInt(value) };
+        const staff = staffList.find(s => s.id === parseInt(value));
+        updatedFieldValue = staff ? staff.name : value;
+      } else if (field === 'applicationNumber') {
+        updatePayload = { applicationNumber: value };
+      } else if (field === 'aadhaar') {
+        updatePayload = { aadhaar: value };
+      } else if (field === 'email') {
+        updatePayload = { email: value };
+      } else if (field === 'estimatedDelivery') {
+        updatePayload = { estimatedDelivery: value };
+      } else {
+        updatePayload = { [field]: value };
+      }
+
+      if (field !== 'status') { // status already updated above
+        await updateTrackingEntry(serviceId, updatePayload);
+      }
+
+      // Update local state
+      const updatedServices = services.map(s =>
+        s.id === serviceId ? { ...s, [field]: updatedFieldValue, ...updatePayload } : s
+      );
+      setServices(updatedServices);
+      
+      if (selectedService?.id === serviceId) {
+        setSelectedService({ ...selectedService, [field]: updatedFieldValue, ...updatePayload });
+      }
+      
+      toast.success(`${field} updated successfully`);
+    } catch (error) {
+      console.error('Inline edit error:', error);
+      toast.error('Failed to update: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setEditingCell({ id: null, field: null });
+    }
+  };
+
   const handleNotifyCustomer = async (service) => {
     try {
-      console.log('TrackServicePage: Sending notification for service:', {
-        id: service.id,
-        serviceEntryId: service.serviceEntryId,
-        customerName: service.customerName,
-        applicationNumber: service.applicationNumber,
-        status: service.status
-      });
-      
       await notifyCustomer(service.id, `Dear ${service.customerName}, your ${service.serviceType} application (App No: ${service.applicationNumber || 'N/A'}) is now ${service.status}.`);
       toast.success(`Notification sent to ${service.customerName} via WhatsApp`);
     } catch (error) {
@@ -764,18 +731,14 @@ const [selectedService, setSelectedService] = useState(null);
       if (trackingFormData.applicationNumber && trackingFormData.applicationNumber.length > 50) {
         throw new Error('Application number must be 50 characters or less');
       }
-
       if (trackingFormData.aadhaar && !/^\d{12}$/.test(trackingFormData.aadhaar)) {
         throw new Error('Aadhaar number must be exactly 12 digits');
       }
-
       if (trackingFormData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trackingFormData.email)) {
         throw new Error('Please enter a valid email address');
       }
 
-      // Calculate new progress based on the new current_step
       const newProgress = calculateProgress(selectedService.status, trackingFormData.currentStep);
-      
       const payload = {
         applicationNumber: trackingFormData.applicationNumber || null,
         currentStep: trackingFormData.currentStep || null,
@@ -788,12 +751,8 @@ const [selectedService, setSelectedService] = useState(null);
         priority: trackingFormData.priority || 'medium',
         progress: newProgress
       };
-      
-      console.log('TrackServicePage: Sending update payload with progress:', payload);
 
-      const response = await updateTrackingEntry(selectedService.id, payload);
-      console.log('TrackServicePage: Update response:', response);
-
+      await updateTrackingEntry(selectedService.id, payload);
       toast.success('Tracking details updated successfully');
       
       const updatedServices = services.map(service =>
@@ -838,30 +797,33 @@ const [selectedService, setSelectedService] = useState(null);
     }
   };
 
-  const handleServiceSelect = (service) => {
-    console.log('TrackServicePage: Selected service:', service);
-    setSelectedService(service);
-    setTrackingFormData({
-      applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
-      currentStep: service.currentStep || 'Submitted',
-      estimatedDelivery: formatDateForInput(service.rawEstimatedDelivery) || '',
-      averageTime: service.averageTime || '7 days',
-      notes: service.notes || '',
-      assignedTo: service.assignedToId || '',
-      aadhaar: service.aadhaar || '',
-      email: service.email || '',
-      priority: service.priority || 'medium',
-    });
-    setActiveTab('overview');
-    
-    // Update URL to reflect selected service (optional)
-    if (!id) {
-      navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
+  const handleExpandRow = (serviceId) => {
+    if (expandedRowId === serviceId) {
+      setExpandedRowId(null);
+      setSelectedService(null);
+    } else {
+      setExpandedRowId(serviceId);
+      const service = services.find(s => s.id === serviceId);
+      setSelectedService(service);
+      setTrackingFormData({
+        applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
+        currentStep: service.currentStep || 'Submitted',
+        estimatedDelivery: formatDateForInput(service.rawEstimatedDelivery) || '',
+        averageTime: service.averageTime || '7 days',
+        notes: service.notes || '',
+        assignedTo: service.assignedToId || '',
+        aadhaar: service.aadhaar || '',
+        email: service.email || '',
+        priority: service.priority || 'medium',
+      });
+      setActiveTab('overview');
     }
   };
 
   const handleBackToList = () => {
     navigate('/dashboard/staff/track_service');
+    setExpandedRowId(null);
+    setSelectedService(null);
   };
 
   const stats = {
@@ -885,7 +847,7 @@ const [selectedService, setSelectedService] = useState(null);
     </div>
   );
 
-  // OverviewView component with Source Badge and Review Section
+  // OverviewView component (same as before)
   const OverviewView = ({ service, onUpdateStatus, priorityConfig }) => {
     const getDisplaySteps = () => {
       if (service.steps && service.steps.length > 0) {
@@ -906,7 +868,6 @@ const [selectedService, setSelectedService] = useState(null);
 
     return (
       <div className="space-y-6">
-        {/* Source Badge */}
         <div className="flex justify-end">
           {service.workSource === "online" ? (
             <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full border border-green-200">
@@ -1026,7 +987,6 @@ const [selectedService, setSelectedService] = useState(null);
           </div>
         </div>
 
-        {/* Review Section */}
         {service.serviceRating && (
           <div className="mt-4 p-6 bg-gray-50 rounded-xl border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Review</h3>
@@ -1101,79 +1061,213 @@ const [selectedService, setSelectedService] = useState(null);
     </motion.div>
   );
 
-  const ServiceCard = ({ service, isSelected, onClick }) => {
-    const config = statusConfig[service.status] || statusConfig['Pending'];
-    const priority = priorityConfig[service.priority || 'medium'];
-    
-    return (
-      <motion.div
-        whileHover={{ y: -2 }}
-        className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-          isSelected 
-            ? 'border-indigo-500 bg-indigo-50 shadow-md' 
-            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-        }`}
-        onClick={onClick}
-      >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center space-x-2 min-w-0 flex-1">
-            <div className="relative flex-shrink-0">
-              <div className="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-600 rounded-lg flex items-center justify-center">
-                <FiUser className="h-4 w-4 text-white" />
-              </div>
-              <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${config.dot}`}></div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-gray-900 text-sm truncate" title={service.customerName || 'Unknown'}>
-                {service.customerName || 'Unknown'}
-              </h3>
-              <p className="text-xs text-gray-500 truncate" title={service.phone || 'N/A'}>
-                {service.phone || 'N/A'}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="mb-2">
-          <p className="text-sm font-medium text-gray-900 truncate" title={service.serviceType || 'Unknown'}>
-            {service.serviceType || 'Unknown'}
-          </p>
-          <p className="text-xs text-gray-600 truncate" title={service.subcategoryName || 'N/A'}>
-            {service.subcategoryName || 'N/A'}
-          </p>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 ${config.bg} ${config.border}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`}></span>
-              <span className={config.color}>{service.status}</span>
-            </span>
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 ${priority.bg} ${priority.border}`}>
-              <FiFlag className={`h-2.5 w-2.5 ${priority.color}`} />
-              <span className={priority.color}>{priority.label}</span>
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-          <div className="text-xs text-gray-500 truncate flex-1 min-w-0 mr-2">
-            {service.applicationNumber ? `App: ${service.applicationNumber}` : 'No App Number'}
-          </div>
-          <div className="text-xs font-medium text-indigo-600 whitespace-nowrap flex-shrink-0">
-            {service.averageTime || 'Not set'}
-          </div>
-        </div>
-        {/* Source Badge on card */}
-        <div className="mt-2">
-          {service.workSource === "online" ? (
-            <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full border border-green-200">
-              Online
-            </span>
+  // Editable cell component
+  const EditableCell = ({ value, serviceId, field, type = 'text', options = null }) => {
+    const isEditing = editingCell.id === serviceId && editingCell.field === field;
+    const [editValue, setEditValue] = useState(value);
+
+    if (isEditing) {
+      return (
+        <div className="relative">
+          {options ? (
+            <select
+              className="w-full px-2 py-1 border border-indigo-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => handleInlineEdit(serviceId, field, editValue)}
+              autoFocus
+            >
+              {options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           ) : (
-            <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full border border-blue-200">
-              Offline
-            </span>
+            <input
+              type={type}
+              className="w-full px-2 py-1 border border-indigo-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => handleInlineEdit(serviceId, field, editValue)}
+              onKeyPress={(e) => e.key === 'Enter' && handleInlineEdit(serviceId, field, editValue)}
+              autoFocus
+            />
           )}
         </div>
-      </motion.div>
+      );
+    }
+
+    // Display value with edit trigger
+    let displayValue = value || '-';
+    if (field === 'status') {
+      const config = statusConfig[value] || statusConfig['Pending'];
+      displayValue = (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
+          {value}
+        </span>
+      );
+    } else if (field === 'priority') {
+      const config = priorityConfig[value] || priorityConfig['medium'];
+      displayValue = (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${config.bg} ${config.border}`}>
+          <FiFlag className={`h-2.5 w-2.5 ${config.color}`} />
+          <span className={config.color}>{config.label}</span>
+        </span>
+      );
+    }
+
+    return (
+      <div 
+        className="cursor-pointer hover:bg-gray-100 rounded p-1 transition-colors"
+        onClick={() => setEditingCell({ id: serviceId, field })}
+      >
+        {displayValue}
+      </div>
+    );
+  };
+
+  // Table row component
+  const TableRow = ({ service }) => {
+    const isExpanded = expandedRowId === service.id;
+    const statusOptions = Object.keys(statusConfig).map(s => ({ value: s, label: s }));
+    const priorityOpts = priorityOptions;
+    const staffOpts = [{ value: '', label: 'Unassigned' }, ...staffList.map(s => ({ value: s.id.toString(), label: s.name }))];
+
+    return (
+      <>
+        <tr 
+          className={`border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer ${isExpanded ? 'bg-indigo-50' : ''}`}
+          onClick={() => handleExpandRow(service.id)}
+        >
+          <td className="px-4 py-3">
+            <div className="flex items-center">
+              <FiChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+            </div>
+          </td>
+          <td className="px-4 py-3 font-medium text-gray-900">{service.customerName}</td>
+          <td className="px-4 py-3 text-gray-600">{service.phone}</td>
+          <td className="px-4 py-3 text-gray-600">{service.serviceType}</td>
+          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+            <EditableCell value={service.status} serviceId={service.id} field="status" options={statusOptions} />
+          </td>
+          <td className="px-4 py-3">
+            <div className="w-24 bg-gray-200 rounded-full h-2">
+              <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${service.progress}%` }}></div>
+            </div>
+          </td>
+          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+            <EditableCell value={service.priority} serviceId={service.id} field="priority" options={priorityOpts} />
+          </td>
+          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+            <EditableCell value={service.assignedToId || ''} serviceId={service.id} field="assignedTo" options={staffOpts} />
+          </td>
+          <td className="px-4 py-3 text-gray-600">{service.applicationNumber}</td>
+          <td className="px-4 py-3 text-right">
+            <div className="flex justify-end space-x-2" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => handleNotifyCustomer(service)}
+                className="p-1 text-gray-500 hover:text-indigo-600 transition-colors"
+                title="Notify Customer"
+              >
+                <FiMessageSquare className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => navigate(`/dashboard/staff/service-workspace/${service.id}`)}
+                className="p-1 text-gray-500 hover:text-purple-600 transition-colors"
+                title="Open Workspace"
+              >
+                <FiGrid className="h-4 w-4" />
+              </button>
+            </div>
+          </td>
+        </tr>
+        {isExpanded && selectedService && (
+          <tr className="bg-gray-50">
+            <td colSpan="10" className="px-6 py-4">
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Service Details</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setActiveTab('tracking')}
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center space-x-1"
+                    >
+                      <FiEdit className="h-3 w-3" />
+                      <span>Edit Details</span>
+                    </button>
+                    <button
+                      onClick={() => handleExpandRow(null)}
+                      className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
+                    >
+                      <FiX className="h-3 w-3 inline mr-1" />
+                      Close
+                    </button>
+                  </div>
+                </div>
+                <div className="border-b border-gray-200 mb-4">
+                  <nav className="flex -mb-px">
+                    {['overview', 'tracking', 'documents', 'history'].map((tab) => (
+                      <button
+                        key={tab}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                          activeTab === tab
+                            ? 'border-indigo-500 text-indigo-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
+                        onClick={() => setActiveTab(tab)}
+                      >
+                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+                <div className="p-2">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={activeTab}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {activeTab === 'overview' && (
+                        <OverviewView 
+                          service={selectedService} 
+                          onUpdateStatus={handleUpdateStatus}
+                          priorityConfig={priorityConfig}
+                        />
+                      )}
+                      {activeTab === 'tracking' && (
+                        <TrackingView 
+                          service={selectedService}
+                          formData={trackingFormData}
+                          onFormChange={handleTrackingFormChange}
+                          staffList={staffList}
+                          stepOptions={stepOptions}
+                          priorityOptions={priorityOptions}
+                          onSave={handleTrackingFormSubmit}
+                          onCancel={() => setActiveTab('overview')}
+                        />
+                      )}
+                      {activeTab === 'documents' && (
+                        <EnhancedDocumentsView 
+                          service={selectedService}
+                          entryServices={entryServices}
+                          categories={categories}
+                          formatPayments={formatPayments}
+                          priorityConfig={priorityConfig}
+                        />
+                      )}
+                      {activeTab === 'history' && (
+                        <HistoryView service={selectedService} />
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
     );
   };
 
@@ -1191,10 +1285,9 @@ const [selectedService, setSelectedService] = useState(null);
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
-        
-        <header className="bg-white border-b border-gray-200">
+        <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center space-x-4">
                 <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
                   <FiTarget className="h-5 w-5 text-white" />
@@ -1236,6 +1329,7 @@ const [selectedService, setSelectedService] = useState(null);
         </header>
         
         <div className="max-w-7xl mx-auto px-6 py-8">
+          {/* KPI Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <KPIStat
               title="Total Services"
@@ -1270,375 +1364,137 @@ const [selectedService, setSelectedService] = useState(null);
               color="bg-gradient-to-br from-purple-500 to-purple-600"
             />
           </div>
-          
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-            {/* Left sidebar - Service List (conditionally rendered) */}
-            {isSidebarVisible && (
-              <div className="xl:col-span-1">
-                <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">Quick Actions</h3>
-                    <div className="flex space-x-1">
-                      <button 
-                        onClick={() => setViewMode('grid')}
-                        className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        <FiGrid className="h-4 w-4" />
-                      </button>
-                      <button 
-                        onClick={() => setViewMode('list')}
-                        className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                      >
-                        <FiList className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
-                      <FiPlus className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">New Service</span>
-                    </button>
-                    <button className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
-                      <FiDownload className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">Export</span>
-                    </button>
-                    <button className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex flex-col items-center justify-center">
-                      <FiFilter className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">Filters</span>
-                    </button>
-                    <button className="p-3 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors flex flex-col items-center justify-center">
-                      <FiPrinter className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">Print</span>
-                    </button>
-                  </div>
-                </div>
-                
-                {/* --- UPGRADED FILTER UI PANEL --- */}
-                <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <FiFilter className="text-indigo-600" /> Filters
-                    </h3>
-                    <button 
-                      onClick={handleSaveView}
-                      className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-md hover:bg-indigo-100 transition-colors"
-                      title="Save these filters for next time"
-                    >
-                      Save My View
-                    </button>
-                  </div>
 
-                  <div className="space-y-4">
-                    {/* Primary Search Input */}
-                    <div className="relative">
-                      <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <input
-                        type="text"
-                        placeholder="Search name, phone, app no..."
-                        className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Toggle for Advanced Filters */}
-                    <button
-                      onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                      className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-indigo-600 py-2 border-b border-gray-100 transition-colors"
-                    >
-                      <span>Advanced Filters</span>
-                      <FiChevronDown className={`transition-transform duration-300 ${showAdvancedFilters ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {/* Collapsible Panel */}
-                    <AnimatePresence>
-                      {showAdvancedFilters && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="space-y-4 overflow-hidden pt-2"
-                        >
-                          {/* Status Dropdown */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
-                            <div className="relative">
-                              <select
-                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                              >
-                                <option value="all">All Statuses</option>
-                                <option value="Pending">Pending</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Delayed">Delayed</option>
-                                <option value="Completed">Completed</option>
-                                <option value="Resubmit">Resubmit</option>
-                                <option value="Paid">Paid</option>
-                              </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                                <FiChevronDown className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Assigned Staff Dropdown */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
-                            <div className="relative">
-                              <select
-                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
-                                value={staffFilter}
-                                onChange={(e) => setStaffFilter(e.target.value)}
-                              >
-                                <option value="all">Everyone</option>
-                                {staffList.map(staff => (
-                                  <option key={staff.id} value={staff.id}>{staff.name}</option>
-                                ))}
-                              </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                                <FiChevronDown className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Expiry Date Dropdown */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
-                            <div className="relative">
-                              <select
-                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
-                                value={expiryFilter}
-                                onChange={(e) => setExpiryFilter(e.target.value)}
-                              >
-                                <option value="all">Any Date</option>
-                                <option value="upcoming">Upcoming Expiry</option>
-                                <option value="overdue">Overdue</option>
-                              </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                                <FiChevronDown className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Aadhaar Search */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
-                            <div className="relative">
-                              <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <input
-                                type="text"
-                                placeholder="Search by Aadhaar..."
-                                className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                                value={aadhaarSearch}
-                                onChange={(e) => setAadhaarSearch(e.target.value)}
-                                maxLength="12"
-                              />
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={handleClearFilters}
-                            className="w-full mt-4 py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
-                          >
-                            Clear All Filters
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-                {/* -------------------------------------- */}
-                
-                <div className="bg-white rounded-xl border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">
-                      Services <span className="text-gray-500 font-normal">({filteredServices.length})</span>
-                    </h3>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                      <span className="text-xs text-gray-500">Active</span>
-                    </div>
-                  </div>
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
-                    {filteredServices.map(service => (
-                      <ServiceCard
-                        key={service.id}
-                        service={service}
-                        isSelected={selectedService?.id === service.id}
-                        onClick={() => handleServiceSelect(service)}
-                      />
-                    ))}
-                    {filteredServices.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
-                        <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                        <p className="text-sm">No services found</p>
-                        <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
-                      </div>
-                    )}
-                  </div>
+          {/* Filter Bar */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 shadow-sm">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="relative flex-1 min-w-[200px]">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <input
+                  type="text"
+                  placeholder="Search by name, phone, service, app no..."
+                  className="w-full pl-10 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <div className="relative">
+                <select
+                  className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">All Status</option>
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Delayed">Delayed</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Resubmit">Resubmit</option>
+                  <option value="Paid">Paid</option>
+                </select>
+              </div>
+              <div className="relative">
+                <select
+                  className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={staffFilter}
+                  onChange={(e) => setStaffFilter(e.target.value)}
+                >
+                  <option value="all">All Staff</option>
+                  {staffList.map(staff => (
+                    <option key={staff.id} value={staff.id}>{staff.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="relative">
+                <select
+                  className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={expiryFilter}
+                  onChange={(e) => setExpiryFilter(e.target.value)}
+                >
+                  <option value="all">Any Date</option>
+                  <option value="upcoming">Upcoming Expiry</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+              <button
+                onClick={handleClearFilters}
+                className="px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Clear
+              </button>
+              <button
+                onClick={handleSaveView}
+                className="px-3 py-2 text-sm text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"
+              >
+                Save View
+              </button>
+              <div className="flex-1 text-right text-sm text-gray-500">
+                Showing {filteredServices.length} of {services.length} services
+              </div>
+            </div>
+            {showAdvancedFilters && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-4">
+                <div className="relative">
+                  <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input
+                    type="text"
+                    placeholder="Aadhaar number"
+                    className="pl-10 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg"
+                    value={aadhaarSearch}
+                    onChange={(e) => setAadhaarSearch(e.target.value)}
+                    maxLength="12"
+                  />
                 </div>
               </div>
             )}
-            
-            {/* Main content - Service Details */}
-            <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
-              {selectedService ? (
-                <div className="space-y-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                          <FiUser className="h-8 w-8 text-white" />
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold text-gray-900">{selectedService.customerName || 'Unknown'}</h2>
-                          <div className="flex items-center space-x-4 mt-2">
-                            <div className="flex items-center space-x-1 text-gray-600">
-                              <FiPhone className="h-4 w-4" />
-                              <span className="text-sm">{selectedService.phone || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-gray-600">
-                              <FiMail className="h-4 w-4" />
-                              <span className="text-sm">{selectedService.email || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-gray-600">
-                              <FiCreditCard className="h-4 w-4" />
-                              <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2 mt-4 lg:mt-0">
-                        <button
-                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200"
-                          onClick={() => handleNotifyCustomer(selectedService)}
-                        >
-                          <FiMessageSquare className="h-4 w-4" />
-                          <span>Notify</span>
-                        </button>
-                        <button
-                          onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200"
-                        >
-                          <FiGrid className="h-4 w-4" />
-                          <span>Workspace</span>
-                        </button>
-                        <button 
-                          onClick={() => setActiveTab('tracking')}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200"
-                        >
-                          <FiEdit className="h-4 w-4" />
-                          <span>Edit</span>
-                        </button>
-                        <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                          <FiMoreHorizontal className="h-4 w-4 text-gray-600" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      <StatItem label="Application No." value={selectedService.applicationNumber || 'N/A'} />
-                      <StatItem label="Current Step" value={selectedService.currentStep || 'N/A'} />
-                      <StatItem label="Est. Delivery" value={selectedService.estimatedDelivery || 'Not set'} />
-                      <StatItem label="Assigned To" value={selectedService.assignedTo || 'Unassigned'} />
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="border-b border-gray-200">
-                      <nav className="flex -mb-px">
-                        {['overview', 'tracking', 'documents', 'history'].map((tab) => (
-                          <button
-                            key={tab}
-                            className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
-                              activeTab === tab
-                                ? 'border-indigo-500 text-indigo-600'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                            onClick={() => setActiveTab(tab)}
-                          >
-                            {tab === 'overview' && 'Overview'}
-                            {tab === 'tracking' && 'Tracking'}
-                            {tab === 'documents' && 'Documents'}
-                            {tab === 'history' && 'History'}
-                          </button>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="p-6">
-                      <AnimatePresence mode="wait">
-                        <motion.div
-                          key={activeTab}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -20 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          {activeTab === 'overview' && (
-                            <OverviewView 
-                              service={selectedService} 
-                              onUpdateStatus={handleUpdateStatus}
-                              priorityConfig={priorityConfig}
-                            />
-                          )}
-                          {activeTab === 'tracking' && (
-                            <TrackingView 
-                              service={selectedService}
-                              formData={trackingFormData}
-                              onFormChange={handleTrackingFormChange}
-                              staffList={staffList}
-                              stepOptions={stepOptions}
-                              priorityOptions={priorityOptions}
-                              onSave={handleTrackingFormSubmit}
-                              onCancel={() => setActiveTab('overview')}
-                            />
-                          )}
-                          {activeTab === 'documents' && (
-                            <EnhancedDocumentsView 
-                              service={selectedService}
-                              entryServices={entryServices}
-                              categories={categories}
-                              formatPayments={formatPayments}
-                              priorityConfig={priorityConfig}
-                            />
-                          )}
-                          {activeTab === 'history' && (
-                            <HistoryView service={selectedService} />
-                          )}
-                        </motion.div>
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                  <div className="w-20 h-20 bg-gray-200 rounded-xl flex items-center justify-center mx-auto mb-4">
-                    <FiUser className="h-10 w-10 text-gray-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No Service Selected</h3>
-                  <p className="text-gray-600 max-w-sm mx-auto">
-                    Select a service from the list to view detailed information
-                  </p>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className="mt-2 text-xs text-indigo-600 flex items-center"
+            >
+              <FiChevronDown className={`h-3 w-3 mr-1 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+              {showAdvancedFilters ? 'Hide advanced filters' : 'Show advanced filters'}
+            </button>
+          </div>
+
+          {/* Table View */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8"></th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">App No.</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredServices.map(service => (
+                  <TableRow key={service.id} service={service} />
+                ))}
+                {filteredServices.length === 0 && (
+                  <tr>
+                    <td colSpan="10" className="px-6 py-12 text-center text-gray-500">
+                      <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                      <p>No services found matching your filters</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-        
-        <style>{`
-          .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-          .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-          }
-        `}</style>
       </div>
     </ErrorBoundary>
   );
 };
 
+// Helper components (same as before)
 const StatItem = ({ label, value }) => (
   <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
     <p className="text-sm font-medium text-gray-600 mb-1">{label}</p>
