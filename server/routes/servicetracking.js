@@ -567,134 +567,133 @@ router.post('/sync-customer-services', authenticateToken, async (req, res) => {
  * GET /api/servicetracking/entries - Get service tracking entries with filters
  */
 router.get('/entries', authenticateToken, async (req, res) => {
-  const { centre_id, status, priority, start_date, end_date } = req.query;
+  const { 
+    centre_id, status, priority, start_date, end_date,
+    page = 1, limit = 20, timeRange, staff, search, aadhaar, expiry
+  } = req.query;
+  
   const client = await pool.connect();
 
   try {
     const queryConditions = [];
     const queryValues = [];
+    let paramIndex = 1;
 
-    // 🔐 Centre Filtering
+    // 1. Role / Centre Filtering
     if (req.user.role !== 'superadmin') {
-      queryConditions.push(`se_staff.centre_id = $${queryValues.length + 1}`);
+      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
       queryValues.push(req.user.centre_id);
     } else if (centre_id && centre_id !== 'all') {
-      queryConditions.push(`se_staff.centre_id = $${queryValues.length + 1}`);
+      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
       queryValues.push(parseInt(centre_id));
     }
 
-    // 📌 Status Filter
+    // 2. Existing Filters
     if (status && status !== 'all') {
-      queryConditions.push(`st.status = $${queryValues.length + 1}`);
+      queryConditions.push(`st.status = $${paramIndex++}`);
       queryValues.push(status);
     }
-
-    // 📌 Priority Filter
     if (priority && priority !== 'all') {
-      queryConditions.push(`st.priority = $${queryValues.length + 1}`);
+      queryConditions.push(`st.priority = $${paramIndex++}`);
       queryValues.push(priority);
     }
-
-    // 📅 Date Filters
     if (start_date) {
-      queryConditions.push(`st.updated_at >= $${queryValues.length + 1}`);
+      queryConditions.push(`st.updated_at >= $${paramIndex++}`);
       queryValues.push(start_date);
     }
-
     if (end_date) {
-      queryConditions.push(`st.updated_at <= $${queryValues.length + 1}`);
+      queryConditions.push(`st.updated_at <= $${paramIndex++}`);
       queryValues.push(end_date);
     }
 
-    const query = `
+    // 3. NEW: Time Range Filter (Fixes your 7 days / 30 days dropdown)
+    if (timeRange === 'week') {
+      queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
+    } else if (timeRange === 'month') {
+      queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
+    } else if (timeRange === 'quarter') {
+      queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
+    }
+
+    // 4. NEW: Server-Side Data Filters
+    if (staff && staff !== 'all') {
+      queryConditions.push(`st.assigned_to = $${paramIndex++}`);
+      queryValues.push(parseInt(staff));
+    }
+    if (search) {
+      queryConditions.push(`(se.customer_name ILIKE $${paramIndex} OR se.phone ILIKE $${paramIndex} OR st.application_number ILIKE $${paramIndex})`);
+      queryValues.push(`%${search}%`);
+      paramIndex++;
+    }
+    if (aadhaar) {
+      queryConditions.push(`st.aadhaar ILIKE $${paramIndex++}`);
+      queryValues.push(`%${aadhaar}%`);
+    }
+    if (expiry && expiry !== 'all') {
+      if (expiry === 'upcoming') {
+          queryConditions.push(`se.expiry_date >= CURRENT_DATE AND st.status != 'completed'`);
+      } else if (expiry === 'overdue') {
+          queryConditions.push(`se.expiry_date < CURRENT_DATE AND st.status != 'completed'`);
+      }
+    }
+
+    let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
+
+    // 5. Pagination: Get Total Count
+    const countQuery = `
+      SELECT COUNT(*) 
+      FROM service_tracking st
+      LEFT JOIN service_entries se ON st.service_entry_id = se.id
+      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      ${whereClause}
+    `;
+    const countResult = await client.query(countQuery, queryValues);
+    const totalRecords = parseInt(countResult.rows[0].count);
+    const totalPages = Math.ceil(totalRecords / parseInt(limit));
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // 6. Pagination: Fetch Exact Data
+    const dataQuery = `
       SELECT 
         st.*,
-
-        -- Service Entry Data
-        se.customer_name,
-        se.phone,
-        se.service_charges,
-        se.department_charges,
-        se.total_charges,
-        se.expiry_date,
-        se.category_id,
-        se.subcategory_id,
-        se.customer_service_id,
-        se.work_source,  -- 🔥 Online / Offline
-
-        -- Service Info
-        s.name AS service_name,
-        sub.name AS subcategory_name,
-
-        -- Assigned Staff
-        st2.name AS assigned_to_name,
-        se_staff.centre_id,
-
-        -- 🔥 Review Info (Only Submitted Reviews)
-        sr.service_rating,
-        sr.staff_rating,
-        sr.review_text,
-        sr.submitted_at,
-
-        -- Steps
+        se.customer_name, se.phone, se.service_charges, se.department_charges, se.total_charges,
+        se.expiry_date, se.category_id, se.subcategory_id, se.customer_service_id, se.work_source,
+        s.name AS service_name, sub.name AS subcategory_name,
+        st2.name AS assigned_to_name, se_staff.centre_id,
+        sr.service_rating, sr.staff_rating, sr.review_text, sr.submitted_at,
         COALESCE((
-          SELECT json_agg(
-            json_build_object(
-              'id', sts.id,
-              'name', sts.name,
-              'completed', sts.completed,
-              'date', sts.date,
-              'created_at', sts.created_at,
-              'step_order', sts.step_order,
-              'estimated_days', sts.estimated_days
-            )
-          )
-          FROM service_tracking_steps sts
-          WHERE sts.service_tracking_id = st.id
+          SELECT json_agg(json_build_object('id', sts.id, 'name', sts.name, 'completed', sts.completed, 'date', sts.date, 'created_at', sts.created_at, 'step_order', sts.step_order, 'estimated_days', sts.estimated_days))
+          FROM service_tracking_steps sts WHERE sts.service_tracking_id = st.id
         ), '[]'::json) AS steps
-
       FROM service_tracking st
-
-      LEFT JOIN service_entries se 
-        ON st.service_entry_id = se.id
-
-      LEFT JOIN services s 
-        ON se.category_id = s.id
-
-      LEFT JOIN subcategories sub 
-        ON se.subcategory_id = sub.id
-
-      LEFT JOIN staff st2 
-        ON st.assigned_to = st2.id
-
-      LEFT JOIN staff se_staff 
-        ON se.staff_id = se_staff.id
-
-      -- 🔥 Join Review Table
-      LEFT JOIN service_reviews sr 
-        ON (
-            sr.tracking_id = st.id
-            OR sr.booking_id = se.customer_service_id
-          )
-        AND sr.is_submitted = true
-
-      ${queryConditions.length > 0 ? 'WHERE ' + queryConditions.join(' AND ') : ''}
-
+      LEFT JOIN service_entries se ON st.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN staff st2 ON st.assigned_to = st2.id
+      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id) AND sr.is_submitted = true
+      ${whereClause}
       ORDER BY st.updated_at DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
+    
+    const dataValues = [...queryValues, parseInt(limit), offset];
+    const result = await client.query(dataQuery, dataValues);
 
-    const result = await client.query(query, queryValues);
-
-    console.log(
-      'servicetracking.js: Fetched service tracking entries:',
-      JSON.stringify(result.rows, null, 2)
-    );
-
-    res.json(result.rows);
+    // Return payload wrapping data and pagination metadata
+    res.json({
+      data: result.rows,
+      pagination: { 
+        totalRecords, 
+        totalPages, 
+        currentPage: parseInt(page), 
+        limit: parseInt(limit) 
+      }
+    });
 
   } catch (err) {
     console.error('servicetracking.js: Error fetching service tracking entries:', err);
-    res.status(500).json({ error: 'Failed to fetch service tracking entries: ' + err.message });
+    res.status(500).json({ error: 'Failed to fetch entries: ' + err.message });
   } finally {
     client.release();
   }

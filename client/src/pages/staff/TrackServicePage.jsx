@@ -107,7 +107,7 @@ const TrackServicePage = () => {
   
   const [services, setServices] = useState([]);
   const [entryServices, setEntryServices] = useState([]);
-const [selectedService, setSelectedService] = useState(null);
+  const [selectedService, setSelectedService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
 
@@ -165,6 +165,30 @@ const [selectedService, setSelectedService] = useState(null);
   const [timeRange, setTimeRange] = useState('week');
   const [viewMode, setViewMode] = useState('list');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const limit = 20; // Number of items per page
+
+  // Debounce search values so typing doesn't spam your API
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [debouncedAadhaar, setDebouncedAadhaar] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedAadhaar(aadhaarSearch), 500);
+    return () => clearTimeout(timer);
+  }, [aadhaarSearch]);
+
+  // Reset to page 1 when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange]);
 
   // Map backend status to frontend status
   const statusMap = {
@@ -559,68 +583,55 @@ const [selectedService, setSelectedService] = useState(null);
   // Fetch all tracking entries
   const fetchAllTrackingEntries = async () => {
     try {
-      console.log('Fetching all tracking entries...');
+      console.log('Fetching paginated tracking entries...');
+      
+      const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+
+      // Construct payload for the backend
+      const params = {
+        page: currentPage,
+        limit: limit,
+        timeRange: timeRange,
+        status: statusFilter === 'all' ? undefined : apiStatus,
+        staff: staffFilter === 'all' ? undefined : staffFilter,
+        expiry: expiryFilter === 'all' ? undefined : expiryFilter,
+        search: debouncedSearch || undefined,
+        aadhaar: debouncedAadhaar || undefined
+      };
+
       const [trackingResponse, entryResponse, staffResponse, categoriesResponse] = await Promise.all([
-        getTrackingEntries(),
+        getTrackingEntries(params),
         getServiceEntries(),
         getStaff(),
         getCategories()
       ]);
 
-      console.log('TrackServicePage: Raw trackingResponse:', trackingResponse);
-
-      // Process data
-      const staffData = Array.isArray(staffResponse) ? staffResponse : 
-                       Array.isArray(staffResponse?.data) ? staffResponse.data : [];
-      
-      const categoriesData = Array.isArray(categoriesResponse) ? categoriesResponse : 
-                           Array.isArray(categoriesResponse?.data) ? categoriesResponse.data : [];
-      
-      const entryData = Array.isArray(entryResponse) ? entryResponse : 
-                       Array.isArray(entryResponse?.data) ? entryResponse.data : [];
-
-      const trackingData = Array.isArray(trackingResponse) ? trackingResponse : 
-                         Array.isArray(trackingResponse?.data) ? trackingResponse.data : [];
-
-      if (trackingData.length === 0) {
-        console.warn('TrackServicePage: No tracking data found');
-        toast.warn('No service tracking entries found');
+      // Extract pagination metadata
+      if (trackingResponse && trackingResponse.pagination) {
+        setTotalRecords(trackingResponse.pagination.totalRecords);
+        setTotalPages(trackingResponse.pagination.totalPages);
       }
+
+      // Handle the new nested { data, pagination } structure from the backend
+      const trackingData = Array.isArray(trackingResponse?.data) 
+        ? trackingResponse.data 
+        : Array.isArray(trackingResponse) ? trackingResponse : [];
+
+      const staffData = Array.isArray(staffResponse?.data) ? staffResponse.data : Array.isArray(staffResponse) ? staffResponse : [];
+      const entryData = Array.isArray(entryResponse?.data) ? entryResponse.data : Array.isArray(entryResponse) ? entryResponse : [];
+      const categoriesData = Array.isArray(categoriesResponse?.data) ? categoriesResponse.data : Array.isArray(categoriesResponse) ? categoriesResponse : [];
 
       setStaffList(staffData);
       setCategories(categoriesData);
       setEntryServices(entryData);
 
-      // Transform the data
       const transformedServices = await transformBackendData(trackingData, entryData);
-      console.log('TrackServicePage: Transformed services:', transformedServices);
-
       setServices(transformedServices);
-
-      // Set initial selected service if available
-      if (transformedServices.length > 0) {
-        const firstService = transformedServices[0];
-        setSelectedService(firstService);
-        setTrackingFormData({
-          applicationNumber: firstService.applicationNumber || `APP${firstService.serviceEntryId}`,
-          currentStep: firstService.currentStep || 'Submitted',
-          estimatedDelivery: formatDateForInput(firstService.rawEstimatedDelivery) || '',
-          averageTime: firstService.averageTime || '7 days',
-          notes: firstService.notes || '',
-          assignedTo: firstService.assignedToId || '',
-          aadhaar: firstService.aadhaar || '',
-          email: firstService.email || '',
-          priority: firstService.priority || 'medium',
-        });
-      }
-      
-      // Show sidebar when in list view
       setIsSidebarVisible(true);
       
-      toast.success(`Loaded ${transformedServices.length} service tracking entries`);
     } catch (error) {
       console.error('TrackServicePage: Error fetching data:', error);
-      toast.error('Failed to fetch data: ' + (error.response?.data?.error || error.message));
+      toast.error('Failed to fetch data');
       setStaffList([]);
       setCategories([]);
       setEntryServices([]);
@@ -632,10 +643,8 @@ const [selectedService, setSelectedService] = useState(null);
       setLoading(true);
       try {
         if (id) {
-          // If ID is provided in URL, fetch just that one record
           await fetchSingleTrackingEntry(id);
         } else {
-          // No ID, fetch all records
           await fetchAllTrackingEntries();
         }
       } catch (error) {
@@ -644,51 +653,8 @@ const [selectedService, setSelectedService] = useState(null);
         setLoading(false);
       }
     };
-
     loadData();
-  }, [id]); // Re-run when ID changes
-
-  const filteredServices = useMemo(() => {
-    return services.filter(service => {
-      // 1. Text Search
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm ||
-        (service.customerName?.toLowerCase().includes(searchLower)) ||
-        (service.phone?.includes(searchTerm)) ||
-        (service.serviceType?.toLowerCase().includes(searchLower)) ||
-        (service.applicationNumber?.toLowerCase().includes(searchLower)) ||
-        (service.email?.toLowerCase().includes(searchLower));
-      
-      // 2. Aadhaar Search
-      const matchesAadhaarSearch = !aadhaarSearch || (service.aadhaar?.includes(aadhaarSearch));
-      
-      // 3. Status Filter
-      const matchesStatus = statusFilter === 'all' || service.status === statusFilter;
-
-      // 4. Staff Name Filter
-      const matchesStaff = staffFilter === 'all' || service.assignedToId?.toString() === staffFilter.toString();
-
-      // 5. Expiry Date Logic
-      let matchesExpiry = true;
-      if (expiryFilter !== 'all') {
-        if (!service.rawExpiryDate) {
-          matchesExpiry = false; 
-        } else {
-          const expiryDate = new Date(service.rawExpiryDate);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0); // Reset time to compare just dates
-          
-          if (expiryFilter === 'upcoming') {
-            matchesExpiry = expiryDate >= today && service.status !== 'Completed';
-          } else if (expiryFilter === 'overdue') {
-            matchesExpiry = expiryDate < today && service.status !== 'Completed';
-          }
-        }
-      }
-      
-      return matchesSearch && matchesAadhaarSearch && matchesStatus && matchesStaff && matchesExpiry;
-    });
-  }, [services, searchTerm, aadhaarSearch, statusFilter, staffFilter, expiryFilter]);
+  }, [id, currentPage, debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
     try {
@@ -1453,15 +1419,16 @@ const [selectedService, setSelectedService] = useState(null);
                 <div className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-gray-900">
-                      Services <span className="text-gray-500 font-normal">({filteredServices.length})</span>
+                      Services <span className="text-gray-500 font-normal">({totalRecords})</span>
                     </h3>
                     <div className="flex items-center space-x-2">
                       <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
                       <span className="text-xs text-gray-500">Active</span>
                     </div>
                   </div>
+                  
                   <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
-                    {filteredServices.map(service => (
+                    {services.map(service => (
                       <ServiceCard
                         key={service.id}
                         service={service}
@@ -1469,7 +1436,8 @@ const [selectedService, setSelectedService] = useState(null);
                         onClick={() => handleServiceSelect(service)}
                       />
                     ))}
-                    {filteredServices.length === 0 && (
+                    
+                    {services.length === 0 && (
                       <div className="text-center py-8 text-gray-500">
                         <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
                         <p className="text-sm">No services found</p>
@@ -1477,6 +1445,29 @@ const [selectedService, setSelectedService] = useState(null);
                       </div>
                     )}
                   </div>
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <div className="text-xs text-gray-500 font-medium">
+                        Page {currentPage} of {totalPages}
+                      </div>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
