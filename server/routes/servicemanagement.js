@@ -5,7 +5,6 @@ import { io } from '../server.js';
 import { logActivity } from "../utils/activityLogger.js";
 import crypto from 'crypto';
 import axios from "axios";
-import { sendTokenUpdateWhatsApp } from '../utils/sendTokenUpdateWhatsapp.js';
 
 const router = express.Router();
 
@@ -2213,26 +2212,9 @@ router.post('/tokens', authenticateToken, async (req, res) => {
       });
     }
 
-  await client.query('COMMIT');
-
-  // Send WhatsApp after successful token creation
-  sendTokenUpdateWhatsApp({
-    customerName: token.customer_name,
-    phone: token.phone,
-    tokenNumber: token.token_id,
-    status: 'Pending',
-    assignedStaff: 'Waiting for Assignment'
-  }).catch(console.error);
-
-  console.log(
-    'servicemanagement.js: Token created:',
-    JSON.stringify(token, null, 2)
-  );
-
-  res.status(201).json({
-    message: 'Token created successfully',
-    token
-  });
+    await client.query('COMMIT');
+    console.log('servicemanagement.js: Token created:', JSON.stringify(token, null, 2));
+    res.status(201).json({ message: 'Token created successfully', token });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('servicemanagement.js: Error creating token:', err);
@@ -2319,16 +2301,6 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
     console.log('servicemanagement.js: Token assigned/reassigned:', { tokenId, staffId });
 
     const staffName = staffResult.rows[0].name || 'Staff';
-
-    // Send WhatsApp after assignment/reassignment
-    sendTokenUpdateWhatsApp({
-      customerName: token.customer_name,
-      phone: token.phone,
-      tokenNumber: token.token_id,
-      status: 'Assigned',
-      assignedStaff: staffName
-    }).catch(console.error);
-
     io.to(`centre_${token.centre_id}`).emit('tokenReassigned', {
       token_id: tokenId,
       staff_id: staffId,
