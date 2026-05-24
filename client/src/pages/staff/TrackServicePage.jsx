@@ -111,15 +111,14 @@ const TrackServicePage = () => {
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
 
-  // --- UPGRADED FILTER STATES & LOCAL STORAGE ---
-  const getSavedFilters = () => {
+const getSavedFilters = () => {
     try {
       const saved = localStorage.getItem('staffServiceSavedView');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error('Could not load saved filters', e);
     }
-    return { status: 'all', staff: 'all', expiry: 'all' };
+    return { status: 'all', staff: 'all', expiry: 'all', date: '' };
   };
 
   const initialFilters = getSavedFilters();
@@ -129,13 +128,15 @@ const TrackServicePage = () => {
   const [statusFilter, setStatusFilter] = useState(initialFilters.status);
   const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
   const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
+  const [dateFilter, setDateFilter] = useState(initialFilters.date || ''); // NEW
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const handleSaveView = () => {
     const filtersToSave = {
       status: statusFilter,
       staff: staffFilter,
-      expiry: expiryFilter
+      expiry: expiryFilter,
+      date: dateFilter // NEW
     };
     localStorage.setItem('staffServiceSavedView', JSON.stringify(filtersToSave));
     toast.success('Your custom view has been saved!');
@@ -147,6 +148,7 @@ const TrackServicePage = () => {
     setExpiryFilter('all');
     setSearchTerm('');
     setAadhaarSearch('');
+    setDateFilter(''); // NEW
   };
   // ----------------------------------------------
   const [categories, setCategories] = useState([]);
@@ -188,7 +190,7 @@ const TrackServicePage = () => {
   // Reset to page 1 when any filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange]);
+  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter]);
 
   // Map backend status to frontend status
   const statusMap = {
@@ -517,6 +519,17 @@ const TrackServicePage = () => {
     return transformed;
   };
 
+  const fetchStats = async () => {
+    const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+    const data = await getTrackingStats({ 
+      timeRange, 
+      date: dateFilter || undefined,
+      status: statusFilter === 'all' ? undefined : apiStatus,
+      staff: staffFilter === 'all' ? undefined : staffFilter,
+    });
+    setGlobalStats(data);
+  };
+
   // Fetch single tracking entry by ID
   const fetchSingleTrackingEntry = async (entryId) => {
     try {
@@ -592,6 +605,7 @@ const TrackServicePage = () => {
         page: currentPage,
         limit: limit,
         timeRange: timeRange,
+        date: dateFilter || undefined, // NEW
         status: statusFilter === 'all' ? undefined : apiStatus,
         staff: staffFilter === 'all' ? undefined : staffFilter,
         expiry: expiryFilter === 'all' ? undefined : expiryFilter,
@@ -1273,8 +1287,15 @@ const TrackServicePage = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
+              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end' : 'space-y-4'}`}
             >
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
+                <div className="relative">
+                  <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input type="date" className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+                </div>
+              </div>
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -1309,7 +1330,7 @@ const TrackServicePage = () => {
                   <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
                 </div>
               </div>
-              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-2 lg:col-span-4' : ''}>
+              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-2 lg:col-span-5' : ''}>
                 <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
                   Clear All Filters
                 </button>
@@ -1515,6 +1536,14 @@ const TrackServicePage = () => {
     );
   }
 
+  // Group services by date for Spreadsheet View
+  const servicesByDate = services.reduce((groups, service) => {
+    const dateKey = service.date || 'Unknown Date';
+    if (!groups[dateKey]) groups[dateKey] = [];
+    groups[dateKey].push(service);
+    return groups;
+  }, {});
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
@@ -1564,10 +1593,10 @@ const TrackServicePage = () => {
         
         <div className="max-w-[1600px] mx-auto px-6 py-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <KPIStat title="Total Services" value={stats.total} subtitle="This month" trend={12} icon={FiBarChart2} color="bg-gradient-to-br from-blue-500 to-blue-600" />
-            <KPIStat title="In Progress" value={stats.inProgress} subtitle="Active now" trend={8} icon={FiTrendingUp} color="bg-gradient-to-br from-amber-500 to-amber-600" />
-            <KPIStat title="Completed" value={stats.completed} subtitle="On track" trend={15} icon={FiCheckCircle} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
-            <KPIStat title="SLA Compliance" value="94%" subtitle="Above target" trend={2} icon={FiAward} color="bg-gradient-to-br from-purple-500 to-purple-600" />
+            <KPIStat title="Total Services" value={globalStats.total || 0} subtitle="In selected period" trend={12} icon={FiBarChart2} color="bg-gradient-to-br from-blue-500 to-blue-600" />
+            <KPIStat title="In Progress" value={globalStats.in_progress || 0} subtitle="Active now" trend={8} icon={FiTrendingUp} color="bg-gradient-to-br from-amber-500 to-amber-600" />
+            <KPIStat title="Completed" value={globalStats.completed || 0} subtitle="Successfully done" trend={15} icon={FiCheckCircle} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
+            <KPIStat title="SLA Compliance" value={`${Math.round(globalStats.sla_compliance || 100)}%`} subtitle="On time delivery" trend={2} icon={FiAward} color="bg-gradient-to-br from-purple-500 to-purple-600" />
           </div>
 
           {/* ========================================= */}
@@ -1600,135 +1629,154 @@ const TrackServicePage = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
-                      {services.map(service => (
-                        <React.Fragment key={service.id}>
-                          <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
-                            {/* 1. Two-Line Customer Info */}
-                            <td className="px-4 py-3">
-                              <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
-                              <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
-                              </div>
-                            </td>
-
-                            {/* 2. Two-Line Service Info */}
-                            <td className="px-4 py-3">
-                              <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
-                                {service.serviceType}
-                              </div>
-                              <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
-                                {service.subcategoryName || '-'}
-                              </div>
-                            </td>
-
-                            {/* 3. Inline App Number Edit */}
-                            <td className="px-4 py-3">
-                              <input 
-                                type="text"
-                                defaultValue={service.applicationNumber || ''}
-                                onBlur={(e) => {
-                                    if(e.target.value !== service.applicationNumber) {
-                                        handleInlineTrackingUpdate(service, { applicationNumber: e.target.value });
-                                    }
-                                }}
-                                className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
-                                placeholder="App No..."
-                              />
-                            </td>
-
-                            {/* 4. Two-Line Status & Step Edits */}
-                            <td className="px-4 py-3 space-y-1.5">
-                              <select 
-                                value={service.status}
-                                onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
-                                className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
-                                    statusConfig[service.status]?.bg || 'bg-gray-100'
-                                } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
-                              >
-                                {Object.keys(statusConfig).map(statusKey => (
-                                    <option key={statusKey} value={statusKey}>{statusKey}</option>
-                                ))}
-                              </select>
-                              
-                              <select
-                                value={service.currentStep || 'Submitted'}
-                                onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
-                                className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                              >
-                                {stepOptions.map(step => (
-                                    <option key={step.value} value={step.value}>{step.label}</option>
-                                ))}
-                              </select>
-                            </td>
-
-                            {/* 5. Two-Line Staff & Est Delivery Edits */}
-                            <td className="px-4 py-3 space-y-1.5">
-                              <select
-                                value={service.assignedToId || ''}
-                                onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
-                                className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                              >
-                                <option value="">Unassigned Staff</option>
-                                {staffList.map(staff => (
-                                    <option key={staff.id} value={staff.id}>{staff.name}</option>
-                                ))}
-                              </select>
-                              
-                              <input 
-                                type="date"
-                                value={formatDateForInput(service.rawEstimatedDelivery)}
-                                onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
-                                className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                              />
-                            </td>
-
-                            {/* 6. Expand Button (Page-jump blocked!) */}
-                            <td className="px-4 py-3 align-top">
-                              <div className="flex items-center justify-end gap-2 mt-1">
-                                {/* Notify Button */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleNotifyCustomer(service);
-                                  }}
-                                  title="Send WhatsApp Notification"
-                                  className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-green-600 hover:bg-green-50 hover:border-green-200"
-                                >
-                                  <FiMessageSquare className="h-4 w-4" />
-                                </button>
-                                
-                                {/* Expand Button */}
-                                <button 
-                                  onClick={() => {
-                                      if (selectedService?.id === service.id) {
-                                          setSelectedService(null); // Collapse instantly
-                                      } else {
-                                          handleServiceSelect(service, true); // Expand AND prevent navigation jump
-                                      }
-                                  }} 
-                                  title={selectedService?.id === service.id ? "Collapse Details" : "Expand Details"}
-                                  className={`p-1.5 rounded-lg transition-colors border shadow-sm ${
-                                    selectedService?.id === service.id 
-                                      ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
-                                      : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
-                                  }`}
-                                >
-                                  <FiChevronDown className={`h-4 w-4 transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
-                                </button>
+                      {Object.entries(servicesByDate).map(([date, dateServices]) => (
+                        <React.Fragment key={date}>
+                          {/* Date Header Row */}
+                          <tr className="bg-gray-50 border-y border-gray-200">
+                            <td colSpan="6" className="px-4 py-2.5 text-xs font-bold text-gray-700 uppercase tracking-wider">
+                              <div className="flex items-center gap-2">
+                                <FiCalendar className="h-4 w-4 text-indigo-500" />
+                                {date === 'Unknown Date' ? date : formatDate(date)}
+                                <span className="bg-gray-200 text-gray-600 py-0.5 px-2 rounded-full text-[10px] ml-2">
+                                  {dateServices.length} items
+                                </span>
                               </div>
                             </td>
                           </tr>
                           
-                          {/* Expandable Inner Row */}
-                          {selectedService?.id === service.id && (
-                            <tr>
-                              <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
-                                <div className="p-6 max-h-[600px] overflow-y-auto">
-                                    {renderDetailPane()}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
+                          {/* Services belonging to this date */}
+                          {dateServices.map(service => (
+                            <React.Fragment key={service.id}>
+                              <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
+                                {/* ... Keep all your existing <td> cells exactly as they were! ... */}
+                                {/* 1. Two-Line Customer Info */}
+                                <td className="px-4 py-3">
+                                  <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
+                                  <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                    <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
+                                  </div>
+                                </td>
+
+                                {/* 2. Two-Line Service Info */}
+                                <td className="px-4 py-3">
+                                  <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
+                                    {service.serviceType}
+                                  </div>
+                                  <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
+                                    {service.subcategoryName || '-'}
+                                  </div>
+                                </td>
+
+                                {/* 3. Inline App Number Edit */}
+                                <td className="px-4 py-3">
+                                  <input 
+                                    type="text"
+                                    defaultValue={service.applicationNumber || ''}
+                                    onBlur={(e) => {
+                                        if(e.target.value !== service.applicationNumber) {
+                                            handleInlineTrackingUpdate(service, { applicationNumber: e.target.value });
+                                        }
+                                    }}
+                                    className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
+                                    placeholder="App No..."
+                                  />
+                                </td>
+
+                                {/* 4. Two-Line Status & Step Edits */}
+                                <td className="px-4 py-3 space-y-1.5">
+                                  <select 
+                                    value={service.status}
+                                    onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
+                                    className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
+                                        statusConfig[service.status]?.bg || 'bg-gray-100'
+                                    } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
+                                  >
+                                    {Object.keys(statusConfig).map(statusKey => (
+                                        <option key={statusKey} value={statusKey}>{statusKey}</option>
+                                    ))}
+                                  </select>
+                                  
+                                  <select
+                                    value={service.currentStep || 'Submitted'}
+                                    onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
+                                    className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                  >
+                                    {stepOptions.map(step => (
+                                        <option key={step.value} value={step.value}>{step.label}</option>
+                                    ))}
+                                  </select>
+                                </td>
+
+                                {/* 5. Two-Line Staff & Est Delivery Edits */}
+                                <td className="px-4 py-3 space-y-1.5">
+                                  <select
+                                    value={service.assignedToId || ''}
+                                    onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
+                                    className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                  >
+                                    <option value="">Unassigned Staff</option>
+                                    {staffList.map(staff => (
+                                        <option key={staff.id} value={staff.id}>{staff.name}</option>
+                                    ))}
+                                  </select>
+                                  
+                                  <input 
+                                    type="date"
+                                    value={formatDateForInput(service.rawEstimatedDelivery)}
+                                    onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
+                                    className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                  />
+                                </td>
+
+                                {/* 6. Expand Button (Page-jump blocked!) */}
+                                <td className="px-4 py-3 align-top">
+                                  <div className="flex items-center justify-end gap-2 mt-1">
+                                    {/* Notify Button */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleNotifyCustomer(service);
+                                      }}
+                                      title="Send WhatsApp Notification"
+                                      className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-green-600 hover:bg-green-50 hover:border-green-200"
+                                    >
+                                      <FiMessageSquare className="h-4 w-4" />
+                                    </button>
+                                    
+                                    {/* Expand Button */}
+                                    <button 
+                                      onClick={() => {
+                                          if (selectedService?.id === service.id) {
+                                              setSelectedService(null); // Collapse instantly
+                                          } else {
+                                              handleServiceSelect(service, true); // Expand AND prevent navigation jump
+                                          }
+                                      }} 
+                                      title={selectedService?.id === service.id ? "Collapse Details" : "Expand Details"}
+                                      className={`p-1.5 rounded-lg transition-colors border shadow-sm ${
+                                        selectedService?.id === service.id 
+                                          ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
+                                          : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
+                                      }`}
+                                    >
+                                      <FiChevronDown className={`h-4 w-4 transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              
+                              {/* Expandable Inner Row */}
+                              {selectedService?.id === service.id && (
+                                <tr>
+                                  <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
+                                    <div className="p-6 max-h-[600px] overflow-y-auto">
+                                        {renderDetailPane()}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
                         </React.Fragment>
                       ))}
                       

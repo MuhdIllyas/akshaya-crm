@@ -567,9 +567,9 @@ router.post('/sync-customer-services', authenticateToken, async (req, res) => {
  * GET /api/servicetracking/entries - Get service tracking entries with filters
  */
 router.get('/entries', authenticateToken, async (req, res) => {
-  const { 
+const { 
     centre_id, status, priority, start_date, end_date,
-    page = 1, limit = 20, timeRange, staff, search, aadhaar, expiry
+    page = 1, limit = 50, timeRange, staff, search, aadhaar, expiry, date
   } = req.query;
   
   const client = await pool.connect();
@@ -615,7 +615,11 @@ router.get('/entries', authenticateToken, async (req, res) => {
       queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
     }
 
-    // 4. NEW: Server-Side Data Filters
+// 4. NEW: Server-Side Data Filters
+    if (date) {
+      queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
+      queryValues.push(date);
+    }
     if (staff && staff !== 'all') {
       queryConditions.push(`st.assigned_to = $${paramIndex++}`);
       queryValues.push(parseInt(staff));
@@ -703,41 +707,64 @@ router.get('/entries', authenticateToken, async (req, res) => {
  * GET /api/servicetracking/stats - Get global counts for KPI cards
  */
 router.get('/stats', authenticateToken, async (req, res) => {
-  const { timeRange, centre_id } = req.query;
-  const client = await pool.connect();
+  const { 
+    centre_id, status, timeRange, staff, date
+  } = req.query;
   
+  const client = await pool.connect();
+
   try {
-    let whereClause = `WHERE 1=1`;
-    let values = [];
-    
-    // Add same access control as your main query
+    const queryConditions = [];
+    const queryValues = [];
+    let paramIndex = 1;
+
+    // Same access controls and filters as your /entries route
     if (req.user.role !== 'superadmin') {
-      whereClause += ` AND se_staff.centre_id = $1`;
-      values.push(req.user.centre_id);
+      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
+      queryValues.push(req.user.centre_id);
     } else if (centre_id && centre_id !== 'all') {
-      whereClause += ` AND se_staff.centre_id = $1`;
-      values.push(parseInt(centre_id));
+      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
+      queryValues.push(parseInt(centre_id));
     }
 
-    // Add time range filter
-    if (timeRange === 'week') whereClause += ` AND st.updated_at >= NOW() - INTERVAL '7 days'`;
-    else if (timeRange === 'month') whereClause += ` AND st.updated_at >= NOW() - INTERVAL '30 days'`;
-    else if (timeRange === 'quarter') whereClause += ` AND st.updated_at >= NOW() - INTERVAL '90 days'`;
+    if (timeRange === 'week') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
+    else if (timeRange === 'month') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
+    else if (timeRange === 'quarter') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
+
+    if (date) {
+      queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
+      queryValues.push(date);
+    }
+    if (status && status !== 'all') {
+      queryConditions.push(`st.status = $${paramIndex++}`);
+      queryValues.push(status);
+    }
+    if (staff && staff !== 'all') {
+      queryConditions.push(`st.assigned_to = $${paramIndex++}`);
+      queryValues.push(parseInt(staff));
+    }
+
+    let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
 
     const statsQuery = `
       SELECT 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE st.status = 'completed') as completed,
         COUNT(*) FILTER (WHERE st.status = 'in_progress') as in_progress,
+        COUNT(*) FILTER (WHERE st.status = 'pending') as pending,
         COUNT(*) FILTER (WHERE st.status = 'rejected') as delayed,
-        COUNT(*) FILTER (WHERE st.status = 'pending') as pending
+        -- Calculate SLA Compliance % (Completed services that finished before expiry date)
+        COALESCE(
+            (COUNT(*) FILTER (WHERE st.status = 'completed' AND st.updated_at <= se.expiry_date)::float / 
+            NULLIF(COUNT(*) FILTER (WHERE st.status = 'completed'), 0)) * 100
+        , 100) as sla_compliance
       FROM service_tracking st
       LEFT JOIN service_entries se ON st.service_entry_id = se.id
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
       ${whereClause}
     `;
     
-    const result = await client.query(statsQuery, values);
+    const result = await client.query(statsQuery, queryValues);
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
