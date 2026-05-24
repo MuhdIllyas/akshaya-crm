@@ -166,7 +166,7 @@ const getSavedFilters = () => {
     priority: 'medium'
   });
   const [timeRange, setTimeRange] = useState('week');
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState('grid');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   const [currentPage, setCurrentPage] = useState(1);
