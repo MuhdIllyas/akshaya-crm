@@ -172,7 +172,7 @@ const getSavedFilters = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const limit = 20; // Number of items per page
+  const limit = 50; // Number of items per page
 
   // Debounce search values so typing doesn't spam your API
   const [debouncedSearch, setDebouncedSearch] = useState('');
