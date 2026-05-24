@@ -347,7 +347,7 @@ const getSavedFilters = () => {
   // Fetch payment details function
   const fetchPaymentDetails = async (serviceEntryId, serviceEntries) => {
     try {
-      const serviceEntry = serviceEntries.find(entry => entry.id === serviceEntryId);
+      const serviceEntry = serviceEntries.find(entry => Number(entry.id) === Number(serviceEntryId));
       
       if (!serviceEntry) {
         console.warn(`No service entry found for serviceEntryId: ${serviceEntryId}`);
