@@ -655,7 +655,7 @@ const getSavedFilters = () => {
   };
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadInitialData = async () => {
       setLoading(true);
 
       try {
@@ -674,9 +674,25 @@ const getSavedFilters = () => {
       }
     };
 
-    loadData();
+    loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (id) return;
+
+    const reloadFilteredData = async () => {
+      try {
+        await Promise.all([
+          fetchAllTrackingEntries(),
+          fetchStats()
+        ]);
+      } catch (error) {
+        console.error('Filter reload error:', error);
+      }
+    };
+
+    reloadFilteredData();
   }, [
-    id,
     currentPage,
     debouncedSearch,
     debouncedAadhaar,
