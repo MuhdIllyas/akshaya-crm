@@ -1191,6 +1191,177 @@ const TrackServicePage = () => {
     );
   };
 
+  // ==========================================
+  // REUSABLE UI PANELS (NEW)
+  // ==========================================
+  const renderQuickActionsPanel = () => (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm h-full flex flex-col justify-center">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">Quick Actions</h3>
+        <div className="flex space-x-1">
+          <button 
+            onClick={() => setViewMode('grid')}
+            className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+            title="Spreadsheet View"
+          >
+            <FiGrid className="h-4 w-4" />
+          </button>
+          <button 
+            onClick={() => setViewMode('list')}
+            className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+            title="Detail View"
+          >
+            <FiList className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
+          <FiPlus className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">New Service</span>
+        </button>
+        <button className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
+          <FiDownload className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">Export</span>
+        </button>
+        <button className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex flex-col items-center justify-center">
+          <FiFilter className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">Filters</span>
+        </button>
+        <button className="p-3 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors flex flex-col items-center justify-center">
+          <FiPrinter className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">Print</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderFiltersPanel = () => (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm h-full flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+          <FiFilter className="text-indigo-600" /> Filters
+        </h3>
+        <button 
+          onClick={handleSaveView}
+          className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-md hover:bg-indigo-100 transition-colors"
+        >
+          Save My View
+        </button>
+      </div>
+      <div className="space-y-4">
+        <div className="relative">
+          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <input
+            type="text"
+            placeholder="Search name, phone, app no..."
+            className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button
+          onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+          className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-indigo-600 py-2 border-b border-gray-100 transition-colors"
+        >
+          <span>Advanced Filters</span>
+          <FiChevronDown className={`transition-transform duration-300 ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+        </button>
+        <AnimatePresence>
+          {showAdvancedFilters && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
+            >
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                  <option value="all">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Delayed">Delayed</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Resubmit">Resubmit</option>
+                  <option value="Paid">Paid</option>
+                </select>
+              </div>
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
+                  <option value="all">Everyone</option>
+                  {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
+                </select>
+              </div>
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
+                  <option value="all">Any Date</option>
+                  <option value="upcoming">Upcoming Expiry</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
+                <div className="relative">
+                  <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
+                </div>
+              </div>
+              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-2 lg:col-span-4' : ''}>
+                <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
+                  Clear All Filters
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+
+  const renderCardList = () => (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">
+          Services <span className="text-gray-500 font-normal">({totalRecords})</span>
+        </h3>
+        <div className="flex items-center space-x-2">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+          <span className="text-xs text-gray-500">Active</span>
+        </div>
+      </div>
+      <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
+        {services.map(service => (
+          <ServiceCard
+            key={service.id}
+            service={service}
+            isSelected={selectedService?.id === service.id}
+            onClick={() => handleServiceSelect(service)}
+          />
+        ))}
+        {services.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
+            <p className="text-sm">No services found</p>
+            <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+          </div>
+        )}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Previous</button>
+          <div className="text-xs text-gray-500 font-medium">Page {currentPage} of {totalPages}</div>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Next</button>
+        </div>
+      )}
+    </div>
+  );
+
+  // ==========================================
+  // EXISTING DETAIL PANE
+  // ==========================================
   const renderDetailPane = () => {
     if (!selectedService) {
       return (
@@ -1393,450 +1564,213 @@ const TrackServicePage = () => {
         
         <div className="max-w-[1600px] mx-auto px-6 py-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <KPIStat
-              title="Total Services"
-              value={stats.total}
-              subtitle="This month"
-              trend={12}
-              icon={FiBarChart2}
-              color="bg-gradient-to-br from-blue-500 to-blue-600"
-            />
-            <KPIStat
-              title="In Progress"
-              value={stats.inProgress}
-              subtitle="Active now"
-              trend={8}
-              icon={FiTrendingUp}
-              color="bg-gradient-to-br from-amber-500 to-amber-600"
-            />
-            <KPIStat
-              title="Completed"
-              value={stats.completed}
-              subtitle="On track"
-              trend={15}
-              icon={FiCheckCircle}
-              color="bg-gradient-to-br from-emerald-500 to-emerald-600"
-            />
-            <KPIStat
-              title="SLA Compliance"
-              value="94%"
-              subtitle="Above target"
-              trend={2}
-              icon={FiAward}
-              color="bg-gradient-to-br from-purple-500 to-purple-600"
-            />
+            <KPIStat title="Total Services" value={stats.total} subtitle="This month" trend={12} icon={FiBarChart2} color="bg-gradient-to-br from-blue-500 to-blue-600" />
+            <KPIStat title="In Progress" value={stats.inProgress} subtitle="Active now" trend={8} icon={FiTrendingUp} color="bg-gradient-to-br from-amber-500 to-amber-600" />
+            <KPIStat title="Completed" value={stats.completed} subtitle="On track" trend={15} icon={FiCheckCircle} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
+            <KPIStat title="SLA Compliance" value="94%" subtitle="Above target" trend={2} icon={FiAward} color="bg-gradient-to-br from-purple-500 to-purple-600" />
           </div>
-          
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-            {/* Left sidebar - Filters & Optional Card List */}
-            {isSidebarVisible && (
-              <div className="xl:col-span-1">
-                <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">Quick Actions</h3>
-                    <div className="flex space-x-1">
-                      <button 
-                        onClick={() => setViewMode('grid')}
-                        className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                        title="Spreadsheet View"
-                      >
-                        <FiGrid className="h-4 w-4" />
-                      </button>
-                      <button 
-                        onClick={() => setViewMode('list')}
-                        className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                        title="Detail View"
-                      >
-                        <FiList className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
-                      <FiPlus className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">New Service</span>
-                    </button>
-                    <button className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
-                      <FiDownload className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">Export</span>
-                    </button>
-                    <button className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex flex-col items-center justify-center">
-                      <FiFilter className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">Filters</span>
-                    </button>
-                    <button className="p-3 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors flex flex-col items-center justify-center">
-                      <FiPrinter className="h-5 w-5 mb-1" />
-                      <span className="text-xs font-medium">Print</span>
-                    </button>
-                  </div>
+
+          {/* ========================================= */}
+          {/* DYNAMIC LAYOUT: GRID VS LIST MODE */}
+          {/* ========================================= */}
+          {viewMode === 'grid' ? (
+            <div className="space-y-6">
+              {/* Top Control Bar for Grid Mode */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
+                  {renderQuickActionsPanel()}
                 </div>
-                
-                {/* --- UPGRADED FILTER UI PANEL --- */}
-                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <FiFilter className="text-indigo-600" /> Filters
-                    </h3>
-                    <button 
-                      onClick={handleSaveView}
-                      className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-md hover:bg-indigo-100 transition-colors"
-                      title="Save these filters for next time"
-                    >
-                      Save My View
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Primary Search Input */}
-                    <div className="relative">
-                      <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <input
-                        type="text"
-                        placeholder="Search name, phone, app no..."
-                        className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Toggle for Advanced Filters */}
-                    <button
-                      onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                      className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-indigo-600 py-2 border-b border-gray-100 transition-colors"
-                    >
-                      <span>Advanced Filters</span>
-                      <FiChevronDown className={`transition-transform duration-300 ${showAdvancedFilters ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {/* Collapsible Panel */}
-                    <AnimatePresence>
-                      {showAdvancedFilters && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="space-y-4 overflow-hidden pt-2"
-                        >
-                          {/* Status Dropdown */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
-                            <div className="relative">
-                              <select
-                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                              >
-                                <option value="all">All Statuses</option>
-                                <option value="Pending">Pending</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Delayed">Delayed</option>
-                                <option value="Completed">Completed</option>
-                                <option value="Resubmit">Resubmit</option>
-                                <option value="Paid">Paid</option>
-                              </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                                <FiChevronDown className="h-4 w-4" />
+                <div className="lg:col-span-2">
+                  {renderFiltersPanel()}
+                </div>
+              </div>
+              
+              {/* Full Width Spreadsheet Table */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+                <div className="overflow-x-auto flex-1">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 font-medium">Customer</th>
+                        <th className="px-4 py-3 font-medium">Service</th>
+                        <th className="px-4 py-3 font-medium w-48">App Number</th>
+                        <th className="px-4 py-3 font-medium w-40">Status & Step</th>
+                        <th className="px-4 py-3 font-medium w-48">Staff & Delivery</th>
+                        <th className="px-4 py-3 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {services.map(service => (
+                        <React.Fragment key={service.id}>
+                          <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
+                            {/* 1. Two-Line Customer Info */}
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
+                              <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
                               </div>
-                            </div>
-                          </div>
+                            </td>
 
-                          {/* Assigned Staff Dropdown */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
-                            <div className="relative">
-                              <select
-                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
-                                value={staffFilter}
-                                onChange={(e) => setStaffFilter(e.target.value)}
+                            {/* 2. Two-Line Service Info */}
+                            <td className="px-4 py-3">
+                              <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
+                                {service.serviceType}
+                              </div>
+                              <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
+                                {service.subcategoryName || '-'}
+                              </div>
+                            </td>
+
+                            {/* 3. Inline App Number Edit */}
+                            <td className="px-4 py-3">
+                              <input 
+                                type="text"
+                                defaultValue={service.applicationNumber || ''}
+                                onBlur={(e) => {
+                                    if(e.target.value !== service.applicationNumber) {
+                                        handleInlineTrackingUpdate(service, { applicationNumber: e.target.value });
+                                    }
+                                }}
+                                className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
+                                placeholder="App No..."
+                              />
+                            </td>
+
+                            {/* 4. Two-Line Status & Step Edits */}
+                            <td className="px-4 py-3 space-y-1.5">
+                              <select 
+                                value={service.status}
+                                onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
+                                className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
+                                    statusConfig[service.status]?.bg || 'bg-gray-100'
+                                } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
                               >
-                                <option value="all">Everyone</option>
-                                {staffList.map(staff => (
-                                  <option key={staff.id} value={staff.id}>{staff.name}</option>
+                                {Object.keys(statusConfig).map(statusKey => (
+                                    <option key={statusKey} value={statusKey}>{statusKey}</option>
                                 ))}
                               </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                                <FiChevronDown className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Expiry Date Dropdown */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
-                            <div className="relative">
+                              
                               <select
-                                className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none transition-all cursor-pointer"
-                                value={expiryFilter}
-                                onChange={(e) => setExpiryFilter(e.target.value)}
+                                value={service.currentStep || 'Submitted'}
+                                onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
+                                className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
                               >
-                                <option value="all">Any Date</option>
-                                <option value="upcoming">Upcoming Expiry</option>
-                                <option value="overdue">Overdue</option>
+                                {stepOptions.map(step => (
+                                    <option key={step.value} value={step.value}>{step.label}</option>
+                                ))}
                               </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
-                                <FiChevronDown className="h-4 w-4" />
-                              </div>
-                            </div>
-                          </div>
+                            </td>
 
-                          {/* Aadhaar Search */}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
-                            <div className="relative">
-                              <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                              <input
-                                type="text"
-                                placeholder="Search by Aadhaar..."
-                                className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                                value={aadhaarSearch}
-                                onChange={(e) => setAadhaarSearch(e.target.value)}
-                                maxLength="12"
+                            {/* 5. Two-Line Staff & Est Delivery Edits */}
+                            <td className="px-4 py-3 space-y-1.5">
+                              <select
+                                value={service.assignedToId || ''}
+                                onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
+                                className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                              >
+                                <option value="">Unassigned Staff</option>
+                                {staffList.map(staff => (
+                                    <option key={staff.id} value={staff.id}>{staff.name}</option>
+                                ))}
+                              </select>
+                              
+                              <input 
+                                type="date"
+                                value={formatDateForInput(service.rawEstimatedDelivery)}
+                                onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
+                                className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
                               />
-                            </div>
-                          </div>
+                            </td>
 
-                          <button
-                            onClick={handleClearFilters}
-                            className="w-full mt-4 py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all"
-                          >
-                            Clear All Filters
-                          </button>
-                        </motion.div>
+                            {/* 6. Expand Button (Page-jump blocked!) */}
+                            <td className="px-4 py-3 text-right align-top">
+                              <button 
+                                onClick={() => {
+                                    if (selectedService?.id === service.id) {
+                                        setSelectedService(null); // Collapse instantly
+                                    } else {
+                                        handleServiceSelect(service, true); // Expand AND prevent navigation jump
+                                    }
+                                }} 
+                                className={`mt-1 p-1.5 rounded-lg transition-colors border shadow-sm ${
+                                  selectedService?.id === service.id 
+                                    ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
+                                    : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
+                                }`}
+                              >
+                                <FiChevronDown className={`transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
+                              </button>
+                            </td>
+                          </tr>
+                          
+                          {/* Expandable Inner Row */}
+                          {selectedService?.id === service.id && (
+                            <tr>
+                              <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
+                                <div className="p-6 max-h-[600px] overflow-y-auto">
+                                    {renderDetailPane()}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                      
+                      {services.length === 0 && (
+                        <tr>
+                          <td colSpan="6" className="text-center py-16 text-gray-500">
+                            <FiSearch className="mx-auto h-10 w-10 mb-3 opacity-30" />
+                            <p className="text-base font-medium text-gray-900">No services found</p>
+                            <p className="text-sm mt-1">Try adjusting your filters or search terms.</p>
+                          </td>
+                        </tr>
                       )}
-                    </AnimatePresence>
-                  </div>
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* Only Show Card List in "List Mode" */}
-                {viewMode === 'list' && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-gray-900">
-                        Services <span className="text-gray-500 font-normal">({totalRecords})</span>
-                      </h3>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                        <span className="text-xs text-gray-500">Active</span>
-                      </div>
+                {/* Pagination Controls For Spreadsheet Mode */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    >
+                      Previous Page
+                    </button>
+                    <div className="text-sm text-gray-600 font-medium bg-white px-4 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                      Page {currentPage} of {totalPages}
                     </div>
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
-                      {services.map(service => (
-                        <ServiceCard
-                          key={service.id}
-                          service={service}
-                          isSelected={selectedService?.id === service.id}
-                          onClick={() => handleServiceSelect(service)}
-                        />
-                      ))}
-                      {services.length === 0 && (
-                        <div className="text-center py-8 text-gray-500">
-                          <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                          <p className="text-sm">No services found</p>
-                          <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
-                        </div>
-                      )}
-                    </div>
-                    {/* Pagination Sidebar Controls */}
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
-                        <button
-                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                          disabled={currentPage === 1}
-                          className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors"
-                        >
-                          Previous
-                        </button>
-                        <div className="text-xs text-gray-500 font-medium">Page {currentPage} of {totalPages}</div>
-                        <button
-                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                          disabled={currentPage === totalPages}
-                          className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    >
+                      Next Page
+                    </button>
                   </div>
                 )}
               </div>
-            )}
-            
-            {/* Main content - Dynamic View Switcher */}
-            <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
-              {viewMode === 'list' ? (
-                // EXISTING LIST VIEW DETAIL PANE
-                renderDetailPane()
-              ) : (
-                // NEW SPREADSHEET (TABLE) VIEW
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
-                  <div className="overflow-x-auto flex-1">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
-                          <th className="px-4 py-3 font-medium">Customer</th>
-                          <th className="px-4 py-3 font-medium">Service</th>
-                          <th className="px-4 py-3 font-medium w-48">App Number</th>
-                          <th className="px-4 py-3 font-medium w-40">Status & Step</th>
-                          <th className="px-4 py-3 font-medium w-48">Staff & Delivery</th>
-                          <th className="px-4 py-3 font-medium text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 bg-white">
-                        {services.map(service => (
-                          <React.Fragment key={service.id}>
-                            <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
-                              {/* 1. Two-Line Customer Info */}
-                              <td className="px-4 py-3">
-                                <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
-                                <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                  <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
-                                </div>
-                              </td>
-
-                              {/* 2. Two-Line Service Info */}
-                              <td className="px-4 py-3">
-                                <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
-                                  {service.serviceType}
-                                </div>
-                                <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
-                                  {service.subcategoryName || '-'}
-                                </div>
-                              </td>
-
-                              {/* 3. Inline App Number Edit */}
-                              <td className="px-4 py-3">
-                                <input 
-                                  type="text"
-                                  defaultValue={service.applicationNumber || ''}
-                                  onBlur={(e) => {
-                                      if(e.target.value !== service.applicationNumber) {
-                                          handleInlineTrackingUpdate(service, { applicationNumber: e.target.value });
-                                      }
-                                  }}
-                                  className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
-                                  placeholder="App No..."
-                                />
-                              </td>
-
-                              {/* 4. Two-Line Status & Step Edits */}
-                              <td className="px-4 py-3 space-y-1.5">
-                                <select 
-                                  value={service.status}
-                                  onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
-                                  className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
-                                      statusConfig[service.status]?.bg || 'bg-gray-100'
-                                  } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
-                                >
-                                  {Object.keys(statusConfig).map(statusKey => (
-                                      <option key={statusKey} value={statusKey}>{statusKey}</option>
-                                  ))}
-                                </select>
-                                
-                                <select
-                                  value={service.currentStep || 'Submitted'}
-                                  onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
-                                  className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                                >
-                                  {stepOptions.map(step => (
-                                      <option key={step.value} value={step.value}>{step.label}</option>
-                                  ))}
-                                </select>
-                              </td>
-
-                              {/* 5. Two-Line Staff & Est Delivery Edits */}
-                              <td className="px-4 py-3 space-y-1.5">
-                                <select
-                                  value={service.assignedToId || ''}
-                                  onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
-                                  className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                                >
-                                  <option value="">Unassigned Staff</option>
-                                  {staffList.map(staff => (
-                                      <option key={staff.id} value={staff.id}>{staff.name}</option>
-                                  ))}
-                                </select>
-                                
-                                <input 
-                                  type="date"
-                                  value={formatDateForInput(service.rawEstimatedDelivery)}
-                                  onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
-                                  className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                                />
-                              </td>
-
-                              {/* 6. Expand Button (Page-jump blocked!) */}
-                              <td className="px-4 py-3 text-right align-top">
-                                <button 
-                                  onClick={() => {
-                                      if (selectedService?.id === service.id) {
-                                          setSelectedService(null); // Collapse instantly
-                                      } else {
-                                          handleServiceSelect(service, true); // Expand AND prevent navigation jump
-                                      }
-                                  }} 
-                                  className={`mt-1 p-1.5 rounded-lg transition-colors border shadow-sm ${
-                                    selectedService?.id === service.id 
-                                      ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
-                                      : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
-                                  }`}
-                                >
-                                  <FiChevronDown className={`transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
-                                </button>
-                              </td>
-                            </tr>
-                            
-                            {/* Expandable Inner Row */}
-                            {selectedService?.id === service.id && (
-                              <tr>
-                                <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
-                                  <div className="p-6 max-h-[600px] overflow-y-auto">
-                                      {renderDetailPane()}
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                        
-                        {services.length === 0 && (
-                          <tr>
-                            <td colSpan="6" className="text-center py-16 text-gray-500">
-                              <FiSearch className="mx-auto h-10 w-10 mb-3 opacity-30" />
-                              <p className="text-base font-medium text-gray-900">No services found</p>
-                              <p className="text-sm mt-1">Try adjusting your filters or search terms.</p>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Pagination Controls For Spreadsheet Mode */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-                      <button
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                      >
-                        Previous Page
-                      </button>
-                      <div className="text-sm text-gray-600 font-medium bg-white px-4 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                        Page {currentPage} of {totalPages}
-                      </div>
-                      <button
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                      >
-                        Next Page
-                      </button>
-                    </div>
-                  )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+              {/* Left sidebar for List Mode */}
+              {isSidebarVisible && (
+                <div className="xl:col-span-1 flex flex-col space-y-6">
+                  {renderQuickActionsPanel()}
+                  {renderFiltersPanel()}
+                  {renderCardList()}
                 </div>
               )}
+              
+              {/* Detail Pane */}
+              <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
+                {renderDetailPane()}
+              </div>
             </div>
-          </div>
+          )}
+
         </div>
         
         <style>{`
