@@ -700,6 +700,53 @@ router.get('/entries', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /api/servicetracking/stats - Get global counts for KPI cards
+ */
+router.get('/stats', authenticateToken, async (req, res) => {
+  const { timeRange, centre_id } = req.query;
+  const client = await pool.connect();
+  
+  try {
+    let whereClause = `WHERE 1=1`;
+    let values = [];
+    
+    // Add same access control as your main query
+    if (req.user.role !== 'superadmin') {
+      whereClause += ` AND se_staff.centre_id = $1`;
+      values.push(req.user.centre_id);
+    } else if (centre_id && centre_id !== 'all') {
+      whereClause += ` AND se_staff.centre_id = $1`;
+      values.push(parseInt(centre_id));
+    }
+
+    // Add time range filter
+    if (timeRange === 'week') whereClause += ` AND st.updated_at >= NOW() - INTERVAL '7 days'`;
+    else if (timeRange === 'month') whereClause += ` AND st.updated_at >= NOW() - INTERVAL '30 days'`;
+    else if (timeRange === 'quarter') whereClause += ` AND st.updated_at >= NOW() - INTERVAL '90 days'`;
+
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE st.status = 'completed') as completed,
+        COUNT(*) FILTER (WHERE st.status = 'in_progress') as in_progress,
+        COUNT(*) FILTER (WHERE st.status = 'rejected') as delayed,
+        COUNT(*) FILTER (WHERE st.status = 'pending') as pending
+      FROM service_tracking st
+      LEFT JOIN service_entries se ON st.service_entry_id = se.id
+      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      ${whereClause}
+    `;
+    
+    const result = await client.query(statsQuery, values);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * GET /api/servicetracking/entries/:id/update-status - Update only status
  * Note: This is a PUT route, but we're listing it here for order reference
  */

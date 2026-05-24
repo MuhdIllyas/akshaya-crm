@@ -348,4 +348,9 @@ export const getTrackingEntryById = async (id) => {
   }
 };
 
+export const getTrackingStats = async (params = {}) => {
+  const response = await trackingApi.get('/entries/stats', { params });
+  return response.data;
+};
+
 export default api;
