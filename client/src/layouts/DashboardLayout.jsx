@@ -203,6 +203,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/team", label: "My Team", icon: TeamIcon },
       { path: "/dashboard/staff/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/staff/token", label: "Token Generator", icon: TokenGeneratorIcon },
+      { path: "/dashboard/staff/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/staff/track_service", label: "Track Service", icon: TrackServiceIcon },
       { path: "/dashboard/staff/customers", label: "Customers Profile", icon: CustomersIcon }
     ],

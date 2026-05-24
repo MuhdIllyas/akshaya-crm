@@ -2535,6 +2535,108 @@ router.get('/staff/campaigns', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/servicemanagement/staff/campaign-tokens - Staff's campaign tokens with tracking info
+router.get('/staff/campaign-tokens', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    // Only staff and admin/superadmin can access
+    if (req.user.role !== 'staff' && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    let centreId = req.user.centre_id;
+    
+    // For superadmin, allow centre filter
+    if (req.user.role === 'superadmin' && req.query.centre_id) {
+      centreId = parseInt(req.query.centre_id);
+    }
+    
+    if (!centreId) {
+      return res.status(400).json({ error: 'Centre ID required' });
+    }
+
+    const query = `
+      SELECT 
+        t.id AS token_id,
+        t.token_id AS token_code,
+        t.customer_name,
+        t.phone,
+        t.status AS token_status,
+        t.created_at AS token_created_at,
+        t.campaign_id,
+        c.name AS campaign_name,
+        c.start_date AS campaign_start,
+        c.end_date AS campaign_end,
+        se.id AS service_entry_id,
+        st.id AS tracking_id,
+        st.application_number,
+        st.status AS service_status,
+        st.current_step,
+        st.progress,
+        st.updated_at AS last_updated,
+        s.name AS service_name,
+        sc.name AS subcategory_name
+      FROM tokens t
+      LEFT JOIN campaigns c ON t.campaign_id = c.id
+      LEFT JOIN service_entries se ON se.token_id = t.token_id
+      LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
+      WHERE t.type = 'campaign'
+        AND t.centre_id = $1
+      ORDER BY c.name, t.created_at DESC
+    `;
+    
+    const result = await client.query(query, [centreId]);
+    
+    // Group by campaign for better frontend display
+    const campaignMap = new Map();
+    
+    for (const row of result.rows) {
+      const campaignId = row.campaign_id;
+      if (!campaignMap.has(campaignId)) {
+        campaignMap.set(campaignId, {
+          campaign_id: campaignId,
+          campaign_name: row.campaign_name,
+          campaign_start: row.campaign_start,
+          campaign_end: row.campaign_end,
+          tokens: []
+        });
+      }
+      
+      campaignMap.get(campaignId).tokens.push({
+        token_id: row.token_id,
+        token_code: row.token_code,
+        customer_name: row.customer_name,
+        phone: row.phone,
+        token_status: row.token_status,
+        token_created_at: row.token_created_at,
+        service_entry_id: row.service_entry_id,
+        tracking_id: row.tracking_id,
+        application_number: row.application_number,
+        service_status: row.service_status,
+        current_step: row.current_step,
+        progress: row.progress,
+        last_updated: row.last_updated,
+        service_name: row.service_name,
+        subcategory_name: row.subcategory_name
+      });
+    }
+    
+    res.json({
+      campaigns: Array.from(campaignMap.values()),
+      total_tokens: result.rows.length
+    });
+    
+  } catch (err) {
+    console.error('Error fetching staff campaign tokens:', err);
+    res.status(500).json({ error: 'Failed to fetch campaign tokens: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/servicemanagement/campaigns
 router.post('/campaigns', authenticateToken, async (req, res) => {
   const { name, description, service_id, start_date, end_date, centre_id, target_tokens } = req.body;
