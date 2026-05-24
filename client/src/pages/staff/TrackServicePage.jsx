@@ -658,11 +658,15 @@ const getSavedFilters = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+
       try {
         if (id) {
           await fetchSingleTrackingEntry(id);
         } else {
-          await fetchAllTrackingEntries();
+          await Promise.all([
+            fetchAllTrackingEntries(),
+            fetchStats()
+          ]);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -670,8 +674,19 @@ const getSavedFilters = () => {
         setLoading(false);
       }
     };
+
     loadData();
-  }, [id, currentPage, debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange]);
+  }, [
+    id,
+    currentPage,
+    debouncedSearch,
+    debouncedAadhaar,
+    statusFilter,
+    staffFilter,
+    expiryFilter,
+    timeRange,
+    dateFilter
+  ]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
     try {
