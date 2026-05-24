@@ -1683,23 +1683,39 @@ const TrackServicePage = () => {
                             </td>
 
                             {/* 6. Expand Button (Page-jump blocked!) */}
-                            <td className="px-4 py-3 text-right align-top">
-                              <button 
-                                onClick={() => {
-                                    if (selectedService?.id === service.id) {
-                                        setSelectedService(null); // Collapse instantly
-                                    } else {
-                                        handleServiceSelect(service, true); // Expand AND prevent navigation jump
-                                    }
-                                }} 
-                                className={`mt-1 p-1.5 rounded-lg transition-colors border shadow-sm ${
-                                  selectedService?.id === service.id 
-                                    ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
-                                    : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
-                                }`}
-                              >
-                                <FiChevronDown className={`transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
-                              </button>
+                            <td className="px-4 py-3 align-top">
+                              <div className="flex items-center justify-end gap-2 mt-1">
+                                {/* Notify Button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleNotifyCustomer(service);
+                                  }}
+                                  title="Send WhatsApp Notification"
+                                  className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-green-600 hover:bg-green-50 hover:border-green-200"
+                                >
+                                  <FiMessageSquare className="h-4 w-4" />
+                                </button>
+                                
+                                {/* Expand Button */}
+                                <button 
+                                  onClick={() => {
+                                      if (selectedService?.id === service.id) {
+                                          setSelectedService(null); // Collapse instantly
+                                      } else {
+                                          handleServiceSelect(service, true); // Expand AND prevent navigation jump
+                                      }
+                                  }} 
+                                  title={selectedService?.id === service.id ? "Collapse Details" : "Expand Details"}
+                                  className={`p-1.5 rounded-lg transition-colors border shadow-sm ${
+                                    selectedService?.id === service.id 
+                                      ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
+                                      : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
+                                  }`}
+                                >
+                                  <FiChevronDown className={`h-4 w-4 transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                           
