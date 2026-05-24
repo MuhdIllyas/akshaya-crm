@@ -39,6 +39,147 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const renderDetailPane = () => {
+      if (!selectedService) {
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+            <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <FiUser className="h-10 w-10 text-gray-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Service Selected</h3>
+            <p className="text-gray-500 max-w-sm mx-auto">
+              Select a service from the list to view detailed information
+            </p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
+              <div className="flex items-center space-x-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <FiUser className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">{selectedService.customerName || 'Unknown'}</h2>
+                  <div className="flex items-center space-x-4 mt-2">
+                    <div className="flex items-center space-x-1 text-gray-600">
+                      <FiPhone className="h-4 w-4" />
+                      <span className="text-sm">{selectedService.phone || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 text-gray-600">
+                      <FiMail className="h-4 w-4" />
+                      <span className="text-sm">{selectedService.email || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 text-gray-600">
+                      <FiCreditCard className="h-4 w-4" />
+                      <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex space-x-2 mt-4 lg:mt-0">
+                <button
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+                  onClick={() => handleNotifyCustomer(selectedService)}
+                >
+                  <FiMessageSquare className="h-4 w-4" />
+                  <span>Notify</span>
+                </button>
+                <button
+                  onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+                >
+                  <FiGrid className="h-4 w-4" />
+                  <span>Workspace</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('tracking')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+                >
+                  <FiEdit className="h-4 w-4" />
+                  <span>Edit</span>
+                </button>
+                <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                  <FiMoreHorizontal className="h-4 w-4 text-gray-600" />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatItem label="Application No." value={selectedService.applicationNumber || 'N/A'} />
+              <StatItem label="Current Step" value={selectedService.currentStep || 'N/A'} />
+              <StatItem label="Est. Delivery" value={selectedService.estimatedDelivery || 'Not set'} />
+              <StatItem label="Assigned To" value={selectedService.assignedTo || 'Unassigned'} />
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="border-b border-gray-200 bg-gray-50/50">
+              <nav className="flex -mb-px">
+                {['overview', 'tracking', 'documents', 'history'].map((tab) => (
+                  <button
+                    key={tab}
+                    className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
+                      activeTab === tab
+                        ? 'border-indigo-500 text-indigo-600 bg-white'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </nav>
+            </div>
+            <div className="p-6">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {activeTab === 'overview' && (
+                    <OverviewView 
+                      service={selectedService} 
+                      onUpdateStatus={handleUpdateStatus}
+                      priorityConfig={priorityConfig}
+                    />
+                  )}
+                  {activeTab === 'tracking' && (
+                    <TrackingView 
+                      service={selectedService}
+                      formData={trackingFormData}
+                      onFormChange={handleTrackingFormChange}
+                      staffList={staffList}
+                      stepOptions={stepOptions}
+                      priorityOptions={priorityOptions}
+                      onSave={handleTrackingFormSubmit}
+                      onCancel={() => setActiveTab('overview')}
+                    />
+                  )}
+                  {activeTab === 'documents' && (
+                    <EnhancedDocumentsView 
+                      service={selectedService}
+                      entryServices={entryServices}
+                      categories={categories}
+                      formatPayments={formatPayments}
+                      priorityConfig={priorityConfig}
+                    />
+                  )}
+                  {activeTab === 'history' && (
+                    <HistoryView service={selectedService} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      );
+    };
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
           <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md text-center">
@@ -701,6 +842,26 @@ const TrackServicePage = () => {
     }
   };
 
+  const handleInlineAppNumberUpdate = async (serviceId, newAppNumber) => {
+    try {
+      await updateTrackingEntry(serviceId, { applicationNumber: newAppNumber });
+      toast.success('Application number updated');
+      
+      const updatedServices = services.map(service => 
+        service.id === serviceId ? { ...service, applicationNumber: newAppNumber } : service
+      );
+      setServices(updatedServices);
+      
+      if (selectedService?.id === serviceId) {
+        setSelectedService(prev => ({ ...prev, applicationNumber: newAppNumber }));
+        setTrackingFormData(prev => ({ ...prev, applicationNumber: newAppNumber }));
+      }
+    } catch (error) {
+      console.error('Error updating application number:', error);
+      toast.error('Failed to update application number');
+    }
+  };
+
   const handleNotifyCustomer = async (service) => {
     try {
       console.log('TrackServicePage: Sending notification for service:', {
@@ -1237,8 +1398,8 @@ const TrackServicePage = () => {
             />
           </div>
           
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-            {/* Left sidebar - Service List (conditionally rendered) */}
+<div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+            {/* Left sidebar - Filters & Optional Card List */}
             {isSidebarVisible && (
               <div className="xl:col-span-1">
                 <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
@@ -1248,12 +1409,14 @@ const TrackServicePage = () => {
                       <button 
                         onClick={() => setViewMode('grid')}
                         className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                        title="Spreadsheet View"
                       >
                         <FiGrid className="h-4 w-4" />
                       </button>
                       <button 
                         onClick={() => setViewMode('list')}
                         className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                        title="Detail View"
                       >
                         <FiList className="h-4 w-4" />
                       </button>
@@ -1280,7 +1443,7 @@ const TrackServicePage = () => {
                 </div>
                 
                 {/* --- UPGRADED FILTER UI PANEL --- */}
-                <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 shadow-sm">
+                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm mb-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                       <FiFilter className="text-indigo-600" /> Filters
@@ -1414,202 +1577,206 @@ const TrackServicePage = () => {
                     </AnimatePresence>
                   </div>
                 </div>
-                {/* -------------------------------------- */}
-                
-                <div className="bg-white rounded-xl border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">
-                      Services <span className="text-gray-500 font-normal">({totalRecords})</span>
-                    </h3>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                      <span className="text-xs text-gray-500">Active</span>
+
+                {/* Only Show Card List in "List Mode" */}
+                {viewMode === 'list' && (
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-gray-900">
+                        Services <span className="text-gray-500 font-normal">({totalRecords})</span>
+                      </h3>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                        <span className="text-xs text-gray-500">Active</span>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
-                    {services.map(service => (
-                      <ServiceCard
-                        key={service.id}
-                        service={service}
-                        isSelected={selectedService?.id === service.id}
-                        onClick={() => handleServiceSelect(service)}
-                      />
-                    ))}
-                    
-                    {services.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
-                        <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                        <p className="text-sm">No services found</p>
-                        <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
+                      {services.map(service => (
+                        <ServiceCard
+                          key={service.id}
+                          service={service}
+                          isSelected={selectedService?.id === service.id}
+                          onClick={() => handleServiceSelect(service)}
+                        />
+                      ))}
+                      {services.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                          <p className="text-sm">No services found</p>
+                          <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+                        </div>
+                      )}
+                    </div>
+                    {/* Pagination Sidebar Controls */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors"
+                        >
+                          Previous
+                        </button>
+                        <div className="text-xs text-gray-500 font-medium">Page {currentPage} of {totalPages}</div>
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors"
+                        >
+                          Next
+                        </button>
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+            
+            {/* Main content - Dynamic View Switcher */}
+            <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
+              {viewMode === 'list' ? (
+                // EXISTING LIST VIEW DETAIL PANE
+                renderDetailPane()
+              ) : (
+                // NEW SPREADSHEET (TABLE) VIEW
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+                  <div className="overflow-x-auto flex-1">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 font-medium">Customer</th>
+                          <th className="px-4 py-3 font-medium">Service</th>
+                          <th className="px-4 py-3 font-medium w-48">App Number</th>
+                          <th className="px-4 py-3 font-medium w-36">Status</th>
+                          <th className="px-4 py-3 font-medium">Timeline</th>
+                          <th className="px-4 py-3 font-medium text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white">
+                        {services.map(service => (
+                          <React.Fragment key={service.id}>
+                            <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
+                              {/* 2-Line Customer Info */}
+                              <td className="px-4 py-3">
+                                <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
+                                <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                  <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
+                                </div>
+                              </td>
+                              {/* 2-Line Service Info */}
+                              <td className="px-4 py-3">
+                                <div className="text-sm text-gray-900 font-medium truncate max-w-xs" title={service.serviceType}>
+                                  {service.serviceType}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate max-w-xs mt-0.5" title={service.subcategoryName}>
+                                  {service.subcategoryName || '-'}
+                                </div>
+                              </td>
+                              {/* Inline App Number Edit */}
+                              <td className="px-4 py-3">
+                                <input 
+                                  type="text"
+                                  defaultValue={service.applicationNumber || ''}
+                                  onBlur={(e) => {
+                                      if(e.target.value !== service.applicationNumber) {
+                                          handleInlineAppNumberUpdate(service.id, e.target.value);
+                                      }
+                                  }}
+                                  className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
+                                  placeholder="App No..."
+                                />
+                              </td>
+                              {/* Inline Status Edit Dropdown */}
+                              <td className="px-4 py-3">
+                                <select 
+                                  value={service.status}
+                                  onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
+                                  className={`text-[11px] font-bold rounded-full px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
+                                      statusConfig[service.status]?.bg || 'bg-gray-100'
+                                  } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
+                                >
+                                  {Object.keys(statusConfig).map(statusKey => (
+                                      <option key={statusKey} value={statusKey}>{statusKey}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              {/* 2-Line Dates Info */}
+                              <td className="px-4 py-3">
+                                <div className="text-xs text-gray-700 whitespace-nowrap">
+                                  <span className="font-medium">Upd:</span> {formatDate(service.updatedAt)}
+                                </div>
+                                <div className="text-[11px] text-gray-500 whitespace-nowrap mt-0.5">
+                                  <span className="font-medium">Est:</span> {service.estimatedDelivery || '-'}
+                                </div>
+                              </td>
+                              {/* Expand Button */}
+                              <td className="px-4 py-3 text-right">
+                                <button 
+                                  onClick={() => {
+                                      if (selectedService?.id === service.id) {
+                                          setSelectedService(null); // Collapse
+                                      } else {
+                                          handleServiceSelect(service); // Expand
+                                      }
+                                  }} 
+                                  className={`p-1.5 rounded-lg transition-colors border shadow-sm ${
+                                    selectedService?.id === service.id 
+                                      ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
+                                      : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
+                                  }`}
+                                >
+                                  <FiChevronDown className={`transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
+                                </button>
+                              </td>
+                            </tr>
+                            
+                            {/* Expandable Inner Row */}
+                            {selectedService?.id === service.id && (
+                              <tr>
+                                <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
+                                  <div className="p-6 max-h-[600px] overflow-y-auto">
+                                      {renderDetailPane()}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                        {services.length === 0 && (
+                          <tr>
+                            <td colSpan="6" className="text-center py-16 text-gray-500">
+                              <FiSearch className="mx-auto h-10 w-10 mb-3 opacity-30" />
+                              <p className="text-base font-medium text-gray-900">No services found</p>
+                              <p className="text-sm mt-1">Try adjusting your filters or search terms.</p>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
-                  {/* Pagination Controls */}
+                  {/* Pagination Controls For Spreadsheet Mode */}
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
                       <button
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                         disabled={currentPage === 1}
-                        className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        Previous
+                        Previous Page
                       </button>
-                      <div className="text-xs text-gray-500 font-medium">
+                      <div className="text-sm text-gray-600 font-medium bg-white px-4 py-1.5 rounded-lg border border-gray-200 shadow-sm">
                         Page {currentPage} of {totalPages}
                       </div>
                       <button
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                         disabled={currentPage === totalPages}
-                        className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
-                        Next
+                        Next Page
                       </button>
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-            
-            {/* Main content - Service Details */}
-            <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
-              {selectedService ? (
-                <div className="space-y-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                          <FiUser className="h-8 w-8 text-white" />
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold text-gray-900">{selectedService.customerName || 'Unknown'}</h2>
-                          <div className="flex items-center space-x-4 mt-2">
-                            <div className="flex items-center space-x-1 text-gray-600">
-                              <FiPhone className="h-4 w-4" />
-                              <span className="text-sm">{selectedService.phone || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-gray-600">
-                              <FiMail className="h-4 w-4" />
-                              <span className="text-sm">{selectedService.email || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-gray-600">
-                              <FiCreditCard className="h-4 w-4" />
-                              <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2 mt-4 lg:mt-0">
-                        <button
-                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200"
-                          onClick={() => handleNotifyCustomer(selectedService)}
-                        >
-                          <FiMessageSquare className="h-4 w-4" />
-                          <span>Notify</span>
-                        </button>
-                        <button
-                          onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200"
-                        >
-                          <FiGrid className="h-4 w-4" />
-                          <span>Workspace</span>
-                        </button>
-                        <button 
-                          onClick={() => setActiveTab('tracking')}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200"
-                        >
-                          <FiEdit className="h-4 w-4" />
-                          <span>Edit</span>
-                        </button>
-                        <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                          <FiMoreHorizontal className="h-4 w-4 text-gray-600" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      <StatItem label="Application No." value={selectedService.applicationNumber || 'N/A'} />
-                      <StatItem label="Current Step" value={selectedService.currentStep || 'N/A'} />
-                      <StatItem label="Est. Delivery" value={selectedService.estimatedDelivery || 'Not set'} />
-                      <StatItem label="Assigned To" value={selectedService.assignedTo || 'Unassigned'} />
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="border-b border-gray-200">
-                      <nav className="flex -mb-px">
-                        {['overview', 'tracking', 'documents', 'history'].map((tab) => (
-                          <button
-                            key={tab}
-                            className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
-                              activeTab === tab
-                                ? 'border-indigo-500 text-indigo-600'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                            onClick={() => setActiveTab(tab)}
-                          >
-                            {tab === 'overview' && 'Overview'}
-                            {tab === 'tracking' && 'Tracking'}
-                            {tab === 'documents' && 'Documents'}
-                            {tab === 'history' && 'History'}
-                          </button>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="p-6">
-                      <AnimatePresence mode="wait">
-                        <motion.div
-                          key={activeTab}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -20 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          {activeTab === 'overview' && (
-                            <OverviewView 
-                              service={selectedService} 
-                              onUpdateStatus={handleUpdateStatus}
-                              priorityConfig={priorityConfig}
-                            />
-                          )}
-                          {activeTab === 'tracking' && (
-                            <TrackingView 
-                              service={selectedService}
-                              formData={trackingFormData}
-                              onFormChange={handleTrackingFormChange}
-                              staffList={staffList}
-                              stepOptions={stepOptions}
-                              priorityOptions={priorityOptions}
-                              onSave={handleTrackingFormSubmit}
-                              onCancel={() => setActiveTab('overview')}
-                            />
-                          )}
-                          {activeTab === 'documents' && (
-                            <EnhancedDocumentsView 
-                              service={selectedService}
-                              entryServices={entryServices}
-                              categories={categories}
-                              formatPayments={formatPayments}
-                              priorityConfig={priorityConfig}
-                            />
-                          )}
-                          {activeTab === 'history' && (
-                            <HistoryView service={selectedService} />
-                          )}
-                        </motion.div>
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                  <div className="w-20 h-20 bg-gray-200 rounded-xl flex items-center justify-center mx-auto mb-4">
-                    <FiUser className="h-10 w-10 text-gray-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No Service Selected</h3>
-                  <p className="text-gray-600 max-w-sm mx-auto">
-                    Select a service from the list to view detailed information
-                  </p>
                 </div>
               )}
             </div>
