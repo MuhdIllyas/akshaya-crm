@@ -305,7 +305,6 @@ const getSavedFilters = () => {
 
   // Enhanced progress calculation function - BASED ON CURRENT_STEP
   const calculateProgress = (status, currentStep) => {
-    console.log('Calculating progress for:', { status, currentStep });
     
     // Map steps to progress percentages - always based on current_step
     const stepProgress = {
@@ -416,14 +415,6 @@ const getSavedFilters = () => {
 
       // Always use calculated progress based on current_step
       const finalProgress = calculatedProgress;
-
-      console.log('Progress calculation:', {
-        backendProgress: trackingEntry.progress,
-        calculatedProgress,
-        finalProgress,
-        status: trackingEntry.status,
-        currentStep: trackingEntry.current_step
-      });
 
       // Determine work source
       const workSource = trackingEntry.work_source || 
@@ -598,7 +589,6 @@ const getSavedFilters = () => {
   // Fetch all tracking entries
   const fetchAllTrackingEntries = async () => {
     try {
-      console.log('Fetching paginated tracking entries...');
       
       const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
 
