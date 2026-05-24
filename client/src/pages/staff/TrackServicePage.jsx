@@ -178,6 +178,8 @@ const getSavedFilters = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [debouncedAadhaar, setDebouncedAadhaar] = useState('');
 
+  const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, delayed: 0, pending: 0, sla_compliance: 100 });
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
     return () => clearTimeout(timer);
@@ -889,6 +891,151 @@ const getSavedFilters = () => {
     }
   };
 
+    // ==========================================
+  // EXISTING DETAIL PANE
+  // ==========================================
+  const renderDetailPane = () => {
+    if (!selectedService) {
+      return (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+          <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <FiUser className="h-10 w-10 text-gray-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">No Service Selected</h3>
+          <p className="text-gray-500 max-w-sm mx-auto">
+            Select a service from the list to view detailed information
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <FiUser className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{selectedService.customerName || 'Unknown'}</h2>
+                <div className="flex items-center space-x-4 mt-2">
+                  <div className="flex items-center space-x-1 text-gray-600">
+                    <FiPhone className="h-4 w-4" />
+                    <span className="text-sm">{selectedService.phone || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center space-x-1 text-gray-600">
+                    <FiMail className="h-4 w-4" />
+                    <span className="text-sm">{selectedService.email || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center space-x-1 text-gray-600">
+                    <FiCreditCard className="h-4 w-4" />
+                    <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex space-x-2 mt-4 lg:mt-0">
+              <button
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+                onClick={() => handleNotifyCustomer(selectedService)}
+              >
+                <FiMessageSquare className="h-4 w-4" />
+                <span>Notify</span>
+              </button>
+              <button
+                onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+              >
+                <FiGrid className="h-4 w-4" />
+                <span>Workspace</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('tracking')}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+              >
+                <FiEdit className="h-4 w-4" />
+                <span>Edit</span>
+              </button>
+              <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                <FiMoreHorizontal className="h-4 w-4 text-gray-600" />
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatItem label="Application No." value={selectedService.applicationNumber || 'N/A'} />
+            <StatItem label="Current Step" value={selectedService.currentStep || 'N/A'} />
+            <StatItem label="Est. Delivery" value={selectedService.estimatedDelivery || 'Not set'} />
+            <StatItem label="Assigned To" value={selectedService.assignedTo || 'Unassigned'} />
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="border-b border-gray-200 bg-gray-50/50">
+            <nav className="flex -mb-px">
+              {['overview', 'tracking', 'documents', 'history'].map((tab) => (
+                <button
+                  key={tab}
+                  className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
+                    activeTab === tab
+                      ? 'border-indigo-500 text-indigo-600 bg-white'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="p-6">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {activeTab === 'overview' && (
+                  <OverviewView 
+                    service={selectedService} 
+                    onUpdateStatus={handleUpdateStatus}
+                    priorityConfig={priorityConfig}
+                  />
+                )}
+                {activeTab === 'tracking' && (
+                  <TrackingView 
+                    service={selectedService}
+                    formData={trackingFormData}
+                    onFormChange={handleTrackingFormChange}
+                    staffList={staffList}
+                    stepOptions={stepOptions}
+                    priorityOptions={priorityOptions}
+                    onSave={handleTrackingFormSubmit}
+                    onCancel={() => setActiveTab('overview')}
+                  />
+                )}
+                {activeTab === 'documents' && (
+                  <EnhancedDocumentsView 
+                    service={selectedService}
+                    entryServices={entryServices}
+                    categories={categories}
+                    formatPayments={formatPayments}
+                    priorityConfig={priorityConfig}
+                  />
+                )}
+                {activeTab === 'history' && (
+                  <HistoryView service={selectedService} />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const handleBackToList = () => {
     navigate('/dashboard/staff/track_service');
   };
@@ -1380,151 +1527,6 @@ const getSavedFilters = () => {
       )}
     </div>
   );
-
-  // ==========================================
-  // EXISTING DETAIL PANE
-  // ==========================================
-  const renderDetailPane = () => {
-    if (!selectedService) {
-      return (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
-          <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-            <FiUser className="h-10 w-10 text-gray-400" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">No Service Selected</h3>
-          <p className="text-gray-500 max-w-sm mx-auto">
-            Select a service from the list to view detailed information
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <FiUser className="h-8 w-8 text-white" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">{selectedService.customerName || 'Unknown'}</h2>
-                <div className="flex items-center space-x-4 mt-2">
-                  <div className="flex items-center space-x-1 text-gray-600">
-                    <FiPhone className="h-4 w-4" />
-                    <span className="text-sm">{selectedService.phone || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-gray-600">
-                    <FiMail className="h-4 w-4" />
-                    <span className="text-sm">{selectedService.email || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-gray-600">
-                    <FiCreditCard className="h-4 w-4" />
-                    <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex space-x-2 mt-4 lg:mt-0">
-              <button
-                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-                onClick={() => handleNotifyCustomer(selectedService)}
-              >
-                <FiMessageSquare className="h-4 w-4" />
-                <span>Notify</span>
-              </button>
-              <button
-                onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-              >
-                <FiGrid className="h-4 w-4" />
-                <span>Workspace</span>
-              </button>
-              <button 
-                onClick={() => setActiveTab('tracking')}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-              >
-                <FiEdit className="h-4 w-4" />
-                <span>Edit</span>
-              </button>
-              <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                <FiMoreHorizontal className="h-4 w-4 text-gray-600" />
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatItem label="Application No." value={selectedService.applicationNumber || 'N/A'} />
-            <StatItem label="Current Step" value={selectedService.currentStep || 'N/A'} />
-            <StatItem label="Est. Delivery" value={selectedService.estimatedDelivery || 'Not set'} />
-            <StatItem label="Assigned To" value={selectedService.assignedTo || 'Unassigned'} />
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="border-b border-gray-200 bg-gray-50/50">
-            <nav className="flex -mb-px">
-              {['overview', 'tracking', 'documents', 'history'].map((tab) => (
-                <button
-                  key={tab}
-                  className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
-                    activeTab === tab
-                      ? 'border-indigo-500 text-indigo-600 bg-white'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                  onClick={() => setActiveTab(tab)}
-                >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
-            </nav>
-          </div>
-          <div className="p-6">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                {activeTab === 'overview' && (
-                  <OverviewView 
-                    service={selectedService} 
-                    onUpdateStatus={handleUpdateStatus}
-                    priorityConfig={priorityConfig}
-                  />
-                )}
-                {activeTab === 'tracking' && (
-                  <TrackingView 
-                    service={selectedService}
-                    formData={trackingFormData}
-                    onFormChange={handleTrackingFormChange}
-                    staffList={staffList}
-                    stepOptions={stepOptions}
-                    priorityOptions={priorityOptions}
-                    onSave={handleTrackingFormSubmit}
-                    onCancel={() => setActiveTab('overview')}
-                  />
-                )}
-                {activeTab === 'documents' && (
-                  <EnhancedDocumentsView 
-                    service={selectedService}
-                    entryServices={entryServices}
-                    categories={categories}
-                    formatPayments={formatPayments}
-                    priorityConfig={priorityConfig}
-                  />
-                )}
-                {activeTab === 'history' && (
-                  <HistoryView service={selectedService} />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   if (loading) {
     return (
