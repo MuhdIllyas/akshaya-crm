@@ -3,11 +3,12 @@ import axios from 'axios';
 // Libromi configuration
 const LIBROMI_ACCESS_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
 const LIBROMI_PHONE_NUMBER = process.env.LIBROMI_PHONE_NUMBER;
+
 const LIBROMI_BASE_URL =
   process.env.LIBROMI_BASE_URL || 'https://wa-api.cloud/api/v1';
 
-// WhatsApp template name
-const TEMPLATE_NAME = 'akshaya_token_update';
+// Approved WhatsApp template name
+const TEMPLATE_NAME = 'campaigns';
 
 const sendTokenUpdateWhatsApp = async ({
   customerName,
@@ -17,39 +18,54 @@ const sendTokenUpdateWhatsApp = async ({
   assignedStaff
 }) => {
   try {
+    // Validate credentials
     if (!LIBROMI_ACCESS_TOKEN || !LIBROMI_PHONE_NUMBER) {
       console.warn(
         'sendTokenUpdateWhatsApp: Missing Libromi credentials'
       );
-      return;
+
+      return {
+        success: false,
+        error: 'Missing Libromi credentials'
+      };
     }
 
+    // Validate phone
     if (!phone) {
       console.warn(
         'sendTokenUpdateWhatsApp: Missing phone number'
       );
-      return;
+
+      return {
+        success: false,
+        error: 'Missing phone number'
+      };
     }
 
-    // format phone
+    // Format phone number
     const formattedPhone = phone.startsWith('+91')
       ? phone
       : `+91${phone.replace(/^\+91/, '')}`;
 
+    // Send WhatsApp template
     const response = await axios.post(
       `${LIBROMI_BASE_URL}/messages`,
       {
         to: formattedPhone,
         type: 'template',
+
         template: {
           name: TEMPLATE_NAME,
+
           language: {
             code: 'en',
             policy: 'deterministic'
           },
+
           components: [
             {
               type: 'body',
+
               parameters: [
                 {
                   type: 'text',
@@ -66,7 +82,8 @@ const sendTokenUpdateWhatsApp = async ({
                 {
                   type: 'text',
                   text:
-                    assignedStaff || 'Waiting for Assignment'
+                    assignedStaff ||
+                    'Waiting for Assignment'
                 }
               ]
             }
