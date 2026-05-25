@@ -3,7 +3,7 @@ import pool from '../db.js';
 import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
 import { logActivity } from "../utils/activityLogger.js";
-import { sendTokenUpdateWhatsApp } from '../utils/sendTokenUpdateWhatsApp.js';
+import sendTokenUpdateWhatsApp from '../utils/sendTokenUpdateWhatsApp.js';
 import crypto from 'crypto';
 import axios from "axios";
 
