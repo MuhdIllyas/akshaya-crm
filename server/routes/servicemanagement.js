@@ -3,6 +3,7 @@ import pool from '../db.js';
 import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
 import { logActivity } from "../utils/activityLogger.js";
+import { sendTokenUpdateWhatsapp } from '../utils/sendTokenUpdateWhatsapp.js';
 import crypto from 'crypto';
 import axios from "axios";
 
@@ -2214,6 +2215,16 @@ router.post('/tokens', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT');
     console.log('servicemanagement.js: Token created:', JSON.stringify(token, null, 2));
+
+    // Send WhatsApp Notification (Non-blocking)
+    sendTokenUpdateWhatsApp({
+      customerName: token.customer_name,
+      phone: token.phone,
+      tokenNumber: token.token_id,
+      status: token.status,
+      assignedStaff: 'Waiting for Assignment'
+    }).catch(err => console.error('WhatsApp notification failed:', err));
+
     res.status(201).json({ message: 'Token created successfully', token });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -2308,6 +2319,15 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
       message: `Token ${tokenId} reassigned to ${staffName}`,
     });
 
+    // Send WhatsApp Notification for Assignment (Non-blocking)
+    sendTokenUpdateWhatsApp({
+      customerName: token.customer_name,
+      phone: token.phone,
+      tokenNumber: tokenId,
+      status: token.status,
+      assignedStaff: staffName
+    }).catch(err => console.error('WhatsApp assignment notification failed:', err));
+
     res.json({ message: 'Token assigned successfully' });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -2329,21 +2349,46 @@ router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
-    const tokenCheck = await client.query('SELECT centre_id FROM tokens WHERE token_id = $1', [tokenId]);
+    
+    // Updated query to fetch data needed for WhatsApp
+    const tokenCheck = await client.query(`
+      SELECT t.centre_id, t.customer_name, t.phone, s.name AS staff_name
+      FROM tokens t
+      LEFT JOIN staff s ON t.staff_id::integer = s.id
+      WHERE t.token_id = $1
+    `, [tokenId]);
+
     if (tokenCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Token not found' });
     }
-    if (req.user.role !== 'superadmin' && tokenCheck.rows[0].centre_id !== req.user.centre_id) {
+    
+    const tokenData = tokenCheck.rows[0];
+
+    if (req.user.role !== 'superadmin' && tokenData.centre_id !== req.user.centre_id) {
       return res.status(403).json({ error: 'Unauthorized to update this token' });
     }
+    
     await client.query('UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2', [status, tokenId]);
+    
     await client.query(
       'INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      ['Token Status Updated', req.user.username, `Updated token ${tokenId} to ${status}`, tokenCheck.rows[0].centre_id]
+      ['Token Status Updated', req.user.username, `Updated token ${tokenId} to ${status}`, tokenData.centre_id]
     );
-    io.to(`centre_${tokenCheck.rows[0].centre_id}`).emit(`tokenUpdate:${tokenCheck.rows[0].centre_id}`, { tokenId, status });
-    console.log('servicemanagement.js: Emitted tokenUpdate:', { tokenId, status, centreId: tokenCheck.rows[0].centre_id });
+    
+    io.to(`centre_${tokenData.centre_id}`).emit(`tokenUpdate:${tokenData.centre_id}`, { tokenId, status });
+    console.log('servicemanagement.js: Emitted tokenUpdate:', { tokenId, status, centreId: tokenData.centre_id });
+    
     await client.query('COMMIT');
+
+    // Send WhatsApp Notification for Status Update (Non-blocking)
+    sendTokenUpdateWhatsApp({
+      customerName: tokenData.customer_name,
+      phone: tokenData.phone,
+      tokenNumber: tokenId,
+      status: status,
+      assignedStaff: tokenData.staff_name || 'Waiting for Assignment'
+    }).catch(err => console.error('WhatsApp status notification failed:', err));
+
     res.json({ message: 'Token status updated successfully' });
   } catch (err) {
     await client.query('ROLLBACK');
