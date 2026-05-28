@@ -569,7 +569,7 @@ router.post('/sync-customer-services', authenticateToken, async (req, res) => {
 router.get('/entries', authenticateToken, async (req, res) => {
 const { 
     centre_id, status, priority, start_date, end_date,
-    page = 1, limit = 50, timeRange, staff, search, aadhaar, expiry, date, service
+    page = 1, limit = 50, timeRange, staff, search, aadhaar, expiry, date, service, subcategory
   } = req.query;
   
   const client = await pool.connect();
@@ -615,10 +615,14 @@ const {
       queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
     }
 
-// 4. NEW: Server-Side Data Filters
+    // 4. NEW: Server-Side Data Filters
     if (service && service !== 'all') {
       queryConditions.push(`se.category_id = $${paramIndex++}`);
       queryValues.push(parseInt(service));
+    }
+    if (subcategory && subcategory !== 'all') {
+      queryConditions.push(`se.subcategory_id = $${paramIndex++}`);
+      queryValues.push(parseInt(subcategory));
     }
     if (date) {
       queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
@@ -712,7 +716,7 @@ const {
  */
 router.get('/stats', authenticateToken, async (req, res) => {
   const { 
-    centre_id, status, timeRange, staff, date, service
+    centre_id, status, timeRange, staff, date, service, subcategory
   } = req.query;
   
   const client = await pool.connect();
@@ -740,6 +744,10 @@ router.get('/stats', authenticateToken, async (req, res) => {
     if (service && service !== 'all') {
       queryConditions.push(`se.category_id = $${paramIndex++}`);
       queryValues.push(parseInt(service));
+    }
+    if (subcategory && subcategory !== 'all') {
+      queryConditions.push(`se.subcategory_id = $${paramIndex++}`);
+      queryValues.push(parseInt(subcategory));
     }
     if (date) {
       queryConditions.push(`st.updated_at::date = $${paramIndex++}`);

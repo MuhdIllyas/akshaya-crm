@@ -119,7 +119,7 @@ const getSavedFilters = () => {
     } catch (e) {
       console.error('Could not load saved filters', e);
     }
-    return { status: 'all', staff: 'all', expiry: 'all', date: '', service: 'all' }; // Added service
+    return { status: 'all', staff: 'all', expiry: 'all', date: '', service: 'all', subcategory: 'all' };
   };
 
   const initialFilters = getSavedFilters();
@@ -131,7 +131,31 @@ const getSavedFilters = () => {
   const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
   const [dateFilter, setDateFilter] = useState(initialFilters.date || '');
   const [serviceFilter, setServiceFilter] = useState(initialFilters.service || 'all');
+  const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Auto-reset subcategory if service changes
+  useEffect(() => {
+    setSubcategoryFilter('all');
+  }, [serviceFilter]);
+
+  // Compute available subcategories dynamically
+  const availableSubcategories = useMemo(() => {
+    if (serviceFilter === 'all') return [];
+    
+    // Look in categories list first
+    const selectedCat = categories.find(c => c.id.toString() === serviceFilter.toString());
+    if (selectedCat && selectedCat.subcategories) return selectedCat.subcategories;
+    
+    // Fallback: extract from loaded services
+    const subs = new Map();
+    services.forEach(s => {
+      if (s.categoryId?.toString() === serviceFilter.toString() && s.subcategoryId) {
+        subs.set(s.subcategoryId, s.subcategoryName);
+      }
+    });
+    return Array.from(subs, ([id, name]) => ({ id, name }));
+  }, [serviceFilter, categories, services]);
 
   const handleSaveView = () => {
     const filtersToSave = {
@@ -139,7 +163,8 @@ const getSavedFilters = () => {
       staff: staffFilter,
       expiry: expiryFilter,
       date: dateFilter,
-      service: serviceFilter // NEW
+      service: serviceFilter,
+      subcategory: subcategoryFilter
     };
     localStorage.setItem('staffServiceSavedView', JSON.stringify(filtersToSave));
     toast.success('Your custom view has been saved!');
@@ -152,7 +177,8 @@ const getSavedFilters = () => {
     setSearchTerm('');
     setAadhaarSearch('');
     setDateFilter('');
-    setServiceFilter('all'); // NEW
+    setServiceFilter('all');
+    setSubcategoryFilter('all');
   };
 
   // ----------------------------------------------
@@ -519,12 +545,13 @@ const getSavedFilters = () => {
   const fetchStats = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
     const data = await getTrackingStats({ 
-      timeRange, 
-      date: dateFilter || undefined,
-      service: serviceFilter === 'all' ? undefined : serviceFilter, // ADDED THIS
-      status: statusFilter === 'all' ? undefined : apiStatus,
-      staff: staffFilter === 'all' ? undefined : staffFilter,
-    });
+        timeRange, 
+        date: dateFilter || undefined,
+        service: serviceFilter === 'all' ? undefined : serviceFilter,
+        subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+        status: statusFilter === 'all' ? undefined : apiStatus,
+        staff: staffFilter === 'all' ? undefined : staffFilter,
+      });
     setGlobalStats(data);
   };
 
@@ -604,6 +631,7 @@ const getSavedFilters = () => {
         timeRange: timeRange,
         date: dateFilter || undefined,
         service: serviceFilter === 'all' ? undefined : serviceFilter,
+        subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
         status: statusFilter === 'all' ? undefined : apiStatus,
         staff: staffFilter === 'all' ? undefined : staffFilter,
         expiry: expiryFilter === 'all' ? undefined : expiryFilter,
@@ -1453,8 +1481,9 @@ const getSavedFilters = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 gap-4 items-end' : 'space-y-4'}`}
+              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
             >
+              {/* Date Filter */}
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                 <div className="relative">
@@ -1462,9 +1491,34 @@ const getSavedFilters = () => {
                   <input type="date" className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
                 </div>
               </div>
+
+              {/* NEW: Service Category Filter */}
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Service</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Service Category</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
+                  <option value="all">All Services</option>
+                  {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select>
+              </div>
+
+              {/* NEW: Subcategory Filter (Cascading) */}
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Subcategory</label>
+                <select 
+                  className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all ${serviceFilter === 'all' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-50 border-gray-200 cursor-pointer text-gray-900'}`} 
+                  value={subcategoryFilter} 
+                  onChange={(e) => setSubcategoryFilter(e.target.value)}
+                  disabled={serviceFilter === 'all'}
+                >
+                  <option value="all">{serviceFilter === 'all' ? 'Select a Service first' : 'All Subcategories'}</option>
+                  {availableSubcategories.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="all">All Services</option>
                   {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
                 </select>
@@ -1503,7 +1557,7 @@ const getSavedFilters = () => {
                   <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
                 </div>
               </div>
-              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-3' : ''}>
+              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-3 lg:col-span-4' : ''}>
                 <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
                   Clear All Filters
                 </button>
