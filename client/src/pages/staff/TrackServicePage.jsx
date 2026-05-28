@@ -130,6 +130,7 @@ const getSavedFilters = () => {
   const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
   const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
   const [dateFilter, setDateFilter] = useState(initialFilters.date || '');
+  const [serviceFilter, setServiceFilter] = useState(initialFilters.service || 'all');
   const [serviceFilter, setServiceFilter] = useState(initialFilters.service || 'all'); // NEW STATE
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
@@ -517,20 +518,16 @@ const getSavedFilters = () => {
   };
 
   const fetchStats = async () => {
-      try {
-        const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
-        const data = await getTrackingStats({ 
-          timeRange, 
-          date: dateFilter || undefined,
-          service: serviceFilter === 'all' ? undefined : serviceFilter, // NEW
-          status: statusFilter === 'all' ? undefined : apiStatus,
-          staff: staffFilter === 'all' ? undefined : staffFilter,
-        });
-        setGlobalStats(data);
-      } catch (error) {
-        console.error('Error fetching global stats:', error);
-      }
-    };
+    const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+    const data = await getTrackingStats({ 
+      timeRange, 
+      date: dateFilter || undefined,
+      service: serviceFilter === 'all' ? undefined : serviceFilter, // ADDED THIS
+      status: statusFilter === 'all' ? undefined : apiStatus,
+      staff: staffFilter === 'all' ? undefined : staffFilter,
+    });
+    setGlobalStats(data);
+  };
 
   // Fetch single tracking entry by ID
   const fetchSingleTrackingEntry = async (entryId) => {

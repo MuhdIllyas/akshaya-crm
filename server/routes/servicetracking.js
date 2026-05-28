@@ -722,7 +722,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
     const queryValues = [];
     let paramIndex = 1;
 
-    // Same access controls and filters as your /entries route
+    // Access control
     if (req.user.role !== 'superadmin') {
       queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
       queryValues.push(req.user.centre_id);
@@ -731,10 +731,12 @@ router.get('/stats', authenticateToken, async (req, res) => {
       queryValues.push(parseInt(centre_id));
     }
 
+    // Time ranges
     if (timeRange === 'week') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
     else if (timeRange === 'month') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
     else if (timeRange === 'quarter') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
 
+    // Advanced Filters
     if (service && service !== 'all') {
       queryConditions.push(`se.category_id = $${paramIndex++}`);
       queryValues.push(parseInt(service));
