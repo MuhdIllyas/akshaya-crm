@@ -5,7 +5,7 @@ import {
   FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
-  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft   // FiGrid added
+  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -103,7 +103,7 @@ const formatTimelineDate = (dateString) => {
 };
 
 const TrackServicePage = () => {
-  const { id } = useParams(); // Get ID from URL params
+  const { id } = useParams();
   const navigate = useNavigate();
   
   const [services, setServices] = useState([]);
@@ -111,8 +111,9 @@ const TrackServicePage = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
+  const [categories, setCategories] = useState([]);   // <-- Moved UP before useMemo
 
-const getSavedFilters = () => {
+  const getSavedFilters = () => {
     try {
       const saved = localStorage.getItem('staffServiceSavedView');
       if (saved) return JSON.parse(saved);
@@ -139,15 +140,13 @@ const getSavedFilters = () => {
     setSubcategoryFilter('all');
   }, [serviceFilter]);
 
-  // Compute available subcategories dynamically
+  // Compute available subcategories dynamically (categories is now defined above)
   const availableSubcategories = useMemo(() => {
     if (serviceFilter === 'all') return [];
     
-    // Look in categories list first
     const selectedCat = categories.find(c => c.id.toString() === serviceFilter.toString());
     if (selectedCat && selectedCat.subcategories) return selectedCat.subcategories;
     
-    // Fallback: extract from loaded services
     const subs = new Map();
     services.forEach(s => {
       if (s.categoryId?.toString() === serviceFilter.toString() && s.subcategoryId) {
@@ -181,8 +180,6 @@ const getSavedFilters = () => {
     setSubcategoryFilter('all');
   };
 
-  // ----------------------------------------------
-  const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [trackingFormData, setTrackingFormData] = useState({
     applicationNumber: '',
@@ -202,9 +199,8 @@ const getSavedFilters = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const limit = 50; // Number of items per page
+  const limit = 50;
 
-  // Debounce search values so typing doesn't spam your API
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [debouncedAadhaar, setDebouncedAadhaar] = useState('');
 
@@ -220,12 +216,10 @@ const getSavedFilters = () => {
     return () => clearTimeout(timer);
   }, [aadhaarSearch]);
 
-  // Reset to page 1 when any filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter]);
 
-  // Map backend status to frontend status
   const statusMap = {
     'pending': 'Pending',
     'in_progress': 'In Progress',
@@ -235,7 +229,6 @@ const getSavedFilters = () => {
     'paid': 'Paid'
   };
 
-  // Map frontend status to backend status
   const reverseStatusMap = {
     'Pending': 'pending',
     'In Progress': 'in_progress',
@@ -333,25 +326,17 @@ const getSavedFilters = () => {
     { value: 'high', label: 'High' }
   ];
 
-  // Enhanced progress calculation function - BASED ON CURRENT_STEP
   const calculateProgress = (status, currentStep) => {
-    
-    // Map steps to progress percentages - always based on current_step
     const stepProgress = {
       'Submitted': 25,
       'Initial Review': 50,
       'Document Verification': 75,
       'Final Approval': 100
     };
-
-    // If status is completed or paid, show 100%
     if (status === 'Completed' || status === 'Paid') return 100;
-    
-    // For all other statuses, progress is based on current_step
     return stepProgress[currentStep] || 25;
   };
 
-  // Format payments function
   const formatPayments = (payments) => {
     if (!Array.isArray(payments) || payments.length === 0) return 'No payments recorded';
     return payments.map(p => {
@@ -360,7 +345,6 @@ const getSavedFilters = () => {
     }).join(', ');
   };
 
-  // Enhanced date formatting for form inputs
   const formatDateForInput = (dateString) => {
     if (!dateString) return '';
     try {
@@ -373,7 +357,6 @@ const getSavedFilters = () => {
     }
   };
 
-  // Fetch payment details function
   const fetchPaymentDetails = async (serviceEntryId, serviceEntries) => {
     try {
       const serviceEntry = serviceEntries.find(entry => Number(entry.id) === Number(serviceEntryId));
@@ -423,7 +406,6 @@ const getSavedFilters = () => {
     }
   };
 
-  // Transform backend data to frontend format
   const transformBackendData = async (trackingData, serviceEntries) => {
     const transformed = [];
     
@@ -437,57 +419,45 @@ const getSavedFilters = () => {
       const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
-      // Calculate progress based on current_step, not status
       const calculatedProgress = calculateProgress(
         statusMap[trackingEntry.status] || 'Pending',
         trackingEntry.current_step || 'Submitted'
       );
 
-      // Always use calculated progress based on current_step
-      const finalProgress = calculatedProgress;
-
-      // Determine work source
       const workSource = trackingEntry.work_source || 
                         (trackingEntry.customer_service_id ? 'online' : 'offline');
 
       transformed.push({
-        // Core identifiers
         id: trackingEntry.id.toString(),
         serviceEntryId: trackingEntry.service_entry_id?.toString(),
         trackingId: `TR-${trackingEntry.id}`,
         applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
         
-        // Customer information
         customerName: trackingEntry.customer_name || 'Unknown',
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
         
-        // Service information
         serviceType: trackingEntry.service_name || 'Unknown',
         serviceName: trackingEntry.service_name || 'Unknown',
         subcategoryName: trackingEntry.subcategory_name || 'N/A',
         categoryId: trackingEntry.category_id,
         subcategoryId: trackingEntry.subcategory_id,
         
-        // Staff information
         staffName: trackingEntry.assigned_to_name || 'Unassigned',
         staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
         
-        // Financial information
         serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
         departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
         totalCharge: paymentData.totalCharge || 0,
         cost: paymentData.totalCharge || 0,
         
-        // Status and progress
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
-        progress: finalProgress,
+        progress: calculatedProgress,
         priority: trackingEntry.priority || 'medium',
         
-        // Dates (formatted for display)
         date: dateStr,
         time: timeStr,
         estimatedDelivery: formatDate(trackingEntry.estimated_delivery),
@@ -495,23 +465,19 @@ const getSavedFilters = () => {
         createdAt: trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
         
-        // Additional fields
         duration: null,
         notes: trackingEntry.notes || 'No notes available',
         rating: null,
         followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
         
-        // Payment information
         paymentStatus: paymentData.paymentStatus,
         paymentDetails: paymentData.paymentDetails,
         payments: paymentData.payments,
         
-        // Contact information
         phone: trackingEntry.phone || 'N/A',
         email: trackingEntry.email || '',
         aadhaar: trackingEntry.aadhaar || '',
         
-        // Steps
         steps: Array.isArray(trackingEntry.steps) ? trackingEntry.steps.map(step => ({
           id: step.id,
           name: step.name,
@@ -524,14 +490,11 @@ const getSavedFilters = () => {
 
         averageTime: trackingEntry.average_time || '7 days',
 
-        // Raw dates for form inputs
         rawEstimatedDelivery: trackingEntry.estimated_delivery,
         rawExpiryDate: trackingEntry.expiry_date,
 
-        // Source information
         workSource: workSource,
 
-        // Review information
         serviceRating: trackingEntry.service_rating,
         staffRating: trackingEntry.staff_rating,
         reviewText: trackingEntry.review_text,
@@ -555,35 +518,30 @@ const getSavedFilters = () => {
     setGlobalStats(data);
   };
 
-  // Fetch single tracking entry by ID
   const fetchSingleTrackingEntry = async (entryId) => {
     try {
       console.log('Fetching single tracking entry:', entryId);
       const [response, staffResponse] = await Promise.all([
         getTrackingEntryById(entryId),
-        getStaff() // Fetch staff list as well
+        getStaff()
       ]);
       
       console.log('Single entry response:', response);
       
-      // Fetch service entries for payment details
       const entryResponse = await getServiceEntries();
       const entryData = Array.isArray(entryResponse) ? entryResponse : 
                       Array.isArray(entryResponse?.data) ? entryResponse.data : [];
       
-      // Set staff list in state
       const staffData = Array.isArray(staffResponse) ? staffResponse : 
                       Array.isArray(staffResponse?.data) ? staffResponse.data : [];
       setStaffList(staffData);
       
-      // Transform the single record
       const transformed = await transformBackendData([response], entryData);
       
       if (transformed.length > 0) {
         setServices(transformed);
         setSelectedService(transformed[0]);
         
-        // Find the staff name from staffData
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
         setTrackingFormData({
@@ -598,7 +556,6 @@ const getSavedFilters = () => {
           priority: transformed[0].priority || 'medium',
         });
         
-        // Update the selected service with proper staff name if available
         if (assignedStaff) {
           setSelectedService(prev => ({
             ...prev,
@@ -607,24 +564,19 @@ const getSavedFilters = () => {
           }));
         }
         
-        // Hide sidebar when viewing single application
         setIsSidebarVisible(false);
       }
     } catch (error) {
       console.error('Error fetching single tracking entry:', error);
       toast.error('Failed to load the specific application');
-      // Fall back to loading all entries
       await fetchAllTrackingEntries();
     }
   };
 
-  // Fetch all tracking entries
   const fetchAllTrackingEntries = async () => {
     try {
-      
       const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
 
-      // Construct payload for the backend
       const params = {
         page: currentPage,
         limit: limit,
@@ -646,13 +598,11 @@ const getSavedFilters = () => {
         getCategories()
       ]);
 
-      // Extract pagination metadata
       if (trackingResponse && trackingResponse.pagination) {
         setTotalRecords(trackingResponse.pagination.totalRecords);
         setTotalPages(trackingResponse.pagination.totalPages);
       }
 
-      // Handle the new nested { data, pagination } structure from the backend
       const trackingData = Array.isArray(trackingResponse?.data) 
         ? trackingResponse.data 
         : Array.isArray(trackingResponse) ? trackingResponse : [];
@@ -681,7 +631,6 @@ const getSavedFilters = () => {
   useEffect(() => {
     const loadInitialData = async () => {
       setLoading(true);
-
       try {
         if (id) {
           await fetchSingleTrackingEntry(id);
@@ -697,13 +646,11 @@ const getSavedFilters = () => {
         setLoading(false);
       }
     };
-
     loadInitialData();
   }, []);
 
   useEffect(() => {
     if (id) return;
-
     const reloadFilteredData = async () => {
       try {
         await Promise.all([
@@ -714,7 +661,6 @@ const getSavedFilters = () => {
         console.error('Filter reload error:', error);
       }
     };
-
     reloadFilteredData();
   }, [
     currentPage,
@@ -735,13 +681,11 @@ const getSavedFilters = () => {
       
       const newProgress = calculateProgress(newStatus, service.currentStep);
       
-      // 1. Mutate the object instantly to prevent closure race conditions
       if (service) {
           service.status = newStatus;
           service.progress = newProgress;
       }
 
-      // 2. Optimistic UI Update - Update state immediately before API call
       setServices(prevServices => prevServices.map(s =>
         s.id === serviceId ? { ...s, status: newStatus, progress: newProgress } : s
       ));
@@ -750,7 +694,6 @@ const getSavedFilters = () => {
         setSelectedService(prev => ({ ...prev, status: newStatus, progress: newProgress }));
       }
 
-      // 3. Perform network call in background
       await updateTrackingStatus(serviceId, apiStatus);
       toast.success(`Status updated to ${newStatus}`);
       
@@ -775,12 +718,10 @@ const getSavedFilters = () => {
         progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
       };
 
-      // 1. Mutate the specific object instantly so clicks in the next millisecond see the new data
       Object.assign(service, updates);
       if (updates.applicationNumber !== undefined) service.applicationNumber = updates.applicationNumber;
       if (updates.currentStep !== undefined) service.currentStep = updates.currentStep;
 
-      // 2. Optimistic UI Update - Update React State immediately
       setServices(prevServices => prevServices.map(s => {
         if (s.id === service.id) {
           return {
@@ -796,13 +737,11 @@ const getSavedFilters = () => {
         return s;
       }));
       
-      // Update selected service tracking menu if it's currently open
       if (selectedService?.id === service.id) {
         setSelectedService(prev => ({ ...prev, ...updates, progress: payload.progress }));
         setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
 
-      // 3. Perform network call in background
       await updateTrackingEntry(service.id, payload);
       toast.success('Details updated successfully');
 
@@ -850,7 +789,6 @@ const getSavedFilters = () => {
         throw new Error('Please enter a valid email address');
       }
 
-      // Calculate new progress based on the new current_step
       const newProgress = calculateProgress(selectedService.status, trackingFormData.currentStep);
       
       const payload = {
@@ -931,15 +869,11 @@ const getSavedFilters = () => {
     });
     setActiveTab('overview');
     
-    // ONLY navigate if we aren't preventing it (prevents dropdown from jumping pages)
     if (!id && !preventNav && viewMode === 'list') {
       navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
     }
   };
 
-    // ==========================================
-  // EXISTING DETAIL PANE
-  // ==========================================
   const renderDetailPane = () => {
     if (!selectedService) {
       return (
@@ -1094,7 +1028,6 @@ const getSavedFilters = () => {
     pending: services.filter(s => s.status === 'Pending').length
   };
 
-  // TimelineItem component
   const TimelineItem = ({ title, dateTime, completed, current }) => (
     <div className="flex items-center space-x-3">
       <div className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-500' : current ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
@@ -1107,7 +1040,6 @@ const getSavedFilters = () => {
     </div>
   );
 
-  // OverviewView component with Source Badge and Review Section
   const OverviewView = ({ service, onUpdateStatus, priorityConfig }) => {
     const getDisplaySteps = () => {
       if (service.steps && service.steps.length > 0) {
@@ -1128,7 +1060,6 @@ const getSavedFilters = () => {
 
     return (
       <div className="space-y-6">
-        {/* Source Badge */}
         <div className="flex justify-end">
           {service.workSource === "online" ? (
             <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full border border-green-200">
@@ -1248,7 +1179,6 @@ const getSavedFilters = () => {
           </div>
         </div>
 
-        {/* Review Section */}
         {service.serviceRating && (
           <div className="mt-4 p-6 bg-gray-50 rounded-xl border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Review</h3>
@@ -1383,7 +1313,6 @@ const getSavedFilters = () => {
             {service.averageTime || 'Not set'}
           </div>
         </div>
-        {/* Source Badge on card */}
         <div className="mt-2">
           {service.workSource === "online" ? (
             <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full border border-green-200">
@@ -1399,9 +1328,6 @@ const getSavedFilters = () => {
     );
   };
 
-  // ==========================================
-  // REUSABLE UI PANELS (NEW)
-  // ==========================================
   const renderQuickActionsPanel = () => (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm h-full flex flex-col justify-center">
       <div className="flex items-center justify-between mb-4">
@@ -1483,7 +1409,6 @@ const getSavedFilters = () => {
               exit={{ height: 0, opacity: 0 }}
               className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
             >
-              {/* Date Filter */}
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                 <div className="relative">
@@ -1492,7 +1417,6 @@ const getSavedFilters = () => {
                 </div>
               </div>
 
-              {/* NEW: Service Category Filter */}
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Service Category</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
@@ -1501,7 +1425,6 @@ const getSavedFilters = () => {
                 </select>
               </div>
 
-              {/* NEW: Subcategory Filter (Cascading) */}
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Subcategory</label>
                 <select 
@@ -1515,14 +1438,6 @@ const getSavedFilters = () => {
                 </select>
               </div>
 
-              {/* Status Filter */}
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="all">All Services</option>
-                  {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
-              </div>
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -1618,7 +1533,6 @@ const getSavedFilters = () => {
     );
   }
 
-  // Group services by date for Spreadsheet View
   const servicesByDate = services.reduce((groups, service) => {
     const dateKey = service.date || 'Unknown Date';
     if (!groups[dateKey]) groups[dateKey] = [];
@@ -1681,12 +1595,8 @@ const getSavedFilters = () => {
             <KPIStat title="SLA Compliance" value={`${Math.round(globalStats.sla_compliance || 100)}%`} subtitle="On time delivery" trend={2} icon={FiAward} color="bg-gradient-to-br from-purple-500 to-purple-600" />
           </div>
 
-          {/* ========================================= */}
-          {/* DYNAMIC LAYOUT: GRID VS LIST MODE */}
-          {/* ========================================= */}
           {viewMode === 'grid' ? (
             <div className="space-y-6">
-              {/* Top Control Bar for Grid Mode */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1">
                   {renderQuickActionsPanel()}
@@ -1696,7 +1606,6 @@ const getSavedFilters = () => {
                 </div>
               </div>
               
-              {/* Full Width Spreadsheet Table */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
                 <div className="overflow-x-auto flex-1">
                   <table className="w-full text-left border-collapse">
@@ -1713,7 +1622,6 @@ const getSavedFilters = () => {
                     <tbody className="divide-y divide-gray-200 bg-white">
                       {Object.entries(servicesByDate).map(([date, dateServices]) => (
                         <React.Fragment key={date}>
-                          {/* Date Header Row */}
                           <tr className="bg-gray-50 border-y border-gray-200">
                             <td colSpan="6" className="px-4 py-2.5 text-xs font-bold text-gray-700 uppercase tracking-wider">
                               <div className="flex items-center gap-2">
@@ -1724,22 +1632,17 @@ const getSavedFilters = () => {
                                 </span>
                               </div>
                             </td>
-                          </tr>
+                           </tr>
                           
-                          {/* Services belonging to this date */}
                           {dateServices.map(service => (
                             <React.Fragment key={service.id}>
                               <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
-                                {/* ... Keep all your existing <td> cells exactly as they were! ... */}
-                                {/* 1. Two-Line Customer Info */}
                                 <td className="px-4 py-3">
                                   <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
                                   <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                                     <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
                                   </div>
-                                </td>
-
-                                {/* 2. Two-Line Service Info */}
+                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
                                     {service.serviceType}
@@ -1747,9 +1650,7 @@ const getSavedFilters = () => {
                                   <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
                                     {service.subcategoryName || '-'}
                                   </div>
-                                </td>
-
-                                {/* 3. Inline App Number Edit */}
+                                 </td>
                                 <td className="px-4 py-3">
                                   <input 
                                     type="text"
@@ -1762,9 +1663,7 @@ const getSavedFilters = () => {
                                     className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
                                     placeholder="App No..."
                                   />
-                                </td>
-
-                                {/* 4. Two-Line Status & Step Edits */}
+                                 </td>
                                 <td className="px-4 py-3 space-y-1.5">
                                   <select 
                                     value={service.status}
@@ -1787,9 +1686,7 @@ const getSavedFilters = () => {
                                         <option key={step.value} value={step.value}>{step.label}</option>
                                     ))}
                                   </select>
-                                </td>
-
-                                {/* 5. Two-Line Staff & Est Delivery Edits */}
+                                 </td>
                                 <td className="px-4 py-3 space-y-1.5">
                                   <select
                                     value={service.assignedToId || ''}
@@ -1808,12 +1705,9 @@ const getSavedFilters = () => {
                                     onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
                                     className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
                                   />
-                                </td>
-
-                                {/* 6. Expand Button (Page-jump blocked!) */}
+                                 </td>
                                 <td className="px-4 py-3 align-top">
                                   <div className="flex items-center justify-end gap-2 mt-1">
-                                    {/* Notify Button */}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1825,13 +1719,12 @@ const getSavedFilters = () => {
                                       <FiMessageSquare className="h-4 w-4" />
                                     </button>
                                     
-                                    {/* Expand Button */}
                                     <button 
                                       onClick={() => {
                                           if (selectedService?.id === service.id) {
-                                              setSelectedService(null); // Collapse instantly
+                                              setSelectedService(null);
                                           } else {
-                                              handleServiceSelect(service, true); // Expand AND prevent navigation jump
+                                              handleServiceSelect(service, true);
                                           }
                                       }} 
                                       title={selectedService?.id === service.id ? "Collapse Details" : "Expand Details"}
@@ -1844,18 +1737,17 @@ const getSavedFilters = () => {
                                       <FiChevronDown className={`h-4 w-4 transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
                                     </button>
                                   </div>
-                                </td>
-                              </tr>
+                                 </td>
+                               </tr>
                               
-                              {/* Expandable Inner Row */}
                               {selectedService?.id === service.id && (
-                                <tr>
+                                 <tr>
                                   <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
                                     <div className="p-6 max-h-[600px] overflow-y-auto">
                                         {renderDetailPane()}
                                     </div>
-                                  </td>
-                                </tr>
+                                   </td>
+                                 </tr>
                               )}
                             </React.Fragment>
                           ))}
@@ -1863,19 +1755,18 @@ const getSavedFilters = () => {
                       ))}
                       
                       {services.length === 0 && (
-                        <tr>
+                         <tr>
                           <td colSpan="6" className="text-center py-16 text-gray-500">
                             <FiSearch className="mx-auto h-10 w-10 mb-3 opacity-30" />
                             <p className="text-base font-medium text-gray-900">No services found</p>
                             <p className="text-sm mt-1">Try adjusting your filters or search terms.</p>
-                          </td>
-                        </tr>
+                           </td>
+                         </tr>
                       )}
                     </tbody>
-                  </table>
+                   </table>
                 </div>
 
-                {/* Pagination Controls For Spreadsheet Mode */}
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
                     <button
@@ -1901,7 +1792,6 @@ const getSavedFilters = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-              {/* Left sidebar for List Mode */}
               {isSidebarVisible && (
                 <div className="xl:col-span-1 flex flex-col space-y-6">
                   {renderQuickActionsPanel()}
@@ -1910,7 +1800,6 @@ const getSavedFilters = () => {
                 </div>
               )}
               
-              {/* Detail Pane */}
               <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
                 {renderDetailPane()}
               </div>
