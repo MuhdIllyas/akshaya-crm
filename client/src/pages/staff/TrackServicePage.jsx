@@ -131,7 +131,6 @@ const getSavedFilters = () => {
   const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
   const [dateFilter, setDateFilter] = useState(initialFilters.date || '');
   const [serviceFilter, setServiceFilter] = useState(initialFilters.service || 'all');
-  const [serviceFilter, setServiceFilter] = useState(initialFilters.service || 'all'); // NEW STATE
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const handleSaveView = () => {
