@@ -698,40 +698,27 @@ const getSavedFilters = () => {
       const apiStatus = reverseStatusMap[newStatus] || newStatus;
       const service = services.find(s => s.id === serviceId);
       
-      // Calculate new progress based on current_step, not status
       const newProgress = calculateProgress(newStatus, service.currentStep);
       
-      console.log('Updating status only:', {
-        serviceId,
-        newStatus,
-        apiStatus,
-        currentStep: service.currentStep,
-        newProgress
-      });
+      // 1. Mutate the object instantly to prevent closure race conditions
+      if (service) {
+          service.status = newStatus;
+          service.progress = newProgress;
+      }
+
+      // 2. Optimistic UI Update - Update state immediately before API call
+      setServices(prevServices => prevServices.map(s =>
+        s.id === serviceId ? { ...s, status: newStatus, progress: newProgress } : s
+      ));
       
+      if (selectedService?.id === serviceId) {
+        setSelectedService(prev => ({ ...prev, status: newStatus, progress: newProgress }));
+      }
+
+      // 3. Perform network call in background
       await updateTrackingStatus(serviceId, apiStatus);
       toast.success(`Status updated to ${newStatus}`);
       
-      // Update only status and progress in the state
-      const updatedServices = services.map(service =>
-        service.id === serviceId 
-          ? { 
-              ...service, 
-              status: newStatus, 
-              progress: newProgress,
-            } 
-          : service
-      );
-      
-      setServices(updatedServices);
-      
-      if (selectedService?.id === serviceId) {
-        setSelectedService({ 
-          ...selectedService, 
-          status: newStatus, 
-          progress: newProgress,
-        });
-      }
     } catch (error) {
       console.error('TrackServicePage: Error updating status:', error);
       toast.error('Failed to update status: ' + (error.response?.data?.error || error.message));
@@ -740,7 +727,6 @@ const getSavedFilters = () => {
 
   const handleInlineTrackingUpdate = async (service, updates) => {
     try {
-      // Build the full payload needed for the backend tracking update
       const payload = {
         applicationNumber: updates.applicationNumber !== undefined ? updates.applicationNumber : service.applicationNumber,
         currentStep: updates.currentStep !== undefined ? updates.currentStep : service.currentStep,
@@ -754,11 +740,13 @@ const getSavedFilters = () => {
         progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
       };
 
-      await updateTrackingEntry(service.id, payload);
-      toast.success('Details updated successfully');
+      // 1. Mutate the specific object instantly so clicks in the next millisecond see the new data
+      Object.assign(service, updates);
+      if (updates.applicationNumber !== undefined) service.applicationNumber = updates.applicationNumber;
+      if (updates.currentStep !== undefined) service.currentStep = updates.currentStep;
 
-      // Update the local state instantly
-      const updatedServices = services.map(s => {
+      // 2. Optimistic UI Update - Update React State immediately
+      setServices(prevServices => prevServices.map(s => {
         if (s.id === service.id) {
           return {
             ...s,
@@ -771,15 +759,18 @@ const getSavedFilters = () => {
           };
         }
         return s;
-      });
-      setServices(updatedServices);
+      }));
       
-      // Update selected service if it's currently open
+      // Update selected service tracking menu if it's currently open
       if (selectedService?.id === service.id) {
-        const updatedSelected = updatedServices.find(s => s.id === service.id);
-        setSelectedService(updatedSelected);
+        setSelectedService(prev => ({ ...prev, ...updates, progress: payload.progress }));
         setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
+
+      // 3. Perform network call in background
+      await updateTrackingEntry(service.id, payload);
+      toast.success('Details updated successfully');
+
     } catch (error) {
       console.error('Error updating details:', error);
       toast.error('Failed to update tracking details');
