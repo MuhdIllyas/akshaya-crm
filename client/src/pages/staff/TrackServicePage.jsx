@@ -119,7 +119,7 @@ const getSavedFilters = () => {
     } catch (e) {
       console.error('Could not load saved filters', e);
     }
-    return { status: 'all', staff: 'all', expiry: 'all', date: '' };
+    return { status: 'all', staff: 'all', expiry: 'all', date: '', service: 'all' }; // Added service
   };
 
   const initialFilters = getSavedFilters();
@@ -129,7 +129,8 @@ const getSavedFilters = () => {
   const [statusFilter, setStatusFilter] = useState(initialFilters.status);
   const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
   const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
-  const [dateFilter, setDateFilter] = useState(initialFilters.date || ''); // NEW
+  const [dateFilter, setDateFilter] = useState(initialFilters.date || '');
+  const [serviceFilter, setServiceFilter] = useState(initialFilters.service || 'all'); // NEW STATE
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const handleSaveView = () => {
@@ -137,7 +138,8 @@ const getSavedFilters = () => {
       status: statusFilter,
       staff: staffFilter,
       expiry: expiryFilter,
-      date: dateFilter // NEW
+      date: dateFilter,
+      service: serviceFilter // NEW
     };
     localStorage.setItem('staffServiceSavedView', JSON.stringify(filtersToSave));
     toast.success('Your custom view has been saved!');
@@ -149,8 +151,10 @@ const getSavedFilters = () => {
     setExpiryFilter('all');
     setSearchTerm('');
     setAadhaarSearch('');
-    setDateFilter(''); // NEW
+    setDateFilter('');
+    setServiceFilter('all'); // NEW
   };
+
   // ----------------------------------------------
   const [categories, setCategories] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
@@ -193,7 +197,7 @@ const getSavedFilters = () => {
   // Reset to page 1 when any filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter]);
+  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter]);
 
   // Map backend status to frontend status
   const statusMap = {
@@ -513,15 +517,20 @@ const getSavedFilters = () => {
   };
 
   const fetchStats = async () => {
-    const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
-    const data = await getTrackingStats({ 
-      timeRange, 
-      date: dateFilter || undefined,
-      status: statusFilter === 'all' ? undefined : apiStatus,
-      staff: staffFilter === 'all' ? undefined : staffFilter,
-    });
-    setGlobalStats(data);
-  };
+      try {
+        const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+        const data = await getTrackingStats({ 
+          timeRange, 
+          date: dateFilter || undefined,
+          service: serviceFilter === 'all' ? undefined : serviceFilter, // NEW
+          status: statusFilter === 'all' ? undefined : apiStatus,
+          staff: staffFilter === 'all' ? undefined : staffFilter,
+        });
+        setGlobalStats(data);
+      } catch (error) {
+        console.error('Error fetching global stats:', error);
+      }
+    };
 
   // Fetch single tracking entry by ID
   const fetchSingleTrackingEntry = async (entryId) => {
@@ -597,7 +606,8 @@ const getSavedFilters = () => {
         page: currentPage,
         limit: limit,
         timeRange: timeRange,
-        date: dateFilter || undefined, // NEW
+        date: dateFilter || undefined,
+        service: serviceFilter === 'all' ? undefined : serviceFilter,
         status: statusFilter === 'all' ? undefined : apiStatus,
         staff: staffFilter === 'all' ? undefined : staffFilter,
         expiry: expiryFilter === 'all' ? undefined : expiryFilter,
@@ -690,7 +700,8 @@ const getSavedFilters = () => {
     staffFilter,
     expiryFilter,
     timeRange,
-    dateFilter
+    dateFilter,
+    serviceFilter
   ]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
@@ -1446,7 +1457,7 @@ const getSavedFilters = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end' : 'space-y-4'}`}
+              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 gap-4 items-end' : 'space-y-4'}`}
             >
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
@@ -1454,6 +1465,13 @@ const getSavedFilters = () => {
                   <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <input type="date" className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
                 </div>
+              </div>
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Service</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
+                  <option value="all">All Services</option>
+                  {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select>
               </div>
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
@@ -1489,7 +1507,7 @@ const getSavedFilters = () => {
                   <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
                 </div>
               </div>
-              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-2 lg:col-span-5' : ''}>
+              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-3' : ''}>
                 <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
                   Clear All Filters
                 </button>
