@@ -135,26 +135,42 @@ const TrackServicePage = () => {
   const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  // Auto-reset subcategory if service changes
+// Auto-reset subcategory when service changes
   useEffect(() => {
     setSubcategoryFilter('all');
   }, [serviceFilter]);
 
-  // Compute available subcategories dynamically (categories is now defined above)
+  // Safely remember all discovered subcategories so the dropdown never shrinks
+  const [discoveredSubcategories, setDiscoveredSubcategories] = useState({});
+
+  useEffect(() => {
+    setDiscoveredSubcategories(prev => {
+      const next = { ...prev };
+      services.forEach(s => {
+        if (s.categoryId && s.subcategoryId) {
+          if (!next[s.categoryId]) next[s.categoryId] = new Map();
+          next[s.categoryId].set(s.subcategoryId, s.subcategoryName);
+        }
+      });
+      return next;
+    });
+  }, [services]);
+
+  // Compute available subcategories safely
   const availableSubcategories = useMemo(() => {
     if (serviceFilter === 'all') return [];
     
+    // 1. Try to get it from the Categories API if provided
     const selectedCat = categories.find(c => c.id.toString() === serviceFilter.toString());
     if (selectedCat && selectedCat.subcategories) return selectedCat.subcategories;
     
-    const subs = new Map();
-    services.forEach(s => {
-      if (s.categoryId?.toString() === serviceFilter.toString() && s.subcategoryId) {
-        subs.set(s.subcategoryId, s.subcategoryName);
-      }
-    });
-    return Array.from(subs, ([id, name]) => ({ id, name }));
-  }, [serviceFilter, categories, services]);
+    // 2. Fallback to our remembered subcategories
+    if (discoveredSubcategories[serviceFilter]) {
+      return Array.from(discoveredSubcategories[serviceFilter], ([id, name]) => ({ id, name }));
+    }
+    
+    return [];
+  }, [serviceFilter, categories, discoveredSubcategories]);
 
   const handleSaveView = () => {
     const filtersToSave = {
@@ -218,7 +234,7 @@ const TrackServicePage = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter]);
+  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
 
   const statusMap = {
     'pending': 'Pending',
