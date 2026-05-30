@@ -2941,6 +2941,297 @@ router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
   }
 });
 
+// ========== CAMPAIGN STATISTICS (CHARTS) ==========
+
+router.get('/campaigns/stats', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { centre_id, campaign_id } = req.query;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    // Determine centre filter
+    let targetCentreId = null;
+    if (userRole === 'staff') {
+      targetCentreId = req.user.centre_id;
+    } else if (userRole === 'admin') {
+      targetCentreId = req.user.centre_id;
+    } else if (userRole === 'superadmin' && centre_id) {
+      targetCentreId = parseInt(centre_id);
+    }
+
+    if (!targetCentreId && (userRole === 'admin' || userRole === 'staff')) {
+      return res.status(400).json({ error: 'Centre ID is required for this role' });
+    }
+
+    // Base query for tokens (campaign type only)
+    let tokenQuery = `
+      SELECT 
+        t.token_id,
+        t.status AS token_status,
+        t.staff_id,
+        t.created_at,
+        t.campaign_id,
+        se.id AS service_entry_id,
+        se.status AS service_status,
+        st.name AS staff_name
+      FROM tokens t
+      LEFT JOIN service_entries se ON se.token_id = t.token_id
+      LEFT JOIN staff st ON st.id = t.staff_id::integer
+      WHERE t.type = 'campaign'
+    `;
+    const queryParams = [];
+    let idx = 1;
+
+    if (targetCentreId) {
+      tokenQuery += ` AND t.centre_id = $${idx++}`;
+      queryParams.push(targetCentreId);
+    }
+    if (campaign_id) {
+      tokenQuery += ` AND t.campaign_id = $${idx++}`;
+      queryParams.push(parseInt(campaign_id));
+    }
+
+    const tokensResult = await client.query(tokenQuery, queryParams);
+    const tokens = tokensResult.rows;
+
+    // 1️⃣ Staff contributions
+    const staffMap = new Map();
+    tokens.forEach(token => {
+      const staffId = token.staff_id ? parseInt(token.staff_id) : null;
+      if (!staffId) return;
+
+      if (!staffMap.has(staffId)) {
+        staffMap.set(staffId, {
+          staff_id: staffId,
+          staff_name: token.staff_name || `Staff ${staffId}`,
+          total_tokens: 0,
+          completed_tokens: 0,
+          pending_tokens: 0,
+          in_progress_tokens: 0,
+        });
+      }
+      const staff = staffMap.get(staffId);
+      staff.total_tokens++;
+
+      const finalStatus = token.service_status || token.token_status;
+      if (finalStatus === 'completed') staff.completed_tokens++;
+      else if (finalStatus === 'pending') staff.pending_tokens++;
+      else if (finalStatus === 'in-progress' || finalStatus === 'processed') staff.in_progress_tokens++;
+    });
+    const staffContributions = Array.from(staffMap.values());
+
+    // 2️⃣ Status summary
+    let statusSummary = {
+      pending: 0,
+      processed: 0,
+      completed: 0,
+      in_progress: 0,
+    };
+    tokens.forEach(token => {
+      const status = token.service_status || token.token_status;
+      if (status === 'pending') statusSummary.pending++;
+      else if (status === 'processed') statusSummary.processed++;
+      else if (status === 'completed') statusSummary.completed++;
+      else if (status === 'in-progress') statusSummary.in_progress++;
+    });
+
+    // 3️⃣ Campaign performance
+    const campaignMap = new Map();
+    for (const token of tokens) {
+      const cid = token.campaign_id;
+      if (!cid) continue;
+      if (!campaignMap.has(cid)) {
+        // Fetch campaign name if not already known
+        const campRes = await client.query(`SELECT name FROM campaigns WHERE id = $1`, [cid]);
+        campaignMap.set(cid, {
+          campaign_id: cid,
+          campaign_name: campRes.rows[0]?.name || `Campaign ${cid}`,
+          total_tokens: 0,
+          completed_tokens: 0,
+        });
+      }
+      const camp = campaignMap.get(cid);
+      camp.total_tokens++;
+      const finalStatus = token.service_status || token.token_status;
+      if (finalStatus === 'completed') camp.completed_tokens++;
+    }
+    const campaignSummary = Array.from(campaignMap.values()).map(c => ({
+      ...c,
+      completion_rate: c.total_tokens ? (c.completed_tokens / c.total_tokens) * 100 : 0,
+    }));
+
+    res.json({
+      staff_contributions: staffContributions,
+      status_summary: statusSummary,
+      campaign_summary: campaignSummary,
+      total_tokens: tokens.length,
+    });
+  } catch (err) {
+    console.error('❌ Campaign stats error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/servicemanagement/campaign-tokens/table
+router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
+  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id } = req.query;
+  const client = await pool.connect();
+  try {
+    let centreId = req.user.centre_id;
+    if (req.user.role === 'superadmin' && centre_id) centreId = parseInt(centre_id);
+    if (!centreId && req.user.role !== 'superadmin') return res.status(400).json({ error: 'Centre ID required' });
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const values = [];
+    let idx = 1;
+    let whereClause = `t.type = 'campaign' AND t.centre_id = $${idx++}`;
+    values.push(centreId);
+
+    if (from) {
+      whereClause += ` AND t.created_at >= $${idx++}`;
+      values.push(`${from} 00:00:00`);
+    }
+    if (to) {
+      whereClause += ` AND t.created_at <= $${idx++}`;
+      values.push(`${to} 23:59:59`);
+    }
+    if (status && status !== 'all') {
+      whereClause += ` AND COALESCE(se.status, t.status) = $${idx++}`;
+      values.push(status);
+    }
+    if (campaign_id && campaign_id !== 'all') {
+      whereClause += ` AND t.campaign_id = $${idx++}`;
+      values.push(parseInt(campaign_id));
+    }
+
+    const countQuery = `SELECT COUNT(*) FROM tokens t LEFT JOIN service_entries se ON t.token_id = se.token_id WHERE ${whereClause}`;
+    const countRes = await client.query(countQuery, values);
+    const total = parseInt(countRes.rows[0].count);
+
+    const dataQuery = `
+      SELECT 
+        t.token_id, t.customer_name, t.phone, t.status AS token_status,
+        t.created_at, t.campaign_id, c.name AS campaign_name,
+        se.id AS service_entry_id, se.status AS service_status,
+        st.id AS tracking_id, st.progress, st.application_number,
+        s.name AS service_name, sc.name AS subcategory_name
+      FROM tokens t
+      LEFT JOIN campaigns c ON t.campaign_id = c.id
+      LEFT JOIN service_entries se ON se.token_id = t.token_id
+      LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
+      WHERE ${whereClause}
+      ORDER BY t.created_at ASC
+      LIMIT $${idx} OFFSET $${idx+1}
+    `;
+    values.push(parseInt(limit), offset);
+    const result = await client.query(dataQuery, values);
+    const tokens = result.rows.map(row => ({
+      tokenCode: row.token_id,
+      customerName: row.customer_name,
+      phone: row.phone,
+      campaignName: row.campaign_name,
+      status: row.service_status || row.token_status,
+      created_at: row.created_at,
+      serviceEntryId: row.service_entry_id,
+      trackingId: row.tracking_id,  // now from st.id
+      progress: row.progress,
+      applicationNumber: row.application_number,
+      serviceName: row.service_name,
+      subcategoryName: row.subcategory_name
+    }));
+
+    res.json({ tokens, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/servicemanagement/tokens/:tokenId/cancel
+router.put('/tokens/:tokenId/cancel', authenticateToken, async (req, res) => {
+  const { tokenId } = req.params;
+  const { reason } = req.body;
+  const client = await pool.connect();
+
+  try {
+    // Get token details
+    const tokenRes = await client.query(
+      `SELECT * FROM tokens WHERE token_id = $1`,
+      [tokenId]
+    );
+    if (tokenRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Token not found' });
+    }
+    const token = tokenRes.rows[0];
+    const centreId = token.centre_id;
+
+    // Authorization check
+    const user = req.user;
+    let isAuthorised = false;
+    if (user.role === 'superadmin') isAuthorised = true;
+    else if (user.role === 'admin' && centreId === user.centre_id) isAuthorised = true;
+    else if (user.role === 'staff' && centreId === user.centre_id) isAuthorised = true;
+
+    if (!isAuthorised) {
+      return res.status(403).json({ error: 'Not authorised to cancel this token' });
+    }
+
+    // Prevent cancelling completed or already cancelled tokens
+    if (token.status === 'completed') {
+      return res.status(400).json({ error: 'Cannot cancel a completed token' });
+    }
+    if (token.status === 'cancelled') {
+      return res.status(400).json({ error: 'Token already cancelled' });
+    }
+
+    await client.query('BEGIN');
+
+    // Update token status
+    await client.query(
+      `UPDATE tokens SET status = 'cancelled', updated_at = NOW() WHERE token_id = $1`,
+      [tokenId]
+    );
+
+    // Optionally cancel associated service entry
+    await client.query(
+      `UPDATE service_entries 
+       SET status = 'cancelled', updated_at = NOW() 
+       WHERE token_id = $1 AND status NOT IN ('completed', 'cancelled')`,
+      [tokenId]
+    );
+
+    // Audit log
+    await client.query(
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      ['Token Cancelled', user.username, `Token ${tokenId} cancelled. Reason: ${reason || 'Not provided'}`, centreId]
+    );
+
+    await client.query('COMMIT');
+
+    // Emit socket event if available
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`centre_${centreId}`).emit('tokenCancelled', { tokenId, reason });
+    }
+
+    res.json({ success: true, message: 'Token cancelled successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error cancelling token:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ========== PENDING PAYMENTS (FIXED QUERIES) ==========
 
 // GET /api/servicemanagement/pending-payments
