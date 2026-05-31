@@ -347,7 +347,7 @@ const StaffDashboard = () => {
       refreshTokens(); 
     }
   };
-  const handleViewDetails = (tokenId) => navigate(`/dashboard/staff/token/${tokenId}/details`);
+  const handleViewDetails = (tokenId) => navigate(`/dashboard/staff/track_service/${tokenId}`);
   const formatTime = (dateString) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatDateUI = (dateString) => {
     const date = new Date(dateString);
