@@ -258,7 +258,7 @@ const CampaignTokenManagementStaff = () => {
 
   // Chart data preparation (same as before)
   const staffChartData = stats?.staff_contributions?.map(s => ({
-    name: s.staff_name.split(' ')[0] || s.staff_name,
+    name: s.staff_name || 'Unknown',
     Completed: s.completed_tokens,
     Pending: s.pending_tokens,
     'In Progress': s.in_progress_tokens,
