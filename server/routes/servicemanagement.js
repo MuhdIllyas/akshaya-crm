@@ -2318,7 +2318,7 @@ router.get('/campaigns/stats', authenticateToken, async (req, res) => {
 
 // GET /api/servicemanagement/campaign-tokens/table
 router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
-  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id } = req.query;
+  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id, search } = req.query;
   const client = await pool.connect();
   try {
     let centreId = req.user.centre_id;
@@ -2348,7 +2348,21 @@ router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
       values.push(parseInt(campaign_id));
     }
 
-    const countQuery = `SELECT COUNT(*) FROM tokens t LEFT JOIN service_entries se ON t.token_id = se.token_id WHERE ${whereClause}`;
+    // --- ADD THIS NEW SEARCH BLOCK ---
+    if (search && search.trim() !== '') {
+      whereClause += ` AND (
+        t.token_id ILIKE $${idx} OR 
+        t.customer_name ILIKE $${idx} OR 
+        t.phone ILIKE $${idx} OR 
+        c.name ILIKE $${idx} OR 
+        staff.name ILIKE $${idx}
+      )`;
+      values.push(`%${search.trim()}%`);
+      idx++;
+    }
+    // ---------------------------------
+
+    const countQuery = `SELECT COUNT(*) FROM tokens t LEFT JOIN campaigns c ON t.campaign_id = c.id LEFT JOIN staff ON staff.id::integer = t.staff_id LEFT JOIN service_entries se ON t.token_id = se.token_id WHERE ${whereClause}`;
     const countRes = await client.query(countQuery, values);
     const total = parseInt(countRes.rows[0].count);
 

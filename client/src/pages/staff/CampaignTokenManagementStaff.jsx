@@ -53,6 +53,7 @@ const CampaignTokenManagementStaff = () => {
   const [tableCampaignId, setTableCampaignId] = useState('all');
   const [tableStatus, setTableStatus] = useState('all');
   const [globalSearch, setGlobalSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [expandedRows, setExpandedRows] = useState(new Set());
 
   // Cancel modal state
@@ -75,29 +76,18 @@ const CampaignTokenManagementStaff = () => {
 
   useEffect(() => {
     setPagination(prev => ({ ...prev, page: 1 }));
-    fetchTableTokens();
-  }, [dateFrom, dateTo, tableCampaignId, tableStatus]);
+  }, [dateFrom, dateTo, tableCampaignId, tableStatus, debouncedSearch]);
 
   useEffect(() => {
     fetchTableTokens();
   }, [pagination.page]);
 
-  // Client-side search filter (includes staff name)
   useEffect(() => {
-    if (!tableTokens.length) {
-      setFilteredTokens([]);
-      return;
-    }
-    const lowerSearch = globalSearch.toLowerCase();
-    const filtered = tableTokens.filter(token =>
-      token.tokenCode.toLowerCase().includes(lowerSearch) ||
-      token.customerName.toLowerCase().includes(lowerSearch) ||
-      token.phone.includes(lowerSearch) ||
-      (token.campaignName && token.campaignName.toLowerCase().includes(lowerSearch)) ||
-      (token.staffName && token.staffName.toLowerCase().includes(lowerSearch))
-    );
-    setFilteredTokens(filtered);
-  }, [globalSearch, tableTokens]);
+      const handler = setTimeout(() => {
+        setDebouncedSearch(globalSearch);
+      }, 500);
+      return () => clearTimeout(handler);
+  }, [globalSearch]);
 
   const fetchCampaignsAndStats = async () => {
     try {
@@ -139,7 +129,8 @@ const CampaignTokenManagementStaff = () => {
         from: dateFrom,
         to: dateTo,
         status: tableStatus,
-        campaign_id: tableCampaignId
+        campaign_id: tableCampaignId,
+        search: debouncedSearch
       });
       const response = await axios.get(`${API_BASE_URL}/api/servicemanagement/campaign-tokens/table?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
