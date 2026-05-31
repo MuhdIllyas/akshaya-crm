@@ -1958,447 +1958,6 @@ router.get('/tokens/history', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/servicemanagement/tokens/:tokenId
-router.get('/tokens/:tokenId', authenticateToken, async (req, res) => {
-  const { tokenId } = req.params;
-  const client = await pool.connect();
-  try {
-    const result = await client.query(
-      `SELECT t.*, c.name AS centre_name, s.name AS service_name, sc.name AS subcategory_name, cmp.name AS campaign_name,
-              st.name AS staff_name, st2.name AS created_by_name
-       FROM tokens t
-       JOIN centres c ON t.centre_id = c.id
-       LEFT JOIN services s ON t.category_id = s.id
-       LEFT JOIN subcategories sc ON t.subcategory_id = sc.id
-       LEFT JOIN campaigns cmp ON t.campaign_id = cmp.id
-       LEFT JOIN staff st ON t.staff_id::integer = st.id
-       LEFT JOIN staff st2 ON t.created_by::integer = st2.id
-       WHERE t.token_id = $1`,
-      [tokenId]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Token not found' });
-    }
-    if (req.user.role !== 'superadmin' && result.rows[0].centre_id !== req.user.centre_id) {
-      return res.status(403).json({ error: 'Unauthorized to access this token' });
-    }
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('Error fetching token:', err);
-    res.status(500).json({ error: 'Failed to fetch token: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// GET /api/servicemanagement/staff
-router.get('/staff', authenticateToken, async (req, res) => {
-  const { centre_id } = req.query;
-
-  try {
-    let query = `
-      SELECT id, username, name, role, department, email, phone,
-             status, join_date, photo, employee_id, employment_type,
-             reports_to, salary, dob, gender, emergency_contact, emergency_relationship
-      FROM staff
-    `;
-    const values = [];
-    if (req.user.role !== 'superadmin') {
-      query += ` WHERE centre_id = $1`;
-      values.push(req.user.centre_id);
-    } else if (centre_id) {
-      query += ` WHERE centre_id = $1`;
-      values.push(centre_id);
-    }
-    query += ` ORDER BY id`;
-
-    const result = await pool.query(query, values);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching staff:', err);
-    res.status(500).json({ error: 'Failed to fetch staff: ' + err.message });
-  }
-});
-
-// Generate unique token ID
-const generateTokenId = async (db, centreId) => {
-  const result = await db.query(
-    'SELECT COUNT(*) as count FROM tokens WHERE centre_id = $1 AND created_at::date = CURRENT_DATE',
-    [centreId]
-  );
-  const count = parseInt(result.rows[0].count) + 1;
-  return `TKN-${centreId}-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${count.toString().padStart(2, '0')}`;
-};
-
-// Generate campaign-specific token ID
-const generateCampaignTokenId = async (db, campaignId, centreId) => {
-  const campaignResult = await db.query(
-    'SELECT name, start_date FROM campaigns WHERE id = $1',
-    [campaignId]
-  );
-  
-  if (campaignResult.rows.length === 0) {
-    throw new Error('Campaign not found');
-  }
-  
-  const campaign = campaignResult.rows[0];
-  
-  const campaignCode = campaign.name
-    .replace(/[^a-zA-Z0-9]/g, '')
-    .substring(0, 5)
-    .toUpperCase();
-  
-  const countResult = await db.query(
-    'SELECT COUNT(*) as count FROM tokens WHERE campaign_id = $1',
-    [campaignId]
-  );
-  
-  const count = parseInt(countResult.rows[0].count) + 1;
-  
-  return `${campaignCode}-${centreId}-${count.toString().padStart(3, '0')}`;
-};
-
-// Create Token
-router.post('/tokens', authenticateToken, async (req, res) => {
-  const { customerName, phone, categoryId, subcategoryId, campaignId, centreId, type } = req.body;
-  const staffId = req.user.id;
-  const userRole = req.user.role;
-
-  console.log('servicemanagement.js: Received token creation request:', JSON.stringify(req.body, null, 2));
-
-  const errors = [];
-  if (!customerName || customerName.trim().length < 2) {
-    errors.push('Customer name is required and must be at least 2 characters');
-  }
-  if (!phone || !/^\d{10}$/.test(phone)) {
-    errors.push('Valid 10-digit phone number is required');
-  }
-  if (userRole !== 'admin' && (!centreId || isNaN(parseInt(centreId)))) {
-    errors.push('Valid centre ID is required for non-admin users');
-  }
-  if (categoryId && isNaN(parseInt(categoryId))) {
-    errors.push('Valid category ID is required');
-  }
-  if (subcategoryId && isNaN(parseInt(subcategoryId))) {
-    errors.push('Valid subcategory ID is required');
-  }
-  if (!type || !['normal', 'campaign'].includes(type)) {
-    errors.push('Type is required and must be either "normal" or "campaign"');
-  }
-  
-  if (type === 'campaign') {
-    if (!campaignId) {
-      errors.push('Campaign ID is required for campaign tokens');
-    } else {
-      const campaignCheck = await pool.query(
-        `SELECT id, name, target_tokens, 
-                (SELECT COUNT(*) FROM tokens WHERE campaign_id = $1) as tokens_generated,
-                start_date, end_date
-         FROM campaigns 
-         WHERE id = $2 AND centre_id = $3`,
-        [parseInt(campaignId), parseInt(campaignId), parseInt(centreId || req.user.centre_id)]
-      );
-      
-      if (campaignCheck.rows.length === 0) {
-        errors.push('Campaign not found');
-      } else {
-        const campaign = campaignCheck.rows[0];
-        const today = new Date();
-        const startDate = new Date(campaign.start_date);
-        const endDate = new Date(campaign.end_date);
-        
-        if (today < startDate || today > endDate) {
-          errors.push('Campaign is not active (outside campaign dates)');
-        }
-        
-        if (parseInt(campaign.tokens_generated) >= parseInt(campaign.target_tokens)) {
-          errors.push('Campaign target tokens limit has been reached');
-        }
-      }
-    }
-  } else {
-    if (campaignId) {
-      errors.push('Campaign ID should not be provided for normal tokens');
-    }
-  }
-
-  if (errors.length > 0) {
-    console.log('servicemanagement.js: Validation errors:', errors);
-    return res.status(400).json({ error: 'Invalid input', details: errors });
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const finalCentreId = userRole === 'admin' ? req.user.centre_id : parseInt(centreId);
-
-    if (userRole !== 'superadmin') {
-      const centreResult = await client.query(
-        `SELECT c.id 
-         FROM centres c
-         LEFT JOIN staff s ON s.centre_id = c.id
-         WHERE c.id = $1 AND (c.admin_id = $2 OR s.id = $2)`,
-        [finalCentreId, parseInt(staffId)]
-      );
-      if (centreResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'You do not have access to this centre' });
-      }
-    }
-
-    if (categoryId) {
-      const categoryResult = await client.query(
-        'SELECT id FROM services WHERE id = $1',
-        [parseInt(categoryId)]
-      );
-      if (categoryResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Invalid category ID' });
-      }
-    }
-    if (subcategoryId) {
-      const subResult = await client.query(
-        'SELECT id FROM subcategories WHERE id = $1 AND service_id = $2',
-        [parseInt(subcategoryId), parseInt(categoryId)]
-      );
-      if (subResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Invalid subcategory ID' });
-      }
-    }
-
-    const staffResult = await client.query(
-      'SELECT id FROM staff WHERE id = $1',
-      [parseInt(staffId)]
-    );
-    if (staffResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Invalid staff ID' });
-    }
-
-    let tokenId;
-    if (type === 'campaign') {
-      tokenId = await generateCampaignTokenId(client, parseInt(campaignId), finalCentreId);
-    } else {
-      tokenId = await generateTokenId(client, finalCentreId);
-    }
-
-    const result = await client.query(
-      `INSERT INTO tokens (
-        token_id, centre_id, customer_name, phone, category_id, subcategory_id, campaign_id, status, staff_id, created_by, type, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, $10, CURRENT_TIMESTAMP)
-      RETURNING id, token_id, centre_id, customer_name, phone, category_id, subcategory_id, campaign_id, status, staff_id, created_by, type, created_at`,
-      [
-        tokenId,
-        finalCentreId,
-        customerName.trim(),
-        phone.trim(),
-        categoryId ? parseInt(categoryId) : null,
-        subcategoryId ? parseInt(subcategoryId) : null,
-        type === 'campaign' ? parseInt(campaignId) : null,
-        'pending',
-        staffId.toString(),
-        type
-      ]
-    );
-
-    const token = result.rows[0];
-
-    if (type === 'normal') {
-      io.to(`centre_${finalCentreId}`).emit('newToken', {
-        token_id: token.token_id,
-        centre_id: token.centre_id,
-        message: `New token ${token.token_id} created for ${token.customer_name}`,
-      });
-    }
-
-    await client.query('COMMIT');
-    console.log('servicemanagement.js: Token created:', JSON.stringify(token, null, 2));
-
-    // Send WhatsApp Notification (Non-blocking)
-    sendTokenUpdateWhatsApp({
-      customerName: token.customer_name,
-      phone: token.phone,
-      tokenNumber: token.token_id,
-      status: token.status,
-      assignedStaff: 'Waiting for Assignment'
-    }).catch(err => console.error('WhatsApp notification failed:', err));
-
-    res.status(201).json({ message: 'Token created successfully', token });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('servicemanagement.js: Error creating token:', err);
-    res.status(500).json({ error: 'Failed to create token: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// Assign or Reassign Staff to Token
-router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
-  const { tokenId } = req.params;
-  const { staffId } = req.body;
-  const userRole = req.user.role;
-  const userId = req.user.id;
-
-  console.log('servicemanagement.js: Received token assignment request:', { tokenId, staffId });
-
-  const errors = [];
-  if (!staffId || isNaN(parseInt(staffId))) {
-    errors.push('Valid staff ID is required');
-  }
-
-  if (errors.length > 0) {
-    console.log('servicemanagement.js: Validation errors:', errors);
-    return res.status(400).json({ error: 'Invalid input', details: errors });
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const tokenResult = await client.query(
-      'SELECT * FROM tokens WHERE token_id = $1',
-      [tokenId]
-    );
-    
-    if (tokenResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: `Token ${tokenId} not found` });
-    }
-
-    const token = tokenResult.rows[0];
-
-    // NEW: Ensure staff can only assign tokens from their own centre
-    if (userRole === 'staff' && token.centre_id !== req.user.centre_id) {
-      await client.query('ROLLBACK');
-      return res.status(403).json({ error: 'You can only assign tokens within your own centre' });
-    }
-    
-    if (token.status !== 'pending') {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Token is not in pending status' });
-    }
-
-    if (userRole === 'admin') {
-      const centreResult = await client.query(
-        `SELECT c.id 
-         FROM centres c
-         WHERE c.id = $1 AND c.admin_id = $2`,
-        [token.centre_id, parseInt(userId)]
-      );
-      if (centreResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'You do not have access to this centre' });
-      }
-    }
-
-    const staffResult = await client.query(
-      'SELECT id, name FROM staff WHERE id = $1 AND centre_id = $2',
-      [parseInt(staffId), token.centre_id]
-    );
-    if (staffResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Assigned staff does not belong to this centre' });
-    }
-
-    await client.query(
-      'UPDATE tokens SET staff_id = $1, updated_at = CURRENT_TIMESTAMP WHERE token_id = $2',
-      [staffId.toString(), tokenId]
-    );
-
-    await client.query('COMMIT');
-    console.log('servicemanagement.js: Token assigned/reassigned:', { tokenId, staffId });
-
-    const staffName = staffResult.rows[0].name || 'Staff';
-    io.to(`centre_${token.centre_id}`).emit('tokenReassigned', {
-      token_id: tokenId,
-      staff_id: staffId,
-      staff_name: staffName,
-      message: `Token ${tokenId} reassigned to ${staffName}`,
-    });
-
-    // Send WhatsApp Notification for Assignment (Non-blocking)
-    sendTokenUpdateWhatsApp({
-      customerName: token.customer_name,
-      phone: token.phone,
-      tokenNumber: tokenId,
-      status: token.status,
-      assignedStaff: staffName
-    }).catch(err => console.error('WhatsApp assignment notification failed:', err));
-
-    res.json({ message: 'Token assigned successfully' });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('servicemanagement.js: Error assigning token:', err);
-    res.status(500).json({ error: 'Failed to assign token: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// PUT /api/servicemanagement/token/:tokenId/status
-router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
-  const { tokenId } = req.params;
-  const { status } = req.body;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const validStatuses = ['pending', 'in-progress', 'processed', 'completed'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
-    
-    // Updated query to fetch data needed for WhatsApp
-    const tokenCheck = await client.query(`
-      SELECT t.centre_id, t.customer_name, t.phone, s.name AS staff_name
-      FROM tokens t
-      LEFT JOIN staff s ON t.staff_id::integer = s.id
-      WHERE t.token_id = $1
-    `, [tokenId]);
-
-    if (tokenCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Token not found' });
-    }
-    
-    const tokenData = tokenCheck.rows[0];
-
-    if (req.user.role !== 'superadmin' && tokenData.centre_id !== req.user.centre_id) {
-      return res.status(403).json({ error: 'Unauthorized to update this token' });
-    }
-    
-    await client.query('UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2', [status, tokenId]);
-    
-    await client.query(
-      'INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      ['Token Status Updated', req.user.username, `Updated token ${tokenId} to ${status}`, tokenData.centre_id]
-    );
-    
-    io.to(`centre_${tokenData.centre_id}`).emit(`tokenUpdate:${tokenData.centre_id}`, { tokenId, status });
-    console.log('servicemanagement.js: Emitted tokenUpdate:', { tokenId, status, centreId: tokenData.centre_id });
-    
-    await client.query('COMMIT');
-
-    // Send WhatsApp Notification for Status Update (Non-blocking)
-    sendTokenUpdateWhatsApp({
-      customerName: tokenData.customer_name,
-      phone: tokenData.phone,
-      tokenNumber: tokenId,
-      status: status,
-      assignedStaff: tokenData.staff_name || 'Waiting for Assignment'
-    }).catch(err => console.error('WhatsApp status notification failed:', err));
-
-    res.json({ message: 'Token status updated successfully' });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('servicemanagement.js: Error updating token status:', err);
-    res.status(500).json({ error: 'Failed to update token status: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
 // Get Active Tokens (excludes expired campaign tokens)
 router.get('/tokens', authenticateToken, async (req, res) => {
   const { centreId, status } = req.query;
@@ -2560,254 +2119,6 @@ router.get('/campaigns/active', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/servicemanagement/staff/campaigns
-router.get('/staff/campaigns', authenticateToken, async (req, res) => {
-  try {
-    const query = `
-      SELECT c.*, s.name AS service_name, ct.name AS centre_name,
-             (SELECT COUNT(*) FROM tokens t WHERE t.campaign_id = c.id) AS tokens_generated
-      FROM campaigns c
-      LEFT JOIN services s ON c.service_id = s.id
-      LEFT JOIN centres ct ON c.centre_id = ct.id
-      WHERE c.centre_id = $1 AND c.start_date <= CURRENT_DATE AND c.end_date >= CURRENT_DATE
-      ORDER BY c.created_at DESC
-    `;
-    const result = await pool.query(query, [req.user.centre_id]);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching staff campaigns:', err);
-    res.status(500).json({ error: 'Failed to fetch staff campaigns: ' + err.message });
-  }
-});
-
-// GET /api/servicemanagement/staff/campaign-tokens - Staff's campaign tokens with tracking info
-router.get('/staff/campaign-tokens', authenticateToken, async (req, res) => {
-  const client = await pool.connect();
-  
-  try {
-    // Only staff and admin/superadmin can access
-    if (req.user.role !== 'staff' && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    let centreId = req.user.centre_id;
-    
-    // For superadmin, allow centre filter
-    if (req.user.role === 'superadmin' && req.query.centre_id) {
-      centreId = parseInt(req.query.centre_id);
-    }
-    
-    if (!centreId) {
-      return res.status(400).json({ error: 'Centre ID required' });
-    }
-
-    const query = `
-      SELECT 
-        t.id AS token_id,
-        t.token_id AS token_code,
-        t.customer_name,
-        t.phone,
-        t.status AS token_status,
-        t.created_at AS token_created_at,
-        t.campaign_id,
-        c.name AS campaign_name,
-        c.start_date AS campaign_start,
-        c.end_date AS campaign_end,
-        se.id AS service_entry_id,
-        st.id AS tracking_id,
-        st.application_number,
-        st.status AS service_status,
-        st.current_step,
-        st.progress,
-        st.updated_at AS last_updated,
-        s.name AS service_name,
-        sc.name AS subcategory_name
-      FROM tokens t
-      LEFT JOIN campaigns c ON t.campaign_id = c.id
-      LEFT JOIN service_entries se ON se.token_id = t.token_id
-      LEFT JOIN service_tracking st ON st.service_entry_id = se.id
-      LEFT JOIN services s ON se.category_id = s.id
-      LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
-      WHERE t.type = 'campaign'
-        AND t.centre_id = $1
-      ORDER BY c.name, t.created_at DESC
-    `;
-    
-    const result = await client.query(query, [centreId]);
-    
-    // Group by campaign for better frontend display
-    const campaignMap = new Map();
-    
-    for (const row of result.rows) {
-      const campaignId = row.campaign_id;
-      if (!campaignMap.has(campaignId)) {
-        campaignMap.set(campaignId, {
-          campaign_id: campaignId,
-          campaign_name: row.campaign_name,
-          campaign_start: row.campaign_start,
-          campaign_end: row.campaign_end,
-          tokens: []
-        });
-      }
-      
-      campaignMap.get(campaignId).tokens.push({
-        token_id: row.token_id,
-        token_code: row.token_code,
-        customer_name: row.customer_name,
-        phone: row.phone,
-        token_status: row.token_status,
-        token_created_at: row.token_created_at,
-        service_entry_id: row.service_entry_id,
-        tracking_id: row.tracking_id,
-        application_number: row.application_number,
-        service_status: row.service_status,
-        current_step: row.current_step,
-        progress: row.progress,
-        last_updated: row.last_updated,
-        service_name: row.service_name,
-        subcategory_name: row.subcategory_name
-      });
-    }
-    
-    res.json({
-      campaigns: Array.from(campaignMap.values()),
-      total_tokens: result.rows.length
-    });
-    
-  } catch (err) {
-    console.error('Error fetching staff campaign tokens:', err);
-    res.status(500).json({ error: 'Failed to fetch campaign tokens: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /api/servicemanagement/campaigns
-router.post('/campaigns', authenticateToken, async (req, res) => {
-  const { name, description, service_id, start_date, end_date, centre_id, target_tokens } = req.body;
-
-  const client = await pool.connect();
-  try {
-    if (!name || !service_id || !start_date || !end_date || !centre_id || target_tokens == null) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    await client.query('BEGIN');
-
-    const serviceQuery = `SELECT id FROM services WHERE id = $1`;
-    const serviceResult = await client.query(serviceQuery, [service_id]);
-    if (serviceResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
-
-    let finalCentreId = centre_id;
-    if (req.user.role !== 'superadmin') {
-      finalCentreId = req.user.centre_id;
-    } else {
-      const centreQuery = `SELECT id FROM centres WHERE id = $1`;
-      const centreResult = await client.query(centreQuery, [centre_id]);
-      if (centreResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Centre not found' });
-      }
-    }
-
-    const campaignQuery = `
-      INSERT INTO campaigns (name, description, service_id, start_date, end_date, centre_id, target_tokens, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-      RETURNING *
-    `;
-    const campaignResult = await client.query(campaignQuery, [
-      name,
-      description || null,
-      service_id,
-      start_date,
-      end_date,
-      finalCentreId,
-      target_tokens
-    ]);
-
-    await client.query('COMMIT');
-    res.status(201).json(campaignResult.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error creating campaign:', err);
-    res.status(500).json({ error: 'Failed to create campaign: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// PUT /api/servicemanagement/campaigns/:id
-router.put('/campaigns/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const { name, description, service_id, start_date, end_date, centre_id, target_tokens } = req.body;
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const campaignQuery = `SELECT id, centre_id FROM campaigns WHERE id = $1`;
-    const campaignResult = await client.query(campaignQuery, [id]);
-    if (campaignResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-
-    if (req.user.role !== 'superadmin' && campaignResult.rows[0].centre_id !== req.user.centre_id) {
-      return res.status(403).json({ error: 'Campaign does not belong to your centre' });
-    }
-
-    const serviceQuery = `SELECT id FROM services WHERE id = $1`;
-    const serviceResult = await client.query(serviceQuery, [service_id]);
-    if (serviceResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
-
-    let finalCentreId = centre_id;
-    if (req.user.role !== 'superadmin') {
-      finalCentreId = req.user.centre_id;
-    } else {
-      const centreQuery = `SELECT id FROM centres WHERE id = $1`;
-      const centreResult = await client.query(centreQuery, [centre_id]);
-      if (centreResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Centre not found' });
-      }
-    }
-
-    const updateQuery = `
-      UPDATE campaigns
-      SET name = COALESCE($1, name),
-          description = $2,
-          service_id = COALESCE($3, service_id),
-          start_date = COALESCE($4, start_date),
-          end_date = COALESCE($5, end_date),
-          centre_id = COALESCE($6, centre_id),
-          target_tokens = COALESCE($7, target_tokens),
-          updated_at = NOW()
-      WHERE id = $8
-      RETURNING *
-    `;
-    const updateResult = await client.query(updateQuery, [
-      name,
-      description,
-      service_id,
-      start_date,
-      end_date,
-      finalCentreId,
-      target_tokens,
-      id
-    ]);
-
-    await client.query('COMMIT');
-    res.status(200).json(updateResult.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error updating campaign:', err);
-    res.status(500).json({ error: 'Failed to update campaign: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
 // GET /api/servicemanagement/campaigns/reports
 router.get('/campaigns/reports', authenticateToken, async (req, res) => {
   const { centre_id, start_date, end_date, status } = req.query;
@@ -2868,76 +2179,6 @@ router.get('/campaigns/reports', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error generating campaign reports:', err);
     res.status(500).json({ error: 'Failed to generate campaign reports: ' + err.message });
-  }
-});
-
-// DELETE /api/servicemanagement/campaigns/:id
-router.delete('/campaigns/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const campaignQuery = `SELECT id, centre_id FROM campaigns WHERE id = $1`;
-    const campaignResult = await client.query(campaignQuery, [id]);
-    if (campaignResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-
-    if (req.user.role !== 'superadmin' && campaignResult.rows[0].centre_id !== req.user.centre_id) {
-      return res.status(403).json({ error: 'Campaign does not belong to your centre' });
-    }
-
-    await client.query(`DELETE FROM tokens WHERE campaign_id = $1`, [id]);
-    await client.query(`DELETE FROM campaigns WHERE id = $1`, [id]);
-
-    await client.query('COMMIT');
-    res.status(200).json({ message: 'Campaign deleted successfully' });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error deleting campaign:', err);
-    res.status(500).json({ error: 'Failed to delete campaign: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// DELETE /api/servicemanagement/tokens/:tokenId
-router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
-  const { tokenId } = req.params;
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-    
-    const tokenCheck = await client.query(
-      'SELECT type FROM tokens WHERE token_id = $1',
-      [tokenId]
-    );
-    
-    if (tokenCheck.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Token not found' });
-    }
-    
-    if (tokenCheck.rows[0].type === 'campaign') {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ 
-        error: 'Campaign tokens cannot be deleted as they serve as booking records' 
-      });
-    }
-    
-    await client.query('DELETE FROM tokens WHERE token_id = $1', [tokenId]);
-    
-    await client.query('COMMIT');
-    res.json({ message: 'Token deleted successfully' });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error deleting token:', err);
-    res.status(500).json({ error: 'Failed to delete token: ' + err.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -3157,6 +2398,460 @@ router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/servicemanagement/staff/campaigns
+router.get('/staff/campaigns', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT c.*, s.name AS service_name, ct.name AS centre_name,
+             (SELECT COUNT(*) FROM tokens t WHERE t.campaign_id = c.id) AS tokens_generated
+      FROM campaigns c
+      LEFT JOIN services s ON c.service_id = s.id
+      LEFT JOIN centres ct ON c.centre_id = ct.id
+      WHERE c.centre_id = $1 AND c.start_date <= CURRENT_DATE AND c.end_date >= CURRENT_DATE
+      ORDER BY c.created_at DESC
+    `;
+    const result = await pool.query(query, [req.user.centre_id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching staff campaigns:', err);
+    res.status(500).json({ error: 'Failed to fetch staff campaigns: ' + err.message });
+  }
+});
+
+// GET /api/servicemanagement/staff/campaign-tokens - Staff's campaign tokens with tracking info
+router.get('/staff/campaign-tokens', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    // Only staff and admin/superadmin can access
+    if (req.user.role !== 'staff' && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    let centreId = req.user.centre_id;
+    
+    // For superadmin, allow centre filter
+    if (req.user.role === 'superadmin' && req.query.centre_id) {
+      centreId = parseInt(req.query.centre_id);
+    }
+    
+    if (!centreId) {
+      return res.status(400).json({ error: 'Centre ID required' });
+    }
+
+    const query = `
+      SELECT 
+        t.id AS token_id,
+        t.token_id AS token_code,
+        t.customer_name,
+        t.phone,
+        t.status AS token_status,
+        t.created_at AS token_created_at,
+        t.campaign_id,
+        c.name AS campaign_name,
+        c.start_date AS campaign_start,
+        c.end_date AS campaign_end,
+        se.id AS service_entry_id,
+        st.id AS tracking_id,
+        st.application_number,
+        st.status AS service_status,
+        st.current_step,
+        st.progress,
+        st.updated_at AS last_updated,
+        s.name AS service_name,
+        sc.name AS subcategory_name
+      FROM tokens t
+      LEFT JOIN campaigns c ON t.campaign_id = c.id
+      LEFT JOIN service_entries se ON se.token_id = t.token_id
+      LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
+      WHERE t.type = 'campaign'
+        AND t.centre_id = $1
+      ORDER BY c.name, t.created_at DESC
+    `;
+    
+    const result = await client.query(query, [centreId]);
+    
+    // Group by campaign for better frontend display
+    const campaignMap = new Map();
+    
+    for (const row of result.rows) {
+      const campaignId = row.campaign_id;
+      if (!campaignMap.has(campaignId)) {
+        campaignMap.set(campaignId, {
+          campaign_id: campaignId,
+          campaign_name: row.campaign_name,
+          campaign_start: row.campaign_start,
+          campaign_end: row.campaign_end,
+          tokens: []
+        });
+      }
+      
+      campaignMap.get(campaignId).tokens.push({
+        token_id: row.token_id,
+        token_code: row.token_code,
+        customer_name: row.customer_name,
+        phone: row.phone,
+        token_status: row.token_status,
+        token_created_at: row.token_created_at,
+        service_entry_id: row.service_entry_id,
+        tracking_id: row.tracking_id,
+        application_number: row.application_number,
+        service_status: row.service_status,
+        current_step: row.current_step,
+        progress: row.progress,
+        last_updated: row.last_updated,
+        service_name: row.service_name,
+        subcategory_name: row.subcategory_name
+      });
+    }
+    
+    res.json({
+      campaigns: Array.from(campaignMap.values()),
+      total_tokens: result.rows.length
+    });
+    
+  } catch (err) {
+    console.error('Error fetching staff campaign tokens:', err);
+    res.status(500).json({ error: 'Failed to fetch campaign tokens: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/servicemanagement/staff
+router.get('/staff', authenticateToken, async (req, res) => {
+  const { centre_id } = req.query;
+
+  try {
+    let query = `
+      SELECT id, username, name, role, department, email, phone,
+             status, join_date, photo, employee_id, employment_type,
+             reports_to, salary, dob, gender, emergency_contact, emergency_relationship
+      FROM staff
+    `;
+    const values = [];
+    if (req.user.role !== 'superadmin') {
+      query += ` WHERE centre_id = $1`;
+      values.push(req.user.centre_id);
+    } else if (centre_id) {
+      query += ` WHERE centre_id = $1`;
+      values.push(centre_id);
+    }
+    query += ` ORDER BY id`;
+
+    const result = await pool.query(query, values);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching staff:', err);
+    res.status(500).json({ error: 'Failed to fetch staff: ' + err.message });
+  }
+});
+
+// GET /api/servicemanagement/tokens/:tokenId
+router.get('/tokens/:tokenId', authenticateToken, async (req, res) => {
+  const { tokenId } = req.params;
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT t.*, c.name AS centre_name, s.name AS service_name, sc.name AS subcategory_name, cmp.name AS campaign_name,
+              st.name AS staff_name, st2.name AS created_by_name
+       FROM tokens t
+       JOIN centres c ON t.centre_id = c.id
+       LEFT JOIN services s ON t.category_id = s.id
+       LEFT JOIN subcategories sc ON t.subcategory_id = sc.id
+       LEFT JOIN campaigns cmp ON t.campaign_id = cmp.id
+       LEFT JOIN staff st ON t.staff_id::integer = st.id
+       LEFT JOIN staff st2 ON t.created_by::integer = st2.id
+       WHERE t.token_id = $1`,
+      [tokenId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Token not found' });
+    }
+    if (req.user.role !== 'superadmin' && result.rows[0].centre_id !== req.user.centre_id) {
+      return res.status(403).json({ error: 'Unauthorized to access this token' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching token:', err);
+    res.status(500).json({ error: 'Failed to fetch token: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Generate unique token ID
+const generateTokenId = async (db, centreId) => {
+  const result = await db.query(
+    'SELECT COUNT(*) as count FROM tokens WHERE centre_id = $1 AND created_at::date = CURRENT_DATE',
+    [centreId]
+  );
+  const count = parseInt(result.rows[0].count) + 1;
+  return `TKN-${centreId}-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${count.toString().padStart(2, '0')}`;
+};
+
+// Generate campaign-specific token ID
+const generateCampaignTokenId = async (db, campaignId, centreId) => {
+  const campaignResult = await db.query(
+    'SELECT name, start_date FROM campaigns WHERE id = $1',
+    [campaignId]
+  );
+  
+  if (campaignResult.rows.length === 0) {
+    throw new Error('Campaign not found');
+  }
+  
+  const campaign = campaignResult.rows[0];
+  
+  const campaignCode = campaign.name
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .substring(0, 5)
+    .toUpperCase();
+  
+  const countResult = await db.query(
+    'SELECT COUNT(*) as count FROM tokens WHERE campaign_id = $1',
+    [campaignId]
+  );
+  
+  const count = parseInt(countResult.rows[0].count) + 1;
+  
+  return `${campaignCode}-${centreId}-${count.toString().padStart(3, '0')}`;
+};
+
+// Create Token
+router.post('/tokens', authenticateToken, async (req, res) => {
+  const { customerName, phone, categoryId, subcategoryId, campaignId, centreId, type } = req.body;
+  const staffId = req.user.id;
+  const userRole = req.user.role;
+
+  console.log('servicemanagement.js: Received token creation request:', JSON.stringify(req.body, null, 2));
+
+  const errors = [];
+  if (!customerName || customerName.trim().length < 2) {
+    errors.push('Customer name is required and must be at least 2 characters');
+  }
+  if (!phone || !/^\d{10}$/.test(phone)) {
+    errors.push('Valid 10-digit phone number is required');
+  }
+  if (userRole !== 'admin' && (!centreId || isNaN(parseInt(centreId)))) {
+    errors.push('Valid centre ID is required for non-admin users');
+  }
+  if (categoryId && isNaN(parseInt(categoryId))) {
+    errors.push('Valid category ID is required');
+  }
+  if (subcategoryId && isNaN(parseInt(subcategoryId))) {
+    errors.push('Valid subcategory ID is required');
+  }
+  if (!type || !['normal', 'campaign'].includes(type)) {
+    errors.push('Type is required and must be either "normal" or "campaign"');
+  }
+  
+  if (type === 'campaign') {
+    if (!campaignId) {
+      errors.push('Campaign ID is required for campaign tokens');
+    } else {
+      const campaignCheck = await pool.query(
+        `SELECT id, name, target_tokens, 
+                (SELECT COUNT(*) FROM tokens WHERE campaign_id = $1) as tokens_generated,
+                start_date, end_date
+         FROM campaigns 
+         WHERE id = $2 AND centre_id = $3`,
+        [parseInt(campaignId), parseInt(campaignId), parseInt(centreId || req.user.centre_id)]
+      );
+      
+      if (campaignCheck.rows.length === 0) {
+        errors.push('Campaign not found');
+      } else {
+        const campaign = campaignCheck.rows[0];
+        const today = new Date();
+        const startDate = new Date(campaign.start_date);
+        const endDate = new Date(campaign.end_date);
+        
+        if (today < startDate || today > endDate) {
+          errors.push('Campaign is not active (outside campaign dates)');
+        }
+        
+        if (parseInt(campaign.tokens_generated) >= parseInt(campaign.target_tokens)) {
+          errors.push('Campaign target tokens limit has been reached');
+        }
+      }
+    }
+  } else {
+    if (campaignId) {
+      errors.push('Campaign ID should not be provided for normal tokens');
+    }
+  }
+
+  if (errors.length > 0) {
+    console.log('servicemanagement.js: Validation errors:', errors);
+    return res.status(400).json({ error: 'Invalid input', details: errors });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const finalCentreId = userRole === 'admin' ? req.user.centre_id : parseInt(centreId);
+
+    if (userRole !== 'superadmin') {
+      const centreResult = await client.query(
+        `SELECT c.id 
+         FROM centres c
+         LEFT JOIN staff s ON s.centre_id = c.id
+         WHERE c.id = $1 AND (c.admin_id = $2 OR s.id = $2)`,
+        [finalCentreId, parseInt(staffId)]
+      );
+      if (centreResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'You do not have access to this centre' });
+      }
+    }
+
+    if (categoryId) {
+      const categoryResult = await client.query(
+        'SELECT id FROM services WHERE id = $1',
+        [parseInt(categoryId)]
+      );
+      if (categoryResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Invalid category ID' });
+      }
+    }
+    if (subcategoryId) {
+      const subResult = await client.query(
+        'SELECT id FROM subcategories WHERE id = $1 AND service_id = $2',
+        [parseInt(subcategoryId), parseInt(categoryId)]
+      );
+      if (subResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Invalid subcategory ID' });
+      }
+    }
+
+    const staffResult = await client.query(
+      'SELECT id FROM staff WHERE id = $1',
+      [parseInt(staffId)]
+    );
+    if (staffResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Invalid staff ID' });
+    }
+
+    let tokenId;
+    if (type === 'campaign') {
+      tokenId = await generateCampaignTokenId(client, parseInt(campaignId), finalCentreId);
+    } else {
+      tokenId = await generateTokenId(client, finalCentreId);
+    }
+
+    const result = await client.query(
+      `INSERT INTO tokens (
+        token_id, centre_id, customer_name, phone, category_id, subcategory_id, campaign_id, status, staff_id, created_by, type, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, $10, CURRENT_TIMESTAMP)
+      RETURNING id, token_id, centre_id, customer_name, phone, category_id, subcategory_id, campaign_id, status, staff_id, created_by, type, created_at`,
+      [
+        tokenId,
+        finalCentreId,
+        customerName.trim(),
+        phone.trim(),
+        categoryId ? parseInt(categoryId) : null,
+        subcategoryId ? parseInt(subcategoryId) : null,
+        type === 'campaign' ? parseInt(campaignId) : null,
+        'pending',
+        staffId.toString(),
+        type
+      ]
+    );
+
+    const token = result.rows[0];
+
+    if (type === 'normal') {
+      io.to(`centre_${finalCentreId}`).emit('newToken', {
+        token_id: token.token_id,
+        centre_id: token.centre_id,
+        message: `New token ${token.token_id} created for ${token.customer_name}`,
+      });
+    }
+
+    await client.query('COMMIT');
+    console.log('servicemanagement.js: Token created:', JSON.stringify(token, null, 2));
+
+    // Send WhatsApp Notification (Non-blocking)
+    sendTokenUpdateWhatsApp({
+      customerName: token.customer_name,
+      phone: token.phone,
+      tokenNumber: token.token_id,
+      status: token.status,
+      assignedStaff: 'Waiting for Assignment'
+    }).catch(err => console.error('WhatsApp notification failed:', err));
+
+    res.status(201).json({ message: 'Token created successfully', token });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('servicemanagement.js: Error creating token:', err);
+    res.status(500).json({ error: 'Failed to create token: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/servicemanagement/campaigns
+router.post('/campaigns', authenticateToken, async (req, res) => {
+  const { name, description, service_id, start_date, end_date, centre_id, target_tokens } = req.body;
+
+  const client = await pool.connect();
+  try {
+    if (!name || !service_id || !start_date || !end_date || !centre_id || target_tokens == null) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    await client.query('BEGIN');
+
+    const serviceQuery = `SELECT id FROM services WHERE id = $1`;
+    const serviceResult = await client.query(serviceQuery, [service_id]);
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    let finalCentreId = centre_id;
+    if (req.user.role !== 'superadmin') {
+      finalCentreId = req.user.centre_id;
+    } else {
+      const centreQuery = `SELECT id FROM centres WHERE id = $1`;
+      const centreResult = await client.query(centreQuery, [centre_id]);
+      if (centreResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Centre not found' });
+      }
+    }
+
+    const campaignQuery = `
+      INSERT INTO campaigns (name, description, service_id, start_date, end_date, centre_id, target_tokens, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      RETURNING *
+    `;
+    const campaignResult = await client.query(campaignQuery, [
+      name,
+      description || null,
+      service_id,
+      start_date,
+      end_date,
+      finalCentreId,
+      target_tokens
+    ]);
+
+    await client.query('COMMIT');
+    res.status(201).json(campaignResult.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error creating campaign:', err);
+    res.status(500).json({ error: 'Failed to create campaign: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // PUT /api/servicemanagement/tokens/:tokenId/cancel
 router.put('/tokens/:tokenId/cancel', authenticateToken, async (req, res) => {
   const { tokenId } = req.params;
@@ -3230,6 +2925,311 @@ router.put('/tokens/:tokenId/cancel', authenticateToken, async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Error cancelling token:', err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Assign or Reassign Staff to Token
+router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
+  const { tokenId } = req.params;
+  const { staffId } = req.body;
+  const userRole = req.user.role;
+  const userId = req.user.id;
+
+  console.log('servicemanagement.js: Received token assignment request:', { tokenId, staffId });
+
+  const errors = [];
+  if (!staffId || isNaN(parseInt(staffId))) {
+    errors.push('Valid staff ID is required');
+  }
+
+  if (errors.length > 0) {
+    console.log('servicemanagement.js: Validation errors:', errors);
+    return res.status(400).json({ error: 'Invalid input', details: errors });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const tokenResult = await client.query(
+      'SELECT * FROM tokens WHERE token_id = $1',
+      [tokenId]
+    );
+    
+    if (tokenResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: `Token ${tokenId} not found` });
+    }
+
+    const token = tokenResult.rows[0];
+
+    // NEW: Ensure staff can only assign tokens from their own centre
+    if (userRole === 'staff' && token.centre_id !== req.user.centre_id) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'You can only assign tokens within your own centre' });
+    }
+    
+    if (token.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Token is not in pending status' });
+    }
+
+    if (userRole === 'admin') {
+      const centreResult = await client.query(
+        `SELECT c.id 
+         FROM centres c
+         WHERE c.id = $1 AND c.admin_id = $2`,
+        [token.centre_id, parseInt(userId)]
+      );
+      if (centreResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'You do not have access to this centre' });
+      }
+    }
+
+    const staffResult = await client.query(
+      'SELECT id, name FROM staff WHERE id = $1 AND centre_id = $2',
+      [parseInt(staffId), token.centre_id]
+    );
+    if (staffResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Assigned staff does not belong to this centre' });
+    }
+
+    await client.query(
+      'UPDATE tokens SET staff_id = $1, updated_at = CURRENT_TIMESTAMP WHERE token_id = $2',
+      [staffId.toString(), tokenId]
+    );
+
+    await client.query('COMMIT');
+    console.log('servicemanagement.js: Token assigned/reassigned:', { tokenId, staffId });
+
+    const staffName = staffResult.rows[0].name || 'Staff';
+    io.to(`centre_${token.centre_id}`).emit('tokenReassigned', {
+      token_id: tokenId,
+      staff_id: staffId,
+      staff_name: staffName,
+      message: `Token ${tokenId} reassigned to ${staffName}`,
+    });
+
+    // Send WhatsApp Notification for Assignment (Non-blocking)
+    sendTokenUpdateWhatsApp({
+      customerName: token.customer_name,
+      phone: token.phone,
+      tokenNumber: tokenId,
+      status: token.status,
+      assignedStaff: staffName
+    }).catch(err => console.error('WhatsApp assignment notification failed:', err));
+
+    res.json({ message: 'Token assigned successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('servicemanagement.js: Error assigning token:', err);
+    res.status(500).json({ error: 'Failed to assign token: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/servicemanagement/token/:tokenId/status
+router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
+  const { tokenId } = req.params;
+  const { status } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const validStatuses = ['pending', 'in-progress', 'processed', 'completed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    
+    // Updated query to fetch data needed for WhatsApp
+    const tokenCheck = await client.query(`
+      SELECT t.centre_id, t.customer_name, t.phone, s.name AS staff_name
+      FROM tokens t
+      LEFT JOIN staff s ON t.staff_id::integer = s.id
+      WHERE t.token_id = $1
+    `, [tokenId]);
+
+    if (tokenCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Token not found' });
+    }
+    
+    const tokenData = tokenCheck.rows[0];
+
+    if (req.user.role !== 'superadmin' && tokenData.centre_id !== req.user.centre_id) {
+      return res.status(403).json({ error: 'Unauthorized to update this token' });
+    }
+    
+    await client.query('UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2', [status, tokenId]);
+    
+    await client.query(
+      'INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      ['Token Status Updated', req.user.username, `Updated token ${tokenId} to ${status}`, tokenData.centre_id]
+    );
+    
+    io.to(`centre_${tokenData.centre_id}`).emit(`tokenUpdate:${tokenData.centre_id}`, { tokenId, status });
+    console.log('servicemanagement.js: Emitted tokenUpdate:', { tokenId, status, centreId: tokenData.centre_id });
+    
+    await client.query('COMMIT');
+
+    // Send WhatsApp Notification for Status Update (Non-blocking)
+    sendTokenUpdateWhatsApp({
+      customerName: tokenData.customer_name,
+      phone: tokenData.phone,
+      tokenNumber: tokenId,
+      status: status,
+      assignedStaff: tokenData.staff_name || 'Waiting for Assignment'
+    }).catch(err => console.error('WhatsApp status notification failed:', err));
+
+    res.json({ message: 'Token status updated successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('servicemanagement.js: Error updating token status:', err);
+    res.status(500).json({ error: 'Failed to update token status: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/servicemanagement/campaigns/:id
+router.put('/campaigns/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, description, service_id, start_date, end_date, centre_id, target_tokens } = req.body;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const campaignQuery = `SELECT id, centre_id FROM campaigns WHERE id = $1`;
+    const campaignResult = await client.query(campaignQuery, [id]);
+    if (campaignResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    if (req.user.role !== 'superadmin' && campaignResult.rows[0].centre_id !== req.user.centre_id) {
+      return res.status(403).json({ error: 'Campaign does not belong to your centre' });
+    }
+
+    const serviceQuery = `SELECT id FROM services WHERE id = $1`;
+    const serviceResult = await client.query(serviceQuery, [service_id]);
+    if (serviceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    let finalCentreId = centre_id;
+    if (req.user.role !== 'superadmin') {
+      finalCentreId = req.user.centre_id;
+    } else {
+      const centreQuery = `SELECT id FROM centres WHERE id = $1`;
+      const centreResult = await client.query(centreQuery, [centre_id]);
+      if (centreResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Centre not found' });
+      }
+    }
+
+    const updateQuery = `
+      UPDATE campaigns
+      SET name = COALESCE($1, name),
+          description = $2,
+          service_id = COALESCE($3, service_id),
+          start_date = COALESCE($4, start_date),
+          end_date = COALESCE($5, end_date),
+          centre_id = COALESCE($6, centre_id),
+          target_tokens = COALESCE($7, target_tokens),
+          updated_at = NOW()
+      WHERE id = $8
+      RETURNING *
+    `;
+    const updateResult = await client.query(updateQuery, [
+      name,
+      description,
+      service_id,
+      start_date,
+      end_date,
+      finalCentreId,
+      target_tokens,
+      id
+    ]);
+
+    await client.query('COMMIT');
+    res.status(200).json(updateResult.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating campaign:', err);
+    res.status(500).json({ error: 'Failed to update campaign: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/servicemanagement/campaigns/:id
+router.delete('/campaigns/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const campaignQuery = `SELECT id, centre_id FROM campaigns WHERE id = $1`;
+    const campaignResult = await client.query(campaignQuery, [id]);
+    if (campaignResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    if (req.user.role !== 'superadmin' && campaignResult.rows[0].centre_id !== req.user.centre_id) {
+      return res.status(403).json({ error: 'Campaign does not belong to your centre' });
+    }
+
+    await client.query(`DELETE FROM tokens WHERE campaign_id = $1`, [id]);
+    await client.query(`DELETE FROM campaigns WHERE id = $1`, [id]);
+
+    await client.query('COMMIT');
+    res.status(200).json({ message: 'Campaign deleted successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting campaign:', err);
+    res.status(500).json({ error: 'Failed to delete campaign: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/servicemanagement/tokens/:tokenId
+router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
+  const { tokenId } = req.params;
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const tokenCheck = await client.query(
+      'SELECT type FROM tokens WHERE token_id = $1',
+      [tokenId]
+    );
+    
+    if (tokenCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Token not found' });
+    }
+    
+    if (tokenCheck.rows[0].type === 'campaign') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Campaign tokens cannot be deleted as they serve as booking records' 
+      });
+    }
+    
+    await client.query('DELETE FROM tokens WHERE token_id = $1', [tokenId]);
+    
+    await client.query('COMMIT');
+    res.json({ message: 'Token deleted successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting token:', err);
+    res.status(500).json({ error: 'Failed to delete token: ' + err.message });
   } finally {
     client.release();
   }
