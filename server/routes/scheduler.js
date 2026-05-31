@@ -23,8 +23,8 @@ cron.schedule("5 0 * * *", async () => {
   timezone: "Asia/Kolkata" // Forces the cron to run at 00:05 IST
 });
 
-// TEST RUN: 9:50 PM IST - Cleanup ALL old normal tokens
-cron.schedule("50 21 * * *", async () => {
+// Run every day at 00:10 AM IST - Cleanup ALL old normal tokens
+cron.schedule("10 0 * * *", async () => {
   try {
     const result = await pool.query(`
       DELETE FROM tokens
