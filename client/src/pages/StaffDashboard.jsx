@@ -378,7 +378,14 @@ const StaffDashboard = () => {
       setCancelling(false);
     }
   };
-  const handleViewDetails = (tokenId) => navigate(`/dashboard/staff/token/${tokenId}/service`);
+  const handleViewDetails = (tokenId, trackingId) => {
+    if (trackingId) {
+      navigate(`/dashboard/staff/track_service/${trackingId}`);
+    } else {
+      // Fallback just in case it's a legacy token without a tracking entry
+      navigate(`/dashboard/staff/token/${tokenId}/details`);
+    }
+  };
   const formatTime = (dateString) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatDateUI = (dateString) => {
     const date = new Date(dateString);
@@ -937,7 +944,7 @@ const StaffDashboard = () => {
                                         </div>
                                       )}
                                     {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
-                                      <button onClick={() => handleViewDetails(token.tokenId)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 flex items-center gap-2">
+                                      <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 flex items-center gap-2">
                                         <FiBarChart2 className="h-4 w-4" /> Details
                                       </button>
                                     )}

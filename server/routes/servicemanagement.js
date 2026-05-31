@@ -1979,6 +1979,8 @@ router.get('/tokens', authenticateToken, async (req, res) => {
       LEFT JOIN campaigns cmp ON t.campaign_id = cmp.id
       LEFT JOIN staff st ON t.staff_id::integer = st.id
       LEFT JOIN staff st2 ON t.created_by::integer = st2.id
+      LEFT JOIN service_entries se ON se.token_id = t.token_id         
+      LEFT JOIN service_tracking st_track ON st_track.service_entry_id = se.id  
     `;
     const queryParams = [];
     const conditions = [];
@@ -2044,6 +2046,7 @@ router.get('/tokens', authenticateToken, async (req, res) => {
       createdByName: row.created_by_name,
       type: row.type,
       createdAt: row.created_at.toISOString(),
+      trackingId: row.tracking_id,
     }));
 
     console.log('servicemanagement.js: Fetched active tokens:', JSON.stringify(tokens, null, 2));
