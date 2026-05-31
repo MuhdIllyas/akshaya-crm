@@ -2322,7 +2322,7 @@ router.get('/campaigns/stats', authenticateToken, async (req, res) => {
 
 // GET /api/servicemanagement/campaign-tokens/table
 router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
-  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id, search } = req.query;
+  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id, search, staff_id } = req.query;
   const client = await pool.connect();
   try {
     let centreId = req.user.centre_id;
@@ -2350,6 +2350,10 @@ router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
     if (campaign_id && campaign_id !== 'all') {
       whereClause += ` AND t.campaign_id = $${idx++}`;
       values.push(parseInt(campaign_id));
+    }
+    if (staff_id && staff_id !== 'all') {
+      whereClause += ` AND t.staff_id = $${idx++}`;
+      values.push(staff_id.toString());
     }
 
     // --- ADD THIS NEW SEARCH BLOCK ---

@@ -52,6 +52,8 @@ const CampaignTokenManagementStaff = () => {
   const [dateTo, setDateTo] = useState('');
   const [tableCampaignId, setTableCampaignId] = useState('all');
   const [tableStatus, setTableStatus] = useState('all');
+  const [staffList, setStaffList] = useState([]);
+  const [tableStaffId, setTableStaffId] = useState('all');
   const [globalSearch, setGlobalSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [expandedRows, setExpandedRows] = useState(new Set());
@@ -76,11 +78,11 @@ const CampaignTokenManagementStaff = () => {
 
   useEffect(() => {
     setPagination(prev => ({ ...prev, page: 1 }));
-  }, [dateFrom, dateTo, tableCampaignId, tableStatus, debouncedSearch]);
+  }, [dateFrom, dateTo, tableCampaignId, tableStatus, debouncedSearch, tableStaffId]);
 
   useEffect(() => {
     fetchTableTokens();
-  }, [pagination.page, dateFrom, dateTo, tableCampaignId, tableStatus, debouncedSearch]);
+  }, [pagination.page, dateFrom, dateTo, tableCampaignId, tableStatus, debouncedSearch, tableStaffId]);
 
   useEffect(() => {
       const handler = setTimeout(() => {
@@ -88,6 +90,22 @@ const CampaignTokenManagementStaff = () => {
       }, 500);
       return () => clearTimeout(handler);
   }, [globalSearch]);
+
+  useEffect(() => {
+    const fetchStaffList = async () => {
+      try {
+        const token = getToken();
+        if (!token) return;
+        const response = await axios.get(`${API_BASE_URL}/api/servicemanagement/staff`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setStaffList(response.data || []);
+      } catch (err) {
+        console.error('Failed to fetch staff list:', err);
+      }
+    };
+    fetchStaffList();
+  }, []);
 
   const fetchCampaignsAndStats = async () => {
     try {
@@ -130,7 +148,8 @@ const CampaignTokenManagementStaff = () => {
         to: dateTo,
         status: tableStatus,
         campaign_id: tableCampaignId,
-        search: debouncedSearch
+        search: debouncedSearch,
+        staff_id: tableStaffId
       });
       const response = await axios.get(`${API_BASE_URL}/api/servicemanagement/campaign-tokens/table?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
