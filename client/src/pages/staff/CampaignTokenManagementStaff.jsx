@@ -4,7 +4,7 @@ import {
   FiAward, FiUser, FiPhone, FiClock, FiChevronRight, FiChevronDown,
   FiEye, FiCheckCircle, FiClock as FiPending, FiXCircle, FiLoader,
   FiCalendar, FiFileText, FiTrendingUp, FiBarChart2, FiPieChart, FiFilter,
-  FiStar
+  FiStar, FiSearch, FiChevronsUp, FiChevronsDown
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
@@ -45,12 +45,15 @@ const CampaignTokenManagementStaff = () => {
 
   // Table state
   const [tableTokens, setTableTokens] = useState([]);
+  const [filteredTokens, setFilteredTokens] = useState([]);
   const [tableLoading, setTableLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 0, limit: 20 });
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [tableCampaignId, setTableCampaignId] = useState('all');
   const [tableStatus, setTableStatus] = useState('all');
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [expandedRows, setExpandedRows] = useState(new Set());
 
   // Cancel modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -80,6 +83,22 @@ const CampaignTokenManagementStaff = () => {
   useEffect(() => {
     fetchTableTokens();
   }, [pagination.page]);
+
+  // Client-side search filter
+  useEffect(() => {
+    if (!tableTokens.length) {
+      setFilteredTokens([]);
+      return;
+    }
+    const lowerSearch = globalSearch.toLowerCase();
+    const filtered = tableTokens.filter(token =>
+      token.tokenCode.toLowerCase().includes(lowerSearch) ||
+      token.customerName.toLowerCase().includes(lowerSearch) ||
+      token.phone.includes(lowerSearch) ||
+      (token.campaignName && token.campaignName.toLowerCase().includes(lowerSearch))
+    );
+    setFilteredTokens(filtered);
+  }, [globalSearch, tableTokens]);
 
   const fetchCampaignsAndStats = async () => {
     try {
@@ -127,6 +146,7 @@ const CampaignTokenManagementStaff = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setTableTokens(response.data.tokens);
+      setFilteredTokens(response.data.tokens);
       setPagination(prev => ({
         ...prev,
         total: response.data.total,
@@ -148,7 +168,6 @@ const CampaignTokenManagementStaff = () => {
     }
   };
 
-  // Open modal instead of native confirm/prompt
   const openCancelModal = (tokenCode, customerName) => {
     setCancelTokenData({ tokenCode, customerName });
     setCancelReason('');
@@ -176,6 +195,24 @@ const CampaignTokenManagementStaff = () => {
     } finally {
       setCancelling(false);
     }
+  };
+
+  const toggleRowExpand = (tokenCode) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tokenCode)) newSet.delete(tokenCode);
+      else newSet.add(tokenCode);
+      return newSet;
+    });
+  };
+
+  const expandAllRows = () => {
+    const allCodes = filteredTokens.map(t => t.tokenCode);
+    setExpandedRows(new Set(allCodes));
+  };
+
+  const collapseAllRows = () => {
+    setExpandedRows(new Set());
   };
 
   const getStatusBadge = (status) => {
@@ -210,7 +247,7 @@ const CampaignTokenManagementStaff = () => {
     return now >= start && now <= end;
   };
 
-  // Chart data preparation
+  // Chart data preparation (same as before)
   const staffChartData = stats?.staff_contributions?.map(s => ({
     name: s.staff_name.split(' ')[0] || s.staff_name,
     Completed: s.completed_tokens,
@@ -290,7 +327,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Row 1: Original 4 stats cards */}
+        {/* Stats Cards - Row 1 and Row 2 unchanged */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-5">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition">
             <div className="flex items-center justify-between">
@@ -321,7 +358,6 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Row 2: Additional metrics cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between">
@@ -349,7 +385,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Campaign Analytics Section (tabs) */}
+        {/* Campaign Analytics Section (tabs) - unchanged */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
@@ -370,14 +406,13 @@ const CampaignTokenManagementStaff = () => {
               </select>
             </div>
           </div>
-
           <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3 mb-6">
             <button onClick={() => setActiveChartTab('staff')} className={`px-5 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeChartTab === 'staff' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}><FiUser className="h-4 w-4" /> Staff Contribution</button>
             <button onClick={() => setActiveChartTab('status')} className={`px-5 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeChartTab === 'status' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}><FiPieChart className="h-4 w-4" /> Status Distribution</button>
             <button onClick={() => setActiveChartTab('campaigns')} className={`px-5 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeChartTab === 'campaigns' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}><FiBarChart2 className="h-4 w-4" /> Campaign Performance</button>
           </div>
-
           <div className="h-80">
+            {/* Chart rendering as before - omitted for brevity, but keep full chart code */}
             {activeChartTab === 'staff' && (
               staffChartData.length === 0 ? <div className="flex items-center justify-center h-full text-gray-400">No staff data</div> : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -439,7 +474,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Staff Leaderboard & Completion Rate Gauge */}
+        {/* Staff Leaderboard & Completion Rate Gauge - unchanged */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
             <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-amber-100 rounded-xl"><FiStar className="h-5 w-5 text-amber-600" /></div><h2 className="text-xl font-semibold text-gray-900">Staff Leaderboard (Top 5)</h2></div>
@@ -473,7 +508,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Filterable, Paginated Token Table with Cancel Modal */}
+        {/* Filterable, Paginated Token Table with Global Search and Expand/Collapse */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
@@ -504,6 +539,36 @@ const CampaignTokenManagementStaff = () => {
             </div>
           </div>
 
+          {/* Global Search Bar */}
+          <div className="mb-4 flex items-center gap-4">
+            <div className="relative flex-1">
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by token ID, customer name, phone, or campaign..."
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={expandAllRows}
+                className="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 flex items-center gap-1"
+                title="Expand all rows"
+              >
+                <FiChevronsDown className="h-4 w-4" /> Expand All
+              </button>
+              <button
+                onClick={collapseAllRows}
+                className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center gap-1"
+                title="Collapse all rows"
+              >
+                <FiChevronsUp className="h-4 w-4" /> Collapse All
+              </button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -514,45 +579,80 @@ const CampaignTokenManagementStaff = () => {
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Status</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Created</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Action</th>
+                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500"></th>
                 </tr>
               </thead>
               <tbody>
                 {tableLoading ? (
-                  <tr><td colSpan="6" className="text-center py-8 text-gray-400">Loading tokens...</td></tr>
-                ) : tableTokens.length === 0 ? (
-                  <tr><td colSpan="6" className="text-center py-8 text-gray-400">No tokens found</td></tr>
+                  <tr><td colSpan="7" className="text-center py-8 text-gray-400">Loading tokens...</td></tr>
+                ) : filteredTokens.length === 0 ? (
+                  <tr><td colSpan="7" className="text-center py-8 text-gray-400">No tokens found</td></tr>
                 ) : (
-                  tableTokens.map(token => (
-                    <tr key={token.tokenCode} className="border-t hover:bg-gray-50">
-                      <td className="py-3 px-4 whitespace-nowrap font-mono text-sm">{token.tokenCode}</td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="font-medium">{token.customerName}</div>
-                        <div className="text-xs text-gray-500">{token.phone}</div>
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap">{token.campaignName}</td>
-                      <td className="py-3 px-4 whitespace-nowrap">{getStatusBadge(token.status)}</td>
-                      <td className="py-3 px-4 whitespace-nowrap">{new Date(token.created_at).toLocaleDateString()}</td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        {token.status !== 'cancelled' ? (
-                          <>
-                            <button
-                              onClick={() => handleServiceAction(token.trackingId, token.tokenCode)}
-                              className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"
-                            >
-                              {token.trackingId ? 'View Service' : 'Start Service'}
-                            </button>
-                            <button
-                              onClick={() => openCancelModal(token.tokenCode, token.customerName)}
-                              className="ml-2 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-100"
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <span className="text-sm text-gray-400">Cancelled</span>
-                        )}
-                      </td>
-                    </tr>
+                  filteredTokens.map(token => (
+                    <React.Fragment key={token.tokenCode}>
+                      <tr className="border-t hover:bg-gray-50">
+                        <td className="py-3 px-4 whitespace-nowrap font-mono text-sm">{token.tokenCode}</td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="font-medium">{token.customerName}</div>
+                          <div className="text-xs text-gray-500">{token.phone}</div>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">{token.campaignName}</td>
+                        <td className="py-3 px-4 whitespace-nowrap">{getStatusBadge(token.status)}</td>
+                        <td className="py-3 px-4 whitespace-nowrap">{new Date(token.created_at).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {token.status !== 'cancelled' ? (
+                            <>
+                              <button
+                                onClick={() => handleServiceAction(token.trackingId, token.tokenCode)}
+                                className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"
+                              >
+                                {token.trackingId ? 'View Service' : 'Start Service'}
+                              </button>
+                              <button
+                                onClick={() => openCancelModal(token.tokenCode, token.customerName)}
+                                className="ml-2 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-100"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-sm text-gray-400">Cancelled</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => toggleRowExpand(token.tokenCode)}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            {expandedRows.has(token.tokenCode) ? <FiChevronDown /> : <FiChevronRight />}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedRows.has(token.tokenCode) && (
+                        <tr className="bg-gray-50 border-t">
+                          <td colSpan="7" className="py-3 px-4 text-sm">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div>
+                                <p className="text-xs font-medium text-gray-500">Service Name</p>
+                                <p className="text-gray-800">{token.serviceName || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-gray-500">Subcategory</p>
+                                <p className="text-gray-800">{token.subcategoryName || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-gray-500">Application Number</p>
+                                <p className="text-gray-800 font-mono">{token.applicationNumber || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-gray-500">Progress</p>
+                                <p className="text-gray-800">{token.progress !== undefined ? `${token.progress}%` : '—'}</p>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
@@ -580,7 +680,7 @@ const CampaignTokenManagementStaff = () => {
           )}
         </div>
 
-        {/* Custom Cancel Modal */}
+        {/* Cancel Modal - unchanged */}
         {showCancelModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
