@@ -3195,8 +3195,8 @@ router.put('/tokens/:tokenId/cancel', authenticateToken, async (req, res) => {
 
     // Update token status
     await client.query(
-      `UPDATE tokens SET status = 'cancelled', updated_at = NOW() WHERE token_id = $1`,
-      [tokenId]
+      `UPDATE tokens SET status = 'cancelled', cancelled_reason = $1, updated_at = NOW() WHERE token_id = $2`,
+      [reason || null, tokenId]
     );
 
     // Optionally cancel associated service entry

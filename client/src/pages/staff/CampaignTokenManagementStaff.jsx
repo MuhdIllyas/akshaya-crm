@@ -52,6 +52,12 @@ const CampaignTokenManagementStaff = () => {
   const [tableCampaignId, setTableCampaignId] = useState('all');
   const [tableStatus, setTableStatus] = useState('all');
 
+  // Cancel modal state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelTokenData, setCancelTokenData] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
   const COLORS = {
     completed: '#10B981',
     pending: '#F59E0B',
@@ -67,7 +73,6 @@ const CampaignTokenManagementStaff = () => {
   }, [selectedCampaignId]);
 
   useEffect(() => {
-    // Reset page to 1 when filters change
     setPagination(prev => ({ ...prev, page: 1 }));
     fetchTableTokens();
   }, [dateFrom, dateTo, tableCampaignId, tableStatus]);
@@ -143,25 +148,33 @@ const CampaignTokenManagementStaff = () => {
     }
   };
 
-  const handleCancelToken = async (tokenCode, customerName) => {
-    if (!window.confirm(`Are you sure you want to cancel token ${tokenCode} for ${customerName}? This action cannot be undone.`)) {
-      return;
-    }
-    const reason = window.prompt('Optional reason for cancellation (e.g., customer request, duplicate):');
+  // Open modal instead of native confirm/prompt
+  const openCancelModal = (tokenCode, customerName) => {
+    setCancelTokenData({ tokenCode, customerName });
+    setCancelReason('');
+    setShowCancelModal(true);
+  };
+
+  const handleCancelConfirm = async () => {
+    if (!cancelTokenData) return;
+    setCancelling(true);
     try {
       const token = getToken();
-      await axios.put(`${API_BASE_URL}/api/servicemanagement/tokens/${tokenCode}/cancel`,
-        { reason: reason || null },
+      await axios.put(`${API_BASE_URL}/api/servicemanagement/tokens/${cancelTokenData.tokenCode}/cancel`,
+        { reason: cancelReason.trim() || null },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success(`Token ${tokenCode} cancelled successfully`);
-      // Refresh the table
+      toast.success(`Token ${cancelTokenData.tokenCode} cancelled successfully`);
+      setShowCancelModal(false);
+      setCancelTokenData(null);
+      setCancelReason('');
       fetchTableTokens();
-      // Also refresh stats
       fetchCampaignsAndStats();
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || 'Failed to cancel token');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -197,7 +210,7 @@ const CampaignTokenManagementStaff = () => {
     return now >= start && now <= end;
   };
 
-  // Prepare chart data (same as before)
+  // Chart data preparation
   const staffChartData = stats?.staff_contributions?.map(s => ({
     name: s.staff_name.split(' ')[0] || s.staff_name,
     Completed: s.completed_tokens,
@@ -336,7 +349,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Campaign Analytics Section (tabs) - same as before */}
+        {/* Campaign Analytics Section (tabs) */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
@@ -460,7 +473,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* NEW: Filterable, Paginated Token Table */}
+        {/* Filterable, Paginated Token Table with Cancel Modal */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
@@ -486,6 +499,7 @@ const CampaignTokenManagementStaff = () => {
                 <option value="processed">Processed</option>
                 <option value="completed">Completed</option>
                 <option value="in-progress">In Progress</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
           </div>
@@ -519,18 +533,24 @@ const CampaignTokenManagementStaff = () => {
                       <td className="py-3 px-4 whitespace-nowrap">{getStatusBadge(token.status)}</td>
                       <td className="py-3 px-4 whitespace-nowrap">{new Date(token.created_at).toLocaleDateString()}</td>
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <button
-                          onClick={() => handleServiceAction(token.trackingId, token.tokenCode)}
-                          className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"
-                        >
-                          {token.trackingId ? 'View Service' : 'Start Service'}
-                        </button>
-                        <button
-                          onClick={() => handleCancelToken(token.tokenCode, token.customerName)}
-                          className="ml-2 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-100"
-                        >
-                          Cancel
-                        </button>
+                        {token.status !== 'cancelled' ? (
+                          <>
+                            <button
+                              onClick={() => handleServiceAction(token.trackingId, token.tokenCode)}
+                              className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"
+                            >
+                              {token.trackingId ? 'View Service' : 'Start Service'}
+                            </button>
+                            <button
+                              onClick={() => openCancelModal(token.tokenCode, token.customerName)}
+                              className="ml-2 px-3 py-1.5 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-100"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-sm text-gray-400">Cancelled</span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -559,6 +579,43 @@ const CampaignTokenManagementStaff = () => {
             </div>
           )}
         </div>
+
+        {/* Custom Cancel Modal */}
+        {showCancelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenCode}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  rows="3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="e.g., customer request, duplicate entry..."
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowCancelModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition"
+                >
+                  No, Keep Token
+                </button>
+                <button
+                  onClick={handleCancelConfirm}
+                  disabled={cancelling}
+                  className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
