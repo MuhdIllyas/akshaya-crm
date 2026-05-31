@@ -536,6 +536,15 @@ const CampaignTokenManagementStaff = () => {
               </select>
             </div>
             <div>
+              <label className="text-xs text-gray-500">Staff</label>
+              <select value={tableStaffId} onChange={e => setTableStaffId(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="all">All Staff</option>
+                {staffList.map(staff => (
+                  <option key={staff.id} value={staff.id}>{staff.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-xs text-gray-500">Status</label>
               <select value={tableStatus} onChange={e => setTableStatus(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-white">
                 <option value="all">All</option>
