@@ -3117,13 +3117,15 @@ router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
         t.created_at, t.campaign_id, c.name AS campaign_name,
         se.id AS service_entry_id, se.status AS service_status,
         st.id AS tracking_id, st.progress, st.application_number,
-        s.name AS service_name, sc.name AS subcategory_name
+        s.name AS service_name, sc.name AS subcategory_name,
+        staff.name AS staff_name
       FROM tokens t
       LEFT JOIN campaigns c ON t.campaign_id = c.id
       LEFT JOIN service_entries se ON se.token_id = t.token_id
       LEFT JOIN service_tracking st ON st.service_entry_id = se.id
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
+      LEFT JOIN staff ON staff.id::integer = t.staff_id
       WHERE ${whereClause}
       ORDER BY t.created_at ASC
       LIMIT $${idx} OFFSET $${idx+1}
@@ -3142,7 +3144,8 @@ router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
       progress: row.progress,
       applicationNumber: row.application_number,
       serviceName: row.service_name,
-      subcategoryName: row.subcategory_name
+      subcategoryName: row.subcategory_name,
+      staffName: row.staff_name || 'Unassigned'
     }));
 
     res.json({ tokens, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });

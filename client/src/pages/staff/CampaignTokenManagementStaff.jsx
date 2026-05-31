@@ -17,7 +17,7 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const getToken = () => localStorage.getItem('token');
 
-// Modern glassmorphic tooltip for bar charts
+// Custom tooltip
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
@@ -65,9 +65,7 @@ const CampaignTokenManagementStaff = () => {
     completed: '#10B981',
     pending: '#F59E0B',
     inProgress: '#8B5CF6',
-    processed: '#3B82F6',
-    gradientStart: '#6366F1',
-    gradientEnd: '#8B5CF6'
+    processed: '#3B82F6'
   };
 
   useEffect(() => {
@@ -84,7 +82,7 @@ const CampaignTokenManagementStaff = () => {
     fetchTableTokens();
   }, [pagination.page]);
 
-  // Client-side search filter
+  // Client-side search filter (includes staff name)
   useEffect(() => {
     if (!tableTokens.length) {
       setFilteredTokens([]);
@@ -95,7 +93,8 @@ const CampaignTokenManagementStaff = () => {
       token.tokenCode.toLowerCase().includes(lowerSearch) ||
       token.customerName.toLowerCase().includes(lowerSearch) ||
       token.phone.includes(lowerSearch) ||
-      (token.campaignName && token.campaignName.toLowerCase().includes(lowerSearch))
+      (token.campaignName && token.campaignName.toLowerCase().includes(lowerSearch)) ||
+      (token.staffName && token.staffName.toLowerCase().includes(lowerSearch))
     );
     setFilteredTokens(filtered);
   }, [globalSearch, tableTokens]);
@@ -122,7 +121,7 @@ const CampaignTokenManagementStaff = () => {
       });
       setStats(statsResponse.data);
     } catch (err) {
-      console.error('Error fetching campaigns/stats:', err);
+      console.error(err);
       toast.error('Failed to load campaign data');
     } finally {
       setLoading(false);
@@ -153,7 +152,7 @@ const CampaignTokenManagementStaff = () => {
         pages: response.data.pages
       }));
     } catch (err) {
-      console.error('Error fetching table tokens:', err);
+      console.error(err);
       toast.error('Failed to load tokens');
     } finally {
       setTableLoading(false);
@@ -327,7 +326,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Stats Cards - Row 1 and Row 2 unchanged */}
+        {/* Stats Cards - Row 1 */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-5">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition">
             <div className="flex items-center justify-between">
@@ -358,6 +357,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
+        {/* Row 2: Additional metrics cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between">
@@ -385,7 +385,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Campaign Analytics Section (tabs) - unchanged */}
+        {/* Campaign Analytics Section */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
@@ -412,7 +412,6 @@ const CampaignTokenManagementStaff = () => {
             <button onClick={() => setActiveChartTab('campaigns')} className={`px-5 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${activeChartTab === 'campaigns' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}><FiBarChart2 className="h-4 w-4" /> Campaign Performance</button>
           </div>
           <div className="h-80">
-            {/* Chart rendering as before - omitted for brevity, but keep full chart code */}
             {activeChartTab === 'staff' && (
               staffChartData.length === 0 ? <div className="flex items-center justify-center h-full text-gray-400">No staff data</div> : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -474,7 +473,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Staff Leaderboard & Completion Rate Gauge - unchanged */}
+        {/* Staff Leaderboard & Completion Rate Gauge */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
             <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-amber-100 rounded-xl"><FiStar className="h-5 w-5 text-amber-600" /></div><h2 className="text-xl font-semibold text-gray-900">Staff Leaderboard (Top 5)</h2></div>
@@ -508,7 +507,7 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
-        {/* Filterable, Paginated Token Table with Global Search and Expand/Collapse */}
+        {/* Token Table with Staff Name Column */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
@@ -545,27 +544,15 @@ const CampaignTokenManagementStaff = () => {
               <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by token ID, customer name, phone, or campaign..."
+                placeholder="Search by token ID, customer name, phone, campaign, or staff..."
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={expandAllRows}
-                className="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 flex items-center gap-1"
-                title="Expand all rows"
-              >
-                <FiChevronsDown className="h-4 w-4" /> Expand All
-              </button>
-              <button
-                onClick={collapseAllRows}
-                className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center gap-1"
-                title="Collapse all rows"
-              >
-                <FiChevronsUp className="h-4 w-4" /> Collapse All
-              </button>
+              <button onClick={expandAllRows} className="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 flex items-center gap-1"><FiChevronsDown className="h-4 w-4" /> Expand All</button>
+              <button onClick={collapseAllRows} className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center gap-1"><FiChevronsUp className="h-4 w-4" /> Collapse All</button>
             </div>
           </div>
 
@@ -576,6 +563,7 @@ const CampaignTokenManagementStaff = () => {
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Token ID</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Customer</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Campaign</th>
+                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Staff</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Status</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Created</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500">Action</th>
@@ -584,9 +572,9 @@ const CampaignTokenManagementStaff = () => {
               </thead>
               <tbody>
                 {tableLoading ? (
-                  <tr><td colSpan="7" className="text-center py-8 text-gray-400">Loading tokens...</td></tr>
+                  <tr><td colSpan="8" className="text-center py-8 text-gray-400">Loading tokens...</td></tr>
                 ) : filteredTokens.length === 0 ? (
-                  <tr><td colSpan="7" className="text-center py-8 text-gray-400">No tokens found</td></tr>
+                  <tr><td colSpan="8" className="text-center py-8 text-gray-400">No tokens found</td></tr>
                 ) : (
                   filteredTokens.map(token => (
                     <React.Fragment key={token.tokenCode}>
@@ -597,6 +585,12 @@ const CampaignTokenManagementStaff = () => {
                           <div className="text-xs text-gray-500">{token.phone}</div>
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">{token.campaignName}</td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            <FiUser className="h-3 w-3 text-gray-400" />
+                            <span className="text-sm">{token.staffName || 'Unassigned'}</span>
+                          </div>
+                        </td>
                         <td className="py-3 px-4 whitespace-nowrap">{getStatusBadge(token.status)}</td>
                         <td className="py-3 px-4 whitespace-nowrap">{new Date(token.created_at).toLocaleDateString()}</td>
                         <td className="py-3 px-4 whitespace-nowrap">
@@ -620,34 +614,19 @@ const CampaignTokenManagementStaff = () => {
                           )}
                         </td>
                         <td className="py-3 px-4">
-                          <button
-                            onClick={() => toggleRowExpand(token.tokenCode)}
-                            className="text-gray-400 hover:text-gray-600"
-                          >
+                          <button onClick={() => toggleRowExpand(token.tokenCode)} className="text-gray-400 hover:text-gray-600">
                             {expandedRows.has(token.tokenCode) ? <FiChevronDown /> : <FiChevronRight />}
                           </button>
                         </td>
                       </tr>
                       {expandedRows.has(token.tokenCode) && (
                         <tr className="bg-gray-50 border-t">
-                          <td colSpan="7" className="py-3 px-4 text-sm">
+                          <td colSpan="8" className="py-3 px-4 text-sm">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                              <div>
-                                <p className="text-xs font-medium text-gray-500">Service Name</p>
-                                <p className="text-gray-800">{token.serviceName || '—'}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-medium text-gray-500">Subcategory</p>
-                                <p className="text-gray-800">{token.subcategoryName || '—'}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-medium text-gray-500">Application Number</p>
-                                <p className="text-gray-800 font-mono">{token.applicationNumber || '—'}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-medium text-gray-500">Progress</p>
-                                <p className="text-gray-800">{token.progress !== undefined ? `${token.progress}%` : '—'}</p>
-                              </div>
+                              <div><p className="text-xs font-medium text-gray-500">Service Name</p><p className="text-gray-800">{token.serviceName || '—'}</p></div>
+                              <div><p className="text-xs font-medium text-gray-500">Subcategory</p><p className="text-gray-800">{token.subcategoryName || '—'}</p></div>
+                              <div><p className="text-xs font-medium text-gray-500">Application Number</p><p className="text-gray-800 font-mono">{token.applicationNumber || '—'}</p></div>
+                              <div><p className="text-xs font-medium text-gray-500">Progress</p><p className="text-gray-800">{token.progress !== undefined ? `${token.progress}%` : '—'}</p></div>
                             </div>
                           </td>
                         </tr>
@@ -661,57 +640,26 @@ const CampaignTokenManagementStaff = () => {
 
           {pagination.pages > 1 && (
             <div className="flex justify-between items-center mt-4">
-              <button
-                disabled={pagination.page === 1}
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                className="px-3 py-1 border rounded text-sm disabled:opacity-50"
-              >
-                Previous
-              </button>
+              <button disabled={pagination.page === 1} onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))} className="px-3 py-1 border rounded text-sm disabled:opacity-50">Previous</button>
               <span className="text-sm text-gray-600">Page {pagination.page} of {pagination.pages}</span>
-              <button
-                disabled={pagination.page === pagination.pages}
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                className="px-3 py-1 border rounded text-sm disabled:opacity-50"
-              >
-                Next
-              </button>
+              <button disabled={pagination.page === pagination.pages} onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))} className="px-3 py-1 border rounded text-sm disabled:opacity-50">Next</button>
             </div>
           )}
         </div>
 
-        {/* Cancel Modal - unchanged */}
+        {/* Cancel Modal */}
         {showCancelModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
-              <p className="text-gray-600 mb-4">
-                Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenCode}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
-              </p>
+              <p className="text-gray-600 mb-4">Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenCode}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?</p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
-                <textarea
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="e.g., customer request, duplicate entry..."
-                />
+                <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows="3" className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., customer request, duplicate entry..." />
               </div>
               <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowCancelModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition"
-                >
-                  No, Keep Token
-                </button>
-                <button
-                  onClick={handleCancelConfirm}
-                  disabled={cancelling}
-                  className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50"
-                >
-                  {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
-                </button>
+                <button onClick={() => setShowCancelModal(false)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition">No, Keep Token</button>
+                <button onClick={handleCancelConfirm} disabled={cancelling} className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50">{cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}</button>
               </div>
             </div>
           </div>
