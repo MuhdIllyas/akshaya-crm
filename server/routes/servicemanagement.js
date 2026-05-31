@@ -1971,7 +1971,8 @@ router.get('/tokens', authenticateToken, async (req, res) => {
              t.subcategory_id, t.campaign_id, t.status, t.staff_id, t.created_by, t.type, 
              t.created_at, c.name AS centre_name, s.name AS service_name, 
              sc.name AS subcategory_name, cmp.name AS campaign_name, st.name AS staff_name,
-             st2.name AS created_by_name
+             st2.name AS created_by_name,
+             st_track.id AS tracking_id
       FROM tokens t
       JOIN centres c ON t.centre_id = c.id
       LEFT JOIN services s ON t.category_id = s.id
