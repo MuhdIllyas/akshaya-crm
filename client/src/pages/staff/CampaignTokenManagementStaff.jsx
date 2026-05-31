@@ -80,7 +80,7 @@ const CampaignTokenManagementStaff = () => {
 
   useEffect(() => {
     fetchTableTokens();
-  }, [pagination.page]);
+  }, [pagination.page, dateFrom, dateTo, tableCampaignId, tableStatus, debouncedSearch]);
 
   useEffect(() => {
       const handler = setTimeout(() => {
