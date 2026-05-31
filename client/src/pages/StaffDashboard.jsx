@@ -90,6 +90,12 @@ const StaffDashboard = () => {
 
   const hasJoinedCentre = useRef(false);
 
+  // Cancel modal state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelTokenData, setCancelTokenData] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
   // --- Welcome banner state ---
   const [currentTime, setCurrentTime] = useState(new Date());
   const staffName = localStorage.getItem('username') || 'Staff';
@@ -347,6 +353,31 @@ const StaffDashboard = () => {
       refreshTokens(); 
     }
   };
+  const openCancelModal = (token) => {
+    setCancelTokenData({ tokenId: token.tokenId, customerName: token.customerName || 'Customer' });
+    setCancelReason('');
+    setShowCancelModal(true);
+  };
+
+  const handleCancelConfirm = async () => {
+    if (!cancelTokenData) return;
+    setCancelling(true);
+    try {
+      await api.put(`/tokens/${cancelTokenData.tokenId}/cancel`, { 
+        reason: cancelReason.trim() || null 
+      });
+      toast.success(`Token ${cancelTokenData.tokenId} cancelled successfully`);
+      setShowCancelModal(false);
+      setCancelTokenData(null);
+      setCancelReason('');
+      refreshTokens(); // Refresh the list to remove the token
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to cancel token');
+    } finally {
+      setCancelling(false);
+    }
+  };
   const handleViewDetails = (tokenId) => navigate(`/dashboard/staff/token/${tokenId}/service`);
   const formatTime = (dateString) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatDateUI = (dateString) => {
@@ -364,7 +395,8 @@ const StaffDashboard = () => {
     const localStaff = String(staffId).trim();
     const isAssignedToMe = tokenStaff === localStaff;
     const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-    return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.type !== 'campaign';
+    // ADDED: && t.status !== 'cancelled'
+    return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.status !== 'cancelled';
   });
 
   const getCompletedTokens = () => tokens.filter(t => {
@@ -378,7 +410,8 @@ const StaffDashboard = () => {
     const localStaff = String(staffId).trim();
     const isAssignedToMe = tokenStaff === localStaff;
     const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-    return (isAssignedToMe || isUnassigned) && t.type === 'campaign';
+    // ADDED: && t.status !== 'cancelled'
+    return (isAssignedToMe || isUnassigned) && t.type === 'campaign' && t.status !== 'cancelled';
   });
 
   const activeTokens = getActiveTokens();
@@ -884,14 +917,25 @@ const StaffDashboard = () => {
                                   </div>
                                   <div>
                                     {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
-                                      <button 
-                                        onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
-                                        className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 flex items-center gap-2"
-                                      >
-                                        <FiPlayCircle className="h-4 w-4" />
-                                        {token.status === 'pending' ? 'Start' : 'Continue'}
-                                      </button>
-                                    )}
+                                        <div className="flex items-center gap-2">
+                                          <button 
+                                            onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
+                                            className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 flex items-center gap-2 transition-colors"
+                                          >
+                                            <FiPlayCircle className="h-4 w-4" />
+                                            {token.status === 'pending' ? 'Start' : 'Continue'}
+                                          </button>
+                                          
+                                          {/* NEW CANCEL BUTTON */}
+                                          <button 
+                                            onClick={() => openCancelModal(token)} 
+                                            className="px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center gap-2 text-sm font-medium transition-colors"
+                                          >
+                                            <FiXCircle className="h-4 w-4" />
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      )}
                                     {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
                                       <button onClick={() => handleViewDetails(token.tokenId)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 flex items-center gap-2">
                                         <FiBarChart2 className="h-4 w-4" /> Details
