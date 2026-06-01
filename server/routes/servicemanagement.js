@@ -783,9 +783,9 @@ router.get('/entries', authenticateToken, async (req, res) => {
 
     for (const entry of entriesResult.rows) {
 
-      // 🔥 ✅ ONLY LATEST PAYMENT (NO CHAINS, NO DUPLICATES)
+      // 🔥 ✅ ALL UNIQUE PAYMENTS (FIXED UUID CASTING)
       const paymentsResult = await client.query(`
-        SELECT DISTINCT ON (p.service_entry_id)
+        SELECT DISTINCT ON (COALESCE(p.correction_group_id::text, p.id::text))
           p.id,
           p.wallet_id,
           p.amount,
@@ -816,7 +816,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
             WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
           )
 
-        ORDER BY p.service_entry_id, p.created_at DESC
+        ORDER BY COALESCE(p.correction_group_id::text, p.id::text), p.created_at DESC
       `, [entry.id]);
 
       // 🔥 Department Charge (latest only)
@@ -889,7 +889,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
 
         status: entry.status,
 
-        // 🔥 ONLY ONE PAYMENT NOW
+        // 🔥 ALL PAYMENTS SENT TO FRONTEND NOW
         payments: latestPayments.map(p => ({
           id: p.id,
           transaction_id: p.transaction_id,
@@ -952,9 +952,26 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
 
     const entry = result.rows[0];
     
+    // 🔥 ✅ ALL UNIQUE PAYMENTS (FIXED UUID CASTING)
     const paymentsResult = await client.query(`
-      SELECT DISTINCT ON (p.correction_group_id)
-        p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
+      SELECT DISTINCT ON (COALESCE(p.correction_group_id::text, p.id::text))
+        p.id, 
+        p.wallet_id, 
+        p.amount, 
+        p.status, 
+        w.name AS wallet_name, 
+        w.wallet_type, 
+        p.correction_group_id,
+        (
+          SELECT wt.id
+          FROM wallet_transactions wt
+          WHERE wt.reference_payment_id = p.id
+            AND wt.category = 'Service Payment'
+            AND wt.type = 'credit'
+            AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+          ORDER BY wt.created_at DESC
+          LIMIT 1
+        ) AS transaction_id
       FROM payments p
       JOIN wallets w ON p.wallet_id = w.id
       WHERE p.service_entry_id = $1 
@@ -963,7 +980,7 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
           SELECT 1 FROM wallet_transactions wt 
           WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
         )
-      ORDER BY p.correction_group_id, p.created_at DESC
+      ORDER BY COALESCE(p.correction_group_id::text, p.id::text), p.created_at DESC
     `, [entry.id]);
 
     const formattedEntry = {
@@ -985,12 +1002,16 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
       balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
       expiryDate: entry.expiry_date ? entry.expiry_date.toISOString().split('T')[0] : null,
       status: entry.status,
+      
+      // 🔥 UPDATED PAYMENTS MAPPING
       payments: paymentsResult.rows.map(p => ({
         id: p.id,
+        transaction_id: p.transaction_id,
         wallet: p.wallet_id,
         method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
         amount: parseFloat(p.amount),
         status: p.status,
+        correction_group_id: p.correction_group_id,
       })),
     };
 
@@ -1482,6 +1503,130 @@ router.put('/entry/:id/dismiss-expiry', authenticateToken, async (req, res) => {
   }
 });
 
+// DELETE /api/servicemanagement/entry/:id/force
+router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Fetch entry to check permissions
+    const entryRes = await client.query(`
+      SELECT se.id, se.token_id, se.customer_name, st.centre_id
+      FROM service_entries se
+      LEFT JOIN staff st ON se.staff_id = st.id
+      WHERE se.id = $1
+    `, [id]);
+
+    if (entryRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Service entry not found' });
+    }
+
+    const entry = entryRes.rows[0];
+
+    // 2. Security Check: Only Admins/Superadmins can force delete
+    if (req.user.role === 'staff') {
+       await client.query('ROLLBACK');
+       return res.status(403).json({ 
+         error: 'Staff are not authorized to hard-delete entries. Please contact an admin.' 
+       });
+    }
+
+    if (req.user.role === 'admin' && entry.centre_id !== req.user.centre_id) {
+       await client.query('ROLLBACK');
+       return res.status(403).json({ error: 'Unauthorized to delete this entry' });
+    }
+
+    // ====================================================================
+    // 🔥 STEP 3: FINANCIAL REVERSAL (FIXING THE WALLET BALANCES)
+    // ====================================================================
+    
+    // Find all wallet transactions linked to this service OR its payments
+    const txRes = await client.query(`
+      SELECT id, wallet_id, amount, type 
+      FROM wallet_transactions 
+      WHERE reference_id = $1 
+         OR reference_payment_id IN (SELECT id FROM payments WHERE service_entry_id = $1)
+    `, [id]);
+
+    // Reverse the math on the wallets
+    for (const tx of txRes.rows) {
+      if (tx.type === 'credit') {
+        // If money was added to the wallet, take it back out
+        await client.query(`UPDATE wallets SET balance = balance - $1 WHERE id = $2`, [tx.amount, tx.wallet_id]);
+      } else if (tx.type === 'debit') {
+        // If money was taken from the wallet (like a department charge), give it back
+        await client.query(`UPDATE wallets SET balance = balance + $1 WHERE id = $2`, [tx.amount, tx.wallet_id]);
+      }
+    }
+
+    // ====================================================================
+    // 🔥 STEP 4: CASCADING DELETION (WIPING THE DATA)
+    // ====================================================================
+    
+    // 4a. Delete Wallet Transactions
+    await client.query(`
+      DELETE FROM wallet_transactions 
+      WHERE reference_id = $1 OR reference_payment_id IN (SELECT id FROM payments WHERE service_entry_id = $1)
+    `, [id]);
+
+    // 4b. Delete Payments
+    await client.query('DELETE FROM payments WHERE service_entry_id = $1', [id]);
+
+    // 4c. Delete Tracking History
+    await client.query('DELETE FROM service_tracking WHERE service_entry_id = $1', [id]);
+
+    // 4d. Delete the Service Entry
+    await client.query('DELETE FROM service_entries WHERE id = $1', [id]);
+
+    // ====================================================================
+    // 🔥 STEP 5: REVERT THE TOKEN
+    // ====================================================================
+    if (entry.token_id) {
+      await client.query(
+        `UPDATE tokens SET status = 'pending', staff_id = NULL, updated_at = NOW() WHERE token_id = $1`,
+        [entry.token_id]
+      );
+      
+      // Tell the frontend to update instantly
+      const io = req.app.get('io');
+      if (io) {
+         io.emit('tokenUpdate', { tokenId: entry.token_id, status: 'pending' });
+         if (entry.centre_id) {
+           io.to(`centre_${entry.centre_id}`).emit(`tokenUpdate:${entry.centre_id}`, { tokenId: entry.token_id, status: 'pending' });
+         }
+      }
+    }
+
+    // 6. Audit Logging
+    await client.query(`
+      INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+      VALUES ($1, $2, $3, $4, NOW())
+    `, [
+      'Deep Delete Executed',
+      req.user.username,
+      `Deep deleted service entry #${id} (${entry.customer_name || 'Unknown'}). Reverted ${txRes.rows.length} financial transactions.`,
+      entry.centre_id
+    ]);
+
+    await client.query('COMMIT');
+    
+    res.json({ 
+      success: true, 
+      message: 'Service entry and all related financial data completely deleted. Wallet balances have been restored.' 
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('❌ Error executing deep delete:', err);
+    res.status(500).json({ error: 'Failed to deep delete service entry: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ========== UNIFIED TRANSACTION CORRECTION ENGINE ==========
 
 // 🔥 UPDATED: GET /api/servicemanagement/transactions/:id/correction-status
@@ -1831,6 +1976,56 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
          WHERE id = $1`,
         [original.reference_id]
       );
+
+      // ====================================================================
+      // 🔥 NEW: RE-EVALUATE STATUS AFTER CORRECTION (Re-open or Complete)
+      // ====================================================================
+      const seRes = await client.query(`
+        SELECT se.token_id, se.total_charges, st.centre_id 
+        FROM service_entries se
+        LEFT JOIN staff st ON se.staff_id = st.id
+        WHERE se.id = $1
+      `, [original.reference_id]);
+
+      if (seRes.rows.length > 0) {
+        const se = seRes.rows[0];
+        
+        // Calculate new total paid
+        const paymentsRes = await client.query(`
+          SELECT SUM(amount) as total_paid
+          FROM payments
+          WHERE service_entry_id = $1
+            AND status = 'received'
+            AND COALESCE(is_reversal, FALSE) = FALSE
+            AND NOT EXISTS (
+              SELECT 1 FROM wallet_transactions wt 
+              WHERE wt.reference_payment_id = payments.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+            )
+        `, [original.reference_id]);
+
+        const totalPaid = parseFloat(paymentsRes.rows[0].total_paid || 0);
+        const totalCharges = parseFloat(se.total_charges || 0);
+
+        // If it's fully paid, it's completed. Otherwise, revert to pending.
+        const newStatus = (totalPaid >= totalCharges && totalCharges > 0) ? 'completed' : 'pending';
+
+        // Apply new status
+        await client.query(`UPDATE service_entries SET status = $1, updated_at = NOW() WHERE id = $2`, [newStatus, original.reference_id]);
+
+        if (se.token_id) {
+          await client.query(`UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2`, [newStatus, se.token_id]);
+          
+          // Emit socket events to update the dashboard instantly
+          const io = req.app.get('io');
+          if (io) {
+            io.emit('tokenUpdate', { tokenId: se.token_id, status: newStatus });
+            if (se.centre_id) {
+              io.to(`centre_${se.centre_id}`).emit(`tokenUpdate:${se.centre_id}`, { tokenId: se.token_id, status: newStatus });
+            }
+          }
+        }
+      }
+      // ====================================================================
     }
 
     // Audit logging
@@ -3440,14 +3635,15 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 
     const paymentId = paymentRes.rows[0].id;
 
+    // 🔥 FIXED: Fetch token_id, total_charges, and centre_id to evaluate completion
     const serviceEntryResult = await client.query(`
-      SELECT team_id, staff_id
-      FROM service_entries
-      WHERE id = $1
+      SELECT se.team_id, se.staff_id, se.token_id, se.total_charges, st.centre_id
+      FROM service_entries se
+      LEFT JOIN staff st ON se.staff_id = st.id
+      WHERE se.id = $1
     `, [serviceEntryId]);
 
     const serviceEntry = serviceEntryResult.rows[0];
-
     const resolvedTeamId = serviceEntry.team_id;
 
     await client.query(
@@ -3489,6 +3685,45 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
         resolvedTeamId
       ]
     );
+
+    // ====================================================================
+    // 🔥 NEW: CHECK IF FULLY PAID AND CLOSE THE LOOP
+    // ====================================================================
+    
+    // 1. Calculate total received payments for this entry
+    const paymentsRes = await client.query(`
+      SELECT SUM(amount) as total_paid
+      FROM payments
+      WHERE service_entry_id = $1
+        AND status = 'received'
+        AND COALESCE(is_reversal, FALSE) = FALSE
+        AND NOT EXISTS (
+          SELECT 1 FROM wallet_transactions wt 
+          WHERE wt.reference_payment_id = payments.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+        )
+    `, [serviceEntryId]);
+    
+    const totalPaid = parseFloat(paymentsRes.rows[0].total_paid || 0);
+    const totalCharges = parseFloat(serviceEntry.total_charges || 0);
+
+    // 2. If fully paid, mark everything as completed
+    if (totalPaid >= totalCharges && totalCharges > 0) {
+      
+      // Update Service Entry
+      await client.query(`UPDATE service_entries SET status = 'completed', updated_at = NOW() WHERE id = $1`, [serviceEntryId]);
+
+      // Update Token & Emit WebSocket events
+      if (serviceEntry.token_id) {
+        await client.query(`UPDATE tokens SET status = 'completed', updated_at = NOW() WHERE token_id = $1`, [serviceEntry.token_id]);
+        
+        // Notify the frontend instantly
+        io.emit('tokenUpdate', { tokenId: serviceEntry.token_id, status: 'completed' });
+        if (serviceEntry.centre_id) {
+          io.to(`centre_${serviceEntry.centre_id}`).emit(`tokenUpdate:${serviceEntry.centre_id}`, { tokenId: serviceEntry.token_id, status: 'completed' });
+        }
+      }
+    }
+    // ====================================================================
 
     await client.query("COMMIT");
 
@@ -3942,6 +4177,72 @@ router.put('/customer-services/:id/take', authenticateToken, async (req, res) =>
     await client.query('ROLLBACK');
     console.error('Error taking customer service:', err);
     res.status(500).json({ error: 'Failed to take work' });
+  } finally {
+    client.release();
+  }
+});
+
+// ====================================================================
+// 🔥 TEMPORARY ROUTE: FIX HISTORICAL STUCK TOKENS
+// ====================================================================
+router.get('/fix-historical-tokens', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    // 1. Find all entries that are fully paid but stuck in pending/in-progress
+    const result = await client.query(`
+      WITH FullyPaid AS (
+        SELECT se.id as entry_id, se.token_id
+        FROM service_entries se
+        LEFT JOIN payments p ON p.service_entry_id = se.id
+          AND p.status = 'received'
+          AND COALESCE(p.is_reversal, FALSE) = FALSE
+          AND NOT EXISTS (
+            SELECT 1 FROM wallet_transactions wt 
+            WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+          )
+        WHERE se.status != 'completed' AND se.total_charges > 0
+        GROUP BY se.id, se.token_id, se.total_charges
+        HAVING COALESCE(SUM(p.amount), 0) >= se.total_charges
+      )
+      SELECT * FROM FullyPaid;
+    `);
+
+    const stuckRecords = result.rows;
+
+    if (stuckRecords.length === 0) {
+      await client.query('ROLLBACK');
+      return res.json({ message: "No stuck tokens found. Everything is already clean!" });
+    }
+
+    const entryIds = stuckRecords.map(r => r.entry_id);
+    const tokenIds = stuckRecords.map(r => r.token_id).filter(id => id != null);
+
+    // 2. Force fix Service Entries
+    await client.query(`UPDATE service_entries SET status = 'completed', updated_at = NOW() WHERE id = ANY($1::int[])`, [entryIds]);
+
+    // 3. Force fix Service Tracking
+    await client.query(`UPDATE service_tracking SET status = 'completed', updated_at = NOW() WHERE service_entry_id = ANY($1::int[])`, [entryIds]);
+
+    // 4. Force fix Tokens
+    if (tokenIds.length > 0) {
+      await client.query(`UPDATE tokens SET status = 'completed', updated_at = NOW() WHERE token_id = ANY($1::text[])`, [tokenIds]);
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: `Successfully fixed ${stuckRecords.length} stuck tokens!`,
+      fixed_tokens: tokenIds
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to fix historical tokens:', err);
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
