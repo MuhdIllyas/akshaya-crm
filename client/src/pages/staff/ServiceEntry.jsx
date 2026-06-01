@@ -20,11 +20,14 @@ const getLatestTransactions = (transactions) => {
   
   const map = new Map();
   
-  transactions.forEach(tx => {
+  transactions.forEach((tx, index) => {
     // Skip reversal transactions entirely
     if (tx.is_reversal) return;
     
-    const groupId = tx.correction_group_id || `direct-${tx.id}`;
+    // Safely grab the ID (checking transaction_id, then id, then falling back to index)
+    const txId = tx.transaction_id || tx.id || `fallback-${index}`;
+    const groupId = tx.correction_group_id || `direct-${txId}`;
+    
     const existing = map.get(groupId);
     
     if (!existing || new Date(tx.created_at) > new Date(existing.created_at)) {
@@ -111,6 +114,13 @@ const ServiceEntry = () => {
     phone: '',
     items: [{ description: '', amount: '' }],
     notes: '',
+  });
+
+  // ========== DELETE MODAL STATE ==========
+  const [deleteDialog, setDeleteDialog] = useState({
+    isOpen: false,
+    entryId: null,
+    loading: false,
   });
   
   const userRole = localStorage.getItem('role') || 'staff';
@@ -413,6 +423,30 @@ const ServiceEntry = () => {
   const formatAmount = (amount) => {
     const num = parseFloat(amount);
     return isNaN(num) ? '0.00' : num.toFixed(2);
+  };
+
+  // ========== HANDLE DELETION ==========
+  const handleDeleteEntry = async () => {
+    const entryId = deleteDialog.entryId;
+    if (!entryId) return;
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
+    try {
+      const response = await api.delete(`/entry/${entryId}/force`);
+      toast.success(response.data.message || 'Service entry deleted successfully');
+
+      // Remove the deleted entry from the UI without refreshing
+      setServiceEntries(prev => prev.filter(entry => entry.id !== entryId));
+      
+      setDeleteDialog({ isOpen: false, entryId: null, loading: false });
+    } catch (err) {
+      console.error('Delete error:', err);
+      // This will show the error message we wrote in the backend (e.g., if money is collected)
+      toast.error(err.response?.data?.error || 'Failed to delete service entry', {
+        autoClose: 7000
+      });
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
+    }
   };
 
   // ========== INVOICE GENERATOR FUNCTIONS ==========
@@ -2131,6 +2165,16 @@ const generateInvoicePDF = () => {
                             Edited
                           </span>
                         )}
+                        {/* 🔥 NEW DELETE BUTTON FOR ADMINS ONLY */}
+                        {(userRole === 'admin' || userRole === 'superadmin') && (
+                          <button
+                            onClick={() => setDeleteDialog({ isOpen: true, entryId: entry.id, loading: false })}
+                            className="text-rose-600 hover:text-rose-900 p-1.5 rounded-lg hover:bg-rose-50"
+                            title="Delete this entry completely"
+                          >
+                            <FiTrash2 className="h-5 w-5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -2625,6 +2669,46 @@ const generateInvoicePDF = () => {
               >
                 <FiFileText className="h-4 w-4" />
                 Download Invoice PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== DELETE CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
+      {deleteDialog.isOpen && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[70]">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-rose-100 p-2 rounded-full">
+                <FiAlertCircle className="h-6 w-6 text-rose-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Delete Service Entry?</h3>
+            </div>
+            <p className="text-gray-600 text-sm mb-6">
+              Are you sure you want to permanently delete this service entry?
+              <br/><br/>
+              <strong>Note:</strong> You cannot delete an entry if payments have already been collected. You must reverse the payments first.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteDialog({ isOpen: false, entryId: null, loading: false })}
+                disabled={deleteDialog.loading}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteEntry}
+                disabled={deleteDialog.loading}
+                className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors font-medium text-sm shadow-sm flex items-center gap-2 disabled:opacity-50"
+              >
+                {deleteDialog.loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Deleting...
+                  </>
+                ) : 'Yes, Delete'}
               </button>
             </div>
           </div>
