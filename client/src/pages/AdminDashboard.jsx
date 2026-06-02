@@ -52,7 +52,7 @@ import {
 import { getServiceEntries, getTrackingEntries } from '/src/services/serviceService';
 
 // ---------------------------------------------------------------------
-// Safe Toast Implementation (Same as ServiceLogs.jsx)
+// Safe Toast Implementation
 // ---------------------------------------------------------------------
 const createSafeToast = () => {
   let toast = null;
@@ -254,97 +254,68 @@ const safeArray = (data) => {
 };
 
 // ---------------------------------------------------------------------
-// API Functions for Financial Data
+// API Functions for Financial Data (including new widgets)
 // ---------------------------------------------------------------------
-const fetchDailyIncome = async (date) => {
+const fetchDailySummary = async (date) => {
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/accounting/income?date=${date}`,
+      `${import.meta.env.VITE_API_URL}/api/accounting/daily-summary?date=${date}`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
-    
-    if (!res.ok) return { rows: [] };
+    if (!res.ok) return null;
     const data = await res.json();
     return data;
   } catch (error) {
-    console.error('Error fetching daily income:', error);
-    return { rows: [] };
+    console.error('Error fetching daily summary:', error);
+    return null;
   }
 };
 
-const fetchDailyExpenses = async (date) => {
+const fetchYearlyWalletFlow = async () => {
   const token = localStorage.getItem('token');
   try {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/expense?date=${date}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    );
-    
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.map(item => ({
-      ...item,
-      date: item.expense_date || item.date,
-      amount: Number(item.amount || 0),
-      status: item.status === 'auto_approved' ? 'approved' : item.status
-    }));
-  } catch (error) {
-    console.error('Error fetching daily expenses:', error);
-    return [];
-  }
-};
-
-const fetchDailyWalletSummary = async (date) => {
-  const token = localStorage.getItem('token');
-  try {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/summary?from=${date}&to=${date}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    );
-    
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data;
-  } catch (error) {
-    console.error('Error fetching wallet summary:', error);
-    return [];
-  }
-};
-
-const fetchMonthlyWalletFlow = async (month) => {
-  const token = localStorage.getItem('token');
-  try {
-    const [year, monthNum] = month.split('-');
-    const startDate = `${year}-${monthNum}-01`;
-    const endDate = new Date(year, parseInt(monthNum), 0).toISOString().split('T')[0];
+    const year = new Date().getFullYear();
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
     
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/daily-flow?from=${startDate}&to=${endDate}`,
       {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       }
     );
     
     if (!res.ok) return [];
-    const data = await res.json();
-    return data;
+    return await res.json();
   } catch (error) {
-    console.error('Error fetching monthly wallet flow:', error);
+    console.error('Error fetching yearly wallet flow:', error);
+    return [];
+  }
+};
+
+const fetchLiveWalletBalances = async () => {
+  const token = localStorage.getItem('token');
+  try {
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL}/api/accounting/wallet-balances`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    if (!res.ok) {
+      const fallbackRes = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/wallet/my-centre-wallets`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!fallbackRes.ok) return [];
+      return await fallbackRes.json();
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('Error fetching live wallet balances:', error);
     return [];
   }
 };
@@ -354,13 +325,8 @@ const fetchPendingPayments = async () => {
   try {
     const res = await fetch(
       `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
-    
     if (!res.ok) return [];
     const data = await res.json();
     return safeArray(data);
@@ -368,6 +334,44 @@ const fetchPendingPayments = async () => {
     console.error('Error fetching pending payments:', error);
     return [];
   }
+};
+
+// --- NEW WIDGET API FETCHERS (EXACT ROUTES) ---
+const fetchReviewDistribution = async (from, to) => {
+  const token = localStorage.getItem('token');
+  try {
+    // Matches: app.use("/api/staffreport", staffreportsRoute);
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staffreport/rating-distribution?from=${from}&to=${to}`, { headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? await res.json() : [];
+  } catch (e) { return []; }
+};
+
+const fetchStaffPerformanceSummary = async (from, to) => {
+  const token = localStorage.getItem('token');
+  try {
+    // Matches: app.use("/api/staffreport", staffreportsRoute);
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staffreport/staff-performance?from=${from}&to=${to}`, { headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? await res.json() : [];
+  } catch (e) { return []; }
+};
+
+const fetchRecentTransactions = async () => {
+  const token = localStorage.getItem('token');
+  try {
+    // Matches: app.use("/api/transaction", transactionRoute);
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions?page=1&limit=10`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.transactions || [];
+  } catch (e) { return []; }
+};
+
+const fetchYesterdayClosing = async (date) => {
+  const token = localStorage.getItem('token');
+  try {
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/nightly-close?date=${date}`, { headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? await res.json() : null;
+  } catch (e) { return null; }
 };
 
 // ---------------------------------------------------------------------
@@ -641,6 +645,99 @@ const DailyRevenueChart = ({ dailyData = [], labels = [] }) => {
 };
 
 // ---------------------------------------------------------------------
+// NEW WIDGET COMPONENTS
+// ---------------------------------------------------------------------
+const StaffLeaderboard = ({ staffData = [] }) => {
+  const topStaff = [...staffData]
+    .sort((a, b) => (Number(b.total_revenue) || 0) - (Number(a.total_revenue) || 0))
+    .slice(0, 5);
+
+  if (topStaff.length === 0) return <div className="p-4 text-sm text-gray-500 text-center">No staff data available yet.</div>;
+
+  return (
+    <div className="space-y-4">
+      {topStaff.map((staff, i) => (
+        <div key={i} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-100 transition-all">
+          <div className="flex items-center space-x-3">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-gray-200 text-gray-700' : i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-indigo-50 text-indigo-700'}`}>
+              #{i + 1}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{staff.staff_name || staff.name}</p>
+              <p className="text-xs text-gray-500">{staff.service_count || 0} services completed</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-bold text-emerald-600">₹{Number(staff.total_revenue || 0).toLocaleString('en-IN')}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const LiveTransactionFeed = ({ transactions = [] }) => {
+  if (transactions.length === 0) return <div className="p-4 text-sm text-gray-500 text-center">No recent transactions.</div>;
+
+  return (
+    <div className="space-y-3 max-h-72 overflow-y-auto pr-2">
+      {transactions.map((txn, i) => {
+        const isCredit = txn.transactionType === 'credit';
+        return (
+          <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100' : 'bg-rose-100'}`}>
+                {isCredit ? <FiArrowDown className="h-4 w-4 text-emerald-600" /> : <FiArrowUp className="h-4 w-4 text-rose-600" />}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-900 truncate max-w-[150px]">{txn.category || 'Transaction'}</p>
+                <p className="text-[10px] text-gray-500">{txn.localTime || new Date().toLocaleTimeString()} • {txn.fromWalletName || txn.toWalletName || 'Wallet'}</p>
+              </div>
+            </div>
+            <span className={`text-sm font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {isCredit ? '+' : '-'}₹{Number(txn.amount).toLocaleString('en-IN')}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const NightlyCloseAlert = ({ closingData }) => {
+  if (!closingData || !closingData.data) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start space-x-3">
+        <FiAlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+        <div>
+          <h4 className="text-sm font-semibold text-amber-900">Yesterday's Register Unclosed</h4>
+          <p className="text-xs text-amber-700 mt-1">The accounting day for yesterday was not formally closed. Please verify cash balances.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const variance = Number(closingData.data.cash_variance || 0);
+  const isPerfect = variance === 0;
+
+  return (
+    <div className={`p-4 rounded-xl border flex items-start space-x-3 ${isPerfect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+      {isPerfect ? <FiCheckCircle className="h-5 w-5 text-emerald-600 mt-0.5" /> : <FiAlertCircle className="h-5 w-5 text-rose-600 mt-0.5" />}
+      <div>
+        <h4 className={`text-sm font-semibold ${isPerfect ? 'text-emerald-900' : 'text-rose-900'}`}>
+          {isPerfect ? "Register Closed Perfectly" : "Cash Variance Detected"}
+        </h4>
+        <p className={`text-xs mt-1 ${isPerfect ? 'text-emerald-700' : 'text-rose-700'}`}>
+          {isPerfect 
+            ? "Yesterday's physical cash matched the digital ledger exactly." 
+            : `Yesterday's closing reported a variance of ₹${variance.toLocaleString('en-IN')}. Check the accounting logs.`}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
 // MAIN DASHBOARD COMPONENT
 // ---------------------------------------------------------------------
 const AdminDashboard = () => {
@@ -653,6 +750,7 @@ const AdminDashboard = () => {
     attendanceRate: 0,
     salaryPending: 0,
     servicesCompleted: 0,
+    averageOrderValue: 0,  // new
     
     // Financial stats
     todayRevenue: 0,
@@ -680,6 +778,12 @@ const AdminDashboard = () => {
   const [pendingPaymentsList, setPendingPaymentsList] = useState([]);
   const [walletSummary, setWalletSummary] = useState([]);
   
+  // New widget states
+  const [topStaffData, setTopStaffData] = useState([]);
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [yesterdayClosing, setYesterdayClosing] = useState(null);
+  const [reviewStats, setReviewStats] = useState({ rating: 0, count: 0 });
+  
   const [currentMonth] = useState(getCurrentMonth());
   const isMountedRef = useRef(true);
 
@@ -692,7 +796,11 @@ const AdminDashboard = () => {
       try {
         const today = getCurrentDate();
         const currentMonthStr = getCurrentMonth();
-        const last12Months = getLast12Months();
+        const firstDayOfMonth = `${currentMonthStr}-01`;
+        
+        const yDate = new Date();
+        yDate.setDate(yDate.getDate() - 1);
+        const yesterday = normalizeDate(yDate);
         
         // Load all data in parallel
         const [
@@ -701,159 +809,147 @@ const AdminDashboard = () => {
           pendingLeavesRes,
           salaryDataRes,
           serviceEntriesRes,
-          dailyIncomeRes,
-          dailyExpensesRes,
-          walletSummaryRes,
+          dailySummaryRes,
+          liveWalletsRes,
           pendingPaymentsRes,
-          monthlyWalletFlowRes
+          yearlyWalletFlowRes,
+          // New fetches
+          reviewRes,
+          staffPerfRes,
+          transactionsRes,
+          closingRes
         ] = await Promise.all([
           getStaffList().catch(() => []),
           getAllAttendance(currentMonthStr).catch(() => []),
           getPendingLeaves().catch(() => []),
           getSalaryData(currentMonthStr).catch(() => []),
           getServiceEntries().catch(() => ({ data: [] })),
-          fetchDailyIncome(today).catch(() => ({ rows: [] })),
-          fetchDailyExpenses(today).catch(() => []),
-          fetchDailyWalletSummary(today).catch(() => []),
+          fetchDailySummary(today).catch(() => null),
+          fetchLiveWalletBalances().catch(() => []),
           fetchPendingPayments().catch(() => []),
-          fetchMonthlyWalletFlow(currentMonthStr).catch(() => [])
+          fetchYearlyWalletFlow().catch(() => []),
+          fetchReviewDistribution(firstDayOfMonth, today).catch(() => []),
+          fetchStaffPerformanceSummary(firstDayOfMonth, today).catch(() => []),
+          fetchRecentTransactions().catch(() => []),
+          fetchYesterdayClosing(yesterday).catch(() => null)
         ]);
 
         if (!isMountedRef.current) return;
 
-        // Use safeArray
         const staffArray = safeArray(staffListRes);
         const attendanceArray = safeArray(attendanceDataRes);
         const leavesArray = safeArray(pendingLeavesRes);
         const salaryArray = safeArray(salaryDataRes);
         const serviceArray = safeArray(serviceEntriesRes);
-        const incomeRows = safeArray(dailyIncomeRes);
-        const expensesArray = dailyExpensesRes;
-        const walletArray = walletSummaryRes;
+        const walletArray = safeArray(liveWalletsRes);
         const pendingPaymentsArray = safeArray(pendingPaymentsRes);
+        const yearlyFlowArray = safeArray(yearlyWalletFlowRes);
 
-        // Set data for charts
         setStaffList(staffArray);
         setAttendanceData(attendanceArray);
         setSalaryData(salaryArray);
         setServices(serviceArray);
         setPendingPaymentsList(pendingPaymentsArray);
         setWalletSummary(walletArray);
+        
+        // Set new widget data
+        setTopStaffData(safeArray(staffPerfRes?.data || staffPerfRes));
+        setRecentTransactions(safeArray(transactionsRes));
+        setYesterdayClosing(closingRes);
+        
+        // Calculate average rating from review distribution
+        const reviewsArray = safeArray(reviewRes);
+        let totalStars = 0;
+        let totalReviews = 0;
+        reviewsArray.forEach(r => {
+          const count = Number(r.count) || 0;
+          totalStars += (Number(r.staff_rating) * count);
+          totalReviews += count;
+        });
+        setReviewStats({ 
+          rating: totalReviews > 0 ? (totalStars / totalReviews).toFixed(1) : 0, 
+          count: totalReviews 
+        });
 
-        // --- Calculate Financial Stats ---
-        
-        // Today's revenue
-        const todayRevenue = incomeRows.reduce((sum, row) => {
-          return sum + (Number(row.received_amount) || 0);
-        }, 0);
-        
-        // Today's service charges (profit)
-        const todayServiceCharges = incomeRows.reduce((sum, row) => {
-          const received = Number(row.received_amount) || 0;
-          const serviceCharge = Number(row.service_charges) || 0;
-          const departmentCharge = Number(row.department_charges) || 0;
-          const totalBilled = serviceCharge + departmentCharge;
-          
-          if (totalBilled > 0 && received > 0) {
-            const paymentRatio = received / totalBilled;
-            return sum + (serviceCharge * paymentRatio);
-          } else if (received > 0 && totalBilled === 0) {
-            return sum + received;
-          }
-          return sum;
-        }, 0);
-        
-        // Today's approved expenses
-        const todayApprovedExpenses = expensesArray
-          .filter(e => e.status === 'approved')
-          .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-        
-        // Today's profit
-        const todayProfit = todayServiceCharges - todayApprovedExpenses;
+        // --- Calculate Daily Financial Stats directly from Accounting API ---
+        const derived = dailySummaryRes?.derived || {};
+        const todayRevenue = (derived.cashInflow || 0) + (derived.digitalInflow || 0) + (derived.bankInflow || 0);
+        const todayExpenses = (derived.cashOutflow || 0) + (derived.digitalOutflow || 0) + (derived.bankOutflow || 0);
+        const todayProfit = todayRevenue - todayExpenses;
         
         // Pending payments total
         const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => {
           return sum + (Number(p.pending_amount) || Number(p.due) || 0);
         }, 0);
-        
         const pendingPaymentsCount = pendingPaymentsArray.filter(p => {
           const due = Number(p.pending_amount) || Number(p.due) || 0;
           return due > 0;
         }).length;
         
-        // Wallet balances
+        // Wallet balances - LIVE
         let totalWalletBalance = 0;
         let totalCashInHand = 0;
         let totalBankBalance = 0;
         let totalDigitalBalance = 0;
-        
         walletArray.forEach(w => {
-          const balance = Number(w.closing_balance) || 0;
+          const balance = Number(w.current_balance) || Number(w.balance) || 0;
           totalWalletBalance += balance;
-          
           const type = (w.wallet_type || '').toLowerCase();
           if (type === 'cash') totalCashInHand += balance;
           else if (type === 'bank') totalBankBalance += balance;
           else if (type === 'digital') totalDigitalBalance += balance;
         });
         
-        // Monthly revenue from salary data
-        const monthlyRevenue = salaryArray.reduce((sum, s) => sum + (Number(s.net_salary) || 0), 0);
-        
         // --- Build Monthly Revenue Data for Chart ---
-        const monthlyRevData = [];
-        const monthlyRevLabels = [];
+        const monthlyRevMap = new Array(12).fill(0);
+        yearlyFlowArray.forEach(flow => {
+          const flowDate = new Date(flow.date);
+          const monthIndex = flowDate.getMonth();
+          monthlyRevMap[monthIndex] += (Number(flow.total_in) || 0);
+        });
+        const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        setMonthlyRevenueData(monthlyRevMap);
+        setMonthlyRevenueLabels(monthLabels);
+        const currentMonthIndex = new Date().getMonth();
+        const monthlyRevenue = monthlyRevMap[currentMonthIndex] || 0;
         
-        for (const month of last12Months) {
-          monthlyRevLabels.push(month.label);
-          monthlyRevData.push(Math.round(monthlyRevenue * (0.7 + Math.random() * 0.5)));
-        }
-        
-        setMonthlyRevenueData(monthlyRevData);
-        setMonthlyRevenueLabels(monthlyRevLabels);
-        
-        // --- Build Daily Revenue Data for Last 7 Days ---
-        const last7Days = [];
-        const last7DaysLabels = [];
-        
-        for (let i = 6; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          last7DaysLabels.push(date.toLocaleDateString('en-US', { weekday: 'short' }));
-          last7Days.push(Math.round(todayRevenue * (0.5 + Math.random() * 0.7)));
-        }
-        
-        setDailyRevenueData(last7Days);
+        // --- Build Daily Revenue Data for Last 7 Days Chart ---
+        let last7DaysData = [];
+        let last7DaysLabels = [];
+        const sortedFlows = [...yearlyFlowArray].sort((a,b) => new Date(a.date) - new Date(b.date));
+        const recentFlows = sortedFlows.slice(-7);
+        recentFlows.forEach(flow => {
+          const d = new Date(flow.date);
+          last7DaysLabels.push(d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }));
+          last7DaysData.push(Number(flow.total_in) || 0);
+        });
+        setDailyRevenueData(last7DaysData);
         setDailyRevenueLabels(last7DaysLabels);
         
         // Calculate today's attendance
-        const todayDate = normalizeDate(new Date());
-        const todayAttendance = attendanceArray.filter(a => 
-          normalizeDate(a.date) === todayDate
-        );
-        
-        const presentStaffIds = new Set(
-          todayAttendance.filter(a => a.status === 'present').map(a => a.staff_id)
-        );
-        
+        const todayDateStr = normalizeDate(new Date());
+        const todayAttendance = attendanceArray.filter(a => normalizeDate(a.date) === todayDateStr);
+        const presentStaffIds = new Set(todayAttendance.filter(a => a.status === 'present').map(a => a.staff_id));
         const pendingSalary = salaryArray.filter(s => s.status === 'pending');
         const completedServices = serviceArray.filter(s => s.status === 'completed');
         const pendingServices = serviceArray.filter(s => s.status === 'pending' || s.status === 'Pending');
-
+        
+        // Compute Average Order Value (AOV)
+        const averageOrderValue = completedServices.length > 0 ? Math.round(todayRevenue / completedServices.length) : 0;
+        
         // Update stats
         setStats({
           totalStaff: staffArray.length || 0,
           presentToday: presentStaffIds.size || 0,
           pendingLeaves: leavesArray.length || 0,
           pendingServices: pendingServices.length || 0,
-          monthlyRevenue: monthlyRevenue || 0,
-          attendanceRate: staffArray.length > 0 ? 
-            Math.round((presentStaffIds.size / staffArray.length) * 100) : 0,
+          monthlyRevenue: monthlyRevenue,
+          attendanceRate: staffArray.length > 0 ? Math.round((presentStaffIds.size / staffArray.length) * 100) : 0,
           salaryPending: pendingSalary.length || 0,
           servicesCompleted: completedServices.length || 0,
-          
+          averageOrderValue: averageOrderValue,
           todayRevenue: todayRevenue,
-          todayExpenses: todayApprovedExpenses,
+          todayExpenses: todayExpenses,
           todayProfit: todayProfit,
           pendingPayments: pendingPaymentsCount,
           pendingPaymentsTotal: pendingPaymentsTotal,
@@ -865,7 +961,6 @@ const AdminDashboard = () => {
 
         // Generate recent activity
         const activities = [];
-        
         if (todayRevenue > 0) {
           activities.push({
             icon: FiDollarSign,
@@ -876,7 +971,6 @@ const AdminDashboard = () => {
             bg: 'bg-emerald-50'
           });
         }
-        
         if (pendingPaymentsCount > 0) {
           activities.push({
             icon: FiAlertCircle,
@@ -887,7 +981,6 @@ const AdminDashboard = () => {
             bg: 'bg-amber-50'
           });
         }
-        
         if (leavesArray.length > 0) {
           activities.push({
             icon: FiCalendar,
@@ -898,7 +991,6 @@ const AdminDashboard = () => {
             bg: 'bg-blue-50'
           });
         }
-        
         if (pendingServices.length > 0) {
           activities.push({
             icon: FiShoppingBag,
@@ -909,21 +1001,16 @@ const AdminDashboard = () => {
             bg: 'bg-indigo-50'
           });
         }
-
         setRecentActivity(activities.slice(0, 5));
 
-        // ✅ SIMPLE TOAST - No requestAnimationFrame, no delays
-        // Only show on initial load if data was actually loaded
         if (staffArray.length > 0) {
-          toast.success(`Loaded ${staffArray.length} staff, ${serviceArray.length} services`);
+          toast.success(`Dashboard metrics synced.`);
         }
 
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
-        
         if (isMountedRef.current) {
           toast.error('Failed to load dashboard data');
-          
           setRecentActivity([
             {
               icon: FiAlertCircle,
@@ -949,79 +1036,43 @@ const AdminDashboard = () => {
     };
   }, []);
 
-  // Handle refresh
+  // Handle refresh (kept minimal, only refreshing financial summary & pending payments)
   const handleRefresh = async () => {
     toast.info('Refreshing data...');
     setLoading(true);
     
     try {
       const today = getCurrentDate();
-      
-      const [dailyIncomeRes, dailyExpensesRes, pendingPaymentsRes] = await Promise.all([
-        fetchDailyIncome(today),
-        fetchDailyExpenses(today),
+      const [dailySummaryRes, pendingPaymentsRes] = await Promise.all([
+        fetchDailySummary(today),
         fetchPendingPayments()
       ]);
-
       if (!isMountedRef.current) return;
-
-      const incomeRows = safeArray(dailyIncomeRes);
-      const expensesArray = dailyExpensesRes;
       const pendingPaymentsArray = safeArray(pendingPaymentsRes);
-      
-      const todayRevenue = incomeRows.reduce((sum, row) => sum + (Number(row.received_amount) || 0), 0);
-      const todayServiceCharges = incomeRows.reduce((sum, row) => {
-        const received = Number(row.received_amount) || 0;
-        const serviceCharge = Number(row.service_charges) || 0;
-        const departmentCharge = Number(row.department_charges) || 0;
-        const totalBilled = serviceCharge + departmentCharge;
-        
-        if (totalBilled > 0 && received > 0) {
-          const paymentRatio = received / totalBilled;
-          return sum + (serviceCharge * paymentRatio);
-        } else if (received > 0 && totalBilled === 0) {
-          return sum + received;
-        }
-        return sum;
-      }, 0);
-      
-      const todayApprovedExpenses = expensesArray
-        .filter(e => e.status === 'approved')
-        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-      
-      const todayProfit = todayServiceCharges - todayApprovedExpenses;
-      const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => {
-        return sum + (Number(p.pending_amount) || Number(p.due) || 0);
-      }, 0);
-      
+      const derived = dailySummaryRes?.derived || {};
+      const todayRevenue = (derived.cashInflow || 0) + (derived.digitalInflow || 0) + (derived.bankInflow || 0);
+      const todayExpenses = (derived.cashOutflow || 0) + (derived.digitalOutflow || 0) + (derived.bankOutflow || 0);
+      const todayProfit = todayRevenue - todayExpenses;
+      const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => sum + (Number(p.pending_amount) || Number(p.due) || 0), 0);
       const pendingPaymentsCount = pendingPaymentsArray.filter(p => {
         const due = Number(p.pending_amount) || Number(p.due) || 0;
         return due > 0;
       }).length;
-      
       setStats(prev => ({
         ...prev,
         todayRevenue: todayRevenue,
-        todayExpenses: todayApprovedExpenses,
+        todayExpenses: todayExpenses,
         todayProfit: todayProfit,
         pendingPayments: pendingPaymentsCount,
         pendingPaymentsTotal: pendingPaymentsTotal,
       }));
-      
       setPendingPaymentsList(pendingPaymentsArray);
-      
-      // ✅ SIMPLE TOAST - Works like ServiceLogs
       toast.success('Data refreshed successfully');
-      
     } catch (error) {
       console.error('Refresh failed:', error);
-      if (isMountedRef.current) {
-        toast.error('Failed to refresh data');
-      }
+      if (isMountedRef.current) toast.error('Failed to refresh data');
     } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
+      if (isMountedRef.current) setLoading(false);
     }
   };
 
@@ -1072,85 +1123,101 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* Stats Grid - Two Rows */}
-      <div className="space-y-6">
-        {/* Row 1: Staff & Operations */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="Total Staff"
-            value={stats.totalStaff}
-            subtitle={`${stats.attendanceRate}% present today`}
-            icon={FiUsers}
-            color="bg-blue-500"
-            trend={stats.attendanceRate > 80 ? 2.5 : -1.5}
-            onClick={navigateToAttendance}
-          />
-          <StatCard
-            title="Pending Leaves"
-            value={stats.pendingLeaves}
-            subtitle="Requiring approval"
-            icon={FiCalendar}
-            color="bg-amber-500"
-            trend={stats.pendingLeaves > 5 ? 8.7 : -2.3}
-            onClick={navigateToLeaves}
-          />
-          <StatCard
-            title="Active Services"
-            value={stats.pendingServices}
-            subtitle={`${stats.servicesCompleted} completed`}
-            icon={FiShoppingBag}
-            color="bg-indigo-500"
-            trend={stats.pendingServices > 10 ? 12.3 : -5.6}
-            onClick={navigateToServices}
-          />
-          <StatCard
-            title="Monthly Revenue"
-            value={`₹${(stats.monthlyRevenue / 1000).toFixed(0)}k`}
-            subtitle={`${stats.salaryPending} salaries pending`}
-            icon={FiDollarSign}
-            color="bg-emerald-500"
-            trend={stats.monthlyRevenue > 500000 ? 15.2 : 3.4}
-            onClick={navigateToSalary}
-          />
-        </div>
+      {/* Stats Grid - Row 1: Staff & Operations */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Staff"
+          value={stats.totalStaff}
+          subtitle={`${stats.attendanceRate}% present today`}
+          icon={FiUsers}
+          color="bg-blue-500"
+          trend={stats.attendanceRate > 80 ? 2.5 : -1.5}
+          onClick={navigateToAttendance}
+        />
+        <StatCard
+          title="Pending Leaves"
+          value={stats.pendingLeaves}
+          subtitle="Requiring approval"
+          icon={FiCalendar}
+          color="bg-amber-500"
+          trend={stats.pendingLeaves > 5 ? 8.7 : -2.3}
+          onClick={navigateToLeaves}
+        />
+        <StatCard
+          title="Active Services"
+          value={stats.pendingServices}
+          subtitle={`${stats.servicesCompleted} completed`}
+          icon={FiShoppingBag}
+          color="bg-indigo-500"
+          trend={stats.pendingServices > 10 ? 12.3 : -5.6}
+          onClick={navigateToServices}
+        />
+        <StatCard
+          title="Monthly Revenue"
+          value={`₹${(stats.monthlyRevenue / 1000).toFixed(0)}k`}
+          subtitle={`${stats.salaryPending} salaries pending`}
+          icon={FiDollarSign}
+          color="bg-emerald-500"
+          trend={stats.monthlyRevenue > 500000 ? 15.2 : 3.4}
+          onClick={navigateToSalary}
+        />
+      </div>
 
-        {/* Row 2: Financial Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="Today's Revenue"
-            value={`₹${(stats.todayRevenue || 0).toLocaleString('en-IN')}`}
-            subtitle={`₹${(stats.todayProfit || 0).toLocaleString('en-IN')} profit`}
-            icon={FiTrendingUp}
-            color="bg-emerald-600"
-            trend={stats.todayProfit > 0 ? 8.5 : -2.1}
-            onClick={navigateToReports}
-          />
-          <StatCard
-            title="Pending Payments"
-            value={`₹${(stats.pendingPaymentsTotal || 0).toLocaleString('en-IN')}`}
-            subtitle={`${stats.pendingPayments || 0} customers`}
-            icon={FiAlertCircle}
-            color="bg-amber-600"
-            trend={stats.pendingPayments > 10 ? 12.3 : -5.6}
-            onClick={navigateToPendingPayments}
-          />
-          <StatCard
-            title="Cash in Hand"
-            value={`₹${(stats.cashInHand || 0).toLocaleString('en-IN')}`}
-            subtitle="Physical cash"
-            icon={FiHome}
-            color="bg-blue-600"
-            onClick={navigateToReports}
-          />
-          <StatCard
-            title="Total Wallets"
-            value={`₹${(stats.totalWalletBalance || 0).toLocaleString('en-IN')}`}
-            subtitle="All accounts"
-            icon={FiSmartphone}
-            color="bg-purple-600"
-            onClick={navigateToReports}
-          />
-        </div>
+      {/* Row 2: Financial Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        <StatCard
+          title="Today's Revenue"
+          value={`₹${(stats.todayRevenue || 0).toLocaleString('en-IN')}`}
+          subtitle={`₹${(stats.todayProfit || 0).toLocaleString('en-IN')} profit`}
+          icon={FiTrendingUp}
+          color="bg-emerald-600"
+          trend={stats.todayProfit > 0 ? 8.5 : -2.1}
+          onClick={navigateToReports}
+        />
+        <StatCard
+          title="Pending Payments"
+          value={`₹${(stats.pendingPaymentsTotal || 0).toLocaleString('en-IN')}`}
+          subtitle={`${stats.pendingPayments || 0} customers`}
+          icon={FiAlertCircle}
+          color="bg-amber-600"
+          trend={stats.pendingPayments > 10 ? 12.3 : -5.6}
+          onClick={navigateToPendingPayments}
+        />
+        <StatCard
+          title="Cash in Hand"
+          value={`₹${(stats.cashInHand || 0).toLocaleString('en-IN')}`}
+          subtitle="Physical cash"
+          icon={FiHome}
+          color="bg-blue-600"
+          onClick={navigateToReports}
+        />
+        <StatCard
+          title="Total Wallets"
+          value={`₹${(stats.totalWalletBalance || 0).toLocaleString('en-IN')}`}
+          subtitle="All accounts"
+          icon={FiSmartphone}
+          color="bg-purple-600"
+          onClick={navigateToReports}
+        />
+      </div>
+
+      {/* Row 3: New Performance Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        <StatCard
+          title="Average Order Value"
+          value={`₹${(stats.averageOrderValue || 0).toLocaleString('en-IN')}`}
+          subtitle="Per completed service today"
+          icon={FiShoppingBag}
+          color="bg-teal-600"
+        />
+        <StatCard
+          title="Customer Satisfaction"
+          value={`${reviewStats.rating} / 5`}
+          subtitle={`Based on ${reviewStats.count} reviews this month`}
+          icon={FiStar}
+          color="bg-yellow-500"
+          onClick={() => window.location.href = '/admin/reports?tab=reviews'}
+        />
       </div>
 
       {/* Charts Row */}
@@ -1159,10 +1226,7 @@ const AdminDashboard = () => {
           title="Attendance Trends (Last 7 Days)" 
           icon={FiTrendingUp}
           headerAction={
-            <button 
-              onClick={navigateToAttendance}
-              className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-            >
+            <button onClick={navigateToAttendance} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
               View Details
             </button>
           }
@@ -1174,10 +1238,7 @@ const AdminDashboard = () => {
           title="Service Status" 
           icon={FiBarChart2}
           headerAction={
-            <button 
-              onClick={navigateToServices}
-              className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-            >
+            <button onClick={navigateToServices} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
               View All
             </button>
           }
@@ -1196,19 +1257,13 @@ const AdminDashboard = () => {
               <span className="text-xs text-gray-500">
                 Today: ₹{(stats.todayRevenue || 0).toLocaleString('en-IN')}
               </span>
-              <button 
-                onClick={navigateToReports}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-              >
+              <button onClick={navigateToReports} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
                 View Reports
               </button>
             </div>
           }
         >
-          <DailyRevenueChart 
-            dailyData={dailyRevenueData} 
-            labels={dailyRevenueLabels} 
-          />
+          <DailyRevenueChart dailyData={dailyRevenueData} labels={dailyRevenueLabels} />
         </DashboardCard>
       </div>
 
@@ -1224,20 +1279,62 @@ const AdminDashboard = () => {
                 <option>This Year</option>
                 <option>Last Year</option>
               </select>
-              <button 
-                onClick={navigateToReports}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-              >
+              <button onClick={navigateToReports} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
                 Export
               </button>
             </div>
           }
         >
-          <RevenueChart 
-            monthlyRevenueData={monthlyRevenueData} 
-            labels={monthlyRevenueLabels} 
-          />
+          <RevenueChart monthlyRevenueData={monthlyRevenueData} labels={monthlyRevenueLabels} />
         </DashboardCard>
+      </div>
+
+      {/* New Widgets Row: Leaderboard & Live Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+        
+        {/* Top Performing Staff Leaderboard */}
+        <div className="lg:col-span-1">
+          <DashboardCard 
+            title="Top Performing Staff" 
+            icon={FiAward}
+            headerAction={<span className="text-xs font-medium text-gray-500">This Month</span>}
+          >
+            <StaffLeaderboard staffData={topStaffData} />
+          </DashboardCard>
+        </div>
+
+        {/* Live Transaction Feed */}
+        <div className="lg:col-span-1">
+          <DashboardCard 
+            title="Live Transactions" 
+            icon={FiActivity}
+            headerAction={<button onClick={navigateToReports} className="text-xs text-indigo-600">View Ledger</button>}
+          >
+            <LiveTransactionFeed transactions={recentTransactions} />
+          </DashboardCard>
+        </div>
+
+        {/* System Alerts & Expenses */}
+        <div className="lg:col-span-1 space-y-4">
+          <NightlyCloseAlert closingData={yesterdayClosing} />
+          
+          <DashboardCard title="Quick Metrics" icon={FiPieChart}>
+             <div className="space-y-4">
+                <div>
+                   <div className="flex justify-between text-sm mb-1">
+                     <span className="text-gray-600">Today's Profit Margin</span>
+                     <span className="font-bold text-gray-900">
+                        {stats.todayRevenue > 0 ? Math.round((stats.todayProfit / stats.todayRevenue) * 100) : 0}%
+                     </span>
+                   </div>
+                   <div className="w-full bg-gray-200 rounded-full h-2">
+                     <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${stats.todayRevenue > 0 ? Math.max(0, Math.min((stats.todayProfit / stats.todayRevenue) * 100, 100)) : 0}%` }}></div>
+                   </div>
+                </div>
+             </div>
+          </DashboardCard>
+        </div>
+
       </div>
 
       {/* Quick Actions & Recent Activity */}
@@ -1283,11 +1380,7 @@ const AdminDashboard = () => {
         <DashboardCard 
           title="Recent Activity" 
           icon={FiBell}
-          headerAction={
-            <button className="text-xs text-gray-500 hover:text-gray-700">
-              See All
-            </button>
-          }
+          headerAction={<button className="text-xs text-gray-500 hover:text-gray-700">See All</button>}
         >
           <div className="space-y-1">
             {recentActivity.map((activity, index) => (
@@ -1306,33 +1399,24 @@ const AdminDashboard = () => {
                 <FiHome className="h-4 w-4 text-blue-600 mr-2" />
                 <span className="text-sm font-medium text-gray-700">Cash in Hand</span>
               </div>
-              <span className="font-bold text-gray-900">
-                ₹{(stats.cashInHand || 0).toLocaleString('en-IN')}
-              </span>
+              <span className="font-bold text-gray-900">₹{(stats.cashInHand || 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg">
               <div className="flex items-center">
                 <FiCreditCard className="h-4 w-4 text-indigo-600 mr-2" />
                 <span className="text-sm font-medium text-gray-700">Bank Balance</span>
               </div>
-              <span className="font-bold text-gray-900">
-                ₹{(stats.bankBalance || 0).toLocaleString('en-IN')}
-              </span>
+              <span className="font-bold text-gray-900">₹{(stats.bankBalance || 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
               <div className="flex items-center">
                 <FiSmartphone className="h-4 w-4 text-purple-600 mr-2" />
                 <span className="text-sm font-medium text-gray-700">Digital Balance</span>
               </div>
-              <span className="font-bold text-gray-900">
-                ₹{(stats.digitalBalance || 0).toLocaleString('en-IN')}
-              </span>
+              <span className="font-bold text-gray-900">₹{(stats.digitalBalance || 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="pt-2">
-              <button 
-                onClick={navigateToReports}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-              >
+              <button onClick={navigateToReports} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
                 View All Wallets →
               </button>
             </div>
@@ -1343,15 +1427,11 @@ const AdminDashboard = () => {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Revenue Collected</span>
-              <span className="font-bold text-emerald-600">
-                ₹{(stats.todayRevenue || 0).toLocaleString('en-IN')}
-              </span>
+              <span className="font-bold text-emerald-600">₹{(stats.todayRevenue || 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Expenses</span>
-              <span className="font-bold text-rose-600">
-                ₹{(stats.todayExpenses || 0).toLocaleString('en-IN')}
-              </span>
+              <span className="font-bold text-rose-600">₹{(stats.todayExpenses || 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="border-t border-gray-200 pt-2">
               <div className="flex items-center justify-between">
@@ -1363,9 +1443,7 @@ const AdminDashboard = () => {
               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                 <div 
                   className={`h-2 rounded-full ${(stats.todayProfit || 0) >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                  style={{ 
-                    width: `${stats.todayRevenue > 0 ? Math.min(Math.abs((stats.todayProfit / stats.todayRevenue) * 100), 100) : 0}%` 
-                  }}
+                  style={{ width: `${stats.todayRevenue > 0 ? Math.min(Math.abs((stats.todayProfit / stats.todayRevenue) * 100), 100) : 0}%` }}
                 ></div>
               </div>
             </div>
