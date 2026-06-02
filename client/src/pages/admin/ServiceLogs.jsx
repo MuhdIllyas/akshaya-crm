@@ -10,7 +10,7 @@ import {
   FiList, FiGrid, FiUsers, FiUserCheck, FiUserPlus, FiCreditCard, FiEdit3
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId } from '/src/services/serviceService';
+import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats } from '/src/services/serviceService';
 
 // Import Chart.js components
 import {
@@ -720,7 +720,6 @@ const ServiceLogs = () => {
   const isAdmin = userRole === 'admin' || userRole === 'superadmin'; 
 
   const [services, setServices] = useState([]);
-  const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -735,6 +734,102 @@ const ServiceLogs = () => {
   const [sortOrder, setSortOrder] = useState('desc');
   const [activeDetailTab, setActiveDetailTab] = useState('overview');
   const [showCharts, setShowCharts] = useState(true);
+
+  // --- NEW PAGINATION & STATS STATES ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const limit = 20;
+
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, delayed: 0, pending: 0, completionRate: 0 });
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Reset to page 1 when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange]);
+
+  // Main Data Loader
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+        
+        // Map dateRange to backend parameters
+        let timeRangeParam = undefined;
+        let dateParam = undefined;
+        if (dateRange === 'today') dateParam = new Date().toISOString().split('T')[0];
+        else if (dateRange !== 'all') timeRangeParam = dateRange;
+
+        const params = {
+          page: currentPage,
+          limit: limit,
+          timeRange: timeRangeParam,
+          date: dateParam,
+          service: serviceTypeFilter === 'all' ? undefined : serviceTypeFilter,
+          subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+          status: statusFilter === 'all' ? undefined : apiStatus,
+          priority: priorityFilter === 'all' ? undefined : priorityFilter,
+          staff: staffFilter === 'all' ? undefined : staffFilter,
+          search: debouncedSearch || undefined
+        };
+
+        const [trackingResponse, serviceEntries] = await Promise.all([
+          getTrackingEntries(params),
+          fetchServiceEntries()
+        ]);
+
+        if (trackingResponse && trackingResponse.pagination) {
+          setTotalRecords(trackingResponse.pagination.totalRecords);
+          setTotalPages(trackingResponse.pagination.totalPages);
+        }
+
+        const trackingData = Array.isArray(trackingResponse?.data) 
+          ? trackingResponse.data 
+          : Array.isArray(trackingResponse) ? trackingResponse : [];
+
+        let transformed = await transformBackendData(trackingData, serviceEntries);
+        
+        // Client-side sorting for current page
+        transformed.sort((a, b) => {
+          let aValue = a[sortBy] || '';
+          let bValue = b[sortBy] || '';
+          if (sortBy === 'cost') { aValue = a.cost || 0; bValue = b.cost || 0; }
+          if (sortBy === 'date') { aValue = new Date(a.date); bValue = new Date(b.date); }
+          if (sortOrder === 'desc') return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+          return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+        });
+
+        setServices(transformed);
+        
+        // Fetch Global Stats matching these filters
+        const statsData = await getTrackingStats(params);
+        if (statsData) {
+            const completionRate = statsData.total > 0 ? ((statsData.completed / statsData.total) * 100).toFixed(1) : 0;
+            setGlobalStats({ ...statsData, completionRate });
+        }
+        
+      } catch (err) {
+        console.error("ServiceLogs: Error loading service logs:", err);
+        toast.error("Failed to load service logs");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [currentPage, debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, sortBy, sortOrder]);
+
+  // Derived filter options for dropdowns
+  const staffMembers = useMemo(() => [...new Set(services.map(s => s.staffName))].sort(), [services]);
+  const serviceTypes = useMemo(() => [...new Set(services.map(s => s.serviceType))].sort(), [services]);
+  const subcategories = useMemo(() => [...new Set(services.map(s => s.subcategoryName))].sort(), [services]);
 
   // Map backend status to frontend status
   const statusMap = {
@@ -843,66 +938,6 @@ const ServiceLogs = () => {
     }).join(', ');
   };
 
-  // Initialize data from backend
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        console.log('ServiceLogs: Starting data load...');
-        
-        const [trackingResponse, serviceEntries] = await Promise.all([
-          getTrackingEntries(),
-          fetchServiceEntries()
-        ]);
-
-        console.log('ServiceLogs: Raw tracking response:', JSON.stringify(trackingResponse, null, 2));
-        console.log('ServiceLogs: Service entries:', JSON.stringify(serviceEntries, null, 2));
-
-        const trackingData = Array.isArray(trackingResponse) 
-          ? trackingResponse 
-          : trackingResponse.data || [];
-
-        if (trackingData.length === 0) {
-          console.warn('ServiceLogs: No tracking data found');
-          setServices([]);
-          setFilteredServices([]);
-          toast.warn('No service tracking entries found');
-          return;
-        }
-
-        const transformed = await transformBackendData(trackingData, serviceEntries);
-        console.log('ServiceLogs: Transformed data:', JSON.stringify(transformed, null, 2));
-
-        console.log('=== Service IDs and Steps Debug ===');
-        transformed.forEach((service, index) => {
-          console.log(`Service ${index + 1}:`, {
-            id: service.id,
-            serviceEntryId: service.serviceEntryId,
-            customerName: service.customerName,
-            applicationNumber: service.applicationNumber,
-            status: service.status,
-            paymentStatus: service.paymentStatus,
-            workSource: service.workSource,
-            serviceRating: service.serviceRating,
-            staffRating: service.staffRating,
-            reviewText: service.reviewText,
-            steps: service.steps
-          });
-        });
-        
-        setServices(transformed);
-        setFilteredServices(transformed);
-        toast.success(`Loaded ${transformed.length} service tracking entries`);
-      } catch (err) {
-        console.error("ServiceLogs: Error loading service logs:", err);
-        toast.error("Failed to load service logs: " + err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
-
   // Transform backend data to frontend format
   const transformBackendData = async (trackingData, serviceEntries) => {
     const transformed = [];
@@ -990,157 +1025,6 @@ const ServiceLogs = () => {
     }
     return transformed;
   };
-
-  // Get unique values for filters
-  const staffMembers = useMemo(() => {
-    const staff = [...new Set(services.map(service => service.staffName))];
-    return staff.sort();
-  }, [services]);
-
-  const serviceTypes = useMemo(() => {
-    const types = [...new Set(services.map(service => service.serviceType))];
-    return types.sort();
-  }, [services]);
-
-  const subcategories = useMemo(() => {
-    const subs = [...new Set(services.map(service => service.subcategoryName))];
-    return subs.sort();
-  }, [services]);
-
-  // Filter and sort services
-  useEffect(() => {
-    let filtered = services;
-
-    if (searchTerm) {
-      filtered = filtered.filter(service =>
-        (service.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.serviceType?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.applicationNumber?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.staffName?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.customerPhone?.includes(searchTerm) || false) ||
-        (service.subcategoryName?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
-      );
-    }
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(service => service.status === statusFilter);
-    }
-
-    if (priorityFilter !== 'all') {
-      filtered = filtered.filter(service => service.priority === priorityFilter);
-    }
-
-    if (staffFilter !== 'all') {
-      filtered = filtered.filter(service => service.staffName === staffFilter);
-    }
-
-    if (serviceTypeFilter !== 'all') {
-      filtered = filtered.filter(service => service.serviceType === serviceTypeFilter);
-    }
-
-    if (subcategoryFilter !== 'all') {
-      filtered = filtered.filter(service => service.subcategoryName === subcategoryFilter);
-    }
-
-    if (dateRange !== 'all') {
-      const now = new Date();
-      const filterDate = new Date();
-      
-      switch (dateRange) {
-        case 'today':
-          filtered = filtered.filter(service => service.date === now.toISOString().split('T')[0]);
-          break;
-        case 'week':
-          filterDate.setDate(now.getDate() - 7);
-          filtered = filtered.filter(service => new Date(service.date) >= filterDate);
-          break;
-        case 'month':
-          filterDate.setMonth(now.getMonth() - 1);
-          filtered = filtered.filter(service => new Date(service.date) >= filterDate);
-          break;
-        default:
-          break;
-      }
-    }
-
-    filtered.sort((a, b) => {
-      let aValue, bValue;
-      
-      switch (sortBy) {
-        case 'date':
-          aValue = new Date(a.date);
-          bValue = new Date(b.date);
-          break;
-        case 'customer':
-          aValue = a.customerName?.toLowerCase() || '';
-          bValue = b.customerName?.toLowerCase() || '';
-          break;
-        case 'service':
-          aValue = a.serviceType?.toLowerCase() || '';
-          bValue = b.serviceType?.toLowerCase() || '';
-          break;
-        case 'subcategory':
-          aValue = a.subcategoryName?.toLowerCase() || '';
-          bValue = b.subcategoryName?.toLowerCase() || '';
-          break;
-        case 'staff':
-          aValue = a.staffName?.toLowerCase() || '';
-          bValue = b.staffName?.toLowerCase() || '';
-          break;
-        case 'cost':
-          aValue = a.cost || 0;
-          bValue = b.cost || 0;
-          break;
-        case 'priority':
-          const priorityOrder = { high: 3, medium: 2, low: 1 };
-          aValue = priorityOrder[a.priority] || 0;
-          bValue = priorityOrder[b.priority] || 0;
-          break;
-        default:
-          aValue = a[sortBy] || '';
-          bValue = b[sortBy] || '';
-      }
-
-      if (sortOrder === 'desc') {
-        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-      } else {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-      }
-    });
-
-    setFilteredServices(filtered);
-  }, [
-    searchTerm, statusFilter, priorityFilter, staffFilter, 
-    serviceTypeFilter, subcategoryFilter, dateRange, sortBy, 
-    sortOrder, services
-  ]);
-
-  // Statistics - Service focused only
-  const stats = useMemo(() => {
-    const total = services.length;
-    const completed = services.filter(s => s.status === 'Completed').length;
-    const inProgress = services.filter(s => s.status === 'In Progress').length;
-    const pending = services.filter(s => s.status === 'Pending').length;
-    const delayed = services.filter(s => s.status === 'Delayed').length;
-    const followUpRequired = services.filter(s => s.followUpRequired).length;
-    
-    const avgProgress = services.length > 0 
-      ? (services.reduce((sum, service) => sum + (service.progress || 0), 0) / services.length).toFixed(1)
-      : 0;
-
-    const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : 0;
-
-    return {
-      total,
-      completed,
-      inProgress,
-      pending,
-      delayed,
-      followUpRequired,
-      avgProgress,
-      completionRate
-    };
-  }, [services]);
 
   // Update service status
   const handleStatusUpdate = async (serviceId, newStatus) => {
@@ -1343,29 +1227,29 @@ const ServiceLogs = () => {
               <p className="text-sm text-gray-500">{service.applicationNumber || 'N/A'}</p>
             </div>
           </div>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <p className="text-sm text-gray-900">{service.serviceType || 'Unknown'}</p>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <p className="text-sm text-gray-900">{service.subcategoryName || 'N/A'}</p>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <p className="text-sm text-gray-900">{service.staffName}</p>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <p className="text-sm text-gray-600">{service.date}</p>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${status.bg} ${status.color}`}>
             {service.status}
           </span>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${priority.bg} ${priority.color}`}>
             {priority.label}
           </span>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <div className="flex flex-col space-y-1">
             <span className={`text-xs px-2 py-0.5 rounded-full ${service.workSource === 'online' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -1378,14 +1262,14 @@ const ServiceLogs = () => {
               </span>
             )}
           </div>
-        </td>
+         </td>
         <td className="py-4 px-4">
           {service.cost > 0 ? (
             <p className="text-sm font-medium text-emerald-600">₹{service.cost.toFixed(2)}</p>
           ) : (
             <p className="text-sm text-gray-400">-</p>
           )}
-        </td>
+         </td>
         <td className="py-4 px-4">
           <div className="flex items-center space-x-2">
             <div className="w-16 bg-gray-200 rounded-full h-2">
@@ -1396,7 +1280,7 @@ const ServiceLogs = () => {
             </div>
             <span className="text-xs text-gray-600 w-8">{service.progress}%</span>
           </div>
-        </td>
+         </td>
         <td className="py-4 px-4">
           <div className="flex items-center space-x-2">
             <button
@@ -1427,7 +1311,7 @@ const ServiceLogs = () => {
               </button>
             )}
           </div>
-        </td>
+         </td>
       </motion.tr>
     );
   };
@@ -1490,43 +1374,43 @@ const ServiceLogs = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
             <StatCard
               title="Total Services"
-              value={stats.total}
+              value={globalStats.total || 0}
               subtitle="All services"
               icon={FiUsers}
               color="bg-blue-500"
             />
             <StatCard
               title="Completed"
-              value={stats.completed}
-              subtitle={`${stats.completionRate}% rate`}
+              value={globalStats.completed || 0}
+              subtitle={`${globalStats.completionRate || 0}% rate`}
               icon={FiCheckCircle}
               color="bg-emerald-500"
             />
             <StatCard
               title="In Progress"
-              value={stats.inProgress}
+              value={globalStats.in_progress || 0}
               subtitle="Active now"
               icon={FiTrendingUp}
               color="bg-amber-500"
             />
             <StatCard
               title="Pending"
-              value={stats.pending}
+              value={globalStats.pending || 0}
               subtitle="Awaiting action"
               icon={FiClock}
               color="bg-purple-500"
             />
             <StatCard
-              title="Follow-up"
-              value={stats.followUpRequired}
-              subtitle="Need attention"
+              title="Delayed"
+              value={globalStats.delayed || 0}
+              subtitle="Needs review"
               icon={FiAlertCircle}
               color="bg-rose-500"
             />
             <StatCard
               title="Avg Progress"
-              value={`${stats.avgProgress}%`}
-              subtitle="Overall progress"
+              value={`${services.length > 0 ? (services.reduce((acc, s) => acc + (s.progress || 0), 0) / services.length).toFixed(1) : 0}%`}
+              subtitle="Current page"
               icon={FiBarChart2}
               color="bg-indigo-500"
             />
@@ -1585,7 +1469,7 @@ const ServiceLogs = () => {
                   <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-lg">
                     <span className="text-sm text-emerald-700">Completion Rate</span>
                     <span className="font-semibold text-emerald-900">
-                      {stats.completionRate}%
+                      {globalStats.completionRate || 0}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
@@ -1746,7 +1630,7 @@ const ServiceLogs = () => {
           {/* Results Count and Sort - Made more compact */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
             <p className="text-sm text-gray-600">
-              Showing <span className="font-semibold">{filteredServices.length}</span> of <span className="font-semibold">{services.length}</span> services
+              Showing page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span> ({totalRecords} total records)
             </p>
             <div className="flex items-center gap-2">
               <select
@@ -1776,7 +1660,7 @@ const ServiceLogs = () => {
             // Grid View
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               <AnimatePresence>
-                {filteredServices.map((service) => (
+                {services.map((service) => (
                   <motion.div
                     key={service.id}
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -1814,7 +1698,7 @@ const ServiceLogs = () => {
                   </thead>
                   <tbody>
                     <AnimatePresence>
-                      {filteredServices.map((service) => (
+                      {services.map((service) => (
                         <ServiceListRow
                           key={service.id}
                           service={service}
@@ -1828,11 +1712,34 @@ const ServiceLogs = () => {
             </div>
           )}
 
-          {filteredServices.length === 0 && (
+          {services.length === 0 && (
             <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
               <FiSearch className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No services found</h3>
               <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+            </div>
+          )}
+
+          {/* NEW: Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-2 pt-4 mt-6 border-t border-gray-200">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                Previous
+              </button>
+              <div className="text-sm font-medium text-gray-600">
+                Page {currentPage} of {totalPages}
+              </div>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                Next
+              </button>
             </div>
           )}
         </div>
