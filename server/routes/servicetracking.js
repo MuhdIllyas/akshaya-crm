@@ -615,22 +615,22 @@ const {
       queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
     }
 
-    // 4. NEW: Server-Side Data Filters
+// 4. Server-Side Data Filters
     if (service && service !== 'all') {
-      queryConditions.push(`se.category_id = $${paramIndex++}`);
-      queryValues.push(parseInt(service));
+      queryConditions.push(`s.name = $${paramIndex++}`);
+      queryValues.push(service);
     }
     if (subcategory && subcategory !== 'all') {
-      queryConditions.push(`se.subcategory_id = $${paramIndex++}`);
-      queryValues.push(parseInt(subcategory));
+      queryConditions.push(`sub.name = $${paramIndex++}`);
+      queryValues.push(subcategory);
     }
     if (date) {
       queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
       queryValues.push(date);
     }
     if (staff && staff !== 'all') {
-      queryConditions.push(`st.assigned_to = $${paramIndex++}`);
-      queryValues.push(parseInt(staff));
+      queryConditions.push(`st2.name = $${paramIndex++}`);
+      queryValues.push(staff);
     }
     if (search) {
       queryConditions.push(`(se.customer_name ILIKE $${paramIndex} OR se.phone ILIKE $${paramIndex} OR st.application_number ILIKE $${paramIndex})`);
@@ -742,12 +742,12 @@ router.get('/stats', authenticateToken, async (req, res) => {
 
     // Advanced Filters
     if (service && service !== 'all') {
-      queryConditions.push(`se.category_id = $${paramIndex++}`);
-      queryValues.push(parseInt(service));
+      queryConditions.push(`s.name = $${paramIndex++}`);
+      queryValues.push(service);
     }
     if (subcategory && subcategory !== 'all') {
-      queryConditions.push(`se.subcategory_id = $${paramIndex++}`);
-      queryValues.push(parseInt(subcategory));
+      queryConditions.push(`sub.name = $${paramIndex++}`);
+      queryValues.push(subcategory);
     }
     if (date) {
       queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
@@ -758,8 +758,8 @@ router.get('/stats', authenticateToken, async (req, res) => {
       queryValues.push(status);
     }
     if (staff && staff !== 'all') {
-      queryConditions.push(`st.assigned_to = $${paramIndex++}`);
-      queryValues.push(parseInt(staff));
+      queryConditions.push(`st2.name = $${paramIndex++}`);
+      queryValues.push(staff);
     }
 
     let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
@@ -771,7 +771,6 @@ router.get('/stats', authenticateToken, async (req, res) => {
         COUNT(*) FILTER (WHERE st.status = 'in_progress') as in_progress,
         COUNT(*) FILTER (WHERE st.status = 'pending') as pending,
         COUNT(*) FILTER (WHERE st.status = 'rejected') as delayed,
-        -- Calculate SLA Compliance % (Completed services that finished before expiry date)
         COALESCE(
             (COUNT(*) FILTER (WHERE st.status = 'completed' AND st.updated_at <= se.expiry_date)::float / 
             NULLIF(COUNT(*) FILTER (WHERE st.status = 'completed'), 0)) * 100
@@ -779,6 +778,10 @@ router.get('/stats', authenticateToken, async (req, res) => {
       FROM service_tracking st
       LEFT JOIN service_entries se ON st.service_entry_id = se.id
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      -- ADD THESE THREE JOINS:
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN staff st2 ON st.assigned_to = st2.id
       ${whereClause}
     `;
     
