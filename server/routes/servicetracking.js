@@ -677,6 +677,19 @@ const {
         s.name AS service_name, sub.name AS subcategory_name,
         st2.name AS assigned_to_name, se_staff.centre_id,
         sr.service_rating, sr.staff_rating, sr.review_text, sr.submitted_at,
+        
+        -- NEW: Calculate payments directly in the database
+        COALESCE((
+          SELECT SUM(amount::numeric) 
+          FROM payments p 
+          WHERE p.service_entry_id = se.id AND p.status = 'received'
+        ), 0) AS total_received,
+        COALESCE((
+          SELECT json_agg(json_build_object('method', p.method, 'amount', p.amount, 'status', p.status))
+          FROM payments p 
+          WHERE p.service_entry_id = se.id
+        ), '[]'::json) AS payment_details_array,
+        
         COALESCE((
           SELECT json_agg(json_build_object('id', sts.id, 'name', sts.name, 'completed', sts.completed, 'date', sts.date, 'created_at', sts.created_at, 'step_order', sts.step_order, 'estimated_days', sts.estimated_days))
           FROM service_tracking_steps sts WHERE sts.service_tracking_id = st.id

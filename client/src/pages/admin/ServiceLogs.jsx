@@ -781,10 +781,7 @@ const ServiceLogs = () => {
           search: debouncedSearch || undefined
         };
 
-        const [trackingResponse, serviceEntries] = await Promise.all([
-          getTrackingEntries(params),
-          fetchServiceEntries()
-        ]);
+        const trackingResponse = await getTrackingEntries(params);
 
         if (trackingResponse && trackingResponse.pagination) {
           setTotalRecords(trackingResponse.pagination.totalRecords);
@@ -795,7 +792,7 @@ const ServiceLogs = () => {
           ? trackingResponse.data 
           : Array.isArray(trackingResponse) ? trackingResponse : [];
 
-        let transformed = await transformBackendData(trackingData, serviceEntries);
+        let transformed = await transformBackendData(trackingData);
         
         // Client-side sorting for current page
         transformed.sort((a, b) => {
@@ -939,14 +936,34 @@ const ServiceLogs = () => {
   };
 
   // Transform backend data to frontend format
-  const transformBackendData = async (trackingData, serviceEntries) => {
+  const transformBackendData = async (trackingData) => {
     const transformed = [];
     for (const trackingEntry of trackingData) {
-      const paymentData = await fetchPaymentDetails(
-        trackingEntry.service_entry_id,
-        trackingEntry.token_id,
-        serviceEntries
-      );
+      
+      // 1. Math is now done instantly by PostgreSQL
+      const totalCharge = parseFloat(trackingEntry.total_charges || 0);
+      const totalReceived = parseFloat(trackingEntry.total_received || 0);
+      
+      // 2. Determine Payment Status
+      let paymentStatus;
+      if (totalCharge <= 0) {
+        paymentStatus = 'Not Applicable';
+      } else if (totalReceived >= totalCharge) {
+        paymentStatus = 'Received';
+      } else if (totalReceived > 0) {
+        paymentStatus = 'Partial';
+      } else {
+        paymentStatus = 'Pending';
+      }
+
+      // 3. Format Payment Details Array
+      const payments = trackingEntry.payment_details_array || [];
+      const paymentDetails = payments.length > 0 
+        ? payments.map(p => {
+            const method = p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method;
+            return `${method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`;
+          }).join(', ')
+        : 'No payments recorded';
 
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
       const dateStr = updatedDate.toISOString().split('T')[0];
@@ -992,8 +1009,14 @@ const ServiceLogs = () => {
         assignedToId: trackingEntry.assigned_to,
         serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
         departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
-        totalCharge: paymentData.totalCharge || 0,
-        cost: paymentData.totalCharge || 0,
+        
+        // Push the calculated values directly to state
+        totalCharge: totalCharge,
+        cost: totalCharge,
+        paymentStatus: paymentStatus,
+        paymentDetails: paymentDetails,
+        payments: payments,
+        
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
         progress: trackingEntry.progress || 0,
@@ -1008,9 +1031,6 @@ const ServiceLogs = () => {
         notes: trackingEntry.notes || 'No notes available',
         rating: null,
         followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
-        paymentStatus: paymentData.paymentStatus,
-        paymentDetails: paymentData.paymentDetails,
-        payments: paymentData.payments,
         steps: steps,
         
         // Source information
