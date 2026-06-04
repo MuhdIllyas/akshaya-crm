@@ -615,22 +615,40 @@ const {
       queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
     }
 
-// 4. Server-Side Data Filters
+    // 4. Server-Side Data Filters
     if (service && service !== 'all') {
-      queryConditions.push(`s.name = $${paramIndex++}`);
-      queryValues.push(service);
+      if (!isNaN(service)) {
+        queryConditions.push(`s.id = $${paramIndex++}`);
+        queryValues.push(parseInt(service, 10));
+      } else {
+        queryConditions.push(`s.name = $${paramIndex++}`);
+        queryValues.push(service);
+      }
     }
+    
     if (subcategory && subcategory !== 'all') {
-      queryConditions.push(`sub.name = $${paramIndex++}`);
-      queryValues.push(subcategory);
+      if (!isNaN(subcategory)) {
+        queryConditions.push(`sub.id = $${paramIndex++}`);
+        queryValues.push(parseInt(subcategory, 10));
+      } else {
+        queryConditions.push(`sub.name = $${paramIndex++}`);
+        queryValues.push(subcategory);
+      }
     }
+    
     if (date) {
       queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
       queryValues.push(date);
     }
+    
     if (staff && staff !== 'all') {
-      queryConditions.push(`st2.name = $${paramIndex++}`);
-      queryValues.push(staff);
+      if (!isNaN(staff)) {
+        queryConditions.push(`st2.id = $${paramIndex++}`);
+        queryValues.push(parseInt(staff, 10));
+      } else {
+        queryConditions.push(`st2.name = $${paramIndex++}`);
+        queryValues.push(staff);
+      }
     }
     if (search) {
       queryConditions.push(`(se.customer_name ILIKE $${paramIndex} OR se.phone ILIKE $${paramIndex} OR st.application_number ILIKE $${paramIndex})`);
@@ -759,24 +777,43 @@ router.get('/stats', authenticateToken, async (req, res) => {
 
     // Advanced Filters
     if (service && service !== 'all') {
-      queryConditions.push(`s.name = $${paramIndex++}`);
-      queryValues.push(service);
+      if (!isNaN(service)) {
+        queryConditions.push(`s.id = $${paramIndex++}`);
+        queryValues.push(parseInt(service, 10));
+      } else {
+        queryConditions.push(`s.name = $${paramIndex++}`);
+        queryValues.push(service);
+      }
     }
+    
     if (subcategory && subcategory !== 'all') {
-      queryConditions.push(`sub.name = $${paramIndex++}`);
-      queryValues.push(subcategory);
+      if (!isNaN(subcategory)) {
+        queryConditions.push(`sub.id = $${paramIndex++}`);
+        queryValues.push(parseInt(subcategory, 10));
+      } else {
+        queryConditions.push(`sub.name = $${paramIndex++}`);
+        queryValues.push(subcategory);
+      }
     }
+    
     if (date) {
       queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
       queryValues.push(date);
     }
+    
     if (status && status !== 'all') {
       queryConditions.push(`st.status = $${paramIndex++}`);
       queryValues.push(status);
     }
+    
     if (staff && staff !== 'all') {
-      queryConditions.push(`st2.name = $${paramIndex++}`);
-      queryValues.push(staff);
+      if (!isNaN(staff)) {
+        queryConditions.push(`st2.id = $${paramIndex++}`);
+        queryValues.push(parseInt(staff, 10));
+      } else {
+        queryConditions.push(`st2.name = $${paramIndex++}`);
+        queryValues.push(staff);
+      }
     }
 
     let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
