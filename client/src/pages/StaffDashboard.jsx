@@ -1118,9 +1118,56 @@ const StaffDashboard = () => {
                                       {entry.tokenId && <span className="text-xs text-gray-500 font-mono">{shortenTokenId(entry.tokenId)}</span>}
                                     </div>
                                   </div>
-                                  {/* View Button */}
+                                  {/* SMART VIEW BUTTON: Handles both Token and No-Token Services */}
                                   <button
-                                    onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id || entry.trackingId)}
+                                    type="button"
+                                    onClick={async (e) => {
+                                      e.preventDefault();
+                                      
+                                      let correctTrackingId = entry.tracking_id || entry.trackingId;
+                                      const correctTokenId = entry.token_id || entry.tokenId;
+                                      const serviceEntryId = entry.id; // The ID from recentServiceEntries
+                                      
+                                      // 1. FAST PATH: If it has a token, check the active tokens array
+                                      if (!correctTrackingId && correctTokenId) {
+                                        const matchedToken = tokens.find(t => t.tokenId === correctTokenId);
+                                        if (matchedToken && matchedToken.trackingId) {
+                                          correctTrackingId = matchedToken.trackingId;
+                                        }
+                                      }
+                                      
+                                      // 2. SMART PATH: If no token (or tracking ID still missing), fetch it from backend
+                                      if (!correctTrackingId && serviceEntryId) {
+                                        const toastId = toast.loading("Locating tracker...");
+                                        try {
+                                          // Fetch all tracking entries for this staff member
+                                          const response = await api.get('/servicetracking');
+                                          const trackingEntries = response.data || [];
+                                          
+                                          // Find the tracking entry that belongs to this specific service entry
+                                          const matchedTracking = trackingEntries.find(t => 
+                                            String(t.service_entry_id) === String(serviceEntryId)
+                                          );
+                                          
+                                          if (matchedTracking && matchedTracking.id) {
+                                            correctTrackingId = matchedTracking.id;
+                                          }
+                                        } catch (error) {
+                                          console.error("Error finding tracking ID:", error);
+                                        } finally {
+                                          toast.dismiss(toastId);
+                                        }
+                                      }
+
+                                      // 3. SECURE NAVIGATION
+                                      if (correctTrackingId) {
+                                        navigate(`/dashboard/staff/track_service/${correctTrackingId}`);
+                                      } else if (correctTokenId) {
+                                        navigate(`/dashboard/staff/token/${correctTokenId}/details`);
+                                      } else {
+                                        toast.error("Tracking details not found for this older service.");
+                                      }
+                                    }}
                                     className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors shrink-0"
                                     title="View Service Details"
                                   >
