@@ -4,6 +4,7 @@ import { socket, connectSocket, disconnectSocket } from "@/services/socket";
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
+  const staffName = localStorage.getItem("name");
   const customerName = localStorage.getItem("customer_name");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activePath, setActivePath] = useState(window.location.pathname);
@@ -229,7 +230,7 @@ const DashboardLayout = () => {
   const roleDisplayNames = {
     superadmin: "Super Admin",
     admin: "Administrator",
-    staff: "Staff Member",
+    staff: staffName || "Staff Member",
     supervisor: "Supervisor",
     customer: customerName
   };
