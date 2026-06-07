@@ -7,7 +7,7 @@ import {
   FiUsers, FiClock, FiCheckCircle, FiPlayCircle, FiPlus, FiSearch, 
   FiAlertCircle, FiRefreshCw, FiCalendar, FiBarChart2, FiTrendingUp,
   FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign,
-  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight
+  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiEye
 } from 'react-icons/fi';
 import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
@@ -1118,6 +1118,15 @@ const StaffDashboard = () => {
                                       {entry.tokenId && <span className="text-xs text-gray-500 font-mono">{shortenTokenId(entry.tokenId)}</span>}
                                     </div>
                                   </div>
+                                  {/* View Button */}
+                                  <button
+                                    onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id || entry.trackingId)}
+                                    className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors shrink-0"
+                                    title="View Service Details"
+                                  >
+                                    <FiEye className="w-3.5 h-3.5" />
+                                    <span>View</span>
+                                  </button>
                                 </div>
                               ))}
                             </div>
