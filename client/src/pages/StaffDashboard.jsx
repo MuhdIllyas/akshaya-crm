@@ -370,7 +370,7 @@ const StaffDashboard = () => {
       setShowCancelModal(false);
       setCancelTokenData(null);
       setCancelReason('');
-      refreshTokens();
+      refreshTokens(); // Refresh the list to remove the token
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || 'Failed to cancel token');
@@ -382,6 +382,7 @@ const StaffDashboard = () => {
     if (trackingId) {
       navigate(`/dashboard/staff/track_service/${trackingId}`);
     } else {
+      // Fallback just in case it's a legacy token without a tracking entry
       navigate(`/dashboard/staff/token/${tokenId}/details`);
     }
   };
@@ -401,6 +402,7 @@ const StaffDashboard = () => {
     const localStaff = String(staffId).trim();
     const isAssignedToMe = tokenStaff === localStaff;
     const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+    // ADDED: && t.status !== 'cancelled'
     return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.status !== 'cancelled';
   });
 
@@ -415,6 +417,7 @@ const StaffDashboard = () => {
     const localStaff = String(staffId).trim();
     const isAssignedToMe = tokenStaff === localStaff;
     const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+    // ADDED: && t.status !== 'cancelled'
     return (isAssignedToMe || isUnassigned) && t.type === 'campaign' && t.status !== 'cancelled';
   });
 
@@ -529,23 +532,6 @@ const StaffDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Custom Scrollbar Styles */}
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f1f1f1;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
-      `}</style>
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
       <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
@@ -758,7 +744,7 @@ const StaffDashboard = () => {
               <option value="all">All Time</option>
             </select>
 
-            {/* Ultra‑Compact Wallet Pill */}
+            {/* ----- Ultra‑Compact Wallet Pill ----- */}
             {myWallet && (
               <motion.div
                 whileHover={{ y: -1 }}
@@ -947,7 +933,7 @@ const StaffDashboard = () => {
                                             {token.status === 'pending' ? 'Start' : 'Continue'}
                                           </button>
                                           
-                                          {/* CANCEL BUTTON */}
+                                          {/* NEW CANCEL BUTTON */}
                                           <button 
                                             onClick={() => openCancelModal(token)} 
                                             className="px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center gap-2 text-sm font-medium transition-colors"
@@ -1093,158 +1079,56 @@ const StaffDashboard = () => {
                 )}
               </div>
 
-              {/* ========== UPGRADED RECENT ACTIVITY ========== */}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                      <FiActivity className="h-5 w-5 text-indigo-500" />
-                      Recent Activity
-                    </h3>
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                      {recentServiceEntries.length} entries
-                    </span>
-                  </div>
+              {/* Recent Activity */}
+              <div className="bg-white rounded-xl border border-gray-200">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
                 </div>
-                
-                <div className="p-4 overflow-y-auto max-h-[520px] custom-scrollbar">
-                  {Object.keys(groupedRecentActivities).length > 0 ? (
-                    <div className="space-y-5">
-                      {Object.entries(groupedRecentActivities).map(([date, entries], dateIdx) => (
-                        <div key={date} className="relative">
-                          {/* Sticky Date Badge */}
-                          <div className="sticky top-0 z-10 -mt-1 pt-1 pb-2 bg-white/95 backdrop-blur-sm">
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-100 text-indigo-600">
-                                <FiCalendar className="h-3.5 w-3.5" />
-                              </div>
-                              <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                  <div className="p-6 overflow-y-auto max-h-[500px]">
+                    {Object.keys(groupedRecentActivities).length > 0 ? (
+                      <div className="space-y-6">
+                        {Object.entries(groupedRecentActivities).map(([date, entries]) => (
+                          <div key={date}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                 {formatDateUI(date)}
-                              </span>
-                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                                {entries.length} {entries.length === 1 ? 'activity' : 'activities'}
-                              </span>
+                              </h4>
                             </div>
-                          </div>
-
-                          {/* Timeline Container */}
-                          <div className="relative mt-2 pl-4 ml-3 border-l-2 border-gray-100 space-y-3">
-                            {entries.map((entry, idx) => (
-                              <motion.div
-                                key={entry.id || idx}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: idx * 0.03 }}
-                                whileHover={{ scale: 1.01, x: 4 }}
-                                className="group relative bg-white rounded-xl border border-gray-100 hover:border-indigo-200 hover:shadow-md transition-all duration-200 p-3"
-                              >
-                                {/* Timeline Dot */}
-                                <div className="absolute -left-[27px] top-5 w-3 h-3 rounded-full border-2 border-white shadow-sm"
-                                  style={{
-                                    backgroundColor: 
-                                      entry.status === 'completed' ? '#10B981' :
-                                      entry.status === 'in-progress' ? '#3B82F6' :
-                                      entry.status === 'pending' ? '#F59E0B' : '#9CA3AF'
-                                  }}
-                                />
-                                
-                                <div className="flex gap-3">
-                                  {/* Avatar/Icon */}
-                                  <div className="flex-shrink-0">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors group-hover:scale-105 ${
-                                      entry.status === 'completed' ? 'bg-green-100 text-green-600' :
-                                      entry.status === 'in-progress' ? 'bg-blue-100 text-blue-600' :
-                                      entry.status === 'pending' ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'
-                                    }`}>
-                                      {entry.status === 'completed' ? <FiCheckCircle className="h-5 w-5" /> :
-                                       entry.status === 'in-progress' ? <FiPlayCircle className="h-5 w-5" /> :
-                                       <FiUser className="h-5 w-5" />}
-                                    </div>
+                            <div className="space-y-4">
+                              {entries.map(entry => (
+                                <div key={entry.id} className="flex gap-3 pb-4 last:pb-0 border-b last:border-0 border-gray-100">
+                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <FiUser className="h-4 w-4 text-gray-600" />
                                   </div>
-                                  
-                                  {/* Content */}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex flex-wrap items-baseline justify-between gap-1 mb-1">
-                                      <h4 className="text-sm font-semibold text-gray-900 truncate max-w-[150px] sm:max-w-[200px]">
-                                        {entry.customerName || 'Walk-in Customer'}
-                                      </h4>
-                                      <span className="text-xs text-gray-400 font-mono whitespace-nowrap">
-                                        {formatTime(entry.created_at)}
-                                      </span>
+                                  <div className="flex-1">
+                                    <div className="flex justify-between items-baseline">
+                                      <p className="text-sm font-medium text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
+                                      <span className="text-xs text-gray-500 ml-2">{formatTime(entry.created_at)}</span>
                                     </div>
-                                    
-                                    <p className="text-xs text-gray-600 mb-1.5 flex items-center gap-1 flex-wrap">
-                                      <span className="font-medium">{getCategoryName(entry.category)}</span>
-                                      {entry.subcategory && (
-                                        <>
-                                          <span className="text-gray-300">•</span>
-                                          <span className="text-gray-500 text-xs">{getSubcategoryName(entry.category, entry.subcategory)}</span>
-                                        </>
-                                      )}
-                                    </p>
-                                    
-                                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                      {/* Status Badge */}
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                                        entry.status === 'completed' ? 'bg-green-50 text-green-700 border border-green-200' :
-                                        entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                                        entry.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                        'bg-gray-50 text-gray-600 border border-gray-200'
+                                    <p className="text-sm text-gray-600">{getCategoryName(entry.category)} service</p>
+                                    <div className="flex justify-between items-center mt-1">
+                                      <span className={`text-xs font-medium ${
+                                        entry.status === 'completed' ? 'text-green-600' :
+                                        entry.status === 'in-progress' ? 'text-blue-600' :
+                                        entry.status === 'pending' ? 'text-amber-600' : 'text-gray-600'
                                       }`}>
-                                        {entry.status === 'completed' && <FiCheckCircle className="h-3 w-3" />}
-                                        {entry.status === 'in-progress' && <FiPlayCircle className="h-3 w-3" />}
-                                        {entry.status === 'pending' && <FiClock className="h-3 w-3" />}
                                         {entry.status?.replace('-', ' ')}
                                       </span>
-                                      
-                                      {/* Token ID */}
-                                      {entry.tokenId && (
-                                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full font-mono">
-                                          <FiBarChart2 className="h-3 w-3" />
-                                          {shortenTokenId(entry.tokenId)}
-                                        </span>
-                                      )}
-                                      
-                                      {/* Amount - New! */}
-                                      {entry.amount && entry.amount > 0 && (
-                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                          <FiDollarSign className="h-3 w-3" />
-                                          {formatCurrency(entry.amount)}
-                                        </span>
-                                      )}
-                                      
-                                      {/* Payment Status - New! */}
-                                      {entry.payment_status && (
-                                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
-                                          entry.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' :
-                                          entry.payment_status === 'pending' ? 'bg-amber-50 text-amber-700' :
-                                          'bg-gray-50 text-gray-600'
-                                        }`}>
-                                          {entry.payment_status === 'paid' ? '✓ Paid' : 
-                                           entry.payment_status === 'pending' ? '⏳ Pending' : entry.payment_status}
-                                        </span>
-                                      )}
+                                      {entry.tokenId && <span className="text-xs text-gray-500 font-mono">{shortenTokenId(entry.tokenId)}</span>}
                                     </div>
                                   </div>
                                 </div>
-                              </motion.div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <FiActivity className="h-8 w-8 text-gray-400" />
+                        ))}
                       </div>
-                      <p className="text-gray-500 font-medium">No recent activity</p>
-                      <p className="text-gray-400 text-sm mt-1">Complete a service to see it here</p>
-                    </div>
+                    ) : (
+                    <div className="text-center py-8 text-gray-500">No recent activity</div>
                   )}
                 </div>
               </div>
-              {/* ========== END UPGRADED RECENT ACTIVITY ========== */}
               
             </div>
           </div>
