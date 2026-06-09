@@ -96,6 +96,24 @@ const StaffDashboard = () => {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
+  // --- Tasks & Events State ---
+  const [myTasks, setMyTasks] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+
+  // Dynamic Auto-Cycling States
+  const [activeEventTab, setActiveEventTab] = useState('All');
+  const [isEventsHovered, setIsEventsHovered] = useState(false);
+
+  const getEventDayLabel = (dateStr) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    return date.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
   // --- Welcome banner state ---
   const [currentTime, setCurrentTime] = useState(new Date());
   const staffName = localStorage.getItem('username') || 'Staff';
@@ -255,6 +273,70 @@ const StaffDashboard = () => {
     }
   }, [period, customDateRange]);
 
+  // --- Fetch Tasks & Events ---
+  const fetchTasksAndEvents = useCallback(async () => {
+    try {
+      const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+      const eventsUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'events');
+
+      // 1. Fetch Pending Tasks
+      const tasksRes = await api.get('/all', {
+        baseURL: tasksUrl,
+        params: { assigned_to: staffId, status: 'pending' }
+      });
+      setMyTasks(tasksRes.data || []);
+
+      // 2. Fetch Upcoming Events (Next 7 days)
+      const today = new Date();
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      const eventsRes = await api.get('/', {
+        baseURL: eventsUrl,
+        params: { 
+          start: today.toISOString().split('T')[0], 
+          end: nextWeek.toISOString().split('T')[0] 
+        }
+      });
+      
+      // Filter out past events and sort
+      today.setHours(0,0,0,0);
+      const validEvents = (eventsRes.data || [])
+        .filter(e => new Date(e.date || e.start_datetime) >= today)
+        .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
+      
+      setUpcomingEvents(validEvents.slice(0, 10)); // Keep top 10
+    } catch (err) {
+      console.error('Error fetching tasks/events:', err);
+    }
+  }, [staffId]);
+
+  // --- Auto-cycle Events Tabs ---
+  useEffect(() => {
+    if (isEventsHovered || upcomingEvents.length === 0) return;
+    const tabs = ['All', 'Tasks', 'Deliveries', 'Expiries'];
+    
+    const interval = setInterval(() => {
+      setActiveEventTab(prev => {
+        const currentIndex = tabs.indexOf(prev);
+        return tabs[(currentIndex + 1) % tabs.length];
+      });
+    }, 5000); // Rotates every 5 seconds
+    
+    return () => clearInterval(interval);
+  }, [isEventsHovered, upcomingEvents.length]);
+
+  const handleCompleteTask = async (taskId) => {
+    try {
+      const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+      await api.patch(`/${taskId}/status`, { status: 'completed' }, { baseURL: tasksUrl });
+      toast.success('Task completed!');
+      fetchTasksAndEvents(); // Refresh lists
+    } catch (err) {
+      toast.error('Failed to complete task');
+    }
+  };
+
   // Load wallets (unchanged)
   useEffect(() => {
     getWalletsForCentre().then(setWallets).catch(() => toast.error('Failed to load wallets'));
@@ -272,6 +354,7 @@ const StaffDashboard = () => {
         await fetchServiceEntries();
         await fetchOnlineBookings();
         await fetchPerformance();
+        await fetchTasksAndEvents();
       } catch (err) {
         setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
         toast.error('Failed to load dashboard data');
@@ -280,7 +363,7 @@ const StaffDashboard = () => {
       }
     };
     fetchData();
-  }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance]);
+  }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance, fetchTasksAndEvents]);
 
   // Refetch performance when period changes
   useEffect(() => {
@@ -961,8 +1044,171 @@ const StaffDashboard = () => {
               </div>
             </div>
 
-            {/* Right Column – Performance & Recent Activity */}
+            {/* Right Column – Performance, Tasks & Events */}
             <div className="space-y-6">
+              
+              {/* ===== NEW: MY TASKS ===== */}
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 text-sm flex items-center">
+                    <FiCheckSquare className="h-4 w-4 mr-2 text-indigo-600" />
+                    My Pending Tasks
+                  </h3>
+                  <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {myTasks.length}
+                  </span>
+                </div>
+                
+                {myTasks.length === 0 ? (
+                  <div className="text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                    <p className="text-sm text-gray-500">No pending tasks! 🎉</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                    {myTasks.map(task => (
+                      <div key={task.id} className="flex gap-3 items-start p-3 border border-gray-100 rounded-lg bg-gray-50 hover:bg-white transition shadow-sm">
+                        <button 
+                          onClick={() => handleCompleteTask(task.id)}
+                          className="mt-0.5 text-gray-400 hover:text-emerald-500 transition-colors"
+                          title="Mark as complete"
+                        >
+                          <FiCheckCircle className="h-5 w-5" />
+                        </button>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-800">{task.title}</p>
+                          {task.due_date && (
+                            <p className="text-xs text-rose-500 mt-1 flex items-center gap-1 font-medium">
+                              <FiClock className="h-3 w-3" /> Due {getEventDayLabel(task.due_date)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ===== NEW: UPCOMING EVENTS (AUTO-CYCLING) ===== */}
+              <div 
+                className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
+                onMouseEnter={() => setIsEventsHovered(true)}
+                onMouseLeave={() => setIsEventsHovered(false)}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900 text-sm flex items-center">
+                    <FiCalendar className="h-4 w-4 mr-2 text-indigo-600" />
+                    Upcoming Calendar
+                  </h3>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 flex items-center gap-1">
+                    {isEventsHovered ? <FiClock className="text-amber-500" /> : <FiPlayCircle className="text-emerald-500 animate-pulse" />}
+                    {isEventsHovered ? 'Paused' : 'Auto'}
+                  </span>
+                </div>
+
+                {/* Event Tabs */}
+                <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
+                  {['All', 'Tasks', 'Deliveries', 'Expiries'].map(tab => {
+                    const count = upcomingEvents.filter(e => {
+                      if (tab === 'All') return true;
+                      if (tab === 'Tasks') return e.source === 'task' || e.source === 'calendar_event';
+                      if (tab === 'Deliveries') return e.source === 'service_delivery';
+                      if (tab === 'Expiries') return e.source === 'service_expiry';
+                      return false;
+                    }).length;
+
+                    return (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveEventTab(tab)}
+                        className={`text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                          activeEventTab === tab 
+                            ? 'bg-indigo-600 text-white shadow-md' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {tab} 
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeEventTab === tab ? 'bg-white/20' : 'bg-gray-200'}`}>
+                          {count}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                
+                {/* Dynamic Event Feed */}
+                <motion.div 
+                  key={activeEventTab}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-3 max-h-60 overflow-y-auto pr-1"
+                >
+                  {(() => {
+                    const filteredEvents = upcomingEvents.filter(e => {
+                      if (activeEventTab === 'All') return true;
+                      if (activeEventTab === 'Tasks') return e.source === 'task' || e.source === 'calendar_event';
+                      if (activeEventTab === 'Deliveries') return e.source === 'service_delivery';
+                      if (activeEventTab === 'Expiries') return e.source === 'service_expiry';
+                      return false;
+                    });
+
+                    if (filteredEvents.length === 0) {
+                      return (
+                        <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                          <p className="text-sm text-gray-500">No {activeEventTab.toLowerCase()} scheduled.</p>
+                        </div>
+                      );
+                    }
+
+                    return filteredEvents.map(event => {
+                      const dayLabel = getEventDayLabel(event.date || event.start_datetime);
+                      const isToday = dayLabel === 'Today';
+                      const isTomorrow = dayLabel === 'Tomorrow';
+                      
+                      let Icon = FiCalendar;
+                      let typeColor = 'text-indigo-600 bg-indigo-50 border-indigo-100';
+                      let badgeLabel = 'Event';
+                      
+                      if (event.source === 'service_delivery') {
+                        Icon = FiBriefcase;
+                        typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
+                        badgeLabel = 'Delivery';
+                      } else if (event.source === 'service_expiry') {
+                        Icon = FiAlertCircle;
+                        typeColor = 'text-rose-600 bg-rose-50 border-rose-100';
+                        badgeLabel = 'Expiry';
+                      } else if (event.source === 'task' || event.source === 'calendar_event') {
+                        Icon = FiCheckSquare;
+                        typeColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
+                        badgeLabel = 'Task';
+                      }
+
+                      return (
+                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-lg border ${typeColor} shadow-sm transition-all hover:shadow-md`}>
+                          <div className={`mt-0.5 p-1.5 rounded-md bg-white shadow-sm`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-gray-900 truncate" title={event.title}>{event.title}</p>
+                            {event.description && <p className="text-xs text-gray-600 truncate mt-0.5">{event.description}</p>}
+                            <div className="flex items-center justify-between mt-1.5">
+                              <p className="text-xs font-medium flex items-center gap-1">
+                                <FiClock className="h-3 w-3" />
+                                <span className={`${isToday ? 'text-rose-600 font-bold' : isTomorrow ? 'text-amber-600 font-bold' : 'text-gray-600'}`}>
+                                  {dayLabel}
+                                </span>
+                              </p>
+                              <span className="text-[9px] uppercase tracking-wider font-bold opacity-70">
+                                {badgeLabel}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </motion.div>
+              </div>
               
               {/* Performance Score Card */}
               <div className="bg-white rounded-xl border border-gray-200 p-5">
