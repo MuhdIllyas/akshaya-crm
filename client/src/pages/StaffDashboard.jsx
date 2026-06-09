@@ -7,7 +7,7 @@ import {
   FiUsers, FiClock, FiCheckCircle, FiPlayCircle, FiPlus, FiSearch, 
   FiAlertCircle, FiRefreshCw, FiCalendar, FiBarChart2, FiTrendingUp,
   FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign,
-  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight
+  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiExternalLink
 } from 'react-icons/fi';
 import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
@@ -334,6 +334,31 @@ const StaffDashboard = () => {
       fetchTasksAndEvents(); // Refresh lists
     } catch (err) {
       toast.error('Failed to complete task');
+    }
+  };
+
+  // 🔥 Navigation Handler for Calendar Events
+  const handleViewService = (event) => {
+    const eventIdStr = String(event.id || "");
+    let targetTrackingId;
+    
+    // 1. FOR EXPIRIES
+    if (eventIdStr.startsWith("expiry-")) {
+      targetTrackingId = event.tracking_id; 
+    } 
+    // 2. FOR DELIVERIES
+    else if (eventIdStr.startsWith("delivery-")) {
+      targetTrackingId = eventIdStr.replace("delivery-", ""); 
+    } 
+    // 3. FALLBACK FOR CUSTOM TASKS
+    else if (event.tracking_id) {
+      targetTrackingId = event.tracking_id;
+    }
+
+    if (targetTrackingId) {
+      navigate(`/dashboard/staff/track_service/${targetTrackingId}`); 
+    } else {
+      toast.error("Cannot open: No tracking steps exist for this service yet.");
     }
   };
 
@@ -1184,8 +1209,8 @@ const StaffDashboard = () => {
                       }
 
                       return (
-                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-lg border ${typeColor} shadow-sm transition-all hover:shadow-md`}>
-                          <div className={`mt-0.5 p-1.5 rounded-md bg-white shadow-sm`}>
+                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-lg border ${typeColor} shadow-sm transition-all hover:shadow-md group`}>
+                          <div className={`mt-0.5 p-1.5 rounded-md bg-white shadow-sm shrink-0`}>
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -1202,6 +1227,17 @@ const StaffDashboard = () => {
                                 {badgeLabel}
                               </span>
                             </div>
+                          </div>
+                          
+                          {/* 🔥 The Action Button */}
+                          <div className="shrink-0 flex flex-col items-center justify-center self-stretch ml-1">
+                            <button
+                              onClick={() => handleViewService(event)}
+                              className="p-2 bg-white/60 hover:bg-white rounded-full shadow-sm text-gray-500 hover:text-indigo-600 transition-all border border-black/5 opacity-80 hover:opacity-100"
+                              title="Go to Service Tracking"
+                            >
+                              <FiExternalLink className="h-4 w-4" />
+                            </button>
                           </div>
                         </div>
                       );
