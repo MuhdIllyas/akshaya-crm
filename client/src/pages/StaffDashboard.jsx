@@ -701,7 +701,7 @@ const StaffDashboard = () => {
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            🚀 Added Invoice Generation in Service Entry!! 💸🧾 Check it out when you start the next service! 👀
+            🚀 track your daily tasks & deadlines live on your dashboard! ⚡📆
           </div>
         </div>
       </div>
