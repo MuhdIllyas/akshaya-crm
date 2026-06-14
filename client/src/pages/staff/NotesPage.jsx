@@ -7,8 +7,8 @@ import {
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { MentionsInput, Mention } from 'react-mentions';
-import { getStaff } from '/src/services/serviceService';
-import { createNote } from '/src/services/noteService';
+import { getStaff } from '@/services/serviceService';
+import { createNote } from '@/services/noteService';
 import api from '@/services/serviceService';
 import { toast } from 'react-toastify';
 
