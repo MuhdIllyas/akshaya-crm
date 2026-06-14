@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FiSearch, FiMessageCircle, FiAtSign, FiClock, FiUser, 
+import {
+  FiSearch, FiMessageCircle, FiAtSign, FiClock, FiUser,
   FiExternalLink, FiLock, FiGlobe, FiMapPin, FiCheck,
   FiCornerDownLeft, FiPaperclip, FiBookmark, FiAlertCircle
 } from 'react-icons/fi';
@@ -17,7 +17,7 @@ const NotesPage = () => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Note Creator State (Google Keep Expandable style)
   const [isCreating, setIsCreating] = useState(false);
   const [noteTitle, setNoteTitle] = useState('');
@@ -76,9 +76,11 @@ const NotesPage = () => {
         title: noteTitle.trim() || 'General Note',
         content: noteContent.trim(),
         visibility: noteVisibility,
-        mentions: noteMentions
+        mentions: noteMentions,
+        centre_id: centreId,          // <-- added missing centre_id
+        created_by: currentUserId
       });
-      
+
       toast.success('Note pinned to board');
       setNoteTitle('');
       setNoteContent('');
@@ -100,12 +102,12 @@ const NotesPage = () => {
     if (parseInt(note.is_mentioned) > 0) {
       return 'bg-[#E6F4EA] border-[#CEEAD6] text-[#137333] shadow-[0_1px_3px_rgba(60,64,67,0.12)]'; // Pastel Green for Mentions
     }
-    switch(note.visibility) {
-      case 'private': 
+    switch (note.visibility) {
+      case 'private':
         return 'bg-[#FCE8E6] border-[#FAD2CF] text-[#C5221F]'; // Pastel Red
-      case 'global': 
+      case 'global':
         return 'bg-[#E8F0FE] border-[#D2E3FC] text-[#1A73E8]'; // Pastel Blue
-      default: 
+      default:
         return 'bg-[#FFF8E1] border-[#FFE082] text-[#B85C00]'; // Pastel Yellow/Amber for Centre
     }
   };
@@ -137,7 +139,7 @@ const NotesPage = () => {
 
   return (
     <div className="min-h-screen bg-[#FFFFFF] font-sans pb-16 text-gray-700">
-      
+
       {/* ===== GOOGLE KEEP STYLE TOP NAV BAR ===== */}
       <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4 z-40 shadow-sm">
         <div className="flex items-center gap-3">
@@ -164,10 +166,10 @@ const NotesPage = () => {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-6 sm:px-8 mt-8">
-        
+
         {/* ===== KEEP STICKY NOTE CREATOR ===== */}
         <div className="flex justify-center mb-10" ref={creatorRef}>
-          <motion.form 
+          <motion.form
             onSubmit={handleCreateNote}
             layout
             className="w-full max-w-xl bg-white border border-gray-200 rounded-xl shadow-[0_1px_3px_rgba(60,64,67,0.2),0_2px_8px_rgba(60,64,67,0.1)] p-3 transition-all overflow-hidden"
@@ -186,30 +188,44 @@ const NotesPage = () => {
 
             <MentionsInput
               value={noteContent}
-              onChange={(e, nv, nt, ma) => {
-                setNoteContent(nv);
-                setNoteMentions(ma.map(m => parseInt(m.id)));
+              onChange={(e, newValue, newPlainText, mentions) => {
+                setNoteContent(newValue);
+                setNoteMentions(mentions.map(m => parseInt(m.id)));
               }}
               onFocus={() => setIsCreating(true)}
               placeholder="Take an internal note... Use @ to tag staff members"
               className="text-sm"
               style={{
-                control: { backgroundColor: 'transparent', minHeight: isCreating ? '80px' : '24px', fontSize: 14, lineHeight: 1.5 },
+                control: {
+                  backgroundColor: 'transparent',
+                  minHeight: isCreating ? '80px' : '24px',
+                  fontSize: 14,
+                  lineHeight: 1.5
+                },
                 highlighter: { padding: '6px 12px', margin: 0 },
                 input: { padding: '6px 12px', border: 'none', outline: 'none', margin: 0, color: '#3c4043' },
-                suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', zIndex: 110, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }, item: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: 13 } }
+                suggestions: {
+                  list: {
+                    backgroundColor: 'white',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    zIndex: 110,
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                  },
+                  item: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: 13 }
+                }
               }}
             >
-              <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`} />
+              <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, display) => `@${display}`} />
             </MentionsInput>
 
             {isCreating && (
               <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 px-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 font-medium">Visibility:</span>
-                  <select 
-                    value={noteVisibility} 
-                    onChange={(e) => setWorkspaceTab(e.target.value)}
+                  <select
+                    value={noteVisibility}
+                    onChange={(e) => setNoteVisibility(e.target.value)}  // Fixed typo
                     className="text-xs bg-gray-50 border border-gray-200 rounded-md px-2 py-1 text-gray-700 outline-none"
                   >
                     <option value="centre">Centre Only</option>
@@ -217,17 +233,17 @@ const NotesPage = () => {
                     <option value="private">Private (Only Me)</option>
                   </select>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setIsCreating(false)} 
+                  <button
+                    type="button"
+                    onClick={() => setIsCreating(false)}
                     className="text-xs font-semibold text-gray-500 hover:bg-gray-100 px-3 py-1.5 rounded-md transition"
                   >
                     Close
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={!noteContent.trim()}
                     className="text-xs font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white px-4 py-1.5 rounded-lg shadow-sm transition"
                   >
@@ -249,7 +265,7 @@ const NotesPage = () => {
         {/* ===== MASONRY BOARD SECTIONS ===== */}
         {!loading && (
           <div className="space-y-10">
-            
+
             {/* 1. PINNED SECTION (Mentions) */}
             {boardSections.pinned.length > 0 && (
               <div>
@@ -293,7 +309,7 @@ const NotesPage = () => {
 // ----------------------------------------------------------------------
 const KeepCard = ({ note, cardStyle, navigate }) => {
   return (
-    <motion.div 
+    <motion.div
       layout
       whileHover={{ y: -1, boxShadow: "0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15)" }}
       className={`border p-4 rounded-xl shadow-[0_1px_2px_0_rgba(60,64,67,0.3)] transition-all flex flex-col justify-between min-h-[140px] group relative ${cardStyle}`}
@@ -309,7 +325,7 @@ const KeepCard = ({ note, cardStyle, navigate }) => {
 
         {/* Content Body */}
         <div className="text-xs text-gray-800 break-words leading-relaxed whitespace-pre-wrap">
-          {note.content?.split(/(@\w+)/g).map((chunk, i) => 
+          {note.content?.split(/(@\w+)/g).map((chunk, i) =>
             chunk.startsWith('@') ? <span key={i} className="font-bold bg-white/60 px-1 rounded text-indigo-900">{chunk}</span> : chunk
           )}
         </div>
