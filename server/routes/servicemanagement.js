@@ -750,7 +750,8 @@ router.get('/entries', authenticateToken, async (req, res) => {
       SELECT se.*, se.is_edited, se.customer_service_id, se.work_source,
              sc.name AS subcategory_name,
              s.wallet_id AS service_wallet_id,
-             s.name AS service_name
+             s.name AS service_name,
+             (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
@@ -889,6 +890,8 @@ router.get('/entries', authenticateToken, async (req, res) => {
 
         status: entry.status,
 
+        notes_count: parseInt(entry.notes_count) || 0,
+
         // 🔥 ALL PAYMENTS SENT TO FRONTEND NOW
         payments: latestPayments.map(p => ({
           id: p.id,
@@ -918,6 +921,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
 
         workSource: entry.work_source,
         customerServiceId: entry.customer_service_id,
+        notes_count: parseInt(entry.notes_count) || 0,
       });
     }
 
@@ -939,7 +943,8 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const result = await client.query(`
-      SELECT se.*, sc.name AS subcategory_name, s.wallet_id AS service_wallet_id, s.name AS service_name
+      SELECT se.*, sc.name AS subcategory_name, s.wallet_id AS service_wallet_id, s.name AS service_name,
+             (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
@@ -1002,6 +1007,7 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
       balanceAmount: parseFloat(entry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
       expiryDate: entry.expiry_date ? entry.expiry_date.toISOString().split('T')[0] : null,
       status: entry.status,
+      notes_count: parseInt(entry.notes_count) || 0,
       
       // 🔥 UPDATED PAYMENTS MAPPING
       payments: paymentsResult.rows.map(p => ({
@@ -1283,10 +1289,221 @@ router.post('/entry', authenticateToken, async (req, res) => {
       });
     }
 
-    res.status(201).json({ message: 'Service entry created successfully', serviceEntryId });
+    res.status(201).json({ message: 'Service entry created successfully', 
+      serviceEntryId: serviceEntryId,
+      id: serviceEntryId });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('servicemanagement.js error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================================
+// 🔥 POST /api/servicemanagement/entry/bulk (WATERFALL CART CHECKOUT)
+// ============================================================================
+router.post('/entry/bulk', authenticateToken, async (req, res) => {
+  const {
+    tokenId,
+    customerServiceId,
+    customerName,
+    phone,
+    staffId,
+    services,
+    payments
+  } = req.body;
+
+  if (!customerName || !phone || !services || services.length === 0) {
+    return res.status(400).json({ error: 'Missing required fields or empty cart' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Resolve Team ID
+    const resolvedTeamId = await resolveFinancialTeam({
+      client, staffId, role: req.user.role, selectedTeamId: null
+    });
+
+    // 2. Resolve Token Centre
+    let centreId = req.user.centre_id;
+    let tokenCentreId = null;
+    if (tokenId) {
+      const tokenResult = await client.query('SELECT centre_id, status FROM tokens WHERE token_id = $1', [tokenId]);
+      if (tokenResult.rows.length === 0) throw new Error(`Token ${tokenId} not found`);
+      centreId = tokenResult.rows[0].centre_id;
+      tokenCentreId = centreId;
+    }
+
+    // 3. Setup the Payment Pool (The "Waterfall" Source)
+    let paymentPool = payments.map(p => ({
+      wallet: parseInt(p.wallet),
+      method: p.method,
+      amount: parseFloat(p.amount),
+      status: p.status,
+      remaining: parseFloat(p.amount) // Track how much of this payment is left
+    }));
+
+    const results = [];
+    let allServicesCompleted = true;
+
+    // 4. Loop through the Cart
+    for (let i = 0; i < services.length; i++) {
+      const svc = services[i];
+      const svcTotal = parseFloat(svc.totalCharge || 0);
+      const svcDept = parseFloat(svc.departmentCharge || 0);
+      const svcService = parseFloat(svc.serviceCharge || 0);
+
+      // --- WATERFALL ALGORITHM ---
+      let amountNeeded = svcTotal;
+      let amountCollected = 0;
+      const appliedPayments = [];
+
+      // Drain the payment pool into this service until it's full
+      for (const poolItem of paymentPool) {
+        if (amountNeeded <= 0) break; // This service is fully paid
+        if (poolItem.remaining <= 0) continue; // This payment is empty
+
+        const amountToTake = Math.min(amountNeeded, poolItem.remaining);
+
+        appliedPayments.push({
+          wallet: poolItem.wallet,
+          method: poolItem.method,
+          amount: amountToTake,
+          status: poolItem.status
+        });
+
+        poolItem.remaining -= amountToTake; // Deduct from pool
+        amountNeeded -= amountToTake;       // Reduce amount needed
+
+        if (poolItem.status === 'received') {
+          amountCollected += amountToTake;
+        }
+      }
+
+      // Determine the status of THIS specific service entry
+      const svcStatus = (amountCollected >= svcTotal && svcTotal > 0) ? 'completed' : 'pending';
+      if (svcStatus !== 'completed') allServicesCompleted = false;
+
+      // Online Booking is only attached to the first item in the cart
+      const currentCustomerServiceId = (i === 0 && customerServiceId) ? customerServiceId : null;
+
+      // --- DATABASE INSERTIONS ---
+      // A. Insert Service Entry
+      const insertRes = await client.query(`
+        INSERT INTO service_entries (
+          token_id, customer_name, phone, category_id, subcategory_id, 
+          service_charges, department_charges, total_charges, status, 
+          expiry_date, staff_id, customer_service_id, work_source, team_id, created_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()) RETURNING id
+      `, [
+        tokenId || null, customerName, phone, svc.categoryId, svc.subcategoryId, 
+        svcService, svcDept, svcTotal, svcStatus, svc.expiryDate || null, staffId, 
+        currentCustomerServiceId, currentCustomerServiceId ? 'online' : 'offline', resolvedTeamId
+      ]);
+      const newEntryId = insertRes.rows[0].id;
+
+      // B. Insert Tracking
+      await client.query(`
+        INSERT INTO service_tracking (service_entry_id, assigned_to, status, current_step, progress, updated_at)
+        VALUES ($1, $2, 'pending', 'Application Received', 0, NOW())
+      `, [newEntryId, req.user.id]);
+
+      // Fetch Service Name for Logging
+      const nameRes = await client.query('SELECT name FROM services WHERE id = $1', [svc.categoryId]);
+      const serviceName = nameRes.rows[0]?.name || 'Service';
+
+      // C. Process Department Charges (Deduction)
+      if (svc.serviceWalletId && svcDept > 0) {
+        const deptGroupId = crypto.randomUUID();
+        await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [svcDept, svc.serviceWalletId]);
+        await client.query(`
+          INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, team_id, created_at)
+          VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, $7, NOW())
+        `, [svc.serviceWalletId, staffId, svcDept, `Department charge for ${serviceName} (#${newEntryId})`, newEntryId, deptGroupId, resolvedTeamId]);
+      }
+
+      // D. Process Applied Payments (Additions)
+      for (const pmt of appliedPayments) {
+        const groupId = crypto.randomUUID();
+        const pmtRes = await client.query(`
+          INSERT INTO payments (service_entry_id, wallet_id, amount, status, correction_group_id, created_at)
+          VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id
+        `, [newEntryId, pmt.wallet, pmt.amount, pmt.status, groupId]);
+        
+        const newPmtId = pmtRes.rows[0].id;
+        await client.query('UPDATE payments SET original_payment_id = $1 WHERE id = $1', [newPmtId]);
+
+        if (pmt.status === 'received') {
+          const walletRes = await client.query('SELECT wallet_type FROM wallets WHERE id = $1', [pmt.wallet]);
+          const walletType = walletRes.rows[0]?.wallet_type || 'digital';
+          
+          await client.query('UPDATE wallets SET balance = balance + $1 WHERE id = $2', [pmt.amount, pmt.wallet]);
+          await client.query(`
+            INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, team_id, reference_payment_id, created_at)
+            VALUES ($1, $2, 'credit', $3, $4, 'Service Payment', $5, 'payment', $6, $7, $8, NOW())
+          `, [pmt.wallet, staffId, pmt.amount, `${walletType === 'cash' ? 'Cash' : 'Online'} payment for ${serviceName} (#${newEntryId})`, newEntryId, groupId, resolvedTeamId, newPmtId]);
+        }
+      }
+
+      // E. Activity Log
+      if (svcStatus === 'completed') {
+        await logActivity({
+          centre_id: centreId, related_type: 'service_entry', related_id: newEntryId,
+          action: 'Service Completed', description: `Service completed for ${customerName} - ${serviceName}`,
+          performed_by: staffId, performed_by_role: req.user.role
+        });
+      }
+
+      // Package data for the frontend to generate Notes/Tasks
+      results.push({
+        serviceEntryId: newEntryId,
+        initialNote: svc.initialNote,
+        initialNoteMentions: svc.initialNoteMentions,
+        initialNoteVisibility: svc.initialNoteVisibility,
+        createTask: svc.createTask,
+        taskTitle: svc.taskTitle,
+        taskAssignee: svc.taskAssignee,
+        taskDueDate: svc.taskDueDate
+      });
+    }
+
+    // 5. Update Online Booking Status
+    if (customerServiceId) {
+       await client.query(
+         `UPDATE customer_services SET payment_status = $1, status = $2, last_updated = NOW() WHERE id = $3`,
+         [allServicesCompleted ? 'Payment Completed' : 'Payment Pending', 'in_progress', customerServiceId]
+       );
+    }
+
+    // 6. Update Token Status
+    if (tokenId) {
+      const finalTokenStatus = allServicesCompleted ? 'completed' : 'in-progress';
+      await client.query(`UPDATE tokens SET status = $1, staff_id = $2, updated_at = NOW() WHERE token_id = $3`, [finalTokenStatus, staffId, tokenId]);
+      
+      if (tokenCentreId) {
+        io.emit('tokenUpdate', { tokenId, status: finalTokenStatus });
+        io.to(`centre_${tokenCentreId}`).emit(`tokenUpdate:${tokenCentreId}`, { tokenId, status: finalTokenStatus });
+      }
+    }
+
+    io.emit('serviceEntryCreated', { staff_id: staffId, token_id: tokenId, message: `Bulk entries processed` });
+
+    await client.query('COMMIT');
+    
+    // Return the array of created services back to React!
+    res.status(201).json({ 
+      message: 'Bulk services created successfully', 
+      createdServices: results 
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Bulk Entry Error:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -1410,24 +1627,61 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    const updateQuery = `UPDATE service_entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+  const updateQuery = `UPDATE service_entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
     const result = await client.query(updateQuery, updateValues);
-    const updatedEntry = result.rows[0];
+    let updatedEntry = result.rows[0];
 
-    if (status && updatedEntry.token_id) {
+    // ====================================================================
+    // 🔥 FIX: MATHEMATICAL RE-EVALUATION OF STATUS
+    // ====================================================================
+    const paymentsRes = await client.query(`
+      SELECT SUM(amount) as total_paid
+      FROM payments
+      WHERE service_entry_id = $1
+        AND status = 'received'
+        AND COALESCE(is_reversal, FALSE) = FALSE
+        AND NOT EXISTS (
+          SELECT 1 FROM wallet_transactions wt 
+          WHERE wt.reference_payment_id = payments.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+        )
+    `, [parseInt(id)]);
+
+    const totalPaid = parseFloat(paymentsRes.rows[0].total_paid || 0);
+    const actualTotalCharges = parseFloat(updatedEntry.total_charges || 0);
+
+    // Auto-correct the status based on actual math, overriding what the frontend sent
+    let calculatedStatus = updatedEntry.status;
+
+    if (totalPaid >= actualTotalCharges && actualTotalCharges > 0) {
+      calculatedStatus = 'completed';
+    } else if (totalPaid < actualTotalCharges && updatedEntry.status === 'completed') {
+      calculatedStatus = 'pending';
+    }
+
+    // If the math demands a status change, apply it to the database instantly
+    if (calculatedStatus !== updatedEntry.status) {
+      await client.query(`UPDATE service_entries SET status = $1, updated_at = NOW() WHERE id = $2`, [calculatedStatus, parseInt(id)]);
+      updatedEntry.status = calculatedStatus;
+    }
+    // ====================================================================
+
+    // Update Token Status using the newly calculated status
+    if (updatedEntry.status && updatedEntry.token_id) {
       let tokenStatus = 'pending';
-      if (status === 'completed') tokenStatus = 'completed';
-      else if (status === 'not_received') tokenStatus = 'processed';
-      else if (status === 'pending') tokenStatus = 'in-progress';
+      if (updatedEntry.status === 'completed') tokenStatus = 'completed';
+      else if (updatedEntry.status === 'not_received') tokenStatus = 'processed';
+      else if (updatedEntry.status === 'pending') tokenStatus = 'in-progress';
+      
       await client.query('UPDATE tokens SET status = $1, updated_at = NOW() WHERE token_id = $2', [tokenStatus, updatedEntry.token_id]);
       io.emit('tokenUpdate', { tokenId: updatedEntry.token_id, status: tokenStatus });
       io.to(`centre_${centreId}`).emit(`tokenUpdate:${centreId}`, { tokenId: updatedEntry.token_id, status: tokenStatus });
     }
 
-    if (status) {
+    // Update Tracking Status using the newly calculated status
+    if (updatedEntry.status) {
       const trackingResult = await client.query('SELECT id, status, application_number FROM service_tracking WHERE service_entry_id = $1', [parseInt(id)]);
       if (trackingResult.rows.length > 0) {
-        const trackingStatus = status === 'completed' ? 'completed' : status === 'not_received' ? 'rejected' : 'pending';
+        const trackingStatus = updatedEntry.status === 'completed' ? 'completed' : updatedEntry.status === 'not_received' ? 'rejected' : 'pending';
         await client.query(`UPDATE service_tracking SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE service_entry_id = $2`, [trackingStatus, parseInt(id)]);
         io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', { applicationNumber: trackingResult.rows[0].application_number, status: trackingStatus });
       }
