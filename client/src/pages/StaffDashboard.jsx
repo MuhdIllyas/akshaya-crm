@@ -6,7 +6,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { 
   FiUsers, FiClock, FiCheckCircle, FiPlayCircle, FiPlus, FiSearch, 
   FiAlertCircle, FiRefreshCw, FiCalendar, FiBarChart2, FiTrendingUp,
-  FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign,
+  FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign, FiGlobe,
   FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiExternalLink
 } from 'react-icons/fi';
 import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
@@ -61,6 +61,7 @@ const StaffDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDate, setActiveDate] = useState('today');
   const [activeView, setActiveView] = useState('active');
+  const [workspaceTab, setWorkspaceTab] = useState('tokens');
   const staffId = localStorage.getItem('id')?.trim();
   const centreId = localStorage.getItem('centre_id')?.trim();
   const [showQuickService, setShowQuickService] = useState(false);
@@ -701,7 +702,7 @@ const StaffDashboard = () => {
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            🚀 track your daily tasks & deadlines live on your dashboard! ⚡📆
+            🚀 Added Invoice Generation in Service Entry!! 💸🧾 Check it out when you start the next service! 👀
           </div>
         </div>
       </div>
@@ -881,188 +882,190 @@ const StaffDashboard = () => {
           </div>
 
           {/* Two‑Column Layout */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
             
-            {/* Left Column – Tokens & Online Bookings */}
-            <div className="xl:col-span-2 space-y-6">
+            {/* Left Column – Unified Workspace */}
+            <div className="xl:col-span-2 flex flex-col gap-6">
               
-              {/* Online Bookings */}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                  <h2 className="text-lg font-semibold text-gray-900">Online Booking Queue</h2>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[850px]">
+                
+                {/* Master Workspace Tabs */}
+                <div className="flex p-3 border-b border-gray-200 bg-gray-50/80 gap-2 overflow-x-auto hide-scrollbar">
+                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-indigo-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                    <FiUsers className="h-4 w-4" />
+                    Walk-in Tokens
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'}`}>{statusCounts.total}</span>
+                  </button>
+                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-blue-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                    <FiGlobe className="h-4 w-4" />
+                    Online Queue
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'queue' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>{onlineBookings.length}</span>
+                  </button>
+                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                    <FiPlayCircle className="h-4 w-4" />
+                    My Online Work
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
+                  </button>
                 </div>
-                <div className="p-6">
-                  {onlineBookings.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">No pending online bookings</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {onlineBookings.map(booking => (
-                        <div key={booking.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center font-semibold text-indigo-800">#{booking.id}</div>
-                            <div>
-                              <h4 className="font-medium text-gray-900">{booking.customer_name}</h4>
-                              <p className="text-sm text-gray-600">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                              <div className="flex gap-4 mt-1 text-xs text-gray-500">
-                                <span>{new Date(booking.applied_at).toLocaleTimeString()}</span>
-                                <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">Online</span>
-                              </div>
-                            </div>
-                          </div>
-                          <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800">Take Work</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              {/* My Online Processing Work */}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                  <h2 className="text-lg font-semibold text-gray-900">My Online Processing Work</h2>
-                </div>
-                <div className="p-6">
-                  {processingBookings.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">No active online work</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {processingBookings.map(booking => (
-                        <div key={booking.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300">
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center font-semibold text-green-800">#{booking.id}</div>
-                            <div>
-                              <h4 className="font-medium text-gray-900">{booking.customer_name}</h4>
-                              <p className="text-sm text-gray-600">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                              <div className="flex gap-4 mt-1 text-xs text-gray-500">
-                                <span>{new Date(booking.taken_at || booking.applied_at).toLocaleTimeString()}</span>
-                                <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded">Assigned to you</span>
-                              </div>
-                            </div>
-                          </div>
-                          <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 flex items-center gap-2">
-                            <FiPlayCircle className="h-4 w-4" /> Start
+                {/* Workspace Content */}
+                <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 sm:p-6">
+                  
+                  {/* TAB 1: TOKENS */}
+                  {workspaceTab === 'tokens' && (
+                    <div className="space-y-4">
+                      {/* Sub-Tabs for Tokens */}
+                      <div className="flex gap-2 border-b border-gray-200 pb-3">
+                        {['active', 'completed', 'campaign'].map(tab => (
+                          <button
+                            key={tab}
+                            onClick={() => setActiveView(tab)}
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors ${
+                              activeView === tab ? 'bg-gray-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            {tab}
                           </button>
+                        ))}
+                      </div>
+
+                      {Object.keys(groupedTokens).length === 0 ? (
+                        <div className="text-center py-16 text-gray-400">
+                          <FiPlayCircle className="mx-auto h-12 w-12 mb-3 opacity-30"/>
+                          <p className="font-medium">No tokens found</p>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="space-y-6">
+                          {Object.entries(groupedTokens).map(([date, dateTokens]) => (
+                            <div key={date}>
+                              <div className="flex items-center gap-2 mb-3 pl-1">
+                                <FiCalendar className="h-4 w-4 text-indigo-500" />
+                                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">{formatDateUI(date)}</h3>
+                                <div className="h-px bg-gray-200 flex-1 ml-2"></div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-3">
+                                {dateTokens.map(token => {
+                                  const isAssignedToMe = String(token.staffId || '').trim() === String(staffId).trim();
+                                  const isUnassigned = !token.staffId || token.staffId === 'null';
+                                  
+                                  return (
+                                    <div key={token.tokenId} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all group">
+                                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                                          activeView === 'completed' ? 'bg-green-50 text-green-700 border border-green-100' :
+                                          activeView === 'campaign' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                                          'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                        }`}>
+                                          {shortenTokenId(token.tokenId)}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2 mb-0.5">
+                                            <h4 className="font-bold text-gray-900 text-sm truncate">{token.customerName || 'Customer'}</h4>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
+                                              {token.status?.replace('-', ' ')}
+                                            </span>
+                                            {isAssignedToMe && activeView === 'active' && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Mine</span>}
+                                          </div>
+                                          <p className="text-xs text-gray-500 truncate flex items-center gap-2">
+                                            <span className="font-medium text-gray-700">{getCategoryName(token.categoryId)}</span>
+                                            <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                                            <span>{formatTime(token.createdAt)}</span>
+                                            {token.phone && <><span className="w-1 h-1 bg-gray-300 rounded-full"></span><span>{token.phone}</span></>}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex items-center gap-2 pl-3 shrink-0">
+                                        {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
+                                          <>
+                                            <button 
+                                              onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
+                                              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors"
+                                            >
+                                              <FiPlayCircle className="h-3.5 w-3.5" /> {token.status === 'pending' ? 'Start' : 'Resume'}
+                                            </button>
+                                            <button 
+                                              onClick={() => openCancelModal(token)} 
+                                              className="p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors"
+                                              title="Cancel Token"
+                                            >
+                                              <FiXCircle className="h-4 w-4" />
+                                            </button>
+                                          </>
+                                        )}
+                                        {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
+                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors">
+                                            <FiBarChart2 className="h-3.5 w-3.5" /> Details
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              </div>
 
-              {/* Token Tabs */}
-              <div className="bg-white rounded-xl border border-gray-200">
-                <div className="flex border-b border-gray-200">
-                  {[
-                    { id: 'active', label: 'Active', icon: FiPlayCircle, count: activeTokens.length, color: 'blue' },
-                    { id: 'completed', label: 'Completed', icon: FiCheckSquare, count: completedTokens.length, color: 'green' },
-                    { id: 'campaign', label: 'Campaign', icon: FiAward, count: campaignTokens.length, color: 'purple' },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveView(tab.id)}
-                      className={`flex-1 py-3 text-center font-medium transition-all ${
-                        activeView === tab.id
-                          ? `border-b-2 border-${tab.color}-600 text-${tab.color}-700`
-                          : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <tab.icon className="h-4 w-4" />
-                        <span>{tab.label}</span>
-                        <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{tab.count}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="p-6">
-                  {Object.keys(groupedTokens).length === 0 ? (
-                    <div className="text-center py-12 text-gray-500">
-                      <FiPlayCircle className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                      <p>No {activeView} tokens found</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {Object.entries(groupedTokens).map(([date, dateTokens]) => (
-                        <div key={date}>
-                          <div className="flex items-center gap-2 mb-3">
-                            <FiCalendar className="h-4 w-4 text-gray-500" />
-                            <h3 className="font-medium text-gray-700">{formatDateUI(date)}</h3>
-                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{dateTokens.length}</span>
-                          </div>
-                          <div className="space-y-3">
-                            {dateTokens.map(token => {
-                              const tokenStaff = String(token.staffId || '').trim();
-                              const currentStaff = String(staffId).trim();
-                              const isAssignedToMe = tokenStaff === currentStaff;
-                              const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-                              return (
-                                <div key={token.tokenId} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                                  <div className="flex items-center gap-4 flex-1">
-                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-semibold ${
-                                      activeView === 'completed' ? 'bg-green-100 text-green-800' :
-                                      activeView === 'campaign' ? 'bg-purple-100 text-purple-800' :
-                                      'bg-gray-100 text-gray-900'
-                                    }`}>
-                                      {shortenTokenId(token.tokenId)}
-                                    </div>
-                                    <div className="flex-1">
-                                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                                        <h4 className="font-medium text-gray-900">{token.customerName || 'Customer'}</h4>
-                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(token.status)}`}>
-                                          {getStatusIcon(token.status)} {token.status?.replace('-', ' ')}
-                                        </span>
-                                        {activeView === 'active' && isAssignedToMe && (
-                                          <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs">Assigned to me</span>
-                                        )}
-                                        {activeView === 'active' && isUnassigned && (
-                                          <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">Available</span>
-                                        )}
-                                      </div>
-                                      <p className="text-sm text-gray-600">{getCategoryName(token.categoryId)} • {getSubcategoryName(token.categoryId, token.subcategoryId)}</p>
-                                      <div className="flex flex-wrap gap-4 mt-1 text-xs text-gray-500">
-                                        <span>{formatTime(token.createdAt)}</span>
-                                        {token.phone && <span>{token.phone}</span>}
-                                        {activeView === 'completed' && token.updatedAt && (
-                                          <span className="text-green-600">Completed: {formatTime(token.updatedAt)}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
-                                        <div className="flex items-center gap-2">
-                                          <button 
-                                            onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
-                                            className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 flex items-center gap-2 transition-colors"
-                                          >
-                                            <FiPlayCircle className="h-4 w-4" />
-                                            {token.status === 'pending' ? 'Start' : 'Continue'}
-                                          </button>
-                                          
-                                          {/* NEW CANCEL BUTTON */}
-                                          <button 
-                                            onClick={() => openCancelModal(token)} 
-                                            className="px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 flex items-center gap-2 text-sm font-medium transition-colors"
-                                          >
-                                            <FiXCircle className="h-4 w-4" />
-                                            Cancel
-                                          </button>
-                                        </div>
-                                      )}
-                                    {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
-                                      <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 flex items-center gap-2">
-                                        <FiBarChart2 className="h-4 w-4" /> Details
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                  {/* TAB 2: ONLINE QUEUE */}
+                  {workspaceTab === 'queue' && (
+                    <div className="space-y-3">
+                      {onlineBookings.length === 0 ? (
+                        <div className="text-center py-16 text-gray-400">
+                          <FiGlobe className="mx-auto h-12 w-12 mb-3 opacity-30"/>
+                          <p className="font-medium">No pending online bookings</p>
                         </div>
-                      ))}
+                      ) : (
+                        onlineBookings.map(booking => (
+                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-blue-100 rounded-xl hover:shadow-md transition-all group">
+                            <div className="flex items-center gap-4 min-w-0">
+                              <div className="w-10 h-10 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
+                                <p className="text-xs text-gray-500 mt-0.5 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
+                                <p className="text-[10px] text-gray-400 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
+                              </div>
+                            </div>
+                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm shrink-0 transition-colors">
+                              Take Work
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 3: MY ONLINE WORK */}
+                  {workspaceTab === 'processing' && (
+                    <div className="space-y-3">
+                      {processingBookings.length === 0 ? (
+                        <div className="text-center py-16 text-gray-400">
+                          <FiCheckSquare className="mx-auto h-12 w-12 mb-3 opacity-30"/>
+                          <p className="font-medium">No active online work</p>
+                        </div>
+                      ) : (
+                        processingBookings.map(booking => (
+                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-emerald-100 rounded-xl hover:shadow-md transition-all group">
+                            <div className="flex items-center gap-4 min-w-0">
+                              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
+                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Assigned to you</span>
+                                </div>
+                                <p className="text-xs text-gray-500 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
+                                <p className="text-[10px] text-gray-400 mt-1 font-mono">Taken at: {new Date(booking.taken_at || booking.applied_at).toLocaleString()}</p>
+                              </div>
+                            </div>
+                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
+                              <FiPlayCircle className="h-4 w-4" /> Start
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
