@@ -713,22 +713,34 @@ const generateInvoicePDF = () => {
               tokenId,
               customerName: tokenData.customer_name || '',
               phone: tokenData.phone || '',
-              category: tokenData.category_id ? String(tokenData.category_id) : '',
-              subcategory: tokenData.subcategory_id ? String(tokenData.subcategory_id) : '',
-              serviceCharge: String(serviceCharge),
-              departmentCharge: String(departmentCharge),
-              totalCharge: String(totalCharge),
               status: tokenData.status === 'done' ? 'completed' : tokenData.status || 'pending',
-              expiryDate: tokenData.expiry_date || '',
               payments: tokenData.payments?.length > 0 ? tokenData.payments.map(p => ({
                 wallet: String(p.wallet || ''),
                 method: p.method || 'cash',
                 amount: String(p.amount || ''),
                 status: p.status || 'pending',
               })) : [],
-              serviceWalletId: tokenData.service_wallet_id ? parseInt(tokenData.service_wallet_id) : category?.wallet_id ? parseInt(category.wallet_id) : null,
-              requiresWallet: category?.requires_wallet || subcategory?.requires_wallet || tokenData.requires_wallet || false,
-              hasExpiry: category?.has_expiry || tokenData.has_expiry || false,
+              // 🔥 PROPERLY INITIALIZING THE CART ARRAY
+              services: [{
+                id: crypto.randomUUID(),
+                category: tokenData.category_id ? String(tokenData.category_id) : '',
+                subcategory: tokenData.subcategory_id ? String(tokenData.subcategory_id) : '',
+                serviceCharge: String(serviceCharge),
+                departmentCharge: String(departmentCharge),
+                totalCharge: String(totalCharge),
+                serviceWalletId: tokenData.service_wallet_id ? parseInt(tokenData.service_wallet_id) : category?.wallet_id ? parseInt(category.wallet_id) : null,
+                requiresWallet: category?.requires_wallet || subcategory?.requires_wallet || tokenData.requires_wallet || false,
+                hasExpiry: category?.has_expiry || tokenData.has_expiry || false,
+                expiryDate: tokenData.expiry_date || '',
+                initialNote: '', 
+                initialNoteMentions: [], 
+                initialNoteVisibility: 'centre', 
+                createTask: false, 
+                taskTitle: '', 
+                taskAssignee: '', 
+                taskDueDate: null,
+                showNoteArea: false
+              }]
             };
 
             setFormData(newFormData);
@@ -772,11 +784,27 @@ const generateInvoicePDF = () => {
               tokenId: null,
               customerName: booking.customer_name || '',
               phone: booking.phone || '',
-              category: booking.service_id ? String(booking.service_id) : '',
-              subcategory: booking.subcategory_id ? String(booking.subcategory_id) : '',
-              serviceCharge: String(serviceCharge),
-              departmentCharge: String(departmentCharge),
-              totalCharge: String(totalCharge),
+              // 🔥 PROPERLY INITIALIZING THE CART ARRAY
+              services: [{
+                id: crypto.randomUUID(),
+                category: booking.service_id ? String(booking.service_id) : '',
+                subcategory: booking.subcategory_id ? String(booking.subcategory_id) : '',
+                serviceCharge: String(serviceCharge),
+                departmentCharge: String(departmentCharge),
+                totalCharge: String(totalCharge),
+                serviceWalletId: category?.wallet_id ? parseInt(category.wallet_id) : null,
+                requiresWallet: category?.requires_wallet || subcategory?.requires_wallet || false,
+                hasExpiry: category?.has_expiry || false,
+                expiryDate: '',
+                initialNote: '', 
+                initialNoteMentions: [], 
+                initialNoteVisibility: 'centre', 
+                createTask: false, 
+                taskTitle: '', 
+                taskAssignee: '', 
+                taskDueDate: null,
+                showNoteArea: false
+              }]
             }));
 
           } catch (err) {
@@ -793,142 +821,6 @@ const generateInvoicePDF = () => {
     };
     fetchData();
   }, [tokenId, customerServiceId]);
-
-  useEffect(() => {
-    if (formData.category && categories.length > 0) {
-      const category = categories.find(cat => cat.id === parseInt(formData.category));
-      if (category) {
-        setFilteredSubcategories(category.subcategories || []);
-        const serviceWalletId = category.wallet_id ? parseInt(category.wallet_id) : formData.serviceWalletId;
-        const requiresWallet = category.requires_wallet || (category.subcategories && category.subcategories.some(sub => sub.requires_wallet)) || formData.requiresWallet;
-        const hasExpiry = category.has_expiry || formData.hasExpiry;
-        const categoryDocs = (category.required_documents || []).filter(doc => doc.service_id === parseInt(formData.category) && !doc.sub_category_id);
-        setFormData(prev => ({
-          ...prev,
-          serviceWalletId,
-          requiresWallet,
-          hasExpiry,
-          expiryDate: hasExpiry && !prev.expiryDate ? new Date(new Date().setDate(new Date().getDate() + 90)).toISOString().split('T')[0] : prev.expiryDate,
-        }));
-        setSelectedCategoryDocuments(categoryDocs);
-        setSelectedWebsite(category.website || null);
-        console.log('ServiceEntry.jsx: Set formData for category:', {
-          category: category.name,
-          serviceWalletId,
-          requiresWallet,
-          hasExpiry,
-          subcategories: category.subcategories ? category.subcategories.map(sub => sub.name) : [],
-          required_documents: categoryDocs,
-          website: category.website,
-        });
-        if (!formData.subcategory && category.subcategories && category.subcategories.length > 0 && !formData.subcategory) {
-          const firstSub = category.subcategories[0];
-          const serviceCharge = parseFloat(firstSub.service_charges) || parseFloat(formData.serviceCharge) || 0;
-          const departmentCharge = parseFloat(firstSub.department_charges) || parseFloat(formData.departmentCharge) || 0;
-          const totalCharge = serviceCharge + departmentCharge;
-          const subDocs = (firstSub.required_documents || []).filter(doc => doc.sub_category_id === firstSub.id);
-          setFormData(prev => ({
-            ...prev,
-            subcategory: String(firstSub.id),
-            serviceCharge: String(serviceCharge),
-            departmentCharge: String(departmentCharge),
-            totalCharge: String(totalCharge),
-            requiresWallet: firstSub.requires_wallet || prev.requiresWallet,
-          }));
-          setSelectedSubcategory(firstSub);
-          setSelectedSubcategoryDocuments(subDocs);
-          console.log('ServiceEntry.jsx: Set formData for first subcategory:', {
-            subcategory: firstSub.name,
-            serviceCharge,
-            departmentCharge,
-            totalCharge,
-            requiresWallet: firstSub.requires_wallet,
-            required_documents: subDocs,
-          });
-        }
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          subcategory: prev.subcategory || '',
-          serviceCharge: prev.serviceCharge || '',
-          departmentCharge: prev.departmentCharge || '',
-          totalCharge: prev.totalCharge || '',
-          serviceWalletId: prev.serviceWalletId || null,
-          requiresWallet: prev.requiresWallet || false,
-          hasExpiry: prev.hasExpiry || false,
-          expiryDate: prev.expiryDate || '',
-        }));
-        setFilteredSubcategories([]);
-        setSelectedSubcategory(null);
-        setSelectedCategoryDocuments([]);
-        setSelectedSubcategoryDocuments([]);
-        setSelectedWebsite(null);
-        console.log('ServiceEntry.jsx: Category not found, preserving existing formData');
-        toast.warn('Selected category not found in categories data. Please select manually.');
-      }
-    } else {
-      setFilteredSubcategories([]);
-      setFormData(prev => ({
-        ...prev,
-        subcategory: prev.subcategory || '',
-        serviceCharge: prev.serviceCharge || '',
-        departmentCharge: prev.departmentCharge || '',
-        totalCharge: prev.totalCharge || '',
-        serviceWalletId: prev.serviceWalletId || null,
-        requiresWallet: prev.requiresWallet || false,
-        hasExpiry: prev.hasExpiry || false,
-        expiryDate: prev.expiryDate || '',
-      }));
-      setSelectedSubcategory(null);
-      setSelectedCategoryDocuments([]);
-      setSelectedSubcategoryDocuments([]);
-      setSelectedWebsite(null);
-      console.log('ServiceEntry.jsx: No category selected, preserving existing formData');
-    }
-  }, [formData.category, categories]);
-
-  useEffect(() => {
-    if (formData.subcategory && filteredSubcategories.length > 0) {
-      const subcategory = filteredSubcategories.find(sub => sub.id === parseInt(formData.subcategory));
-      if (subcategory) {
-        const subDocs = (subcategory.required_documents || []).filter(doc => doc.sub_category_id === parseInt(formData.subcategory));
-        const serviceCharge = parseFloat(subcategory.service_charges) || parseFloat(formData.serviceCharge) || 0;
-        const departmentCharge = parseFloat(subcategory.department_charges) || parseFloat(formData.departmentCharge) || 0;
-        const totalCharge = serviceCharge + departmentCharge;
-        setFormData(prev => ({
-          ...prev,
-          serviceCharge: String(serviceCharge),
-          departmentCharge: String(departmentCharge),
-          totalCharge: String(totalCharge),
-          requiresWallet: subcategory.requires_wallet || prev.requiresWallet,
-        }));
-        setSelectedSubcategory(subcategory);
-        setSelectedSubcategoryDocuments(subDocs);
-        console.log('ServiceEntry.jsx: Set selectedSubcategory:', {
-          subcategory: subcategory.name,
-          serviceCharge,
-          departmentCharge,
-          requiresWallet: subcategory.requires_wallet,
-          required_documents: subDocs,
-        });
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          serviceCharge: prev.serviceCharge || '',
-          departmentCharge: prev.departmentCharge || '',
-          totalCharge: prev.totalCharge || '',
-          requiresWallet: prev.requiresWallet || false,
-        }));
-        setSelectedSubcategory(null);
-        setSelectedSubcategoryDocuments([]);
-        console.log('ServiceEntry.jsx: Subcategory not found, preserving existing charges');
-        toast.warn('Selected subcategory not found. Please select manually.');
-      }
-    } else {
-      setSelectedSubcategory(null);
-      setSelectedSubcategoryDocuments([]);
-    }
-  }, [formData.subcategory, filteredSubcategories]);
 
   useEffect(() => {
     const newGrandTotal = formData.services.reduce((sum, svc) => {
@@ -951,20 +843,6 @@ const generateInvoicePDF = () => {
       }
     }
   }, [formData.services, formData.payments, isEditMode]);
-
-  useEffect(() => {
-    if (formData.hasExpiry && formData.category && !formData.expiryDate) {
-      const today = new Date();
-      const expiry = new Date();
-      expiry.setDate(today.getDate() + 90);
-      const formattedDate = expiry.toISOString().split('T')[0];
-      setFormData(prev => ({ ...prev, expiryDate: formattedDate }));
-      calculateDaysRemaining(formattedDate);
-    } else if (!formData.hasExpiry) {
-      setFormData(prev => ({ ...prev, expiryDate: '' }));
-      setDaysRemaining(null);
-    }
-  }, [formData.category, formData.hasExpiry]);
 
   const calculateDaysRemaining = (dateString) => {
     if (!dateString) {
@@ -1526,7 +1404,7 @@ const generateInvoicePDF = () => {
                 </div>
                 
                 <AnimatePresence>
-                  {formData.services.map((svc, index) => {
+                  {(formData.services || []).map((svc, index) => {
                     const subcategories = categories.find(c => c.id === parseInt(svc.category))?.subcategories || [];
                     const categoryDocs = categories.find(c => c.id === parseInt(svc.category))?.required_documents?.filter(doc => !doc.sub_category_id) || [];
                     const subcategoryDocs = categories.find(c => c.id === parseInt(svc.category))?.subcategories?.find(s => s.id === parseInt(svc.subcategory))?.required_documents || [];
@@ -1764,7 +1642,7 @@ const generateInvoicePDF = () => {
                       <p className="text-gray-500 text-sm mt-1">Add your first payment method</p>
                     </div>
                   ) : (
-                    formData.payments.map((payment, index) => (
+                    (formData.payments || []).map((payment, index) => (
                       <div key={index} className="bg-white p-4 rounded-xl border border-gray-200 relative">
                         <div className="absolute top-3 right-3">
                           <button
