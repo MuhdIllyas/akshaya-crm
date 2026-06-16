@@ -1163,7 +1163,30 @@ const generateInvoicePDF = () => {
           toast.success('Services successfully created and paid!');
         }
         
-        setTimeout(() => navigate(userRole === 'admin' || userRole === 'superadmin' ? -1 : '/dashboard/staff'), 2000);
+        // --- 1. Fetch updated entries so the table shows the new submission immediately ---
+        try {
+          const entriesRes = await getServiceEntries(true);
+          setServiceEntries(entriesRes.data || []);
+        } catch (fetchErr) {
+          console.error("Failed to refresh table", fetchErr);
+        }
+
+        // --- 2. Clear the form instead of navigating away ---
+        setFormData({
+          tokenId: '',
+          customerName: '',
+          phone: '',
+          status: 'pending',
+          payments: [],
+          services: [{
+            id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
+            departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
+            hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
+            initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false
+          }]
+        });
+        setEditingEntryId(null);
+        
       } catch (err) {
         toast.error(err.response?.data?.error || 'Failed to submit service entries');
       }
@@ -1754,7 +1777,22 @@ const generateInvoicePDF = () => {
           <div className="flex justify-end mt-2 gap-4">
             <button
               type="button"
-              onClick={() => navigate('/dashboard/staff')}
+              onClick={() => {
+                setFormData({
+                  tokenId: '',
+                  customerName: '',
+                  phone: '',
+                  status: 'pending',
+                  payments: [],
+                  services: [{
+                    id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
+                    departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
+                    hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
+                    initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false
+                  }]
+                });
+                setEditingEntryId(null);
+              }}
               className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2"
             >
               <FiX className="h-5 w-5" />
