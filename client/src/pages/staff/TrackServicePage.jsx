@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   FiUser, FiPhone, FiClock, FiCheckCircle, FiAlertCircle, 
   FiRefreshCw, FiSearch, FiEdit, FiMessageSquare, FiChevronDown, 
   FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
-  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft
+  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -22,6 +25,7 @@ import {
   getTrackingStats
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
+import NotesPanel from '/src/components/notes/NotesPanel';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -968,8 +972,8 @@ const TrackServicePage = () => {
         
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="border-b border-gray-200 bg-gray-50/50">
-            <nav className="flex -mb-px">
-              {['overview', 'tracking', 'documents', 'history'].map((tab) => (
+            <nav className="flex -mb-px overflow-x-auto hide-scrollbar">
+              {['overview', 'tracking', 'documents', 'history', 'discussion'].map((tab) => (
                 <button
                   key={tab}
                   className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
@@ -1024,12 +1028,119 @@ const TrackServicePage = () => {
                 {activeTab === 'history' && (
                   <HistoryView service={selectedService} />
                 )}
+                {activeTab === 'discussion' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FiMessageCircle className="h-5 w-5 text-indigo-600" />
+                      <h3 className="font-semibold text-gray-900">Internal Discussion & Tasks</h3>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-4">
+                      These notes are strictly internal. Tag staff using @ to assign them tasks.
+                    </p>
+                    <div className="bg-gray-50 rounded-xl p-2 sm:p-4 border border-gray-100">
+                      <NotesPanel 
+                        contextType="service_entry" 
+                        contextId={selectedService.serviceEntryId} 
+                        embedded={true} 
+                        showHeader={false}
+                      />
+                    </div>
+                  </div>
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
         </div>
       </div>
     );
+  };
+  
+  const handleExportExcel = () => {
+    try {
+      if (services.length === 0) {
+        toast.info("No data to export");
+        return;
+      }
+      
+      const exportData = services.map(s => ({
+        'Application No': s.applicationNumber || 'N/A',
+        'Customer Name': s.customerName || 'Unknown',
+        'Phone': s.phone || 'N/A',
+        'Email': s.email || 'N/A',
+        'Service Type': s.serviceType || 'Unknown',
+        'Subcategory': s.subcategoryName || 'N/A',
+        'Status': s.status || 'Pending',
+        'Current Step': s.currentStep || 'Submitted',
+        'Priority': s.priority || 'Medium',
+        'Assigned To': s.assignedTo || 'Unassigned',
+        'Created Date': s.date || 'N/A',
+        'Estimated Delivery': s.estimatedDelivery || 'Not set',
+        'Service Charge': s.serviceCharge || 0,
+        'Department Charge': s.departmentCharge || 0,
+        'Total Charge': s.totalCharge || 0,
+        'Payment Status': s.paymentStatus || 'Pending'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Tracked Services");
+      XLSX.writeFile(workbook, `Service_Tracking_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success("Excel exported successfully!");
+    } catch (error) {
+      console.error("Export Error:", error);
+      toast.error("Failed to export Excel. Ensure xlsx is installed.");
+    }
+  };
+
+  const handleExportPDF = () => {
+    try {
+      if (services.length === 0) {
+        toast.info("No data to export");
+        return;
+      }
+      
+      const doc = new jsPDF('landscape');
+      
+      // Document Header
+      doc.setFontSize(16);
+      doc.text("Service Tracking Report", 14, 15);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()} | Total Records: ${services.length}`, 14, 22);
+
+      const tableColumn = ["App No", "Customer Name", "Phone", "Service", "Status", "Step", "Assigned To", "Total"];
+      const tableRows = [];
+
+      services.forEach(s => {
+        const rowData = [
+          s.applicationNumber || 'N/A',
+          s.customerName || 'Unknown',
+          s.phone || 'N/A',
+          s.serviceType || 'Unknown',
+          s.status || 'Pending',
+          s.currentStep || 'Submitted',
+          s.assignedTo || 'Unassigned',
+          `Rs ${s.totalCharge || 0}`
+        ];
+        tableRows.push(rowData);
+      });
+
+      // UPDATED: Using the explicit autoTable function instead of doc.autoTable
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 28,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600 to match your UI
+        alternateRowStyles: { fillColor: [249, 250, 251] }
+      });
+
+      doc.save(`Service_Tracking_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success("PDF exported successfully!");
+    } catch (error) {
+      console.error("Export Error:", error);
+      toast.error("Failed to export PDF. Please check the console for details.");
+    }
   };
 
   const handleBackToList = () => {
@@ -1365,15 +1476,30 @@ const TrackServicePage = () => {
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      
+      {/* Note: Changed grid-cols-4 to grid-cols-5 to accommodate the extra button */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
           <FiPlus className="h-5 w-5 mb-1" />
-          <span className="text-xs font-medium">New Service</span>
+          <span className="text-xs font-medium">New</span>
         </button>
-        <button className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
+        
+        {/* NEW: Excel Export Button */}
+        <button 
+          onClick={handleExportExcel}
+          className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
           <FiDownload className="h-5 w-5 mb-1" />
-          <span className="text-xs font-medium">Export</span>
+          <span className="text-xs font-medium">Excel</span>
         </button>
+        
+        {/* NEW: PDF Export Button */}
+        <button 
+          onClick={handleExportPDF}
+          className="p-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors flex flex-col items-center justify-center">
+          <FiFileText className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">PDF</span>
+        </button>
+        
         <button className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex flex-col items-center justify-center">
           <FiFilter className="h-5 w-5 mb-1" />
           <span className="text-xs font-medium">Filters</span>
@@ -1992,11 +2118,11 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
           placeholder="Enter customer email address"
         />
         <FormTextarea
-          label="Notes"
+          label="Customer Remarks (Sent via WhatsApp)"
           name="notes"
           value={formData.notes}
           onChange={onFormChange}
-          placeholder="Enter additional notes"
+          placeholder="Enter remarks visible to the customer..."
           rows={3}
         />
       </div>
