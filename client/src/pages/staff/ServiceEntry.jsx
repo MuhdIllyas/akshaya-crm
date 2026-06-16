@@ -516,14 +516,28 @@ const ServiceEntry = () => {
 
   // ========== INVOICE GENERATOR FUNCTIONS ==========
   const openInvoiceModal = () => {
-    // Build default items from current formData
-    const items = [
-      { description: 'Service Charge', amount: formData.serviceCharge || '0' },
-      {
-        description: 'Department Charge',
-        amount: formData.departmentCharge || '0',
-      },
-    ];
+    // Build default items from the dynamic Services Cart
+    const items = [];
+
+    (formData.services || []).forEach((svc) => {
+      if (!svc.category) return; // Skip empty rows
+
+      const catName = getCategoryName(svc.category);
+      const subName = getSubcategoryName(svc.category, svc.subcategory);
+      const name = subName !== 'N/A' ? `${catName} - ${subName}` : catName;
+
+      if (parseFloat(svc.serviceCharge) > 0) {
+        items.push({ description: `${name} (Service)`, amount: String(svc.serviceCharge) });
+      }
+      if (parseFloat(svc.departmentCharge) > 0) {
+        items.push({ description: `${name} (Dept)`, amount: String(svc.departmentCharge) });
+      }
+    });
+
+    // Fallback if the cart is somehow totally empty
+    if (items.length === 0) {
+      items.push({ description: 'Service Charge', amount: '0' });
+    }
 
     setInvoiceData({
       customerName: formData.customerName,
@@ -576,16 +590,27 @@ const generateInvoicePDF = () => {
   doc.text(`Customer: ${invoiceData.customerName}`, 14, 64);
   doc.text(`Phone: ${invoiceData.phone}`, 14, 70);
 
-    // ---------- SERVICE & STAFF ----------
-  const serviceName =
-    getCategoryName(formData.category) +
-    (formData.subcategory
-      ? ' - ' + getSubcategoryName(formData.category, formData.subcategory)
-      : '');
-  const staffName = localStorage.getItem('name');
+  // ---------- SERVICE & STAFF ----------
+  // Extract all service names from the cart
+  const serviceNamesList = (formData.services || [])
+    .filter(svc => svc.category)
+    .map(svc => {
+      const catName = getCategoryName(svc.category);
+      const subName = getSubcategoryName(svc.category, svc.subcategory);
+      return subName !== 'N/A' ? `${catName} (${subName})` : catName;
+    });
+
+  const serviceName = serviceNamesList.length > 0 
+    ? serviceNamesList.join(', ') 
+    : 'General Service';
+
+  const staffName = localStorage.getItem('name') || 'Staff';
+
+  // Truncate service name if it's too long so it doesn't run off the PDF page
+  const displayServiceName = serviceName.length > 60 ? serviceName.substring(0, 57) + '...' : serviceName;
 
   doc.setFontSize(10);
-  doc.text(`Service: ${serviceName}`, 14, 78);
+  doc.text(`Service: ${displayServiceName}`, 14, 78);
   doc.text(`Served by: ${staffName}`, 14, 84);
   // ------------------------------------
 
