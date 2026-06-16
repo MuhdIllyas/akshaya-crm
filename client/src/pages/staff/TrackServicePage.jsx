@@ -1054,15 +1054,52 @@ const TrackServicePage = () => {
       </div>
     );
   };
-  
-  const handleExportExcel = () => {
+
+  // Add this new helper function right here:
+  const fetchAllFilteredDataForExport = async () => {
+    const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+    
+    const params = {
+      page: 1,
+      limit: totalRecords > 0 ? totalRecords : 10000, 
+      timeRange: timeRange,
+      date: dateFilter || undefined,
+      service: serviceFilter === 'all' ? undefined : serviceFilter,
+      subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+      status: statusFilter === 'all' ? undefined : apiStatus,
+      staff: staffFilter === 'all' ? undefined : staffFilter,
+      expiry: expiryFilter === 'all' ? undefined : expiryFilter,
+      search: debouncedSearch || undefined,
+      aadhaar: debouncedAadhaar || undefined
+    };
+
     try {
-      if (services.length === 0) {
+      const trackingResponse = await getTrackingEntries(params);
+      const trackingData = Array.isArray(trackingResponse?.data) 
+        ? trackingResponse.data 
+        : Array.isArray(trackingResponse) ? trackingResponse : [];
+
+      const transformedData = await transformBackendData(trackingData, entryServices);
+      return transformedData;
+    } catch (error) {
+      console.error('Error fetching export data:', error);
+      throw new Error('Failed to fetch complete dataset');
+    }
+  };
+  
+  const handleExportExcel = async () => {
+    try {
+      if (totalRecords === 0) {
         toast.info("No data to export");
         return;
       }
       
-      const exportData = services.map(s => ({
+      toast.info("Preparing Excel file... This might take a moment.", { autoClose: 2000 });
+      
+      // Fetch ALL filtered data instead of using local state
+      const fullDataset = await fetchAllFilteredDataForExport();
+
+      const exportData = fullDataset.map(s => ({
         'Application No': s.applicationNumber || 'N/A',
         'Customer Name': s.customerName || 'Unknown',
         'Phone': s.phone || 'N/A',
@@ -1092,12 +1129,17 @@ const TrackServicePage = () => {
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     try {
-      if (services.length === 0) {
+      if (totalRecords === 0) {
         toast.info("No data to export");
         return;
       }
+      
+      toast.info("Generating PDF... This might take a moment.", { autoClose: 2000 });
+      
+      // Fetch ALL filtered data instead of using local state
+      const fullDataset = await fetchAllFilteredDataForExport();
       
       const doc = new jsPDF('landscape');
       
@@ -1106,12 +1148,12 @@ const TrackServicePage = () => {
       doc.text("Service Tracking Report", 14, 15);
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Generated on: ${new Date().toLocaleDateString()} | Total Records: ${services.length}`, 14, 22);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()} | Total Records: ${fullDataset.length}`, 14, 22);
 
       const tableColumn = ["App No", "Customer Name", "Phone", "Service", "Status", "Step", "Assigned To", "Total"];
       const tableRows = [];
 
-      services.forEach(s => {
+      fullDataset.forEach(s => {
         const rowData = [
           s.applicationNumber || 'N/A',
           s.customerName || 'Unknown',
@@ -1125,7 +1167,6 @@ const TrackServicePage = () => {
         tableRows.push(rowData);
       });
 
-      // UPDATED: Using the explicit autoTable function instead of doc.autoTable
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
