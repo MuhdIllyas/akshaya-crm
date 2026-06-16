@@ -742,7 +742,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
 
 // 🔥 GET /api/servicemanagement/entries - FINAL CLEAN VERSION
 router.get('/entries', authenticateToken, async (req, res) => {
-  const { today } = req.query;
+  const { today, staff_id } = req.query; // <-- Extract the new staff_id
   const client = await pool.connect();
 
   try {
@@ -751,11 +751,13 @@ router.get('/entries', authenticateToken, async (req, res) => {
              sc.name AS subcategory_name,
              s.wallet_id AS service_wallet_id,
              s.name AS service_name,
+             tr.id AS tracking_id,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
       JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN service_tracking tr ON tr.service_entry_id = se.id
     `;
 
     let values = [];
@@ -765,10 +767,24 @@ router.get('/entries', authenticateToken, async (req, res) => {
       conditions.push(`se.created_at::date = CURRENT_DATE`);
     }
 
+    // 1. Staff can ONLY ever see their own entries (highest security)
     if (req.user.role === 'staff') {
       conditions.push(`se.staff_id = $${values.length + 1}`);
       values.push(parseInt(req.user.id));
-    } else if (req.user.role === 'admin') {
+    } 
+    // 2. Admins/Superadmins explicitly requesting a specific staff dashboard
+    else if (staff_id) {
+      conditions.push(`se.staff_id = $${values.length + 1}`);
+      values.push(parseInt(staff_id));
+      
+      // Ensure admins still can't snoop on other centres
+      if (req.user.role === 'admin') {
+        conditions.push(`st.centre_id = $${values.length + 1}`);
+        values.push(parseInt(req.user.centre_id));
+      }
+    } 
+    // 3. Fallback: Admin requesting all centre entries
+    else if (req.user.role === 'admin') {
       conditions.push(`st.centre_id = $${values.length + 1}`);
       values.push(parseInt(req.user.centre_id));
     }
@@ -889,6 +905,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
           : null,
 
         status: entry.status,
+        tracking_id: entry.tracking_id,
 
         notes_count: parseInt(entry.notes_count) || 0,
 
