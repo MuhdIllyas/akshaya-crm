@@ -735,7 +735,7 @@ const StaffDashboard = () => {
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            🚀 Added Invoice Generation in Service Entry!! 💸🧾 Check it out when you start the next service! 👀
+            ✨ Gave the Recent Activity feed a massive glow-up! 💅 Now you can track services instantly with the new 'Details' button! 🔍🕒
           </div>
         </div>
       </div>
