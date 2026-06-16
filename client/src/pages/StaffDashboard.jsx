@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -188,21 +188,17 @@ const StaffDashboard = () => {
     }
   }, [centreId]);
 
-  // --- Fetch service entries (unchanged) ---
+
+  // --- Fetch service entries (optimized) ---
   const fetchServiceEntries = useCallback(async () => {
     try {
-      const serviceEntriesRes = await getServiceEntries();
-      let staffEntries = serviceEntriesRes.data;
-      const hasStaffId = serviceEntriesRes.data.some(entry => entry.staff_id || entry.staffId);
-      if (hasStaffId) {
-        staffEntries = serviceEntriesRes.data.filter(entry => {
-          const entryStaffId = String(entry.staff_id || entry.staffId || '').trim();
-          return entryStaffId === String(staffId).trim();
-        });
-      }
-      const sortedEntries = staffEntries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      setRecentServiceEntries(sortedEntries.slice(0, 15)); 
-      return sortedEntries;
+      // Pass the explicit staffId directly to the backend
+      const serviceEntriesRes = await getServiceEntries(false, staffId);
+      
+      // Backend already returns exact matches sorted by date, so we just take the top 15
+      const entries = serviceEntriesRes.data || [];
+      setRecentServiceEntries(entries.slice(0, 15)); 
+      return entries;
     } catch (err) {
       console.error('Error fetching service entries:', err);
       return [];
@@ -370,31 +366,43 @@ const StaffDashboard = () => {
 
   // Initial data fetch
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
-        const categoriesRes = await getCategories();
-        setCategories(categoriesRes.data || []);
-        await refreshTokens();
-        await fetchServiceEntries();
-        await fetchOnlineBookings();
-        await fetchPerformance();
-        await fetchTasksAndEvents();
-      } catch (err) {
-        setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
-        toast.error('Failed to load dashboard data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
+      
+      // Fire all API requests concurrently
+      const [categoriesRes] = await Promise.all([
+        getCategories(),
+        refreshTokens(),
+        fetchServiceEntries(),
+        fetchOnlineBookings(),
+        fetchPerformance(),
+        fetchTasksAndEvents()
+      ]);
+
+      // Set state for the ones that don't handle their own state inside their functions
+      setCategories(categoriesRes.data || []);
+      
+    } catch (err) {
+      setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchData();
   }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance, fetchTasksAndEvents]);
+
+  const isMounted = useRef(false);
 
   // Refetch performance when period changes
   useEffect(() => {
-    if (!loading) {
+    if (isMounted.current && !loading) {
       fetchPerformance();
+    } else if (!loading) {
+      isMounted.current = true;
     }
   }, [period, customDateRange, fetchPerformance, loading]);
 
@@ -490,9 +498,11 @@ const StaffDashboard = () => {
   const handleViewDetails = (tokenId, trackingId) => {
     if (trackingId) {
       navigate(`/dashboard/staff/track_service/${trackingId}`);
-    } else {
+    } else if (tokenId) {
       // Fallback just in case it's a legacy token without a tracking entry
       navigate(`/dashboard/staff/token/${tokenId}/details`);
+    } else {
+      toast.info("No tracking details available for this quick service.");
     }
   };
   const formatTime = (dateString) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -505,56 +515,86 @@ const StaffDashboard = () => {
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  // Token filtering (unchanged)
-  const getActiveTokens = () => tokens.filter(t => {
-    const tokenStaff = String(t.staffId || '').trim();
+  // Token filtering optimized with useMemo
+  const { activeTokens, completedTokens, campaignTokens, statusCounts } = useMemo(() => {
     const localStaff = String(staffId).trim();
-    const isAssignedToMe = tokenStaff === localStaff;
-    const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-    // ADDED: && t.status !== 'cancelled'
-    return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.status !== 'cancelled';
-  });
 
-  const getCompletedTokens = () => tokens.filter(t => {
-    const tokenStaff = String(t.staffId || '').trim();
-    const localStaff = String(staffId).trim();
-    return tokenStaff === localStaff && t.status === 'completed' && t.type !== 'campaign';
-  });
+    const active = tokens.filter(t => {
+      const tokenStaff = String(t.staffId || '').trim();
+      const isAssignedToMe = tokenStaff === localStaff;
+      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+      return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.status !== 'cancelled';
+    });
 
-  const getCampaignTokens = () => tokens.filter(t => {
-    const tokenStaff = String(t.staffId || '').trim();
-    const localStaff = String(staffId).trim();
-    const isAssignedToMe = tokenStaff === localStaff;
-    const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-    // ADDED: && t.status !== 'cancelled'
-    return (isAssignedToMe || isUnassigned) && t.type === 'campaign' && t.status !== 'cancelled';
-  });
+    const completed = tokens.filter(t => {
+      const tokenStaff = String(t.staffId || '').trim();
+      return tokenStaff === localStaff && t.status === 'completed' && t.type !== 'campaign';
+    });
 
-  const activeTokens = getActiveTokens();
-  const completedTokens = getCompletedTokens();
-  const campaignTokens = getCampaignTokens();
+    const campaign = tokens.filter(t => {
+      const tokenStaff = String(t.staffId || '').trim();
+      const isAssignedToMe = tokenStaff === localStaff;
+      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
+      return (isAssignedToMe || isUnassigned) && t.type === 'campaign' && t.status !== 'cancelled';
+    });
 
-  const getFilteredTokens = () => {
+    return {
+      activeTokens: active,
+      completedTokens: completed,
+      campaignTokens: campaign,
+      statusCounts: {
+        pending: active.filter(t => t.status === 'pending').length,
+        inProgress: active.filter(t => t.status === 'in-progress' || t.status === 'processing').length,
+        completed: completed.length,
+        campaign: campaign.length,
+        total: active.length + completed.length
+      }
+    };
+  }, [tokens, staffId]);
+
+  const filteredTokens = useMemo(() => {
     let source = activeView === 'active' ? activeTokens : activeView === 'completed' ? completedTokens : campaignTokens;
+    
+    // 1. Calculate search string ONCE outside the loop (Performance)
+    const searchLower = searchQuery.toLowerCase().trim();
+    
+    // 2. Safely calculate Dates ONCE outside the loop
+    const todayObj = new Date();
+    todayObj.setHours(0, 0, 0, 0); // Normalize today to midnight
+    
+    const yesterdayObj = new Date(todayObj);
+    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    
+    const weekAgoObj = new Date(todayObj);
+    weekAgoObj.setDate(weekAgoObj.getDate() - 7);
+
+    const todayStr = todayObj.toDateString();
+    const yesterdayStr = yesterdayObj.toDateString();
+
     return source.filter(token => {
-      const matchesSearch = token.customerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           token.tokenId?.toString().includes(searchQuery) ||
-                           token.phone?.includes(searchQuery);
-      const tokenDate = new Date(token.createdAt).toDateString();
-      const today = new Date().toDateString();
-      const yesterday = new Date(Date.now() - 86400000).toDateString();
-      const weekAgo = new Date(Date.now() - 604800000);
-      const matchesDate = activeDate === 'today' ? tokenDate === today :
-                         activeDate === 'yesterday' ? tokenDate === yesterday :
-                         activeDate === 'week' ? new Date(tokenDate) >= weekAgo : true;
+      // 3. Safe string conversion to prevent crashes if a number is passed
+      const matchesSearch = !searchLower || 
+                            String(token.customerName || '').toLowerCase().includes(searchLower) ||
+                            String(token.tokenId || '').toLowerCase().includes(searchLower) ||
+                            String(token.phone || '').toLowerCase().includes(searchLower);
+
+      // 4. Accurate date matching ignoring the exact hour/minute
+      const tokenDateObj = new Date(token.createdAt);
+      tokenDateObj.setHours(0, 0, 0, 0);
+      const tokenDateStr = tokenDateObj.toDateString();
+
+      const matchesDate = activeDate === 'today' ? tokenDateStr === todayStr :
+                          activeDate === 'yesterday' ? tokenDateStr === yesterdayStr :
+                          activeDate === 'week' ? tokenDateObj >= weekAgoObj : 
+                          true; // Fallback for 'all'
+
       return matchesSearch && matchesDate;
     });
-  };
+  }, [activeTokens, completedTokens, campaignTokens, activeView, searchQuery, activeDate]);
 
-  const filteredTokens = getFilteredTokens();
-  const groupTokensByDate = (tokens) => {
+  const groupedTokens = useMemo(() => {
     const grouped = {};
-    tokens.forEach(token => {
+    filteredTokens.forEach(token => {
       const date = new Date(token.createdAt).toDateString();
       if (!grouped[date]) grouped[date] = [];
       grouped[date].push(token);
@@ -562,23 +602,16 @@ const StaffDashboard = () => {
     return Object.entries(grouped)
       .sort(([a], [b]) => new Date(b) - new Date(a))
       .reduce((acc, [date, arr]) => ({ ...acc, [date]: arr.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)) }), {});
-  };
-  const groupedTokens = groupTokensByDate(filteredTokens);
+  }, [filteredTokens]);
 
-  const groupedRecentActivities = recentServiceEntries.reduce((acc, entry) => {
+  const groupedRecentActivities = useMemo(() => {
+    return recentServiceEntries.reduce((acc, entry) => {
       const date = new Date(entry.created_at).toDateString();
       if (!acc[date]) acc[date] = [];
       acc[date].push(entry);
       return acc;
-  }, {});
-
-  const statusCounts = {
-    pending: activeTokens.filter(t => t.status === 'pending').length,
-    inProgress: activeTokens.filter(t => t.status === 'in-progress' || t.status === 'processing').length,
-    completed: completedTokens.length,
-    campaign: campaignTokens.length,
-    total: activeTokens.length + completedTokens.length
-  };
+    }, {});
+  }, [recentServiceEntries]);
 
   const handleTakeWork = async (bookingId) => {
     try {
@@ -1371,36 +1404,92 @@ const StaffDashboard = () => {
                 </div>
                   <div className="p-6 overflow-y-auto max-h-[500px]">
                     {Object.keys(groupedRecentActivities).length > 0 ? (
-                      <div className="space-y-6">
+                      <div className="space-y-8">
                         {Object.entries(groupedRecentActivities).map(([date, entries]) => (
-                          <div key={date}>
-                            <div className="flex items-center gap-2 mb-3">
-                              <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
-                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <div key={date} className="relative">
+                            {/* Date Sticky Header */}
+                            <div className="flex items-center gap-3 mb-4 sticky top-0 bg-white/90 backdrop-blur-sm py-2 z-20 -mx-2 px-2">
+                              <div className="p-1.5 bg-gray-100 rounded-md">
+                                <FiCalendar className="h-3.5 w-3.5 text-gray-600" />
+                              </div>
+                              <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
                                 {formatDateUI(date)}
                               </h4>
+                              <div className="h-px bg-gray-200 flex-1 ml-2"></div>
                             </div>
-                            <div className="space-y-4">
-                              {entries.map(entry => (
-                                <div key={entry.id} className="flex gap-3 pb-4 last:pb-0 border-b last:border-0 border-gray-100">
-                                  <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <FiUser className="h-4 w-4 text-gray-600" />
+
+                            {/* Timeline Entries */}
+                            <div className="space-y-4 relative">
+                              {entries.map((entry, index) => (
+                                <div key={entry.id} className="group relative flex gap-4">
+                                  {/* Timeline Vertical Line (hides on the very last item of the day) */}
+                                  {index !== entries.length - 1 && (
+                                    <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
+                                  )}
+                                  
+                                  {/* Activity Avatar */}
+                                  <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
+                                    <FiUser className="h-4 w-4 text-indigo-600" />
                                   </div>
-                                  <div className="flex-1">
-                                    <div className="flex justify-between items-baseline">
-                                      <p className="text-sm font-medium text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
-                                      <span className="text-xs text-gray-500 ml-2">{formatTime(entry.created_at)}</span>
-                                    </div>
-                                    <p className="text-sm text-gray-600">{getCategoryName(entry.category)} service</p>
-                                    <div className="flex justify-between items-center mt-1">
-                                      <span className={`text-xs font-medium ${
-                                        entry.status === 'completed' ? 'text-green-600' :
-                                        entry.status === 'in-progress' ? 'text-blue-600' :
-                                        entry.status === 'pending' ? 'text-amber-600' : 'text-gray-600'
-                                      }`}>
-                                        {entry.status?.replace('-', ' ')}
+
+                                  {/* Activity Card */}
+                                  <div className="flex-1 bg-white border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200">
+                                    <div className="flex justify-between items-start mb-2">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-bold text-gray-900">{entry.customerName || 'Customer'}</p>
+                                        
+                                        {/* Upgraded Badges */}
+                                        <div className="flex items-center gap-1.5">
+                                          {entry.workSource === 'online' && (
+                                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase tracking-wider border border-blue-100">
+                                              <FiGlobe className="h-3 w-3" /> Online
+                                            </span>
+                                          )}
+                                          {entry.is_edited && (
+                                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-bold uppercase tracking-wider border border-gray-200">
+                                              Edited
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Time Tag */}
+                                      <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 px-2 py-1 rounded-md shrink-0 border border-gray-100">
+                                        {formatTime(entry.created_at)}
                                       </span>
-                                      {entry.tokenId && <span className="text-xs text-gray-500 font-mono">{shortenTokenId(entry.tokenId)}</span>}
+                                    </div>
+                                    
+                                    <p className="text-xs font-medium text-gray-600 mb-3">{getCategoryName(entry.category)} service</p>
+                                    
+                                    {/* Action & Status Row */}
+                                    <div className="flex justify-between items-center pt-3 border-t border-gray-50">
+                                      <div className="flex items-center gap-2">
+                                        {/* Upgraded Status Pills */}
+                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                          entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                          entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                          entry.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 
+                                          'bg-gray-50 text-gray-700 border border-gray-200'
+                                        }`}>
+                                          {entry.status?.replace('-', ' ')}
+                                        </span>
+                                        
+                                        {entry.tokenId && (
+                                          <span className="text-[11px] text-gray-500 font-mono font-medium pl-2 border-l border-gray-200">
+                                            {shortenTokenId(entry.tokenId)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      
+                                      {/* Enhanced Details Button */}
+                                      {(entry.tokenId || entry.tracking_id) && (
+                                        <button 
+                                          onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
+                                          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider shadow-sm transition-all shrink-0"
+                                        >
+                                          <FiBarChart2 className="h-3.5 w-3.5" /> Details
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
