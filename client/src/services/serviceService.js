@@ -208,9 +208,11 @@ export const getTokenData = async (tokenId) => {
 };
 
 // Get all service entries (staff)
-export const getServiceEntries = async (today = false) => {
-  console.log('serviceService.js: Fetching service entries', { today });
-  return await api.get('/entries', { params: { today } });
+export const getServiceEntries = async (today = false, staffId = null) => {
+  console.log('serviceService.js: Fetching service entries', { today, staffId });
+  const params = { today };
+  if (staffId) params.staff_id = staffId; // Attach the staff ID to the request
+  return await api.get('/entries', { params });
 };
 
 // Create a service entry (staff)
