@@ -192,12 +192,11 @@ const StaffDashboard = () => {
   // --- Fetch service entries (optimized) ---
   const fetchServiceEntries = useCallback(async () => {
     try {
-      // Pass the explicit staffId directly to the backend
-      const serviceEntriesRes = await getServiceEntries(false, staffId);
+      // Pass staffId AND a strict limit of 20 to stop massive network payloads!
+      const serviceEntriesRes = await getServiceEntries(false, staffId, 20);
       
-      // Backend already returns exact matches sorted by date, so we just take the top 15
       const entries = serviceEntriesRes.data || [];
-      setRecentServiceEntries(entries.slice(0, 15)); 
+      setRecentServiceEntries(entries); 
       return entries;
     } catch (err) {
       console.error('Error fetching service entries:', err);
@@ -205,21 +204,17 @@ const StaffDashboard = () => {
     }
   }, [staffId]);
 
-  // --- Fetch online bookings (unchanged) ---
+  // --- Fetch online bookings (optimized) ---
   const fetchOnlineBookings = useCallback(async () => {
     try {
-      const pendingRes = await api.get('/customer-services', { params: { status: 'under_review' } });
-      const processingRes = await api.get('/customer-services', { params: { status: 'processing', staff_id: staffId } });
-      const serviceEntriesRes = await getServiceEntries();
-      const processedBookingIds = new Set();
-      serviceEntriesRes.data.forEach(entry => {
-        if (entry.customer_service_id) processedBookingIds.add(entry.customer_service_id.toString());
-      });
-      const filteredProcessingBookings = (processingRes.data || []).filter(
-        booking => !processedBookingIds.has(booking.id.toString())
-      );
+      // Fetch concurrently and REMOVE the massive double-fetch of service entries
+      const [pendingRes, processingRes] = await Promise.all([
+        api.get('/customer-services', { params: { status: 'under_review' } }),
+        api.get('/customer-services', { params: { status: 'processing', staff_id: staffId } })
+      ]);
+
       setOnlineBookings(pendingRes.data || []);
-      setProcessingBookings(filteredProcessingBookings);
+      setProcessingBookings(processingRes.data || []);
     } catch (err) {
       console.error('Error fetching online bookings:', err);
       toast.error('Failed to load online bookings');

@@ -742,7 +742,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
 
 // 🔥 GET /api/servicemanagement/entries - FINAL CLEAN VERSION
 router.get('/entries', authenticateToken, async (req, res) => {
-  const { today, staff_id } = req.query; // <-- Extract the new staff_id
+  const { today, staff_id, limit } = req.query; 
   const client = await pool.connect();
 
   try {
@@ -794,6 +794,12 @@ router.get('/entries', authenticateToken, async (req, res) => {
     }
 
     query += ` ORDER BY se.created_at DESC`;
+
+    // Apply the limit if requested by the dashboard
+    if (limit) {
+      query += ` LIMIT $${values.length + 1}`;
+      values.push(parseInt(limit));
+    }
 
     const entriesResult = await client.query(query, values);
     const entries = [];
