@@ -1392,7 +1392,7 @@ const ServiceLogs = () => {
         
         {/* Header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="max-w-[98%] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 bg-indigo-500 rounded-xl flex items-center justify-center shadow-lg">
@@ -1427,7 +1427,7 @@ const ServiceLogs = () => {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-[98%] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 py-8">
           {/* Stats Overview - Service focused only */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
             <StatCard
