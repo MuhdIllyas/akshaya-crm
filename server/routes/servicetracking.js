@@ -668,7 +668,7 @@ const {
     }
 
     if (reviewed === 'true') {
-      queryConditions.push(`st.service_rating IS NOT NULL`);
+      queryConditions.push(`sr.is_submitted = true`);
     }
 
     let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
@@ -832,7 +832,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
     }
 
     if (reviewed === 'true') {
-      queryConditions.push(`st.service_rating IS NOT NULL`);
+      queryConditions.push(`sr.is_submitted = true`);
     }
 
     let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
@@ -854,6 +854,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
       LEFT JOIN staff st2 ON st.assigned_to = st2.id
+      LEFT JOIN service_reviews sr ON st.id = sr.tracking_id
       ${whereClause}
     `;
     
