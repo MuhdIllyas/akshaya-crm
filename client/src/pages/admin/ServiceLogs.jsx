@@ -723,7 +723,7 @@ const ServiceLogs = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedService, setSelectedService] = useState(null);
-  const [viewMode, setViewMode] = useState('grid');
+  const [viewMode, setViewMode] = useState('list');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
   const [activeDetailTab, setActiveDetailTab] = useState('overview');
@@ -1602,18 +1602,18 @@ const ServiceLogs = () => {
                 <div className="flex items-center gap-2">
                   <div className="flex border border-gray-300 rounded-lg overflow-hidden">
                     <button
-                      onClick={() => setViewMode('grid')}
-                      className={`p-2 ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                      title="Grid View"
-                    >
-                      <FiGrid className="h-4 w-4" />
-                    </button>
-                    <button
                       onClick={() => setViewMode('list')}
                       className={`p-2 ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
                       title="List View"
                     >
                       <FiList className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`p-2 ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                      title="Grid View"
+                    >
+                      <FiGrid className="h-4 w-4" />
                     </button>
                   </div>
                   <button
