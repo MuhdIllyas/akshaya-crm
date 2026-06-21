@@ -759,6 +759,18 @@ const SuperAdminServiceLogs = () => {
   const [staffList, setStaffList] = useState([]);
   const [categoriesList, setCategoriesList] = useState([]);
 
+  const fetchCentres = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('SuperAdminServiceLogs: Error fetching centres:', error);
+      return [];
+    }
+  };
+
   // Auto-reset subcategory when service changes
   useEffect(() => {
     setSubcategoryFilter('all');
