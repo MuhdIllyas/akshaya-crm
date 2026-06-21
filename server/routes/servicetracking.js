@@ -868,6 +868,90 @@ router.get('/stats', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /api/servicetracking/chart-data - Lightweight global data for dashboard charts
+ */
+router.get('/chart-data', authenticateToken, async (req, res) => {
+  const { 
+    centre_id, status, priority, start_date, end_date,
+    timeRange, staff, search, aadhaar, expiry, date, service, subcategory, reviewed
+  } = req.query;
+  
+  const client = await pool.connect();
+  try {
+    const queryConditions = [];
+    const queryValues = [];
+    let paramIndex = 1;
+
+    // 1. Role / Centre
+    if (req.user.role !== 'superadmin') {
+      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
+      queryValues.push(req.user.centre_id);
+    } else if (centre_id && centre_id !== 'all') {
+      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
+      queryValues.push(parseInt(centre_id));
+    }
+
+    // 2. Standard Filters
+    if (status && status !== 'all') { queryConditions.push(`st.status = $${paramIndex++}`); queryValues.push(status); }
+    if (priority && priority !== 'all') { queryConditions.push(`st.priority = $${paramIndex++}`); queryValues.push(priority); }
+    if (start_date) { queryConditions.push(`st.updated_at >= $${paramIndex++}`); queryValues.push(start_date); }
+    if (end_date) { queryConditions.push(`st.updated_at <= $${paramIndex++}`); queryValues.push(end_date); }
+    if (timeRange === 'week') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
+    else if (timeRange === 'month') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
+    else if (timeRange === 'quarter') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
+
+    // 3. Foreign Key Filters
+    if (service && service !== 'all') {
+      if (!isNaN(service)) { queryConditions.push(`s.id = $${paramIndex++}`); queryValues.push(parseInt(service, 10)); } 
+      else { queryConditions.push(`s.name = $${paramIndex++}`); queryValues.push(service); }
+    }
+    if (subcategory && subcategory !== 'all') {
+      if (!isNaN(subcategory)) { queryConditions.push(`sub.id = $${paramIndex++}`); queryValues.push(parseInt(subcategory, 10)); } 
+      else { queryConditions.push(`sub.name = $${paramIndex++}`); queryValues.push(subcategory); }
+    }
+    if (staff && staff !== 'all') {
+      if (!isNaN(staff)) { queryConditions.push(`st2.id = $${paramIndex++}`); queryValues.push(parseInt(staff, 10)); } 
+      else { queryConditions.push(`st2.name = $${paramIndex++}`); queryValues.push(staff); }
+    }
+    if (date) { queryConditions.push(`st.updated_at::date = $${paramIndex++}`); queryValues.push(date); }
+    if (search) {
+      queryConditions.push(`(se.customer_name ILIKE $${paramIndex} OR se.phone ILIKE $${paramIndex} OR st.application_number ILIKE $${paramIndex})`);
+      queryValues.push(`%${search}%`); paramIndex++;
+    }
+    if (aadhaar) { queryConditions.push(`st.aadhaar ILIKE $${paramIndex++}`); queryValues.push(`%${aadhaar}%`); }
+    if (reviewed === 'true') { queryConditions.push(`sr.is_submitted = true`); }
+
+    let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
+
+    // Lightweight query: No paginations, no heavy JSON payment calculations
+    const chartQuery = `
+      SELECT 
+        st.status,
+        st.priority,
+        st.updated_at,
+        s.name AS service_name,
+        st2.name AS assigned_to_name
+      FROM service_tracking st
+      LEFT JOIN service_entries se ON st.service_entry_id = se.id
+      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN staff st2 ON st.assigned_to = st2.id
+      LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id)
+      ${whereClause}
+    `;
+    
+    const result = await client.query(chartQuery, queryValues);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching chart data:', err);
+    res.status(500).json({ error: 'Failed to fetch chart data' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * GET /api/servicetracking/entries/:id/update-status - Update only status
  * Note: This is a PUT route, but we're listing it here for order reference
  */
@@ -2395,90 +2479,6 @@ router.get('/', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('servicetracking.js: Error fetching service tracking entries:', err);
     res.status(500).json({ error: 'Failed to fetch service tracking entries: ' + err.message });
-  } finally {
-    client.release();
-  }
-});
-
-/**
- * GET /api/servicetracking/chart-data - Lightweight global data for dashboard charts
- */
-router.get('/chart-data', authenticateToken, async (req, res) => {
-  const { 
-    centre_id, status, priority, start_date, end_date,
-    timeRange, staff, search, aadhaar, expiry, date, service, subcategory, reviewed
-  } = req.query;
-  
-  const client = await pool.connect();
-  try {
-    const queryConditions = [];
-    const queryValues = [];
-    let paramIndex = 1;
-
-    // 1. Role / Centre
-    if (req.user.role !== 'superadmin') {
-      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
-      queryValues.push(req.user.centre_id);
-    } else if (centre_id && centre_id !== 'all') {
-      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
-      queryValues.push(parseInt(centre_id));
-    }
-
-    // 2. Standard Filters
-    if (status && status !== 'all') { queryConditions.push(`st.status = $${paramIndex++}`); queryValues.push(status); }
-    if (priority && priority !== 'all') { queryConditions.push(`st.priority = $${paramIndex++}`); queryValues.push(priority); }
-    if (start_date) { queryConditions.push(`st.updated_at >= $${paramIndex++}`); queryValues.push(start_date); }
-    if (end_date) { queryConditions.push(`st.updated_at <= $${paramIndex++}`); queryValues.push(end_date); }
-    if (timeRange === 'week') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
-    else if (timeRange === 'month') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
-    else if (timeRange === 'quarter') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
-
-    // 3. Foreign Key Filters
-    if (service && service !== 'all') {
-      if (!isNaN(service)) { queryConditions.push(`s.id = $${paramIndex++}`); queryValues.push(parseInt(service, 10)); } 
-      else { queryConditions.push(`s.name = $${paramIndex++}`); queryValues.push(service); }
-    }
-    if (subcategory && subcategory !== 'all') {
-      if (!isNaN(subcategory)) { queryConditions.push(`sub.id = $${paramIndex++}`); queryValues.push(parseInt(subcategory, 10)); } 
-      else { queryConditions.push(`sub.name = $${paramIndex++}`); queryValues.push(subcategory); }
-    }
-    if (staff && staff !== 'all') {
-      if (!isNaN(staff)) { queryConditions.push(`st2.id = $${paramIndex++}`); queryValues.push(parseInt(staff, 10)); } 
-      else { queryConditions.push(`st2.name = $${paramIndex++}`); queryValues.push(staff); }
-    }
-    if (date) { queryConditions.push(`st.updated_at::date = $${paramIndex++}`); queryValues.push(date); }
-    if (search) {
-      queryConditions.push(`(se.customer_name ILIKE $${paramIndex} OR se.phone ILIKE $${paramIndex} OR st.application_number ILIKE $${paramIndex})`);
-      queryValues.push(`%${search}%`); paramIndex++;
-    }
-    if (aadhaar) { queryConditions.push(`st.aadhaar ILIKE $${paramIndex++}`); queryValues.push(`%${aadhaar}%`); }
-    if (reviewed === 'true') { queryConditions.push(`sr.is_submitted = true`); }
-
-    let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
-
-    // Lightweight query: No paginations, no heavy JSON payment calculations
-    const chartQuery = `
-      SELECT 
-        st.status,
-        st.priority,
-        st.updated_at,
-        s.name AS service_name,
-        st2.name AS assigned_to_name
-      FROM service_tracking st
-      LEFT JOIN service_entries se ON st.service_entry_id = se.id
-      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-      LEFT JOIN services s ON se.category_id = s.id
-      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
-      LEFT JOIN staff st2 ON st.assigned_to = st2.id
-      LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id)
-      ${whereClause}
-    `;
-    
-    const result = await client.query(chartQuery, queryValues);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching chart data:', err);
-    res.status(500).json({ error: 'Failed to fetch chart data' });
   } finally {
     client.release();
   }
