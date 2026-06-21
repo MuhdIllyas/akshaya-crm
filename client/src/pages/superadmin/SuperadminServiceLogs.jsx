@@ -767,56 +767,6 @@ const SuperAdminServiceLogs = () => {
     }
   };
 
-  // Fetch service entries
-  const fetchServiceEntries = async () => {
-    try {
-      const response = await getServiceEntries();
-      const entries = Array.isArray(response) ? response : response.data || [];
-      console.log('SuperAdminServiceLogs: Fetched service entries:', JSON.stringify(entries, null, 2));
-      return entries;
-    } catch (error) {
-      console.error('SuperAdminServiceLogs: Error fetching service entries:', error);
-      toast.error('Failed to fetch service entries: ' + (error.response?.data?.error || error.message));
-      return [];
-    }
-  };
-
-  // Fetch payment details
-  const fetchPaymentDetails = async (serviceEntryId, tokenId, serviceEntries) => {
-    try {
-      let serviceEntry = serviceEntries?.find(entry => Number(entry.id) === Number(serviceEntryId));
-      
-      if (!serviceEntry && tokenId) {
-        serviceEntry = await getServiceEntryByTokenId(tokenId);
-      }
-
-      if (!serviceEntry) {
-        return { payments: [], totalCharge: 0, paymentStatus: 'Not Applicable', paymentDetails: 'No payments recorded' };
-      }
-
-      const payments = Array.isArray(serviceEntry.payments) ? serviceEntry.payments : [];
-      const totalCharge = parseFloat(serviceEntry.totalCharge || serviceEntry.total_charges || 0);
-      const totalReceived = payments
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-
-      let paymentStatus = 'Pending';
-      if (totalCharge <= 0) paymentStatus = 'Not Applicable';
-      else if (totalReceived >= totalCharge) paymentStatus = 'Received';
-      else if (totalReceived > 0) paymentStatus = 'Partial';
-
-      return {
-        payments,
-        totalCharge,
-        paymentStatus,
-        paymentDetails: formatPayments(payments)
-      };
-    } catch (err) {
-      console.error('SuperAdminServiceLogs: Error processing payment details:', err);
-      return { payments: [], totalCharge: 0, paymentStatus: 'Pending', paymentDetails: 'Error fetching payments' };
-    }
-  };
-
   // Format payments
   const formatPayments = (payments) => {
     if (!Array.isArray(payments) || payments.length === 0) return 'No payments recorded';
@@ -826,16 +776,24 @@ const SuperAdminServiceLogs = () => {
     }).join(', ');
   };
 
-  // Transform backend data
-  const transformBackendData = async (trackingData, serviceEntries, centres) => {
-    // Process all entries concurrently instead of sequentially
-    const transformedPromises = trackingData.map(async (trackingEntry) => {
-      const paymentData = await fetchPaymentDetails(
-        trackingEntry.service_entry_id,
-        trackingEntry.token_id,
-        serviceEntries
-      );
+  // Transform backend data (Instantly process using pre-calculated backend data)
+  const transformBackendData = async (trackingData, centres) => {
+    return trackingData.map((trackingEntry) => {
+      // 1. Calculate payments instantly using the data already provided by the SQL query
+      const totalCharge = parseFloat(trackingEntry.total_charges || 0);
+      const totalReceived = parseFloat(trackingEntry.total_received || 0);
+      const payments = trackingEntry.payment_details_array || [];
 
+      let paymentStatus = 'Pending';
+      if (totalCharge <= 0) paymentStatus = 'Not Applicable';
+      else if (totalReceived >= totalCharge) paymentStatus = 'Received';
+      else if (totalReceived > 0) paymentStatus = 'Partial';
+
+      const paymentDetailsStr = payments.length > 0 
+        ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
+        : 'No payments recorded';
+
+      // 2. Format Dates
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
       const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
@@ -857,7 +815,7 @@ const SuperAdminServiceLogs = () => {
         staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
-        cost: paymentData.totalCharge || 0,
+        cost: totalCharge,
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
         progress: trackingEntry.progress || 0,
@@ -873,9 +831,9 @@ const SuperAdminServiceLogs = () => {
         reviewText: trackingEntry.review_text,
         reviewSubmittedAt: trackingEntry.submitted_at,
         aadhaar: trackingEntry.aadhaar || 'N/A',
-        paymentStatus: paymentData.paymentStatus,
-        paymentDetails: paymentData.paymentDetails,
-        payments: paymentData.payments,
+        paymentStatus: paymentStatus,
+        paymentDetails: paymentDetailsStr,
+        payments: payments,
         steps: trackingEntry.steps || []
       };
     });
@@ -910,10 +868,10 @@ const SuperAdminServiceLogs = () => {
           search: debouncedSearch || undefined
         };
 
-        const [centresData, trackingResponse, serviceEntries] = await Promise.all([
+        // 🔥 CRITICAL FIX: Removed fetchServiceEntries() so we don't download the whole database!
+        const [centresData, trackingResponse] = await Promise.all([
           fetchCentres(),
-          getTrackingEntries(params),
-          fetchServiceEntries()
+          getTrackingEntries(params)
         ]);
 
         setCentres(centresData);
@@ -927,7 +885,8 @@ const SuperAdminServiceLogs = () => {
           ? trackingResponse.data 
           : Array.isArray(trackingResponse) ? trackingResponse : [];
 
-        let transformed = await transformBackendData(trackingData, serviceEntries, centresData);
+        // Note: We no longer pass serviceEntries here
+        let transformed = await transformBackendData(trackingData, centresData);
 
         // Sort Data
         transformed.sort((a, b) => {
@@ -940,7 +899,7 @@ const SuperAdminServiceLogs = () => {
         });
 
         setServices(transformed);
-        setFilteredServices(transformed); // Keep UI mapping working
+        setFilteredServices(transformed); 
         
         // Fetch Global Stats matching these filters
         const statsData = await getTrackingStats(params);
