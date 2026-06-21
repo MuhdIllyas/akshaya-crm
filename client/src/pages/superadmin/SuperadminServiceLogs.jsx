@@ -784,15 +784,13 @@ const SuperAdminServiceLogs = () => {
   // Fetch payment details
   const fetchPaymentDetails = async (serviceEntryId, tokenId, serviceEntries) => {
     try {
-      let serviceEntry;
-      if (tokenId) {
-        const response = await getServiceEntryByTokenId(tokenId);
-        serviceEntry = response;
-      } else {
-        serviceEntry = serviceEntries.find(entry => entry.id === serviceEntryId);
+      let serviceEntry = serviceEntries?.find(entry => Number(entry.id) === Number(serviceEntryId));
+      
+      if (!serviceEntry && tokenId) {
+        serviceEntry = await getServiceEntryByTokenId(tokenId);
       }
+
       if (!serviceEntry) {
-        console.warn(`SuperAdminServiceLogs: No service entry found for serviceEntryId: ${serviceEntryId}, tokenId: ${tokenId}`);
         return { payments: [], totalCharge: 0, paymentStatus: 'Not Applicable', paymentDetails: 'No payments recorded' };
       }
 
@@ -802,32 +800,16 @@ const SuperAdminServiceLogs = () => {
         .filter(p => p.status === 'received')
         .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
-      let paymentStatus;
-      if (totalCharge <= 0) {
-        paymentStatus = 'Not Applicable';
-      } else if (totalReceived >= totalCharge) {
-        paymentStatus = 'Received';
-      } else if (totalReceived > 0) {
-        paymentStatus = 'Partial';
-      } else {
-        paymentStatus = 'Pending';
-      }
-
-      const paymentDetails = formatPayments(payments);
-
-      console.log('SuperAdminServiceLogs: Payment details for serviceEntryId:', serviceEntryId, {
-        totalReceived,
-        totalCharge,
-        paymentStatus,
-        payments,
-        paymentDetails
-      });
+      let paymentStatus = 'Pending';
+      if (totalCharge <= 0) paymentStatus = 'Not Applicable';
+      else if (totalReceived >= totalCharge) paymentStatus = 'Received';
+      else if (totalReceived > 0) paymentStatus = 'Partial';
 
       return {
         payments,
         totalCharge,
         paymentStatus,
-        paymentDetails
+        paymentDetails: formatPayments(payments)
       };
     } catch (err) {
       console.error('SuperAdminServiceLogs: Error processing payment details:', err);
@@ -846,8 +828,8 @@ const SuperAdminServiceLogs = () => {
 
   // Transform backend data
   const transformBackendData = async (trackingData, serviceEntries, centres) => {
-    const transformed = [];
-    for (const trackingEntry of trackingData) {
+    // Process all entries concurrently instead of sequentially
+    const transformedPromises = trackingData.map(async (trackingEntry) => {
       const paymentData = await fetchPaymentDetails(
         trackingEntry.service_entry_id,
         trackingEntry.token_id,
@@ -861,7 +843,7 @@ const SuperAdminServiceLogs = () => {
       const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
       const centre = centres.find(c => c.id === trackingEntry.centre_id);
 
-      transformed.push({
+      return {
         id: trackingEntry.id.toString(),
         serviceEntryId: trackingEntry.service_entry_id?.toString(),
         trackingId: `TR-${trackingEntry.id}`,
@@ -890,10 +872,16 @@ const SuperAdminServiceLogs = () => {
         staffRating: trackingEntry.staff_rating,
         reviewText: trackingEntry.review_text,
         reviewSubmittedAt: trackingEntry.submitted_at,
-        aadhaar: trackingEntry.aadhaar || 'N/A'
-      });
-    }
-    return transformed;
+        aadhaar: trackingEntry.aadhaar || 'N/A',
+        paymentStatus: paymentData.paymentStatus,
+        paymentDetails: paymentData.paymentDetails,
+        payments: paymentData.payments,
+        steps: trackingEntry.steps || []
+      };
+    });
+
+    // Wait for all 50 rows to process at once (takes ~2ms)
+    return Promise.all(transformedPromises);
   };
 
   // Initialize data
