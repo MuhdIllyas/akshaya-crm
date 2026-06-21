@@ -816,6 +816,7 @@ const SuperAdminServiceLogs = () => {
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
         cost: totalCharge,
+        totalCharge: totalCharge,
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
         progress: trackingEntry.progress || 0,
