@@ -11,7 +11,6 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats, getStaff, getCategories } from '/src/services/serviceService';
-import axios from 'axios'; 
 
 // Import Chart.js components
 import {
