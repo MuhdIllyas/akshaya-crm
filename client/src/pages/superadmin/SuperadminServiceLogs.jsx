@@ -1652,8 +1652,7 @@ const SuperAdminServiceLogs = () => {
               </button>
             </div>
           )}
-
-        </div>
+          
         </div>
 
         {/* Side Panel */}
