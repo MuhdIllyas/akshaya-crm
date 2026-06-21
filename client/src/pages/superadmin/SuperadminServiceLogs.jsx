@@ -9,7 +9,7 @@ import {
   FiList, FiGrid, FiUsers, FiUserCheck, FiUserPlus, FiCreditCard
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId } from '/src/services/serviceService';
+import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats } from '/src/services/serviceService';
 import axios from 'axios';
 
 // Import Chart.js components
@@ -691,6 +691,24 @@ const SuperAdminServiceLogs = () => {
   const [activeDetailTab, setActiveDetailTab] = useState('overview');
   const [showCharts, setShowCharts] = useState(true);
 
+  // --- PAGINATION & STATS STATES ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const limit = 50;
+
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, delayed: 0, pending: 0, completionRate: 0 });
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, centreFilter]);
+
   // Map backend status to frontend status
   const statusMap = {
     'pending': 'Pending',
@@ -826,73 +844,6 @@ const SuperAdminServiceLogs = () => {
     }).join(', ');
   };
 
-  // Initialize data
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        console.log('SuperAdminServiceLogs: Starting data load...');
-        
-        const [centresData, trackingResponse, serviceEntries] = await Promise.all([
-          fetchCentres(),
-          getTrackingEntries(centreFilter !== 'all' ? { centre_id: centreFilter } : {}),
-          fetchServiceEntries()
-        ]);
-
-        console.log('SuperAdminServiceLogs: Raw tracking response:', JSON.stringify(trackingResponse, null, 2));
-        console.log('SuperAdminServiceLogs: Service entries:', JSON.stringify(serviceEntries, null, 2));
-        console.log('SuperAdminServiceLogs: Centres:', JSON.stringify(centresData, null, 2));
-
-        setCentres(centresData);
-
-        const trackingData = Array.isArray(trackingResponse) 
-          ? trackingResponse 
-          : trackingResponse.data || [];
-
-        if (trackingData.length === 0) {
-          console.warn('SuperAdminServiceLogs: No tracking data found');
-          setServices([]);
-          setFilteredServices([]);
-          toast.warn('No service tracking entries found. Please check the database or filters.');
-          return;
-        }
-
-        const transformed = await transformBackendData(trackingData, serviceEntries, centresData);
-        console.log('SuperAdminServiceLogs: Transformed data:', JSON.stringify(transformed, null, 2));
-
-        console.log('=== Service IDs and Steps Debug ===');
-        transformed.forEach((service, index) => {
-          console.log(`Service ${index + 1}:`, {
-            id: service.id,
-            serviceEntryId: service.serviceEntryId,
-            customerName: service.customerName,
-            applicationNumber: service.applicationNumber,
-            status: service.status,
-            paymentStatus: service.paymentStatus,
-            centreName: service.centreName,
-            workSource: service.workSource,
-            serviceRating: service.serviceRating,
-            staffRating: service.staffRating,
-            reviewText: service.reviewText,
-            steps: service.steps
-          });
-        });
-        
-        setServices(transformed);
-        setFilteredServices(transformed);
-        toast.success(`Loaded ${transformed.length} service tracking entries`);
-      } catch (err) {
-        console.error("SuperAdminServiceLogs: Error loading service logs:", err);
-        toast.error(`Failed to load service logs: ${err.response?.data?.error || err.message}`);
-        setServices([]);
-        setFilteredServices([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, [centreFilter]);
-
   // Transform backend data
   const transformBackendData = async (trackingData, serviceEntries, centres) => {
     const transformed = [];
@@ -907,11 +858,7 @@ const SuperAdminServiceLogs = () => {
       const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
-      // Determine work source
-      const workSource = trackingEntry.work_source || 
-                        (trackingEntry.customer_service_id ? 'online' : 'offline');
-
-      // Find centre using trackingEntry.centre_id
+      const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
       const centre = centres.find(c => c.id === trackingEntry.centre_id);
 
       transformed.push({
@@ -922,18 +869,12 @@ const SuperAdminServiceLogs = () => {
         customerName: trackingEntry.customer_name || 'Unknown',
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
-        address: 'Address not available',
         serviceType: trackingEntry.service_name || 'Unknown',
         subcategoryName: trackingEntry.subcategory_name || 'N/A',
-        categoryId: trackingEntry.category_id,
-        subcategoryId: trackingEntry.subcategory_id,
         staffName: trackingEntry.assigned_to_name || 'Unassigned',
         staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
-        serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
-        departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
-        totalCharge: paymentData.totalCharge || 0,
         cost: paymentData.totalCharge || 0,
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
@@ -942,39 +883,9 @@ const SuperAdminServiceLogs = () => {
         date: dateStr,
         time: timeStr,
         estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? new Date(trackingEntry.estimated_delivery).toISOString() : 'Not set',
-        expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'Not set',
-        createdAt: trackingEntry.created_at && !isNaN(new Date(trackingEntry.created_at)) ? new Date(trackingEntry.created_at).toISOString() : new Date().toISOString(),
-        updatedAt: trackingEntry.updated_at && !isNaN(new Date(trackingEntry.updated_at)) ? new Date(trackingEntry.updated_at).toISOString() : new Date().toISOString(),
-        duration: null,
-        notes: trackingEntry.notes || 'No notes available',
-        rating: null,
-        followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
-        paymentStatus: paymentData.paymentStatus,
-        paymentDetails: paymentData.paymentDetails,
-        payments: paymentData.payments,
-        steps: Array.isArray(trackingEntry.steps) && trackingEntry.steps.length > 0 
-          ? trackingEntry.steps.map(step => ({
-              id: step.id,
-              name: step.name || 'Unnamed Step',
-              completed: step.completed || false,
-              date: step.date && !isNaN(new Date(step.date)) ? new Date(step.date).toISOString() : null,
-              created_at: step.created_at && !isNaN(new Date(step.created_at)) ? new Date(step.created_at).toISOString() : new Date().toISOString(),
-              step_order: parseInt(step.step_order) || 0,
-              estimated_days: parseInt(step.estimated_days) || 0
-            })).filter(step => step.name && step.step_order > 0)
-          : [
-              { name: 'Submitted', completed: true, date: trackingEntry.created_at || new Date().toISOString(), step_order: 1, estimated_days: 1, created_at: new Date().toISOString() },
-              { name: 'Initial Review', completed: trackingEntry.status !== 'pending', date: trackingEntry.status !== 'pending' ? trackingEntry.updated_at : null, step_order: 2, estimated_days: 3, created_at: new Date().toISOString() },
-              { name: 'Document Verification', completed: ['completed', 'paid'].includes(trackingEntry.status) || trackingEntry.current_step === 'Document Verification', date: ['completed', 'paid'].includes(trackingEntry.status) || trackingEntry.current_step === 'Document Verification' ? trackingEntry.updated_at : null, step_order: 3, estimated_days: 5, created_at: new Date().toISOString() },
-              { name: 'Final Approval', completed: ['completed', 'paid'].includes(trackingEntry.status), date: ['completed', 'paid'].includes(trackingEntry.status) ? trackingEntry.updated_at : null, step_order: 4, estimated_days: 2, created_at: new Date().toISOString() }
-            ],
         centreId: trackingEntry.centre_id || null,
         centreName: centre ? centre.name : 'Unknown Centre',
-        
-        // Source information
         workSource: workSource,
-
-        // Review information
         serviceRating: trackingEntry.service_rating,
         staffRating: trackingEntry.staff_rating,
         reviewText: trackingEntry.review_text,
@@ -985,165 +896,86 @@ const SuperAdminServiceLogs = () => {
     return transformed;
   };
 
-  // Get unique values for filters
-  const staffMembers = useMemo(() => {
-    const staff = [...new Set(services.map(service => service.staffName))];
-    return staff.sort();
-  }, [services]);
-
-  const serviceTypes = useMemo(() => {
-    const types = [...new Set(services.map(service => service.serviceType))];
-    return types.sort();
-  }, [services]);
-
-  const subcategories = useMemo(() => {
-    const subs = [...new Set(services.map(service => service.subcategoryName))];
-    return subs.sort();
-  }, [services]);
-
-  const uniqueCentres = useMemo(() => {
-    return centres.sort((a, b) => a.name.localeCompare(b.name));
-  }, [centres]);
-
-  // Filter and sort services
+  // Initialize data
   useEffect(() => {
-    let filtered = services;
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+        
+        let timeRangeParam = undefined;
+        let dateParam = undefined;
+        if (dateRange === 'today') dateParam = new Date().toISOString().split('T')[0];
+        else if (dateRange !== 'all') timeRangeParam = dateRange;
 
-    if (searchTerm) {
-      filtered = filtered.filter(service =>
-        (service.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.serviceType?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.applicationNumber?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.staffName?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.customerPhone?.includes(searchTerm) || false) ||
-        (service.subcategoryName?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-        (service.centreName?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
-      );
-    }
+        const params = {
+          page: currentPage,
+          limit: limit,
+          timeRange: timeRangeParam,
+          date: dateParam,
+          centre_id: centreFilter === 'all' ? undefined : centreFilter,
+          service: serviceTypeFilter === 'all' ? undefined : serviceTypeFilter,
+          subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+          status: statusFilter === 'all' ? undefined : apiStatus,
+          priority: priorityFilter === 'all' ? undefined : priorityFilter,
+          staff: staffFilter === 'all' ? undefined : staffFilter,
+          search: debouncedSearch || undefined
+        };
 
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(service => service.status === statusFilter);
-    }
+        const [centresData, trackingResponse, serviceEntries] = await Promise.all([
+          fetchCentres(),
+          getTrackingEntries(params),
+          fetchServiceEntries()
+        ]);
 
-    if (priorityFilter !== 'all') {
-      filtered = filtered.filter(service => service.priority === priorityFilter);
-    }
+        setCentres(centresData);
 
-    if (staffFilter !== 'all') {
-      filtered = filtered.filter(service => service.staffName === staffFilter);
-    }
+        if (trackingResponse && trackingResponse.pagination) {
+          setTotalRecords(trackingResponse.pagination.totalRecords);
+          setTotalPages(trackingResponse.pagination.totalPages);
+        }
 
-    if (serviceTypeFilter !== 'all') {
-      filtered = filtered.filter(service => service.serviceType === serviceTypeFilter);
-    }
+        const trackingData = Array.isArray(trackingResponse?.data) 
+          ? trackingResponse.data 
+          : Array.isArray(trackingResponse) ? trackingResponse : [];
 
-    if (subcategoryFilter !== 'all') {
-      filtered = filtered.filter(service => service.subcategoryName === subcategoryFilter);
-    }
+        let transformed = await transformBackendData(trackingData, serviceEntries, centresData);
 
-    if (dateRange !== 'all') {
-      const now = new Date();
-      const filterDate = new Date();
-      
-      switch (dateRange) {
-        case 'today':
-          filtered = filtered.filter(service => service.date === now.toISOString().split('T')[0]);
-          break;
-        case 'week':
-          filterDate.setDate(now.getDate() - 7);
-          filtered = filtered.filter(service => new Date(service.date) >= filterDate);
-          break;
-        case 'month':
-          filterDate.setMonth(now.getMonth() - 1);
-          filtered = filtered.filter(service => new Date(service.date) >= filterDate);
-          break;
-        default:
-          break;
+        // Sort Data
+        transformed.sort((a, b) => {
+          let aValue = a[sortBy] || '';
+          let bValue = b[sortBy] || '';
+          if (sortBy === 'cost') { aValue = a.cost || 0; bValue = b.cost || 0; }
+          if (sortBy === 'date') { aValue = new Date(a.date); bValue = new Date(b.date); }
+          if (sortOrder === 'desc') return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+          return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+        });
+
+        setServices(transformed);
+        setFilteredServices(transformed); // Keep UI mapping working
+        
+        // Fetch Global Stats matching these filters
+        const statsData = await getTrackingStats(params);
+        if (statsData) {
+            const completionRate = statsData.total > 0 ? ((statsData.completed / statsData.total) * 100).toFixed(1) : 0;
+            setGlobalStats({ ...statsData, completionRate, delayed: statsData.delayed || 0 }); 
+        }
+
+      } catch (err) {
+        console.error("SuperAdminServiceLogs: Error loading service logs:", err);
+        toast.error(`Failed to load service logs: ${err.response?.data?.error || err.message}`);
+      } finally {
+        setLoading(false);
       }
-    }
-
-    filtered.sort((a, b) => {
-      let aValue, bValue;
-      
-      switch (sortBy) {
-        case 'date':
-          aValue = new Date(a.date);
-          bValue = new Date(b.date);
-          break;
-        case 'customer':
-          aValue = a.customerName?.toLowerCase() || '';
-          bValue = b.customerName?.toLowerCase() || '';
-          break;
-        case 'service':
-          aValue = a.serviceType?.toLowerCase() || '';
-          bValue = b.serviceType?.toLowerCase() || '';
-          break;
-        case 'subcategory':
-          aValue = a.subcategoryName?.toLowerCase() || '';
-          bValue = b.subcategoryName?.toLowerCase() || '';
-          break;
-        case 'staff':
-          aValue = a.staffName?.toLowerCase() || '';
-          bValue = b.staffName?.toLowerCase() || '';
-          break;
-        case 'cost':
-          aValue = a.cost || 0;
-          bValue = b.cost || 0;
-          break;
-        case 'priority':
-          const priorityOrder = { high: 3, medium: 2, low: 1 };
-          aValue = priorityOrder[a.priority] || 0;
-          bValue = priorityOrder[b.priority] || 0;
-          break;
-        case 'centre':
-          aValue = a.centreName?.toLowerCase() || '';
-          bValue = b.centreName?.toLowerCase() || '';
-          break;
-        default:
-          aValue = a[sortBy] || '';
-          bValue = b[sortBy] || '';
-      }
-
-      if (sortOrder === 'desc') {
-        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-      } else {
-        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-      }
-    });
-
-    setFilteredServices(filtered);
-  }, [
-    searchTerm, statusFilter, priorityFilter, staffFilter, 
-    serviceTypeFilter, subcategoryFilter, dateRange, centreFilter,
-    sortBy, sortOrder, services
-  ]);
-
-  // Statistics
-  const stats = useMemo(() => {
-    const total = services.length;
-    const completed = services.filter(s => s.status === 'Completed').length;
-    const inProgress = services.filter(s => s.status === 'In Progress').length;
-    const pending = services.filter(s => s.status === 'Pending').length;
-    const delayed = services.filter(s => s.status === 'Delayed').length;
-    const followUpRequired = services.filter(s => s.followUpRequired).length;
-    
-    const avgProgress = services.length > 0 
-      ? (services.reduce((sum, service) => sum + (service.progress || 0), 0) / services.length).toFixed(1)
-      : 0;
-
-    const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : 0;
-
-    return {
-      total,
-      completed,
-      inProgress,
-      pending,
-      delayed,
-      followUpRequired,
-      avgProgress,
-      completionRate
     };
-  }, [services]);
+    loadData();
+  }, [currentPage, debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, centreFilter, sortBy, sortOrder]);
+
+  // Dropdown option generators
+  const staffMembers = useMemo(() => [...new Set(services.map(s => s.staffName))].sort(), [services]);
+  const serviceTypes = useMemo(() => [...new Set(services.map(s => s.serviceType))].sort(), [services]);
+  const subcategories = useMemo(() => [...new Set(services.map(s => s.subcategoryName))].sort(), [services]);
+  const uniqueCentres = useMemo(() => centres.sort((a, b) => a.name.localeCompare(b.name)), [centres]);
 
   // Update service status
   const handleStatusUpdate = async (serviceId, newStatus) => {
@@ -1452,43 +1284,43 @@ const SuperAdminServiceLogs = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
             <StatCard
               title="Total Services"
-              value={stats.total}
+              value={globalStats.total || 0}
               subtitle="All services"
               icon={FiUsers}
               color="bg-blue-500"
             />
             <StatCard
               title="Completed"
-              value={stats.completed}
-              subtitle={`${stats.completionRate}% rate`}
+              value={globalStats.completed || 0}
+              subtitle={`${globalStats.completionRate || 0}% rate`}
               icon={FiCheckCircle}
               color="bg-emerald-500"
             />
             <StatCard
               title="In Progress"
-              value={stats.inProgress}
+              value={globalStats.in_progress || 0}
               subtitle="Active now"
               icon={FiTrendingUp}
               color="bg-amber-500"
             />
             <StatCard
               title="Pending"
-              value={stats.pending}
+              value={globalStats.pending || 0}
               subtitle="Awaiting action"
               icon={FiClock}
               color="bg-purple-500"
             />
             <StatCard
               title="Follow-up"
-              value={stats.followUpRequired}
-              subtitle="Need attention"
+              value={globalStats.delayed || 0}
+              subtitle="Needs review"
               icon={FiAlertCircle}
               color="bg-rose-500"
             />
             <StatCard
               title="Avg Progress"
-              value={`${stats.avgProgress}%`}
-              subtitle="Overall progress"
+              value={`${services.length > 0 ? (services.reduce((acc, s) => acc + (s.progress || 0), 0) / services.length).toFixed(1) : 0}%`}
+              subtitle="Current page"
               icon={FiBarChart2}
               color="bg-indigo-500"
             />
@@ -1703,7 +1535,7 @@ const SuperAdminServiceLogs = () => {
           {/* Results Count and Sort */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
             <p className="text-sm text-gray-600">
-              Showing <span className="font-semibold">{filteredServices.length}</span> of <span className="font-semibold">{services.length}</span> services
+              Showing page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span> ({totalRecords} total records)
             </p>
             <div className="flex items-center gap-2">
               <select
@@ -1797,6 +1629,31 @@ const SuperAdminServiceLogs = () => {
               <p className="text-gray-600">Try adjusting your search or filter criteria</p>
             </div>
           )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-2 pt-4 mt-6 border-t border-gray-200">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                Previous
+              </button>
+              <div className="text-sm font-medium text-gray-600">
+                Page {currentPage} of {totalPages}
+              </div>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                Next
+              </button>
+            </div>
+          )}
+
+        </div>
         </div>
 
         {/* Side Panel */}
