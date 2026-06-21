@@ -37,7 +37,12 @@ const AdminExpenseEntry = ({
     { id: 12, name: "Stationery", color: "#84CC16", icon: "✏️", requires_approval: false },
     { id: 13, name: "Bank / CDM Charges", color: "#64748B", icon: "🏦", requires_approval: false },
     { id: 14, name: "Other Expenses", color: "#6B7280", icon: "📝", requires_approval: false },
-    { id: 15, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true }
+    { id: 15, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true },
+
+    { id: 16, name: "Shortage", color: "#EF4444", icon: "📉", requires_approval: false },
+    { id: 17, name: "Daily Adjustment", color: "#F59E0B", icon: "⚖️", requires_approval: false },
+    { id: 18, name: "Refreshments / Pantry", color: "#0EA5E9", icon: "💧", requires_approval: false }, 
+    { id: 19, name: "Software Subscriptions", color: "#8B5CF6", icon: "☁️", requires_approval: false } 
   ];
 
   // Default payment methods
