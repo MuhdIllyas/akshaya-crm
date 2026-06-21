@@ -22,7 +22,7 @@ import {
 } from "@/services/walletService";
 import { Link } from "react-router-dom";
 
-// ----- Icons (unchanged) -----
+// ----- Icons -----
 const WalletIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
     <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
@@ -1269,8 +1269,8 @@ const WalletManagementSuperAdmin = () => {
 
                     <div className="p-5">
                       {/* Header: Checkbox + Icon + Name + Status */}
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center space-x-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start space-x-3 flex-1 min-w-0">
                           {isSuperAdmin && (
                             <input
                               type="checkbox"
@@ -1280,18 +1280,18 @@ const WalletManagementSuperAdmin = () => {
                                   ? [...selectedWallets, wallet.id]
                                   : selectedWallets.filter(id => id !== wallet.id));
                               }}
-                              className="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5"
+                              className="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5 mt-1 flex-shrink-0"
                               aria-label={`Select wallet ${wallet.name} for bulk actions`}
                             />
                           )}
-                          <div className={`p-2.5 rounded-2xl ${lightBg} ring-2 ring-white/50 shadow-sm`}>
+                          <div className={`p-2.5 rounded-2xl ${lightBg} ring-2 ring-white/50 shadow-sm flex-shrink-0`}>
                             <WalletIcon />
                           </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-gray-800 leading-tight truncate max-w-[180px]" title={wallet.centre_name ? `${wallet.centre_name} - ${wallet.name}` : wallet.name}>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-lg font-bold text-gray-800 leading-tight break-words" title={wallet.centre_name ? `${wallet.centre_name} - ${wallet.name}` : wallet.name}>
                               {wallet.centre_name ? `${wallet.centre_name} - ${wallet.name}` : wallet.name}
                             </h3>
-                            <div className="flex items-center mt-0.5">
+                            <div className="flex items-center mt-0.5 flex-wrap gap-1">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                 isOnline
                                   ? 'bg-emerald-100 text-emerald-800'
@@ -1300,11 +1300,11 @@ const WalletManagementSuperAdmin = () => {
                                 <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
                                 {isOnline ? 'Online' : 'Offline'}
                               </span>
-                              <span className="ml-2 text-xs text-gray-400">#{wallet.id.toString().padStart(4, '0')}</span>
+                              <span className="text-xs text-gray-400">#{wallet.id.toString().padStart(4, '0')}</span>
                             </div>
                           </div>
                         </div>
-                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full flex-shrink-0">
                           {type?.name || 'Wallet'}
                         </span>
                       </div>
