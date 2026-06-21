@@ -776,22 +776,9 @@ const SuperAdminServiceLogs = () => {
     }).join(', ');
   };
 
-  // Helper to calculate progress percentage
-  const calculateProgress = (status, currentStep) => {
-    const stepProgress = {
-      'Submitted': 25,
-      'Initial Review': 50,
-      'Document Verification': 75,
-      'Final Approval': 100
-    };
-    if (status === 'Completed' || status === 'Paid' || status === 'completed' || status === 'paid') return 100;
-    return stepProgress[currentStep] || 25;
-  };
-
   // Transform backend data (Instantly process using pre-calculated backend data)
-  const transformBackendData = async (trackingData) => {
-    // Process all entries concurrently instead of sequentially
-    const transformedPromises = trackingData.map(async (trackingEntry) => {
+  const transformBackendData = async (trackingData, centres) => {
+    return trackingData.map((trackingEntry) => {
       // 1. Calculate payments instantly using the data already provided by the SQL query
       const totalCharge = parseFloat(trackingEntry.total_charges || 0);
       const totalReceived = parseFloat(trackingEntry.total_received || 0);
@@ -806,16 +793,13 @@ const SuperAdminServiceLogs = () => {
         ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
         : 'No payments recorded';
 
+      // 2. Format Dates
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
       const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
-      const calculatedProgress = calculateProgress(
-        statusMap[trackingEntry.status] || 'Pending',
-        trackingEntry.current_step || 'Submitted'
-      );
-
       const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
+      const centre = centres.find(c => c.id === trackingEntry.centre_id);
 
       return {
         id: trackingEntry.id.toString(),
@@ -826,58 +810,35 @@ const SuperAdminServiceLogs = () => {
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
         serviceType: trackingEntry.service_name || 'Unknown',
-        serviceName: trackingEntry.service_name || 'Unknown',
         subcategoryName: trackingEntry.subcategory_name || 'N/A',
-        categoryId: trackingEntry.category_id,
-        subcategoryId: trackingEntry.subcategory_id,
         staffName: trackingEntry.assigned_to_name || 'Unassigned',
         staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
-        serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
-        departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
-        totalCharge: totalCharge,
         cost: totalCharge,
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
-        progress: calculatedProgress,
+        progress: trackingEntry.progress || 0,
         priority: trackingEntry.priority || 'medium',
         date: dateStr,
         time: timeStr,
-        estimatedDelivery: formatDate(trackingEntry.estimated_delivery),
-        expiryDate: formatDate(trackingEntry.expiry_date),
-        createdAt: trackingEntry.updated_at,
-        updatedAt: trackingEntry.updated_at,
-        duration: null,
-        notes: trackingEntry.notes || 'No notes available',
-        rating: null,
-        followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
-        paymentStatus: paymentStatus,
-        paymentDetails: paymentDetailsStr,
-        payments: payments,
-        phone: trackingEntry.phone || 'N/A',
-        email: trackingEntry.email || '',
-        aadhaar: trackingEntry.aadhaar || '',
-        steps: Array.isArray(trackingEntry.steps) ? trackingEntry.steps.map(step => ({
-          id: step.id,
-          name: step.name,
-          completed: step.completed,
-          date: step.date,
-          created_at: step.created_at,
-          step_order: step.step_order,
-          estimated_days: step.estimated_days
-        })) : [],
-        averageTime: trackingEntry.average_time || '7 days',
-        rawEstimatedDelivery: trackingEntry.estimated_delivery,
-        rawExpiryDate: trackingEntry.expiry_date,
+        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? new Date(trackingEntry.estimated_delivery).toISOString() : 'Not set',
+        centreId: trackingEntry.centre_id || null,
+        centreName: centre ? centre.name : 'Unknown Centre',
         workSource: workSource,
         serviceRating: trackingEntry.service_rating,
         staffRating: trackingEntry.staff_rating,
         reviewText: trackingEntry.review_text,
-        reviewSubmittedAt: trackingEntry.submitted_at
+        reviewSubmittedAt: trackingEntry.submitted_at,
+        aadhaar: trackingEntry.aadhaar || 'N/A',
+        paymentStatus: paymentStatus,
+        paymentDetails: paymentDetailsStr,
+        payments: payments,
+        steps: trackingEntry.steps || []
       };
     });
-    
+
+    // Wait for all 50 rows to process at once (takes ~2ms)
     return Promise.all(transformedPromises);
   };
 
