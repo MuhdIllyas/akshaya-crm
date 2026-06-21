@@ -750,8 +750,9 @@ const {
  * GET /api/servicetracking/stats - Get global counts for KPI cards
  */
 router.get('/stats', authenticateToken, async (req, res) => {
+  // 1. Add start_date and end_date here:
   const { 
-    centre_id, status, timeRange, staff, date, service, subcategory
+    centre_id, status, timeRange, staff, date, service, subcategory, start_date, end_date
   } = req.query;
   
   const client = await pool.connect();
@@ -774,6 +775,16 @@ router.get('/stats', authenticateToken, async (req, res) => {
     if (timeRange === 'week') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
     else if (timeRange === 'month') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
     else if (timeRange === 'quarter') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
+
+    // 2. ADD CUSTOM DATE FILTERS HERE:
+    if (start_date) {
+      queryConditions.push(`st.updated_at >= $${paramIndex++}`);
+      queryValues.push(start_date);
+    }
+    if (end_date) {
+      queryConditions.push(`st.updated_at <= $${paramIndex++}`);
+      queryValues.push(end_date);
+    }
 
     // Advanced Filters
     if (service && service !== 'all') {
@@ -832,7 +843,6 @@ router.get('/stats', authenticateToken, async (req, res) => {
       FROM service_tracking st
       LEFT JOIN service_entries se ON st.service_entry_id = se.id
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-      -- ADD THESE THREE JOINS:
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
       LEFT JOIN staff st2 ON st.assigned_to = st2.id

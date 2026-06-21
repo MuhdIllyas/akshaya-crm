@@ -9,7 +9,7 @@ import {
   FiList, FiGrid, FiUsers, FiUserCheck, FiUserPlus, FiCreditCard
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats } from '/src/services/serviceService';
+import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats, getStaff, getCategories } from '/src/services/serviceService';
 import axios from 'axios';
 
 // Import Chart.js components
@@ -675,21 +675,60 @@ const SuperAdminServiceLogs = () => {
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // --- NEW DATE CALCULATOR LOGIC & LOCAL STORAGE ---
+  const getSavedFilters = () => {
+    try {
+      const saved = localStorage.getItem('superAdminServiceSavedView');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Could not load saved filters', e);
+    }
+    // 🔥 DEFAULT TO TODAY
+    return { status: 'all', staff: 'all', priority: 'all', centre: 'all', service: 'all', subcategory: 'all', dateRange: 'today', customStart: '', customEnd: '' };
+  };
+
+  const initialFilters = getSavedFilters();
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [staffFilter, setStaffFilter] = useState('all');
-  const [serviceTypeFilter, setServiceTypeFilter] = useState('all');
-  const [subcategoryFilter, setSubcategoryFilter] = useState('all');
-  const [dateRange, setDateRange] = useState('all');
-  const [centreFilter, setCentreFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(initialFilters.status);
+  const [priorityFilter, setPriorityFilter] = useState(initialFilters.priority);
+  const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
+  const [serviceTypeFilter, setServiceTypeFilter] = useState(initialFilters.service);
+  const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory);
+  const [dateRange, setDateRange] = useState(initialFilters.dateRange);
+  const [customStartDate, setCustomStartDate] = useState(initialFilters.customStart);
+  const [customEndDate, setCustomEndDate] = useState(initialFilters.customEnd);
+  const [centreFilter, setCentreFilter] = useState(initialFilters.centre);
+
+  // Global Dropdown Lists
   const [centres, setCentres] = useState([]);
-  const [selectedService, setSelectedService] = useState(null);
-  const [viewMode, setViewMode] = useState('grid');
-  const [sortBy, setSortBy] = useState('date');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [activeDetailTab, setActiveDetailTab] = useState('overview');
-  const [showCharts, setShowCharts] = useState(true);
+  const [staffList, setStaffList] = useState([]);
+  const [categoriesList, setCategoriesList] = useState([]);
+
+  // Auto-reset subcategory when service changes
+  useEffect(() => {
+    setSubcategoryFilter('all');
+  }, [serviceTypeFilter]);
+
+  // Compute available subcategories based on selected Service
+  const availableSubcategories = useMemo(() => {
+    if (serviceTypeFilter === 'all') return [];
+    const selectedCat = categoriesList.find(c => c.id.toString() === serviceTypeFilter.toString());
+    return selectedCat?.subcategories || [];
+  }, [serviceTypeFilter, categoriesList]);
+
+  // Load Dropdown Metadata ONCE
+  useEffect(() => {
+    const fetchDropdowns = async () => {
+      try {
+        const [staffRes, catRes] = await Promise.all([getStaff(), getCategories()]);
+        setStaffList(Array.isArray(staffRes?.data) ? staffRes.data : Array.isArray(staffRes) ? staffRes : []);
+        setCategoriesList(Array.isArray(catRes?.data) ? catRes.data : Array.isArray(catRes) ? catRes : []);
+      } catch(e) { console.error("Error loading dropdown data", e); }
+    };
+    fetchDropdowns();
+  }, []);
 
   // --- PAGINATION & STATS STATES ---
   const [currentPage, setCurrentPage] = useState(1);
@@ -707,159 +746,63 @@ const SuperAdminServiceLogs = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, centreFilter]);
+  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, centreFilter, customStartDate, customEndDate]);
 
-  // Map backend status to frontend status
-  const statusMap = {
-    'pending': 'Pending',
-    'in_progress': 'In Progress',
-    'completed': 'Completed',
-    'rejected': 'Delayed',
-    'resubmit': 'Resubmit',
-    'paid': 'Paid'
-  };
-
-  const reverseStatusMap = {
-    'Pending': 'pending',
-    'In Progress': 'in_progress',
-    'Completed': 'completed',
-    'Delayed': 'rejected',
-    'Resubmit': 'resubmit',
-    'Paid': 'paid'
-  };
-
-  const paymentStatusConfig = {
-    'Not Applicable': { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' },
-    'Received': { color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' },
-    'Partial': { color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-400' },
-    'Pending': { color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', dot: 'bg-rose-500' },
-    'Processing': { color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', dot: 'bg-blue-500' },
-    'default': { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
-  };
-
-  const statusConfig = {
-    'Pending': { color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-400' },
-    'In Progress': { color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', dot: 'bg-blue-500' },
-    'Delayed': { color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', dot: 'bg-rose-500' },
-    'Completed': { color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' },
-    'Resubmit': { color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-200', dot: 'bg-yellow-400' },
-    'Paid': { color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', dot: 'bg-green-500' }
-  };
-
-  const priorityConfig = {
-    'low': { color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Low' },
-    'medium': { color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', label: 'Medium' },
-    'high': { color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', label: 'High' }
-  };
-
-  // Fetch centres
-  const fetchCentres = async () => {
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      console.log('SuperAdminServiceLogs: Fetched centres:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('SuperAdminServiceLogs: Error fetching centres:', error);
-      toast.error('Failed to fetch centres: ' + (error.response?.data?.error || error.message));
-      return [];
-    }
-  };
-
-  // Format payments
-  const formatPayments = (payments) => {
-    if (!Array.isArray(payments) || payments.length === 0) return 'No payments recorded';
-    return payments.map(p => {
-      const method = p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method;
-      return `${method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`;
-    }).join(', ');
-  };
-
-  // Transform backend data (Instantly process using pre-calculated backend data)
-  const transformBackendData = async (trackingData, centres) => {
-    return trackingData.map((trackingEntry) => {
-      // 1. Calculate payments instantly using the data already provided by the SQL query
-      const totalCharge = parseFloat(trackingEntry.total_charges || 0);
-      const totalReceived = parseFloat(trackingEntry.total_received || 0);
-      const payments = trackingEntry.payment_details_array || [];
-
-      let paymentStatus = 'Pending';
-      if (totalCharge <= 0) paymentStatus = 'Not Applicable';
-      else if (totalReceived >= totalCharge) paymentStatus = 'Received';
-      else if (totalReceived > 0) paymentStatus = 'Partial';
-
-      const paymentDetailsStr = payments.length > 0 
-        ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
-        : 'No payments recorded';
-
-      // 2. Format Dates
-      const updatedDate = new Date(trackingEntry.updated_at || Date.now());
-      const dateStr = updatedDate.toISOString().split('T')[0];
-      const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
-
-      const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
-      const centre = centres.find(c => c.id === trackingEntry.centre_id);
-
-      return {
-        id: trackingEntry.id.toString(),
-        serviceEntryId: trackingEntry.service_entry_id?.toString(),
-        trackingId: `TR-${trackingEntry.id}`,
-        applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
-        customerName: trackingEntry.customer_name || 'Unknown',
-        customerPhone: trackingEntry.phone || 'N/A',
-        customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
-        serviceType: trackingEntry.service_name || 'Unknown',
-        subcategoryName: trackingEntry.subcategory_name || 'N/A',
-        staffName: trackingEntry.assigned_to_name || 'Unassigned',
-        staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
-        assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
-        assignedToId: trackingEntry.assigned_to,
-        cost: totalCharge,
-        totalCharge: totalCharge,
-        status: statusMap[trackingEntry.status] || 'Pending',
-        currentStep: trackingEntry.current_step || 'Submitted',
-        progress: trackingEntry.progress || 0,
-        priority: trackingEntry.priority || 'medium',
-        date: dateStr,
-        time: timeStr,
-        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? new Date(trackingEntry.estimated_delivery).toISOString() : 'Not set',
-        centreId: trackingEntry.centre_id || null,
-        centreName: centre ? centre.name : 'Unknown Centre',
-        workSource: workSource,
-        serviceRating: trackingEntry.service_rating,
-        staffRating: trackingEntry.staff_rating,
-        reviewText: trackingEntry.review_text,
-        reviewSubmittedAt: trackingEntry.submitted_at,
-        aadhaar: trackingEntry.aadhaar || 'N/A',
-        paymentStatus: paymentStatus,
-        paymentDetails: paymentDetailsStr,
-        payments: payments,
-        steps: trackingEntry.steps || []
-      };
-    });
-
-    // Wait for all 50 rows to process at once (takes ~2ms)
-    return Promise.all(transformedPromises);
-  };
-
-  // Initialize data
+  // Main Data Loader
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
         const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
         
-        let timeRangeParam = undefined;
-        let dateParam = undefined;
-        if (dateRange === 'today') dateParam = new Date().toISOString().split('T')[0];
-        else if (dateRange !== 'all') timeRangeParam = dateRange;
+        // 🔥 CALCULATE DATES BASED ON SELECTION
+        let start_date = undefined;
+        let end_date = undefined;
+        const now = new Date();
+
+        if (dateRange === 'today') {
+           start_date = new Date(now.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'yesterday') {
+           const yesterday = new Date(now);
+           yesterday.setDate(yesterday.getDate() - 1);
+           start_date = new Date(yesterday.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(yesterday.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'this_week') {
+           const weekAgo = new Date(now);
+           weekAgo.setDate(weekAgo.getDate() - 7);
+           start_date = new Date(weekAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'this_month') {
+           const monthAgo = new Date(now);
+           monthAgo.setMonth(monthAgo.getMonth() - 1);
+           start_date = new Date(monthAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'last_3_months') {
+           const threeMonthsAgo = new Date(now);
+           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+           start_date = new Date(threeMonthsAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'last_6_months') {
+           const sixMonthsAgo = new Date(now);
+           sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+           start_date = new Date(sixMonthsAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === '1_year') {
+           const yearAgo = new Date(now);
+           yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+           start_date = new Date(yearAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'custom') {
+           if (customStartDate) start_date = new Date(new Date(customStartDate).setHours(0,0,0,0)).toISOString();
+           if (customEndDate) end_date = new Date(new Date(customEndDate).setHours(23,59,59,999)).toISOString();
+        }
 
         const params = {
           page: currentPage,
           limit: limit,
-          timeRange: timeRangeParam,
-          date: dateParam,
+          start_date: start_date,
+          end_date: end_date,
           centre_id: centreFilter === 'all' ? undefined : centreFilter,
           service: serviceTypeFilter === 'all' ? undefined : serviceTypeFilter,
           subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
@@ -869,7 +812,6 @@ const SuperAdminServiceLogs = () => {
           search: debouncedSearch || undefined
         };
 
-        // 🔥 CRITICAL FIX: Removed fetchServiceEntries() so we don't download the whole database!
         const [centresData, trackingResponse] = await Promise.all([
           fetchCentres(),
           getTrackingEntries(params)
@@ -886,10 +828,8 @@ const SuperAdminServiceLogs = () => {
           ? trackingResponse.data 
           : Array.isArray(trackingResponse) ? trackingResponse : [];
 
-        // Note: We no longer pass serviceEntries here
-        let transformed = await transformBackendData(trackingData, centresData);
+        let transformed = await transformBackendData(trackingData);
 
-        // Sort Data
         transformed.sort((a, b) => {
           let aValue = a[sortBy] || '';
           let bValue = b[sortBy] || '';
@@ -902,27 +842,23 @@ const SuperAdminServiceLogs = () => {
         setServices(transformed);
         setFilteredServices(transformed); 
         
-        // Fetch Global Stats matching these filters
-        const statsData = await getTrackingStats(params);
-        if (statsData) {
-            const completionRate = statsData.total > 0 ? ((statsData.completed / statsData.total) * 100).toFixed(1) : 0;
-            setGlobalStats({ ...statsData, completionRate, delayed: statsData.delayed || 0 }); 
+        if (typeof getTrackingStats === 'function') {
+            const statsData = await getTrackingStats(params);
+            if (statsData) {
+                const completionRate = statsData.total > 0 ? ((statsData.completed / statsData.total) * 100).toFixed(1) : 0;
+                setGlobalStats({ ...statsData, completionRate, delayed: statsData.delayed || 0 }); 
+            }
         }
 
       } catch (err) {
         console.error("SuperAdminServiceLogs: Error loading service logs:", err);
-        toast.error(`Failed to load service logs: ${err.response?.data?.error || err.message}`);
       } finally {
         setLoading(false);
       }
     };
     loadData();
-  }, [currentPage, debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, centreFilter, sortBy, sortOrder]);
+  }, [currentPage, debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, customStartDate, customEndDate, centreFilter, sortBy, sortOrder]);
 
-  // Dropdown option generators
-  const staffMembers = useMemo(() => [...new Set(services.map(s => s.staffName))].sort(), [services]);
-  const serviceTypes = useMemo(() => [...new Set(services.map(s => s.serviceType))].sort(), [services]);
-  const subcategories = useMemo(() => [...new Set(services.map(s => s.subcategoryName))].sort(), [services]);
   const uniqueCentres = useMemo(() => centres.sort((a, b) => a.name.localeCompare(b.name)), [centres]);
 
   // Update service status
@@ -1403,8 +1339,8 @@ const SuperAdminServiceLogs = () => {
                       onChange={(e) => setStaffFilter(e.target.value)}
                     >
                       <option value="all">All Staff</option>
-                      {staffMembers.map(staff => (
-                        <option key={staff} value={staff}>{staff}</option>
+                      {staffList.map(staff => (
+                        <option key={staff.id} value={staff.id}>{staff.name}</option>
                       ))}
                     </select>
                   </div>
@@ -1428,15 +1364,10 @@ const SuperAdminServiceLogs = () => {
                   </div>
                   <button
                     onClick={() => {
-                      setSearchTerm('');
-                      setStatusFilter('all');
-                      setPriorityFilter('all');
-                      setStaffFilter('all');
-                      setServiceTypeFilter('all');
-                      setSubcategoryFilter('all');
-                      setDateRange('all');
-                      setCentreFilter('all');
-                      toast.info('Filters reset');
+                      setSearchTerm(''); setStatusFilter('all'); setPriorityFilter('all');
+                      setStaffFilter('all'); setServiceTypeFilter('all'); setSubcategoryFilter('all');
+                      setDateRange('today'); setCustomStartDate(''); setCustomEndDate(''); setCentreFilter('all');
+                      toast.info('Filters reset to Today');
                     }}
                     className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                     title="Reset Filters"
@@ -1445,25 +1376,28 @@ const SuperAdminServiceLogs = () => {
                   </button>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 border-t pt-3">
+
+              {/* Advanced Filter Row (Date, Service, Subcategory) */}
+              <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                 <select
                   className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px]"
                   value={serviceTypeFilter}
                   onChange={(e) => setServiceTypeFilter(e.target.value)}
                 >
                   <option value="all">All Service Types</option>
-                  {serviceTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
+                  {categoriesList.map(type => (
+                    <option key={type.id} value={type.id}>{type.name}</option>
                   ))}
                 </select>
                 <select
-                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px]"
+                  className={`border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px] ${serviceTypeFilter === 'all' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border-gray-300'}`}
                   value={subcategoryFilter}
                   onChange={(e) => setSubcategoryFilter(e.target.value)}
+                  disabled={serviceTypeFilter === 'all'}
                 >
-                  <option value="all">All Subcategories</option>
-                  {subcategories.map(sub => (
-                    <option key={sub} value={sub}>{sub}</option>
+                  <option value="all">{serviceTypeFilter === 'all' ? 'Select a Service First' : 'All Subcategories'}</option>
+                  {availableSubcategories.map(sub => (
+                    <option key={sub.id} value={sub.id}>{sub.name}</option>
                   ))}
                 </select>
                 <select
@@ -1471,11 +1405,35 @@ const SuperAdminServiceLogs = () => {
                   value={dateRange}
                   onChange={(e) => setDateRange(e.target.value)}
                 >
-                  <option value="all">All Dates</option>
+                  <option value="all">All Time</option>
                   <option value="today">Today</option>
-                  <option value="week">Last 7 Days</option>
-                  <option value="month">Last 30 Days</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="this_week">This Week</option>
+                  <option value="this_month">This Month</option>
+                  <option value="last_3_months">Last 3 Months</option>
+                  <option value="last_6_months">Last 6 Months</option>
+                  <option value="1_year">Past 1 Year</option>
+                  <option value="custom">Custom Range...</option>
                 </select>
+                
+                {/* Custom Date Inputs show only when 'Custom Range' is selected */}
+                {dateRange === 'custom' && (
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="date" 
+                      value={customStartDate} 
+                      onChange={e => setCustomStartDate(e.target.value)} 
+                      className="border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                    <span className="text-gray-500 text-sm">to</span>
+                    <input 
+                      type="date" 
+                      value={customEndDate} 
+                      onChange={e => setCustomEndDate(e.target.value)} 
+                      className="border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
