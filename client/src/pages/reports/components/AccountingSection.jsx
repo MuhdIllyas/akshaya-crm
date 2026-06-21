@@ -2453,6 +2453,11 @@ const AccountingSection = ({
     };
   const [loading, setLoading] = useState(false);
 
+  // --- REPORT TAB STATES ---
+  const [reportPeriod, setReportPeriod] = useState('This Month');
+  const [customDateRange, setCustomDateRange] = useState({ from: date, to: date });
+  const [reportData, setReportData] = useState({ income: [], expenses: [], ledger: [], loading: false });
+
   const [ledgerFilters, setLedgerFilters] = useState({
     from: date,
     to: date,
@@ -2548,6 +2553,78 @@ const AccountingSection = ({
     
     return new URLSearchParams(allParams).toString();
   };
+
+  // --- REPORT PERIOD EFFECTS ---
+  const formatDateForAPI = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getReportDateRange = (period) => {
+    const now = new Date();
+    let from, to;
+    
+    if (period === 'Today') {
+      from = date; 
+      to = date;
+    } else if (period === 'This Week') {
+      const first = now.getDate() - now.getDay() + 1;
+      from = formatDateForAPI(new Date(now.setDate(first)));
+      to = formatDateForAPI(new Date(now.setDate(first + 6)));
+    } else if (period === 'This Month') {
+      from = formatDateForAPI(new Date(now.getFullYear(), now.getMonth(), 1));
+      to = formatDateForAPI(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    } else if (period === 'This Quarter') {
+      const quarter = Math.floor(now.getMonth() / 3);
+      from = formatDateForAPI(new Date(now.getFullYear(), quarter * 3, 1));
+      to = formatDateForAPI(new Date(now.getFullYear(), quarter * 3 + 3, 0));
+    } else if (period === 'This Year') {
+      from = formatDateForAPI(new Date(now.getFullYear(), 0, 1));
+      to = formatDateForAPI(new Date(now.getFullYear(), 11, 31));
+    } else if (period === 'Custom Range') {
+      from = customDateRange.from;
+      to = customDateRange.to;
+    } else {
+      from = date;
+      to = date;
+    }
+    return { from, to };
+  };
+
+  useEffect(() => {
+    if (activeAccountingTab === 'reports') {
+      const fetchReportData = async () => {
+        setReportData(prev => ({ ...prev, loading: true }));
+        const { from, to } = getReportDateRange(reportPeriod);
+        
+        try {
+          const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+          
+          const iRes = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/income?${buildQueryString({ from, to })}`, { headers: h });
+          const incomeData = await iRes.json();
+
+          const lRes = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/ledger?${buildQueryString({ from, to })}`, { headers: h });
+          const ledgerData = await lRes.json();
+
+          const filteredExpenses = accountingData.expenses.filter(e => e.date >= from && e.date <= to);
+
+          setReportData({ 
+            income: incomeData.rows || [], 
+            expenses: filteredExpenses, 
+            ledger: ledgerData.rows || [], 
+            loading: false 
+          });
+        } catch (error) {
+          console.error('Failed to fetch report data', error);
+          setReportData(prev => ({ ...prev, loading: false }));
+        }
+      };
+
+      fetchReportData();
+    }
+  }, [activeAccountingTab, reportPeriod, date, customDateRange.from, customDateRange.to, isSuperAdmin, centreId]);
 
   // ---------- Fetch initial data ----------
   useEffect(() => {
@@ -3060,47 +3137,43 @@ const handleApproveExpense = async (expenseId) => {
     }
   };
 
+  // --- REPORT TAB SPECIFIC STATS ---
+  const reportRevenue = reportData.income.reduce((sum, row) => sum + Number(row.received_amount || 0), 0);
+  const reportServiceCharges = reportData.income.reduce((sum, row) => {
+    const r = Number(row.received_amount || 0), s = Number(row.service_charges || 0), d = Number(row.department_charges || 0);
+    if (s+d > 0 && r > 0) return sum + (s * (r / (s+d)));
+    else if (r > 0 && s+d === 0) return sum + r;
+    return sum;
+  }, 0);
+  const reportDeptCharges = reportData.income.reduce((sum, row) => {
+    const r = Number(row.received_amount || 0), s = Number(row.service_charges || 0), d = Number(row.department_charges || 0);
+    if (s+d > 0 && r > 0) return sum + (d * (r / (s+d)));
+    return sum;
+  }, 0);
+  const reportExpensesTotal = reportData.expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const reportProfit = reportServiceCharges - reportExpensesTotal;
+  const reportPendingApprovals = reportData.expenses.filter(e => e.status === 'pending').length;
+
   // ---------- NEW: Excel export handler ----------
-const handleExportExcel = () => {
+  const handleExportExcel = () => {
     try {
       const formatAmount = (val) => val ? Number(val).toLocaleString('en-IN') : '0';
       
-      const incomeRows = (accountingData.income?.rows || []).map(row => ({
-        'Date': row.received_at ? new Date(row.received_at).toLocaleDateString() : '',
-        'Time': row.received_at ? new Date(row.received_at).toLocaleTimeString() : '',
-        'Customer': row.customer_name || '',
-        'Service': row.service_name || '',
-        'Staff': row.staff_name || '',
-        'Received Amount (₹)': formatAmount(row.received_amount),
-        'Service Charges (₹)': formatAmount(row.service_charges),
-        'Department Charges (₹)': formatAmount(row.department_charges),
-        'Status': 'Completed'
-      }));
+      // 🔥 Changed to use reportData instead of accountingData
+      const rIncome = reportData.income.map(row => ({ 'Date': row.received_at ? new Date(row.received_at).toLocaleDateString() : '', 'Time': row.received_at ? new Date(row.received_at).toLocaleTimeString() : '', 'Customer': row.customer_name || '', 'Service': row.service_name || '', 'Staff': row.staff_name || '', 'Received Amount (₹)': formatAmount(row.received_amount), 'Service Charges (₹)': formatAmount(row.service_charges), 'Department Charges (₹)': formatAmount(row.department_charges), 'Status': 'Completed' }));
+      const rExp = reportData.expenses.filter(e => e.status !== 'rejected').map(exp => ({ 'Date': exp.date || '', 'Description': exp.description || '', 'Category': exp.category || '', 'Amount (₹)': formatAmount(exp.amount), 'Payment Method': exp.payment_method || '', 'Wallet': exp.wallet_name || '', 'Staff': exp.staff_name || '', 'Status': exp.status || '', 'Notes': exp.notes || '' }));
+      const rLedger = reportData.ledger.map(tx => ({ 'Date': tx.created_at ? new Date(tx.created_at).toLocaleDateString() : '', 'Time': tx.created_at ? new Date(tx.created_at).toLocaleTimeString() : '', 'Wallet': tx.wallet_name || '', 'Type': tx.type || '', 'Amount (₹)': formatAmount(tx.amount), 'Category': tx.category || '', 'Staff': tx.staff_name || '', 'Customer': tx.customer_name || '', 'Service': tx.service_name || '' }));
       
-      const expensesForDate = accountingData.expenses.filter(e => e.date === date && e.status !== 'rejected');
-      const expenseRows = expensesForDate.map(exp => ({
-        'Date': exp.date || '',
-        'Description': exp.description || '',
-        'Category': exp.category || '',
-        'Amount (₹)': formatAmount(exp.amount),
-        'Payment Method': exp.payment_method || '',
-        'Wallet': exp.wallet_name || '',
-        'Staff': exp.staff_name || '',
-        'Status': exp.status || '',
-        'Notes': exp.notes || ''
-      }));
+      const wb = XLSX.utils.book_new();
+      const w1 = XLSX.utils.json_to_sheet(rIncome), w2 = XLSX.utils.json_to_sheet(rExp), w3 = XLSX.utils.json_to_sheet(rLedger);
       
-      const ledgerRows = (accountingData.ledger?.rows || []).map(tx => ({
-        'Date': tx.created_at ? new Date(tx.created_at).toLocaleDateString() : '',
-        'Time': tx.created_at ? new Date(tx.created_at).toLocaleTimeString() : '',
-        'Wallet': tx.wallet_name || '',
-        'Type': tx.type || '',
-        'Amount (₹)': formatAmount(tx.amount),
-        'Category': tx.category || '',
-        'Staff': tx.staff_name || '',
-        'Customer': tx.customer_name || '',
-        'Service': tx.service_name || ''
-      }));
+      XLSX.utils.book_append_sheet(wb, w1, 'Income');
+      XLSX.utils.book_append_sheet(wb, w2, 'Expenses');
+      XLSX.utils.book_append_sheet(wb, w3, 'Ledger');
+      
+      // Dynamic file name based on period
+      const pName = reportPeriod === 'Custom Range' ? `${customDateRange.from}_to_${customDateRange.to}` : reportPeriod.replace(/\s+/g, '_');
+      const fileName = `Accounting_Report_${pName}.xlsx`;
       
       const walletsData = derivedWallets.map(w => ({
         'Wallet Name': w.name,
@@ -3146,7 +3219,6 @@ const handleExportExcel = () => {
         'Closed Timestamp': nightly.timestamp ? new Date(nightly.timestamp).toLocaleString() : ''
       }];
       
-      const wb = XLSX.utils.book_new();
       const wsIncome = XLSX.utils.json_to_sheet(incomeRows);
       const wsExpenses = XLSX.utils.json_to_sheet(expenseRows);
       const wsLedger = XLSX.utils.json_to_sheet(ledgerRows);
@@ -3183,8 +3255,6 @@ const handleExportExcel = () => {
       XLSX.utils.book_append_sheet(wb, wsWallets, 'Wallets');
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Daily Summary');
       XLSX.utils.book_append_sheet(wb, wsNightly, 'Nightly Accounting');
-      
-      const fileName = `Accounting_Report_${date}.xlsx`;
       
       // --- BROWSER-SAFE EXPORT LOGIC ---
       // Generate the Excel file as an array buffer
@@ -3487,7 +3557,7 @@ const handleExportExcel = () => {
               />
             )}
 
-            {/* Reports */}
+                      {/* Reports */}
             {activeAccountingTab === 'reports' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
