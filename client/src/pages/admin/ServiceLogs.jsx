@@ -721,6 +721,7 @@ const ServiceLogs = () => {
 
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
+  const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedService, setSelectedService] = useState(null);
@@ -859,9 +860,23 @@ const ServiceLogs = () => {
           search: debouncedSearch || undefined
         };
 
-        const [trackingResponse] = await Promise.all([
-          getTrackingEntries(params)
+        // Fetch both paginated table data AND lightweight global chart data simultaneously
+        const [trackingResponse, chartResponse] = await Promise.all([
+          getTrackingEntries(params),
+          axios.get(`${import.meta.env.VITE_API_URL}/api/servicetracking/chart-data`, { 
+            params, headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
+          }).catch(err => ({ data: [] }))
         ]);
+
+        // Map the lightweight DB response to match what the Chart components expect
+        const formattedChartData = (chartResponse?.data || []).map(item => ({
+          status: statusMap[item.status] || 'Pending',
+          priority: item.priority || 'medium',
+          date: item.updated_at,
+          serviceType: item.service_name || 'Unknown',
+          staffName: item.assigned_to_name || 'Unassigned'
+        }));
+        setChartData(formattedChartData);
 
         if (trackingResponse && trackingResponse.pagination) {
           setTotalRecords(trackingResponse.pagination.totalRecords);
@@ -1491,18 +1506,18 @@ const ServiceLogs = () => {
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <StatusDistributionChart services={services} />
-                <MonthlyServiceTrendChart services={services} />
+                <StatusDistributionChart services={chartData} />
+                <MonthlyServiceTrendChart services={chartData} />
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <ServiceTypeDistributionChart services={services} />
-                <StaffWorkloadChart services={services} />
+                <ServiceTypeDistributionChart services={chartData} />
+                <StaffWorkloadChart services={chartData} />
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <PriorityDistributionChart services={services} />
-                <ServiceCompletionRateChart services={services} />
+                <PriorityDistributionChart services={chartData} />
+                <ServiceCompletionRateChart services={chartData} />
               </div>
 
               {/* Quick Insights - Service Focused */}
