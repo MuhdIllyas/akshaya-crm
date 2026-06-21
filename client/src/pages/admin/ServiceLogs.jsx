@@ -10,7 +10,7 @@ import {
   FiList, FiGrid, FiUsers, FiUserCheck, FiUserPlus, FiCreditCard, FiEdit3
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats } from '/src/services/serviceService';
+import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats, getStaff, getCategories } from '/src/services/serviceService';
 
 // Import Chart.js components
 import {
@@ -722,12 +722,6 @@ const ServiceLogs = () => {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [staffFilter, setStaffFilter] = useState('all');
-  const [serviceTypeFilter, setServiceTypeFilter] = useState('all');
-  const [subcategoryFilter, setSubcategoryFilter] = useState('all');
-  const [dateRange, setDateRange] = useState('all');
   const [selectedService, setSelectedService] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('date');
@@ -735,25 +729,70 @@ const ServiceLogs = () => {
   const [activeDetailTab, setActiveDetailTab] = useState('overview');
   const [showCharts, setShowCharts] = useState(true);
 
-  // --- NEW PAGINATION & STATS STATES ---
+  // --- NEW DATE CALCULATOR LOGIC & LOCAL STORAGE ---
+  const getSavedFilters = () => {
+    try {
+      const saved = localStorage.getItem('adminServiceSavedView');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Could not load saved filters', e);
+    }
+    return { status: 'all', staff: 'all', priority: 'all', service: 'all', subcategory: 'all', dateRange: 'today', customStart: '', customEnd: '', reviewed: 'all' };
+  };
+
+  const initialFilters = getSavedFilters();
+
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const limit = 20;
+  const limit = 50;
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, delayed: 0, pending: 0, completionRate: 0 });
 
-  // Debounce search input
+  const [statusFilter, setStatusFilter] = useState(initialFilters.status);
+  const [priorityFilter, setPriorityFilter] = useState(initialFilters.priority);
+  const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
+  const [serviceTypeFilter, setServiceTypeFilter] = useState(initialFilters.service);
+  const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory);
+  const [dateRange, setDateRange] = useState(initialFilters.dateRange);
+  const [customStartDate, setCustomStartDate] = useState(initialFilters.customStart);
+  const [customEndDate, setCustomEndDate] = useState(initialFilters.customEnd);
+  const [reviewedFilter, setReviewedFilter] = useState(initialFilters.reviewed || 'all');
+
+  // Global Dropdown Lists
+  const [staffList, setStaffList] = useState([]);
+  const [categoriesList, setCategoriesList] = useState([]);
+
+  useEffect(() => {
+    const fetchDropdowns = async () => {
+      try {
+        const [staffRes, catRes] = await Promise.all([getStaff(), getCategories()]);
+        setStaffList(Array.isArray(staffRes?.data) ? staffRes.data : Array.isArray(staffRes) ? staffRes : []);
+        setCategoriesList(Array.isArray(catRes?.data) ? catRes.data : Array.isArray(catRes) ? catRes : []);
+      } catch(e) { console.error("Error loading dropdown data", e); }
+    };
+    fetchDropdowns();
+  }, []);
+
+  useEffect(() => {
+    setSubcategoryFilter('all');
+  }, [serviceTypeFilter]);
+
+  const availableSubcategories = useMemo(() => {
+    if (serviceTypeFilter === 'all') return [];
+    const selectedCat = categoriesList.find(c => c.id.toString() === serviceTypeFilter.toString());
+    return selectedCat?.subcategories || [];
+  }, [serviceTypeFilter, categoriesList]);
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Reset to page 1 when any filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange]);
+  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, customStartDate, customEndDate, reviewedFilter]);
 
   // Main Data Loader
   useEffect(() => {
@@ -762,26 +801,66 @@ const ServiceLogs = () => {
       try {
         const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
         
-        // Map dateRange to backend parameters
-        let timeRangeParam = undefined;
-        let dateParam = undefined;
-        if (dateRange === 'today') dateParam = new Date().toISOString().split('T')[0];
-        else if (dateRange !== 'all') timeRangeParam = dateRange;
+        // Calculate Dates
+        let start_date = undefined;
+        let end_date = undefined;
+        const now = new Date();
+
+        if (dateRange === 'today') {
+           start_date = new Date(now.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'yesterday') {
+           const yesterday = new Date(now);
+           yesterday.setDate(yesterday.getDate() - 1);
+           start_date = new Date(yesterday.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(yesterday.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'this_week') {
+           const weekAgo = new Date(now);
+           weekAgo.setDate(weekAgo.getDate() - 7);
+           start_date = new Date(weekAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'this_month') {
+           const monthAgo = new Date(now);
+           monthAgo.setMonth(monthAgo.getMonth() - 1);
+           start_date = new Date(monthAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'last_3_months') {
+           const threeMonthsAgo = new Date(now);
+           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+           start_date = new Date(threeMonthsAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'last_6_months') {
+           const sixMonthsAgo = new Date(now);
+           sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+           start_date = new Date(sixMonthsAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === '1_year') {
+           const yearAgo = new Date(now);
+           yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+           start_date = new Date(yearAgo.setHours(0,0,0,0)).toISOString();
+           end_date = new Date(now.setHours(23,59,59,999)).toISOString();
+        } else if (dateRange === 'custom') {
+           if (customStartDate) start_date = new Date(new Date(customStartDate).setHours(0,0,0,0)).toISOString();
+           if (customEndDate) end_date = new Date(new Date(customEndDate).setHours(23,59,59,999)).toISOString();
+        }
 
         const params = {
           page: currentPage,
           limit: limit,
-          timeRange: timeRangeParam,
-          date: dateParam,
+          start_date: start_date,
+          end_date: end_date,
           service: serviceTypeFilter === 'all' ? undefined : serviceTypeFilter,
           subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
           status: statusFilter === 'all' ? undefined : apiStatus,
           priority: priorityFilter === 'all' ? undefined : priorityFilter,
           staff: staffFilter === 'all' ? undefined : staffFilter,
+          reviewed: reviewedFilter === 'reviewed' ? 'true' : undefined,
           search: debouncedSearch || undefined
         };
 
-        const trackingResponse = await getTrackingEntries(params);
+        const [trackingResponse] = await Promise.all([
+          getTrackingEntries(params)
+        ]);
 
         if (trackingResponse && trackingResponse.pagination) {
           setTotalRecords(trackingResponse.pagination.totalRecords);
@@ -794,7 +873,6 @@ const ServiceLogs = () => {
 
         let transformed = await transformBackendData(trackingData);
         
-        // Client-side sorting for current page
         transformed.sort((a, b) => {
           let aValue = a[sortBy] || '';
           let bValue = b[sortBy] || '';
@@ -805,28 +883,24 @@ const ServiceLogs = () => {
         });
 
         setServices(transformed);
+        setFilteredServices(transformed);
         
-        // Fetch Global Stats matching these filters
-        const statsData = await getTrackingStats(params);
-        if (statsData) {
-            const completionRate = statsData.total > 0 ? ((statsData.completed / statsData.total) * 100).toFixed(1) : 0;
-            setGlobalStats({ ...statsData, completionRate });
+        if (typeof getTrackingStats === 'function') {
+            const statsData = await getTrackingStats(params);
+            if (statsData) {
+                const completionRate = statsData.total > 0 ? ((statsData.completed / statsData.total) * 100).toFixed(1) : 0;
+                setGlobalStats({ ...statsData, completionRate });
+            }
         }
         
       } catch (err) {
         console.error("ServiceLogs: Error loading service logs:", err);
-        toast.error("Failed to load service logs");
       } finally {
         setLoading(false);
       }
     };
     loadData();
-  }, [currentPage, debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, sortBy, sortOrder]);
-
-  // Derived filter options for dropdowns
-  const staffMembers = useMemo(() => [...new Set(services.map(s => s.staffName))].sort(), [services]);
-  const serviceTypes = useMemo(() => [...new Set(services.map(s => s.serviceType))].sort(), [services]);
-  const subcategories = useMemo(() => [...new Set(services.map(s => s.subcategoryName))].sort(), [services]);
+  }, [currentPage, debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, customStartDate, customEndDate, reviewedFilter, sortBy, sortOrder]);
 
   // Map backend status to frontend status
   const statusMap = {
@@ -935,62 +1009,41 @@ const ServiceLogs = () => {
     }).join(', ');
   };
 
-  // Transform backend data to frontend format
+  // Helper to calculate progress percentage
+  const calculateProgress = (status, currentStep) => {
+    const stepProgress = { 'Submitted': 25, 'Initial Review': 50, 'Document Verification': 75, 'Final Approval': 100 };
+    if (status === 'Completed' || status === 'Paid' || status === 'completed' || status === 'paid') return 100;
+    return stepProgress[currentStep] || 25;
+  };
+
+  // Transform backend data (Instantly process using pre-calculated backend data)
   const transformBackendData = async (trackingData) => {
-    const transformed = [];
-    for (const trackingEntry of trackingData) {
-      
-      // 1. Math is now done instantly by PostgreSQL
+    const transformedPromises = trackingData.map(async (trackingEntry) => {
       const totalCharge = parseFloat(trackingEntry.total_charges || 0);
       const totalReceived = parseFloat(trackingEntry.total_received || 0);
-      
-      // 2. Determine Payment Status
-      let paymentStatus;
-      if (totalCharge <= 0) {
-        paymentStatus = 'Not Applicable';
-      } else if (totalReceived >= totalCharge) {
-        paymentStatus = 'Received';
-      } else if (totalReceived > 0) {
-        paymentStatus = 'Partial';
-      } else {
-        paymentStatus = 'Pending';
-      }
-
-      // 3. Format Payment Details Array
       const payments = trackingEntry.payment_details_array || [];
-      const paymentDetails = payments.length > 0 
-        ? payments.map(p => {
-            const method = p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method;
-            return `${method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`;
-          }).join(', ')
+
+      let paymentStatus = 'Pending';
+      if (totalCharge <= 0) paymentStatus = 'Not Applicable';
+      else if (totalReceived >= totalCharge) paymentStatus = 'Received';
+      else if (totalReceived > 0) paymentStatus = 'Partial';
+
+      const paymentDetailsStr = payments.length > 0 
+        ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
         : 'No payments recorded';
 
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
       const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
-      // Determine work source
-      const workSource = trackingEntry.work_source || 
-                        (trackingEntry.customer_service_id ? 'online' : 'offline');
+      const calculatedProgress = trackingEntry.progress || calculateProgress(
+        statusMap[trackingEntry.status] || 'Pending',
+        trackingEntry.current_step || 'Submitted'
+      );
 
-      const steps = Array.isArray(trackingEntry.steps) && trackingEntry.steps.length > 0 
-        ? trackingEntry.steps.map(step => ({
-            id: step.id,
-            name: step.name || 'Unnamed Step',
-            completed: step.completed || false,
-            date: step.date && !isNaN(new Date(step.date)) ? new Date(step.date).toISOString() : null,
-            created_at: step.created_at && !isNaN(new Date(step.created_at)) ? new Date(step.created_at).toISOString() : new Date().toISOString(),
-            step_order: parseInt(step.step_order) || 0,
-            estimated_days: parseInt(step.estimated_days) || 0
-          })).filter(step => step.name && step.step_order > 0)
-        : [
-            { name: 'Submitted', completed: true, date: trackingEntry.created_at || new Date().toISOString(), step_order: 1, estimated_days: 1, created_at: new Date().toISOString() },
-            { name: 'Initial Review', completed: trackingEntry.status !== 'pending', date: trackingEntry.status !== 'pending' ? trackingEntry.updated_at : null, step_order: 2, estimated_days: 3, created_at: new Date().toISOString() },
-            { name: 'Document Verification', completed: ['completed', 'paid'].includes(trackingEntry.status) || trackingEntry.current_step === 'Document Verification', date: ['completed', 'paid'].includes(trackingEntry.status) || trackingEntry.current_step === 'Document Verification' ? trackingEntry.updated_at : null, step_order: 3, estimated_days: 5, created_at: new Date().toISOString() },
-            { name: 'Final Approval', completed: ['completed', 'paid'].includes(trackingEntry.status), date: ['completed', 'paid'].includes(trackingEntry.status) ? trackingEntry.updated_at : null, step_order: 4, estimated_days: 2, created_at: new Date().toISOString() }
-          ];
+      const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
 
-      transformed.push({
+      return {
         id: trackingEntry.id.toString(),
         serviceEntryId: trackingEntry.service_entry_id?.toString(),
         trackingId: `TR-${trackingEntry.id}`,
@@ -998,8 +1051,8 @@ const ServiceLogs = () => {
         customerName: trackingEntry.customer_name || 'Unknown',
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
-        address: 'Address not available',
         serviceType: trackingEntry.service_name || 'Unknown',
+        serviceName: trackingEntry.service_name || 'Unknown',
         subcategoryName: trackingEntry.subcategory_name || 'N/A',
         categoryId: trackingEntry.category_id,
         subcategoryId: trackingEntry.subcategory_id,
@@ -1007,43 +1060,28 @@ const ServiceLogs = () => {
         staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
-        serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
-        departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
-        
-        // Push the calculated values directly to state
-        totalCharge: totalCharge,
         cost: totalCharge,
-        paymentStatus: paymentStatus,
-        paymentDetails: paymentDetails,
-        payments: payments,
-        
+        totalCharge: totalCharge,
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
-        progress: trackingEntry.progress || 0,
+        progress: calculatedProgress,
         priority: trackingEntry.priority || 'medium',
         date: dateStr,
         time: timeStr,
         estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? new Date(trackingEntry.estimated_delivery).toISOString() : 'Not set',
-        expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'Not set',
-        createdAt: trackingEntry.created_at && !isNaN(new Date(trackingEntry.created_at)) ? new Date(trackingEntry.created_at).toISOString() : new Date().toISOString(),
-        updatedAt: trackingEntry.updated_at && !isNaN(new Date(trackingEntry.updated_at)) ? new Date(trackingEntry.updated_at).toISOString() : new Date().toISOString(),
-        duration: null,
-        notes: trackingEntry.notes || 'No notes available',
-        rating: null,
-        followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
-        steps: steps,
-        
-        // Source information
         workSource: workSource,
-
-        // Review information
         serviceRating: trackingEntry.service_rating,
         staffRating: trackingEntry.staff_rating,
         reviewText: trackingEntry.review_text,
-        reviewSubmittedAt: trackingEntry.submitted_at
-      });
-    }
-    return transformed;
+        reviewSubmittedAt: trackingEntry.submitted_at,
+        aadhaar: trackingEntry.aadhaar || 'N/A',
+        paymentStatus: paymentStatus,
+        paymentDetails: paymentDetailsStr,
+        payments: payments,
+        steps: trackingEntry.steps || []
+      };
+    });
+    return Promise.all(transformedPromises);
   };
 
   // Update service status
@@ -1510,14 +1548,11 @@ const ServiceLogs = () => {
             </motion.div>
           )}
 
-          {/* Compact Filters and Controls */}
+          {/* Filters and Controls */}
           <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
             <div className="flex flex-col space-y-3">
-              {/* Main Filter Row */}
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                {/* Left Side - Search and Basic Filters */}
                 <div className="flex flex-col sm:flex-row gap-2 flex-1">
-                  {/* Search */}
                   <div className="relative flex-1 sm:max-w-xs">
                     <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                     <input
@@ -1528,8 +1563,6 @@ const ServiceLogs = () => {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                  
-                  {/* Compact Filter Group */}
                   <div className="flex flex-wrap gap-2">
                     <select
                       className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[120px]"
@@ -1544,7 +1577,6 @@ const ServiceLogs = () => {
                       <option value="Resubmit">Resubmit</option>
                       <option value="Paid">Paid</option>
                     </select>
-
                     <select
                       className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[120px]"
                       value={priorityFilter}
@@ -1555,23 +1587,19 @@ const ServiceLogs = () => {
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
                     </select>
-
                     <select
                       className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[120px]"
                       value={staffFilter}
                       onChange={(e) => setStaffFilter(e.target.value)}
                     >
                       <option value="all">All Staff</option>
-                      {staffMembers.map(staff => (
-                        <option key={staff} value={staff}>{staff}</option>
+                      {staffList.map(staff => (
+                        <option key={staff.id} value={staff.id}>{staff.name}</option>
                       ))}
                     </select>
                   </div>
                 </div>
-
-                {/* Right Side - Controls */}
                 <div className="flex items-center gap-2">
-                  {/* View Toggle */}
                   <div className="flex border border-gray-300 rounded-lg overflow-hidden">
                     <button
                       onClick={() => setViewMode('grid')}
@@ -1588,18 +1616,13 @@ const ServiceLogs = () => {
                       <FiList className="h-4 w-4" />
                     </button>
                   </div>
-
-                  {/* Reset Button */}
                   <button
                     onClick={() => {
-                      setSearchTerm('');
-                      setStatusFilter('all');
-                      setPriorityFilter('all');
-                      setStaffFilter('all');
-                      setServiceTypeFilter('all');
-                      setSubcategoryFilter('all');
-                      setDateRange('all');
-                      toast.info('Filters reset');
+                      setSearchTerm(''); setStatusFilter('all'); setPriorityFilter('all');
+                      setStaffFilter('all'); setServiceTypeFilter('all'); setSubcategoryFilter('all');
+                      setDateRange('today'); setCustomStartDate(''); setCustomEndDate(''); 
+                      setReviewedFilter('all');
+                      toast.info('Filters reset to Today');
                     }}
                     className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                     title="Reset Filters"
@@ -1609,39 +1632,70 @@ const ServiceLogs = () => {
                 </div>
               </div>
 
-              {/* Secondary Filter Row - Collapsible */}
-              <div className="flex flex-wrap gap-2 border-t pt-3">
+              {/* Advanced Filter Row (Date, Service, Subcategory) */}
+              <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                 <select
                   className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px]"
                   value={serviceTypeFilter}
                   onChange={(e) => setServiceTypeFilter(e.target.value)}
                 >
                   <option value="all">All Service Types</option>
-                  {serviceTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
+                  {categoriesList.map(type => (
+                    <option key={type.id} value={type.id}>{type.name}</option>
                   ))}
                 </select>
-
                 <select
-                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px]"
+                  className={`border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px] ${serviceTypeFilter === 'all' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white border-gray-300'}`}
                   value={subcategoryFilter}
                   onChange={(e) => setSubcategoryFilter(e.target.value)}
+                  disabled={serviceTypeFilter === 'all'}
                 >
-                  <option value="all">All Subcategories</option>
-                  {subcategories.map(sub => (
-                    <option key={sub} value={sub}>{sub}</option>
+                  <option value="all">{serviceTypeFilter === 'all' ? 'Select a Service First' : 'All Subcategories'}</option>
+                  {availableSubcategories.map(sub => (
+                    <option key={sub.id} value={sub.id}>{sub.name}</option>
                   ))}
                 </select>
-
                 <select
                   className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px]"
                   value={dateRange}
                   onChange={(e) => setDateRange(e.target.value)}
                 >
-                  <option value="all">All Dates</option>
+                  <option value="all">All Time</option>
                   <option value="today">Today</option>
-                  <option value="week">Last 7 Days</option>
-                  <option value="month">Last 30 Days</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="this_week">This Week</option>
+                  <option value="this_month">This Month</option>
+                  <option value="last_3_months">Last 3 Months</option>
+                  <option value="last_6_months">Last 6 Months</option>
+                  <option value="1_year">Past 1 Year</option>
+                  <option value="custom">Custom Range...</option>
+                </select>
+                
+                {dateRange === 'custom' && (
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="date" 
+                      value={customStartDate} 
+                      onChange={e => setCustomStartDate(e.target.value)} 
+                      className="border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                    <span className="text-gray-500 text-sm">to</span>
+                    <input 
+                      type="date" 
+                      value={customEndDate} 
+                      onChange={e => setCustomEndDate(e.target.value)} 
+                      className="border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                  </div>
+                )}
+
+                <select
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px]"
+                  value={reviewedFilter}
+                  onChange={(e) => setReviewedFilter(e.target.value)}
+                >
+                  <option value="all">All Records</option>
+                  <option value="reviewed">Reviewed Only</option>
                 </select>
               </div>
             </div>
