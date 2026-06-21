@@ -145,56 +145,49 @@ const AdminReports = () => {
     const currentMonth = new Date().getMonth();
     const lastMonth = currentMonth > 0 ? currentMonth - 1 : 11;
     
-    // Safely fallback to empty arrays
-    const revenue = data.revenue || [];
-    const expenses = data.expenses || [];
-    const profit = data.profit || [];
-    const transactions = data.transactions || [];
-    const wallets = data.wallets || [];
-
-    const currentMonthRevenue = revenue[currentMonth] || 0;
-    const lastMonthRevenue = revenue[lastMonth] || 0;
+    const currentMonthRevenue = data.revenue[currentMonth] || 0;
+    const lastMonthRevenue = data.revenue[lastMonth] || 0;
     const revenueChange = lastMonthRevenue > 0 
       ? ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1)
       : 0;
 
-    const currentMonthExpenses = expenses[currentMonth] || 0;
-    const lastMonthExpenses = expenses[lastMonth] || 0;
+    const currentMonthExpenses = data.expenses[currentMonth] || 0;
+    const lastMonthExpenses = data.expenses[lastMonth] || 0;
     const expenseChange = lastMonthExpenses > 0 
       ? ((currentMonthExpenses - lastMonthExpenses) / lastMonthExpenses * 100).toFixed(1)
       : 0;
 
-    const currentMonthProfit = profit[currentMonth] || 0;
-    const lastMonthProfit = profit[lastMonth] || 0;
+    const currentMonthProfit = data.profit[currentMonth] || 0;
+    const lastMonthProfit = data.profit[lastMonth] || 0;
     const profitChange = lastMonthProfit > 0 
       ? ((currentMonthProfit - lastMonthProfit) / lastMonthProfit * 100).toFixed(1)
       : 0;
 
-    const totalRevenue = revenue.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
-    const totalExpenses = expenses.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
+    const totalRevenue = data.revenue.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
+    const totalExpenses = data.expenses.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
     const totalProfit = totalRevenue - totalExpenses;
 
-    const totalTransactions = transactions.length;
-    const pendingTransactions = transactions.filter(t => t.status === 'Pending').length;
-    const completedTransactions = transactions.filter(t => t.status === 'Completed').length;
+    const totalTransactions = data.transactions.length;
+    const pendingTransactions = data.transactions.filter(t => t.status === 'Pending').length;
+    const completedTransactions = data.transactions.filter(t => t.status === 'Completed').length;
 
     const averageTransaction = totalTransactions > 0 
-      ? Math.round(transactions.reduce((a, b) => a + (b.amount || 0), 0) / totalTransactions)
+      ? Math.round(data.transactions.reduce((a, b) => a + b.amount, 0) / totalTransactions)
       : 0;
 
     // Wallet totals
-    const totalWalletBalance = wallets.reduce((sum, wallet) => sum + (wallet.currentBalance || 0), 0);
-    const totalCashInHand = wallets.find(w => w.name === 'Cash in Hand')?.currentBalance || 0;
-    const totalBankBalance = wallets.filter(w => w.type?.includes('Bank')).reduce((sum, w) => sum + (w.currentBalance || 0), 0);
-    const totalDigitalBalance = wallets.filter(w => w.type?.includes('Digital') || w.type?.includes('Wallet')).reduce((sum, w) => sum + (w.currentBalance || 0), 0);
+    const totalWalletBalance = data.wallets.reduce((sum, wallet) => sum + wallet.currentBalance, 0);
+    const totalCashInHand = data.wallets.find(w => w.name === 'Cash in Hand')?.currentBalance || 0;
+    const totalBankBalance = data.wallets.filter(w => w.type.includes('Bank')).reduce((sum, w) => sum + w.currentBalance, 0);
+    const totalDigitalBalance = data.wallets.filter(w => w.type.includes('Digital') || w.type.includes('Wallet')).reduce((sum, w) => sum + w.currentBalance, 0);
 
     // Daily cash flow
-    const totalCashInToday = wallets.reduce((sum, wallet) => sum + (wallet.todayIn || 0), 0);
-    const totalCashOutToday = wallets.reduce((sum, wallet) => sum + (wallet.todayOut || 0), 0);
+    const totalCashInToday = data.wallets.reduce((sum, wallet) => sum + wallet.todayIn, 0);
+    const totalCashOutToday = data.wallets.reduce((sum, wallet) => sum + wallet.todayOut, 0);
     const netCashFlowToday = totalCashInToday - totalCashOutToday;
 
     // Accounting stats
-    const todayExpenses = accountingData?.expenses?.filter(e => e.status === 'approved').reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+    const todayExpenses = accountingData?.expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0) || 0;
 
     return {
       totalRevenue: `₹${totalRevenue.toLocaleString()}`,
@@ -261,22 +254,8 @@ const AdminReports = () => {
     }));
   };
 
-  useEffect(() => {
-    setLoading(true);
-    fetch(`${import.meta.env.VITE_API_URL}/api/analytics/my-centre`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
-    })
-      .then(res => res.json())
-      .then(result => {
-        setData(result);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to load analytics', err);
-        setLoading(false);
-      });
+useEffect(() => {
+    setLoading(false);
   }, []);
 
   if (loading) {
