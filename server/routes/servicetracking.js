@@ -679,10 +679,10 @@ const {
       FROM service_tracking st
       LEFT JOIN service_entries se ON st.service_entry_id = se.id
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-      -- ADD THESE THREE JOINS SO THE WHERE CLAUSE WORKS:
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
       LEFT JOIN staff st2 ON st.assigned_to = st2.id
+      LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id) 
       ${whereClause}
     `;
     const countResult = await client.query(countQuery, queryValues);
