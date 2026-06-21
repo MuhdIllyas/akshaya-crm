@@ -1280,7 +1280,7 @@ const SuperAdminServiceLogs = () => {
         </div>
 
         <div className="max-w-[98%] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 py-8">
-          {/* Stats Overview */}
+          {/* Stats Overview - Service focused only */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
             <StatCard
               title="Total Services"
@@ -1313,7 +1313,7 @@ const SuperAdminServiceLogs = () => {
             <StatCard
               title="Follow-up"
               value={globalStats.delayed || 0}
-              subtitle="Needs review"
+              subtitle="Need attention"
               icon={FiAlertCircle}
               color="bg-rose-500"
             />
@@ -1379,7 +1379,7 @@ const SuperAdminServiceLogs = () => {
                   <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-lg">
                     <span className="text-sm text-emerald-700">Completion Rate</span>
                     <span className="font-semibold text-emerald-900">
-                      {stats.completionRate}%
+                      {globalStats.completionRate || 0}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
@@ -1652,7 +1652,7 @@ const SuperAdminServiceLogs = () => {
               </button>
             </div>
           )}
-          
+
         </div>
 
         {/* Side Panel */}
