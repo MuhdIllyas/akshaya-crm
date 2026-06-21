@@ -738,7 +738,7 @@ const SuperAdminServiceLogs = () => {
       console.error('Could not load saved filters', e);
     }
     // 🔥 DEFAULT TO TODAY
-    return { status: 'all', staff: 'all', priority: 'all', centre: 'all', service: 'all', subcategory: 'all', dateRange: 'today', customStart: '', customEnd: '' };
+    return { status: 'all', staff: 'all', priority: 'all', centre: 'all', service: 'all', subcategory: 'all', dateRange: 'today', customStart: '', customEnd: '', reviewed: 'all' };
   };
 
   const initialFilters = getSavedFilters();
@@ -753,6 +753,7 @@ const SuperAdminServiceLogs = () => {
   const [customStartDate, setCustomStartDate] = useState(initialFilters.customStart);
   const [customEndDate, setCustomEndDate] = useState(initialFilters.customEnd);
   const [centreFilter, setCentreFilter] = useState(initialFilters.centre);
+  const [reviewedFilter, setReviewedFilter] = useState(initialFilters.reviewed || 'all'); // NEW
 
   // Global Dropdown Lists
   const [centres, setCentres] = useState([]);
@@ -895,7 +896,7 @@ const SuperAdminServiceLogs = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, centreFilter, customStartDate, customEndDate]);
+  }, [debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, centreFilter, customStartDate, customEndDate, reviewedFilter]);
 
   // Main Data Loader
   useEffect(() => {
@@ -958,7 +959,8 @@ const SuperAdminServiceLogs = () => {
           status: statusFilter === 'all' ? undefined : apiStatus,
           priority: priorityFilter === 'all' ? undefined : priorityFilter,
           staff: staffFilter === 'all' ? undefined : staffFilter,
-          search: debouncedSearch || undefined
+          reviewed: reviewedFilter === 'reviewed' ? 'true' : undefined,
+          search: debouncedSearch || undefined,
         };
 
         const [centresData, trackingResponse] = await Promise.all([
@@ -1516,6 +1518,7 @@ const SuperAdminServiceLogs = () => {
                       setSearchTerm(''); setStatusFilter('all'); setPriorityFilter('all');
                       setStaffFilter('all'); setServiceTypeFilter('all'); setSubcategoryFilter('all');
                       setDateRange('today'); setCustomStartDate(''); setCustomEndDate(''); setCentreFilter('all');
+                      setReviewedFilter('all');
                       toast.info('Filters reset to Today');
                     }}
                     className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -1563,6 +1566,16 @@ const SuperAdminServiceLogs = () => {
                   <option value="last_6_months">Last 6 Months</option>
                   <option value="1_year">Past 1 Year</option>
                   <option value="custom">Custom Range...</option>
+                </select>
+
+                {/* REVIEWS FILTER DROPDOWN */}
+                <select
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm min-w-[140px]"
+                  value={reviewedFilter}
+                  onChange={(e) => setReviewedFilter(e.target.value)}
+                >
+                  <option value="all">All Records</option>
+                  <option value="reviewed">Reviewed Only</option>
                 </select>
                 
                 {/* Custom Date Inputs show only when 'Custom Range' is selected */}

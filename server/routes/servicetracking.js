@@ -569,7 +569,7 @@ router.post('/sync-customer-services', authenticateToken, async (req, res) => {
 router.get('/entries', authenticateToken, async (req, res) => {
 const { 
     centre_id, status, priority, start_date, end_date,
-    page = 1, limit = 50, timeRange, staff, search, aadhaar, expiry, date, service, subcategory
+    page = 1, limit = 50, timeRange, staff, search, aadhaar, expiry, date, service, subcategory, reviewed
   } = req.query;
   
   const client = await pool.connect();
@@ -667,6 +667,10 @@ const {
       }
     }
 
+    if (reviewed === 'true') {
+      queryConditions.push(`st.service_rating IS NOT NULL`);
+    }
+
     let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
 
     // 5. Pagination: Get Total Count
@@ -752,7 +756,7 @@ const {
 router.get('/stats', authenticateToken, async (req, res) => {
   // 1. Add start_date and end_date here:
   const { 
-    centre_id, status, timeRange, staff, date, service, subcategory, start_date, end_date
+    centre_id, status, timeRange, staff, date, service, subcategory, start_date, end_date, reviewed
   } = req.query;
   
   const client = await pool.connect();
@@ -825,6 +829,10 @@ router.get('/stats', authenticateToken, async (req, res) => {
         queryConditions.push(`st2.name = $${paramIndex++}`);
         queryValues.push(staff);
       }
+    }
+
+    if (reviewed === 'true') {
+      queryConditions.push(`st.service_rating IS NOT NULL`);
     }
 
     let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
