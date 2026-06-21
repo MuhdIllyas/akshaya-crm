@@ -720,6 +720,7 @@ const ServiceLogs = () => {
   const isAdmin = userRole === 'admin' || userRole === 'superadmin'; 
 
   const [services, setServices] = useState([]);
+  const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedService, setSelectedService] = useState(null);
