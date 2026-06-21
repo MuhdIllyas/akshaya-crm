@@ -676,6 +676,14 @@ const SuperAdminServiceLogs = () => {
   const [filteredServices, setFilteredServices] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // --- RESTORED UI STATES ---
+  const [selectedService, setSelectedService] = useState(null);
+  const [viewMode, setViewMode] = useState('grid');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [activeDetailTab, setActiveDetailTab] = useState('overview');
+  const [showCharts, setShowCharts] = useState(true);
+  
   // --- NEW DATE CALCULATOR LOGIC & LOCAL STORAGE ---
   const getSavedFilters = () => {
     try {
