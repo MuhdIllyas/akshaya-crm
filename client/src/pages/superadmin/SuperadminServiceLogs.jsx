@@ -776,6 +776,18 @@ const SuperAdminServiceLogs = () => {
     }).join(', ');
   };
 
+  // Helper to calculate progress percentage
+  const calculateProgress = (status, currentStep) => {
+    const stepProgress = {
+      'Submitted': 25,
+      'Initial Review': 50,
+      'Document Verification': 75,
+      'Final Approval': 100
+    };
+    if (status === 'Completed' || status === 'Paid' || status === 'completed' || status === 'paid') return 100;
+    return stepProgress[currentStep] || 25;
+  };
+
   // Transform backend data (Instantly process using pre-calculated backend data)
   const transformBackendData = async (trackingData) => {
     // Process all entries concurrently instead of sequentially
