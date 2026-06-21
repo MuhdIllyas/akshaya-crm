@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTrackingEntries, updateTrackingStatus, updateTrackingEntry, notifyCustomer, getServiceEntries, getServiceEntryByTokenId, getTrackingStats, getStaff, getCategories } from '/src/services/serviceService';
+import axios from 'axios'; 
 
 // Import Chart.js components
 import {
@@ -27,6 +28,7 @@ import {
   Filler
 } from 'chart.js';
 import { Bar, Line, Pie, Doughnut } from 'react-chartjs-2';
+import axios from 'axios';
 
 // Register Chart.js components
 ChartJS.register(
