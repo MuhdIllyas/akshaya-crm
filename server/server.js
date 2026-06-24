@@ -50,8 +50,6 @@ import staffperformanceRoutes from "./routes/staffPerformance.js";
 
 import eventsRoutes from "./routes/events.js";
 
-import notesRoutes from "./routes/notes.js";
-
 dotenv.config();
 
 import "./routes/scheduler.js";
@@ -67,7 +65,8 @@ const httpServer = createServer(app);
 
 app.use(cors({
   origin: [
-    process.env.FRONTEND_URL || "http://localhost:5173"
+    "https://akshayasahayi.com",
+    "https://www.akshayasahayi.com"
   ],
   credentials: true
 }));
@@ -237,8 +236,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.PG_URI,
-  // Only force SSL if we are in production mode
-  ssl: process.env.NODE_ENV === "production"
+  ssl: process.env.DATABASE_URL
     ? { rejectUnauthorized: false }
     : false,
 });
@@ -308,9 +306,6 @@ app.use("/api/whatsapp", whatsappRoutes);
 
 /* Events */
 app.use("/api/events", eventsRoutes);
-
-/* Notes */
-app.use("/api/notes", notesRoutes);
 
 /* ================================
    STATIC FILES
