@@ -725,7 +725,19 @@ const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => (
 // MAIN COMPONENT
 // ---------------------------------------------------------------------
 const AdminAttendance = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // 1. Read the 'tab' from the URL, default to 'attendance' if none exists
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'dashboard';
+  });
+
+  // 2. Update the URL quietly when a user clicks different tabs manually
+  useEffect(() => {
+    const url = new URL(window.location);
+    url.searchParams.set('tab', activeTab);
+    window.history.pushState({}, '', url);
+  }, [activeTab]);
+
   const [staffList, setStaffList] = useState([]);
   const [allAttendance, setAllAttendance] = useState([]);
   const [pendingLeaves, setPendingLeaves] = useState([]);
