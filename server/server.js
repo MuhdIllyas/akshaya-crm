@@ -24,7 +24,8 @@ import walletreportsRoute from "./routes/reports/walletReports.js";
 import staffreportsRoute from "./routes/reports/staffReports.js";
 import accountingRoute from "./routes/reports/accounting.js";
 import transactionRoute from "./routes/reports/transactionReports.js";
-import superAdminAnalytics from "./routes/reports/superAdminAnalytics.js";
+import adminAnalyticsRoutes from './routes/reports/adminAnalytics.js';
+import superAdminAnalyticsRoutes from './routes/reports/superAdminAnalytics.js';
 
 import customerRoute from "./routes/customer.js";
 import customerDocumentsRoutes from "./routes/customerDocuments.js";
@@ -49,6 +50,8 @@ import staffperformanceRoutes from "./routes/staffPerformance.js";
 
 import eventsRoutes from "./routes/events.js";
 
+import notesRoutes from "./routes/notes.js";
+
 dotenv.config();
 
 import "./routes/scheduler.js";
@@ -64,8 +67,7 @@ const httpServer = createServer(app);
 
 app.use(cors({
   origin: [
-    "https://akshayasahayi.com",
-    "https://www.akshayasahayi.com"
+    process.env.FRONTEND_URL || "http://localhost:5173"
   ],
   credentials: true
 }));
@@ -235,7 +237,8 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.PG_URI,
-  ssl: process.env.DATABASE_URL
+  // Only force SSL if we are in production mode
+  ssl: process.env.NODE_ENV === "production"
     ? { rejectUnauthorized: false }
     : false,
 });
@@ -278,7 +281,8 @@ app.use("/api/walletreport", walletreportsRoute);
 app.use("/api/staffreport", staffreportsRoute);
 app.use("/api/accounting", accountingRoute);
 app.use("/api/transaction", transactionRoute);
-app.use("/api/analytics", superAdminAnalytics);
+app.use('/api/analytics/admin', adminAnalyticsRoutes);
+app.use('/api/analytics/superadmin', superAdminAnalyticsRoutes);
 
 app.use("/api/customer/documents", customerDocumentsRoutes);
 app.use("/api/customer/bookings", customerBookingRoutes);
@@ -304,6 +308,9 @@ app.use("/api/whatsapp", whatsappRoutes);
 
 /* Events */
 app.use("/api/events", eventsRoutes);
+
+/* Notes */
+app.use("/api/notes", notesRoutes);
 
 /* ================================
    STATIC FILES
