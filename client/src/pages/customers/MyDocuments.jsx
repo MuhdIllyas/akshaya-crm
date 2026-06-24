@@ -6,8 +6,7 @@ import {
   FiEdit, FiChevronDown, FiHome, FiMapPin, FiGlobe 
 } from 'react-icons/fi';
 import axios from "axios";
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import {  toast } from 'react-toastify';
 
 const MyDocuments = () => {
   const [activeScope, setActiveScope] = useState('individual');
@@ -614,7 +613,6 @@ const MyDocuments = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <ToastContainer position="top-right" autoClose={3000} />
       
       {/* Header with Stats */}
       <div className="mb-8">

@@ -5,8 +5,7 @@ import {
   FiPlus, FiRefreshCw, FiChevronDown, FiChevronUp, FiSearch,
   FiX, FiEdit, FiArrowDown, FiArrowUp, FiMapPin, FiMoreVertical
 } from "react-icons/fi";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 import {
   getWallets,
   createWallet,
@@ -458,7 +457,6 @@ const WalletManagement = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <ToastContainer />
       
       {/* Recharge Modal */}
       <AnimatePresence>

@@ -468,7 +468,6 @@ const MyServices = () => {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <ToastContainer position="top-right" autoClose={3000} />
       
       {/* Page Header with Apply Button */}
       <div className="mb-6">

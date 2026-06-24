@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { 
   FiSearch, FiFilter, FiDownload, FiEye, FiMessageSquare,
@@ -42,86 +43,6 @@ ChartJS.register(
   Legend,
   Filler
 );
-
-// Custom Toast Container to handle errors gracefully
-const SafeToastContainer = () => {
-  const [ToastContainer, setToastContainer] = useState(null);
-
-  useEffect(() => {
-    import('react-toastify').then((module) => {
-      setToastContainer(() => module.ToastContainer);
-    }).catch((error) => {
-      console.warn('Toast notifications disabled:', error);
-    });
-  }, []);
-
-  if (!ToastContainer) return null;
-
-  return (
-    <ToastContainer 
-      position="top-right"
-      autoClose={5000}
-      hideProgressBar={false}
-      newestOnTop
-      closeOnClick
-      rtl={false}
-      pauseOnFocusLoss
-      draggable
-      pauseOnHover
-      theme="light"
-    />
-  );
-};
-
-// Safe toast function
-const createSafeToast = () => {
-  let toast = null;
-  
-  import('react-toastify').then((module) => {
-    toast = module.toast;
-  }).catch((error) => {
-    console.warn('Toast notifications disabled:', error);
-    toast = {
-      success: (msg) => console.log('SUCCESS:', msg),
-      error: (msg) => console.error('ERROR:', msg),
-      info: (msg) => console.info('INFO:', msg),
-      warn: (msg) => console.warn('WARN:', msg),
-    };
-  });
-
-  return {
-    success: (message) => {
-      if (toast && toast.success) {
-        toast.success(message);
-      } else {
-        console.log('SUCCESS:', message);
-      }
-    },
-    error: (message) => {
-      if (toast && toast.error) {
-        toast.error(message);
-      } else {
-        console.error('ERROR:', message);
-      }
-    },
-    info: (message) => {
-      if (toast && toast.info) {
-        toast.info(message);
-      } else {
-        console.info('INFO:', message);
-      }
-    },
-    warn: (message) => {
-      if (toast && toast.warn) {
-        toast.warn(message);
-      } else {
-        console.warn('WARN:', message);
-      }
-    }
-  };
-};
-
-const toast = createSafeToast();
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -1405,8 +1326,6 @@ const ServiceLogs = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
-        <SafeToastContainer />
-        
         {/* Header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
           <div className="max-w-[98%] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 py-6">

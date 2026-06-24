@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown, FiUserPlus, FiClock, FiFilter, FiSearch, FiEdit2, FiCalendar, FiAward, FiFileText } from 'react-icons/fi';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify';
 import { getServices, createToken, getTokens, getCampaignHistory, getActiveCampaigns, getStaff, assignStaffToToken } from '/src/services/serviceService';
 // Import centralized socket and connection function
 import { socket, connectSocket } from '@/services/socket';
@@ -414,7 +413,6 @@ const AdminTokenManagement = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <ToastContainer position="top-right" autoClose={5000} />
       
       <div className="max-w-7xl mx-auto">
         {/* Header */}

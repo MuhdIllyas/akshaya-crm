@@ -12,8 +12,7 @@ import {
   deleteSubcategory,
   updateSubcategory
 } from "@/services/serviceService";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 
 // Icons
 const WalletIcon = () => (
@@ -392,7 +391,7 @@ const ServiceManagement = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <ToastContainer />
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-gray-100">

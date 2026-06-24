@@ -8,8 +8,7 @@ import {
 } from 'react-icons/fi';
 import { FaVenusMars, FaTransgender, FaMars, FaVenus } from 'react-icons/fa';
 import axios from "axios";
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify';
 
 const CustomerProfile = () => {
   const [profile, setProfile] = useState({
@@ -328,7 +327,6 @@ const CustomerProfile = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <ToastContainer position="top-right" autoClose={3000} />
       
       {/* Header */}
       <div className="mb-8">
