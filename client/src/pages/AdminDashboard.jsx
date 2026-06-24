@@ -253,163 +253,18 @@ const safeArray = (data) => {
   return [];
 };
 
-// ---------------------------------------------------------------------
-// API Functions for Financial Data (including new widgets)
-// ---------------------------------------------------------------------
-const fetchDailySummary = async (date) => {
-  const token = localStorage.getItem('token');
-  try {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/accounting/daily-summary?date=${date}`,
-      {
-        headers: { Authorization: `Bearer ${token}` }
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data;
-  } catch (error) {
-    console.error('Error fetching daily summary:', error);
-    return null;
-  }
-};
-
-const fetchYearlyWalletFlow = async () => {
-  const token = localStorage.getItem('token');
-  try {
-    const year = new Date().getFullYear();
-    const startDate = `${year}-01-01`;
-    const endDate = `${year}-12-31`;
-    
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/walletreport/wallets/daily-flow?from=${startDate}&to=${endDate}`,
-      {
-        headers: { Authorization: `Bearer ${token}` }
-      }
-    );
-    
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (error) {
-    console.error('Error fetching yearly wallet flow:', error);
-    return [];
-  }
-};
-
-const fetchLiveWalletBalances = async () => {
-  const token = localStorage.getItem('token');
-  try {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/accounting/wallet-balances`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    
-    if (!res.ok) {
-      const fallbackRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/wallet/my-centre-wallets`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!fallbackRes.ok) return [];
-      return await fallbackRes.json();
-    }
-    
-    return await res.json();
-  } catch (error) {
-    console.error('Error fetching live wallet balances:', error);
-    return [];
-  }
-};
-
-const fetchPendingPayments = async () => {
-  const token = localStorage.getItem('token');
-  try {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    return safeArray(data);
-  } catch (error) {
-    console.error('Error fetching pending payments:', error);
-    return [];
-  }
-};
-
-// --- NEW WIDGET API FETCHERS (EXACT ROUTES) ---
-const fetchReviewDistribution = async (from, to) => {
-  const token = localStorage.getItem('token');
-  try {
-    // Matches: app.use("/api/staffreport", staffreportsRoute);
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staffreport/rating-distribution?from=${from}&to=${to}`, { headers: { Authorization: `Bearer ${token}` } });
-    return res.ok ? await res.json() : [];
-  } catch (e) { return []; }
-};
-
-const fetchStaffPerformanceSummary = async (from, to) => {
-  const token = localStorage.getItem('token');
-  try {
-    // Matches: app.use("/api/staffreport", staffreportsRoute);
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staffreport/staff-performance?from=${from}&to=${to}`, { headers: { Authorization: `Bearer ${token}` } });
-    return res.ok ? await res.json() : [];
-  } catch (e) { return []; }
-};
-
-const fetchRecentTransactions = async () => {
-  const token = localStorage.getItem('token');
-  try {
-    // Matches: app.use("/api/transaction", transactionRoute);
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions?page=1&limit=10`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.transactions || [];
-  } catch (e) { return []; }
-};
-
-const fetchYesterdayClosing = async (date) => {
-  const token = localStorage.getItem('token');
-  try {
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/nightly-close?date=${date}`, { headers: { Authorization: `Bearer ${token}` } });
-    return res.ok ? await res.json() : null;
-  } catch (e) { return null; }
-};
 
 // ---------------------------------------------------------------------
 // Chart Components
 // ---------------------------------------------------------------------
 const AttendanceTrendChart = ({ attendanceData = [] }) => {
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    return date.toLocaleDateString('en-US', { weekday: 'short' });
-  });
-
-  const dailyStats = last7Days.map((dayName, index) => {
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() - (6 - index));
-    const dateStr = normalizeDate(targetDate);
-    
-    const dayAttendance = safeArray(attendanceData).filter(a => normalizeDate(a.date) === dateStr);
-    const presentCount = dayAttendance.filter(a => a.status === 'present').length;
-    const lateCount = dayAttendance.filter(a => {
-      if (a.status !== 'present') return false;
-      if (!a.punch_in) return false;
-      const [hours, minutes] = a.punch_in.split(':').map(Number);
-      return hours > 9 || (hours === 9 && minutes > 30);
-    }).length;
-
-    return {
-      present: presentCount,
-      late: lateCount
-    };
-  });
-
+  // Backend now returns an array of objects: { day: 'Mon', present: 5, late: 1 }
   const chartData = {
-    labels: last7Days,
+    labels: attendanceData.map(d => d.day),
     datasets: [
       {
         label: 'Present',
-        data: dailyStats.map(stat => stat.present),
+        data: attendanceData.map(d => Number(d.present) || 0),
         backgroundColor: 'rgba(16, 185, 129, 0.5)',
         borderColor: 'rgb(16, 185, 129)',
         borderWidth: 2,
@@ -418,7 +273,7 @@ const AttendanceTrendChart = ({ attendanceData = [] }) => {
       },
       {
         label: 'Late',
-        data: dailyStats.map(stat => stat.late),
+        data: attendanceData.map(d => Number(d.late) || 0),
         backgroundColor: 'rgba(245, 158, 11, 0.5)',
         borderColor: 'rgb(245, 158, 11)',
         borderWidth: 2,
@@ -432,73 +287,49 @@ const AttendanceTrendChart = ({ attendanceData = [] }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: 'top',
-        labels: { font: { size: 11 } }
-      },
+      legend: { position: 'top', labels: { font: { size: 11 } } },
     },
     scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { font: { size: 10 } }
-      },
-      x: {
-        ticks: { font: { size: 10 } }
-      }
+      y: { beginAtZero: true, ticks: { font: { size: 10 } } },
+      x: { ticks: { font: { size: 10 } } }
     },
   };
 
   return (
     <div className="h-48">
-      <Line data={chartData} options={options} />
+      {attendanceData.length > 0 ? (
+        <Line data={chartData} options={options} />
+      ) : (
+         <div className="h-full flex items-center justify-center">
+          <p className="text-gray-500 text-sm">No attendance data</p>
+        </div>
+      )}
     </div>
   );
 };
 
-const ServiceStatusChart = ({ services = [] }) => {
-  const serviceArray = safeArray(services);
-  
-  const statusCounts = useMemo(() => {
-    const counts = {
-      'Pending': 0,
-      'In Progress': 0,
-      'Completed': 0,
-      'Delayed': 0,
-    };
-
-    serviceArray.forEach(service => {
-      if (service && service.status) {
-        const status = service.status;
-        if (counts.hasOwnProperty(status)) {
-          counts[status]++;
-        } else {
-          counts[status] = (counts[status] || 0) + 1;
-        }
-      }
-    });
-
-    return counts;
-  }, [serviceArray]);
-
+const ServiceStatusChart = ({ services = {} }) => {
+  // Backend now returns the exact counts object directly
   const data = {
-    labels: Object.keys(statusCounts),
+    labels: ['Pending', 'In Progress', 'Completed', 'Delayed'],
     datasets: [{
-      data: Object.values(statusCounts),
+      data: [
+        Number(services?.pending_services || 0),
+        Number(services?.in_progress_services || 0),
+        Number(services?.completed_services || 0),
+        Number(services?.delayed_services || 0)
+      ],
       backgroundColor: [
         'rgba(245, 158, 11, 0.8)',
         'rgba(59, 130, 246, 0.8)',
         'rgba(16, 185, 129, 0.8)',
         'rgba(239, 68, 68, 0.8)',
-        'rgba(139, 92, 246, 0.8)',
-        'rgba(14, 165, 233, 0.8)',
       ],
       borderColor: [
         'rgb(245, 158, 11)',
         'rgb(59, 130, 246)',
         'rgb(16, 185, 129)',
         'rgb(239, 68, 68)',
-        'rgb(139, 92, 246)',
-        'rgb(14, 165, 233)',
       ],
       borderWidth: 2,
     }],
@@ -508,20 +339,16 @@ const ServiceStatusChart = ({ services = [] }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: 'right',
-        labels: {
-          font: { size: 10 },
-          boxWidth: 10
-        }
-      },
+      legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10 } },
     },
     cutout: '65%',
   };
 
+  const hasData = Object.values(services).some(val => Number(val) > 0);
+
   return (
     <div className="h-48">
-      {serviceArray.length > 0 ? (
+      {hasData ? (
         <Doughnut data={data} options={options} />
       ) : (
         <div className="h-full flex items-center justify-center">
@@ -794,208 +621,67 @@ const AdminDashboard = () => {
     const loadDashboardData = async () => {
       setLoading(true);
       try {
-        const today = getCurrentDate();
-        const currentMonthStr = getCurrentMonth();
-        const firstDayOfMonth = `${currentMonthStr}-01`;
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/dashboard`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         
-        const yDate = new Date();
-        yDate.setDate(yDate.getDate() - 1);
-        const yesterday = normalizeDate(yDate);
-        
-        // Load all data in parallel
-        const [
-          staffListRes,
-          attendanceDataRes,
-          pendingLeavesRes,
-          salaryDataRes,
-          serviceEntriesRes,
-          dailySummaryRes,
-          liveWalletsRes,
-          pendingPaymentsRes,
-          yearlyWalletFlowRes,
-          // New fetches
-          reviewRes,
-          staffPerfRes,
-          transactionsRes,
-          closingRes
-        ] = await Promise.all([
-          getStaffList().catch(() => []),
-          getAllAttendance(currentMonthStr).catch(() => []),
-          getPendingLeaves().catch(() => []),
-          getSalaryData(currentMonthStr).catch(() => []),
-          getServiceEntries().catch(() => ({ data: [] })),
-          fetchDailySummary(today).catch(() => null),
-          fetchLiveWalletBalances().catch(() => []),
-          fetchPendingPayments().catch(() => []),
-          fetchYearlyWalletFlow().catch(() => []),
-          fetchReviewDistribution(firstDayOfMonth, today).catch(() => []),
-          fetchStaffPerformanceSummary(firstDayOfMonth, today).catch(() => []),
-          fetchRecentTransactions().catch(() => []),
-          fetchYesterdayClosing(yesterday).catch(() => null)
-        ]);
+        if (!res.ok) throw new Error("Failed to fetch dashboard data");
+        const dashboardData = await res.json();
 
         if (!isMountedRef.current) return;
 
-        const staffArray = safeArray(staffListRes);
-        const attendanceArray = safeArray(attendanceDataRes);
-        const leavesArray = safeArray(pendingLeavesRes);
-        const salaryArray = safeArray(salaryDataRes);
-        const serviceArray = safeArray(serviceEntriesRes);
-        const walletArray = safeArray(liveWalletsRes);
-        const pendingPaymentsArray = safeArray(pendingPaymentsRes);
-        const yearlyFlowArray = safeArray(yearlyWalletFlowRes);
+        // Instantly populate all dashboard states from the single response
+        setStats(dashboardData.stats);
+        setReviewStats(dashboardData.customerSatisfaction);
+        
+        setAttendanceData(dashboardData.charts.attendanceTrend);
+        setServices(dashboardData.charts.serviceStatus); 
+        setDailyRevenueData(dashboardData.charts.dailyRevenue.data);
+        setDailyRevenueLabels(dashboardData.charts.dailyRevenue.labels);
+        setMonthlyRevenueData(dashboardData.charts.monthlyRevenue);
+        
+        setTopStaffData(dashboardData.lists.topStaff);
+        setRecentTransactions(dashboardData.lists.recentTransactions);
+        setYesterdayClosing(dashboardData.alerts.yesterdayClosing);
 
-        setStaffList(staffArray);
-        setAttendanceData(attendanceArray);
-        setSalaryData(salaryArray);
-        setServices(serviceArray);
-        setPendingPaymentsList(pendingPaymentsArray);
-        setWalletSummary(walletArray);
-        
-        // Set new widget data
-        setTopStaffData(safeArray(staffPerfRes?.data || staffPerfRes));
-        setRecentTransactions(safeArray(transactionsRes));
-        setYesterdayClosing(closingRes);
-        
-        // Calculate average rating from review distribution
-        const reviewsArray = safeArray(reviewRes);
-        let totalStars = 0;
-        let totalReviews = 0;
-        reviewsArray.forEach(r => {
-          const count = Number(r.count) || 0;
-          totalStars += (Number(r.staff_rating) * count);
-          totalReviews += count;
-        });
-        setReviewStats({ 
-          rating: totalReviews > 0 ? (totalStars / totalReviews).toFixed(1) : 0, 
-          count: totalReviews 
-        });
-
-        // --- Calculate Daily Financial Stats directly from Accounting API ---
-        const derived = dailySummaryRes?.derived || {};
-        const todayRevenue = (derived.cashInflow || 0) + (derived.digitalInflow || 0) + (derived.bankInflow || 0);
-        const todayExpenses = (derived.cashOutflow || 0) + (derived.digitalOutflow || 0) + (derived.bankOutflow || 0);
-        const todayProfit = todayRevenue - todayExpenses;
-        
-        // Pending payments total
-        const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => {
-          return sum + (Number(p.pending_amount) || Number(p.due) || 0);
-        }, 0);
-        const pendingPaymentsCount = pendingPaymentsArray.filter(p => {
-          const due = Number(p.pending_amount) || Number(p.due) || 0;
-          return due > 0;
-        }).length;
-        
-        // Wallet balances - LIVE
-        let totalWalletBalance = 0;
-        let totalCashInHand = 0;
-        let totalBankBalance = 0;
-        let totalDigitalBalance = 0;
-        walletArray.forEach(w => {
-          const balance = Number(w.current_balance) || Number(w.balance) || 0;
-          totalWalletBalance += balance;
-          const type = (w.wallet_type || '').toLowerCase();
-          if (type === 'cash') totalCashInHand += balance;
-          else if (type === 'bank') totalBankBalance += balance;
-          else if (type === 'digital') totalDigitalBalance += balance;
-        });
-        
-        // --- Build Monthly Revenue Data for Chart ---
-        const monthlyRevMap = new Array(12).fill(0);
-        yearlyFlowArray.forEach(flow => {
-          const flowDate = new Date(flow.date);
-          const monthIndex = flowDate.getMonth();
-          monthlyRevMap[monthIndex] += (Number(flow.total_in) || 0);
-        });
-        const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        setMonthlyRevenueData(monthlyRevMap);
-        setMonthlyRevenueLabels(monthLabels);
-        const currentMonthIndex = new Date().getMonth();
-        const monthlyRevenue = monthlyRevMap[currentMonthIndex] || 0;
-        
-        // --- Build Daily Revenue Data for Last 7 Days Chart ---
-        let last7DaysData = [];
-        let last7DaysLabels = [];
-        const sortedFlows = [...yearlyFlowArray].sort((a,b) => new Date(a.date) - new Date(b.date));
-        const recentFlows = sortedFlows.slice(-7);
-        recentFlows.forEach(flow => {
-          const d = new Date(flow.date);
-          last7DaysLabels.push(d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }));
-          last7DaysData.push(Number(flow.total_in) || 0);
-        });
-        setDailyRevenueData(last7DaysData);
-        setDailyRevenueLabels(last7DaysLabels);
-        
-        // Calculate today's attendance
-        const todayDateStr = normalizeDate(new Date());
-        const todayAttendance = attendanceArray.filter(a => normalizeDate(a.date) === todayDateStr);
-        const presentStaffIds = new Set(todayAttendance.filter(a => a.status === 'present').map(a => a.staff_id));
-        const pendingSalary = salaryArray.filter(s => s.status === 'pending');
-        const completedServices = serviceArray.filter(s => s.status === 'completed');
-        const pendingServices = serviceArray.filter(s => s.status === 'pending' || s.status === 'Pending');
-        
-        // Compute Average Order Value (AOV)
-        const averageOrderValue = completedServices.length > 0 ? Math.round(todayRevenue / completedServices.length) : 0;
-        
-        // Update stats
-        setStats({
-          totalStaff: staffArray.length || 0,
-          presentToday: presentStaffIds.size || 0,
-          pendingLeaves: leavesArray.length || 0,
-          pendingServices: pendingServices.length || 0,
-          monthlyRevenue: monthlyRevenue,
-          attendanceRate: staffArray.length > 0 ? Math.round((presentStaffIds.size / staffArray.length) * 100) : 0,
-          salaryPending: pendingSalary.length || 0,
-          servicesCompleted: completedServices.length || 0,
-          averageOrderValue: averageOrderValue,
-          todayRevenue: todayRevenue,
-          todayExpenses: todayExpenses,
-          todayProfit: todayProfit,
-          pendingPayments: pendingPaymentsCount,
-          pendingPaymentsTotal: pendingPaymentsTotal,
-          cashInHand: totalCashInHand,
-          bankBalance: totalBankBalance,
-          digitalBalance: totalDigitalBalance,
-          totalWalletBalance: totalWalletBalance,
-        });
-
-        // Generate recent activity
+        // Generate Recent Activity Notification Feed
         const activities = [];
-        if (todayRevenue > 0) {
+        if (dashboardData.stats.todayRevenue > 0) {
           activities.push({
             icon: FiDollarSign,
             title: 'Revenue recorded',
-            description: `₹${todayRevenue.toLocaleString('en-IN')} collected today`,
+            description: `₹${dashboardData.stats.todayRevenue.toLocaleString('en-IN')} collected today`,
             time: 'Today',
             color: 'text-emerald-600',
             bg: 'bg-emerald-50'
           });
         }
-        if (pendingPaymentsCount > 0) {
+        if (dashboardData.stats.pendingPayments > 0) {
           activities.push({
             icon: FiAlertCircle,
             title: 'Pending payments',
-            description: `${pendingPaymentsCount} customers owe ₹${pendingPaymentsTotal.toLocaleString('en-IN')}`,
+            description: `${dashboardData.stats.pendingPayments} customers owe ₹${dashboardData.stats.pendingPaymentsTotal.toLocaleString('en-IN')}`,
             time: 'Due now',
             color: 'text-amber-600',
             bg: 'bg-amber-50'
           });
         }
-        if (leavesArray.length > 0) {
+        if (dashboardData.stats.pendingLeaves > 0) {
           activities.push({
             icon: FiCalendar,
             title: 'Leave requests',
-            description: `${leavesArray.length} pending approval`,
+            description: `${dashboardData.stats.pendingLeaves} pending approval`,
             time: 'Today',
             color: 'text-blue-600',
             bg: 'bg-blue-50'
           });
         }
-        if (pendingServices.length > 0) {
+        if (dashboardData.stats.pendingServices > 0) {
           activities.push({
             icon: FiShoppingBag,
             title: 'Pending services',
-            description: `${pendingServices.length} need attention`,
+            description: `${dashboardData.stats.pendingServices} need attention`,
             time: 'Active',
             color: 'text-indigo-600',
             bg: 'bg-indigo-50'
@@ -1003,9 +689,7 @@ const AdminDashboard = () => {
         }
         setRecentActivity(activities.slice(0, 5));
 
-        if (staffArray.length > 0) {
-          toast.success(`Dashboard metrics synced.`);
-        }
+        toast.success(`Dashboard metrics synced.`);
 
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
@@ -1023,17 +707,13 @@ const AdminDashboard = () => {
           ]);
         }
       } finally {
-        if (isMountedRef.current) {
-          setLoading(false);
-        }
+        if (isMountedRef.current) setLoading(false);
       }
     };
 
     loadDashboardData();
     
-    return () => {
-      isMountedRef.current = false;
-    };
+    return () => { isMountedRef.current = false; };
   }, []);
 
   // Handle refresh (kept minimal, only refreshing financial summary & pending payments)
@@ -1042,31 +722,27 @@ const AdminDashboard = () => {
     setLoading(true);
     
     try {
-      const today = getCurrentDate();
-      const [dailySummaryRes, pendingPaymentsRes] = await Promise.all([
-        fetchDailySummary(today),
-        fetchPendingPayments()
-      ]);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/dashboard`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!res.ok) throw new Error("Failed to fetch dashboard data");
+      const dashboardData = await res.json();
+      
       if (!isMountedRef.current) return;
-      const pendingPaymentsArray = safeArray(pendingPaymentsRes);
-      const derived = dailySummaryRes?.derived || {};
-      const todayRevenue = (derived.cashInflow || 0) + (derived.digitalInflow || 0) + (derived.bankInflow || 0);
-      const todayExpenses = (derived.cashOutflow || 0) + (derived.digitalOutflow || 0) + (derived.bankOutflow || 0);
-      const todayProfit = todayRevenue - todayExpenses;
-      const pendingPaymentsTotal = pendingPaymentsArray.reduce((sum, p) => sum + (Number(p.pending_amount) || Number(p.due) || 0), 0);
-      const pendingPaymentsCount = pendingPaymentsArray.filter(p => {
-        const due = Number(p.pending_amount) || Number(p.due) || 0;
-        return due > 0;
-      }).length;
-      setStats(prev => ({
-        ...prev,
-        todayRevenue: todayRevenue,
-        todayExpenses: todayExpenses,
-        todayProfit: todayProfit,
-        pendingPayments: pendingPaymentsCount,
-        pendingPaymentsTotal: pendingPaymentsTotal,
-      }));
-      setPendingPaymentsList(pendingPaymentsArray);
+      
+      setStats(dashboardData.stats);
+      setReviewStats(dashboardData.customerSatisfaction);
+      setAttendanceData(dashboardData.charts.attendanceTrend);
+      setServices(dashboardData.charts.serviceStatus); 
+      setDailyRevenueData(dashboardData.charts.dailyRevenue.data);
+      setDailyRevenueLabels(dashboardData.charts.dailyRevenue.labels);
+      setMonthlyRevenueData(dashboardData.charts.monthlyRevenue);
+      setTopStaffData(dashboardData.lists.topStaff);
+      setRecentTransactions(dashboardData.lists.recentTransactions);
+      setYesterdayClosing(dashboardData.alerts.yesterdayClosing);
+      
       toast.success('Data refreshed successfully');
     } catch (error) {
       console.error('Refresh failed:', error);
@@ -1077,12 +753,13 @@ const AdminDashboard = () => {
   };
 
   // Navigation handlers
-  const navigateToAttendance = () => window.location.href = '/admin/attendance';
-  const navigateToLeaves = () => window.location.href = '/admin/attendance#leave';
-  const navigateToSalary = () => window.location.href = '/admin/attendance#salary';
-  const navigateToServices = () => window.location.href = '/admin/services';
-  const navigateToReports = () => window.location.href = '/admin/reports';
-  const navigateToPendingPayments = () => window.location.href = '/admin/reports?tab=pendingPayments';
+  const navigateToAttendance = () => window.location.href = '/dashboard/admin/attendancemanagement';
+  const navigateToLeaves = () => window.location.href = '/dashboard/admin/attendancemanagement?tab=leave';
+  const navigateToSalary = () => window.location.href = '/dashboard/admin/attendancemanagement?tab=salary';
+  const navigateToServices = () => window.location.href = '/dashboard/admin/servicelogs';
+  const navigateToWallets = () => window.location.href = '/dashboard/admin/wallets';
+  const navigateToReports = () => window.location.href = '/dashboard/admin/reports';
+  const navigateToPendingPayments = () => window.location.href = '/dashboard/admin/reports?tab=pendingPayments';
 
   if (loading) {
     return (
@@ -1197,7 +874,7 @@ const AdminDashboard = () => {
           subtitle="All accounts"
           icon={FiSmartphone}
           color="bg-purple-600"
-          onClick={navigateToReports}
+          onClick={navigateToWallets}
         />
       </div>
 
