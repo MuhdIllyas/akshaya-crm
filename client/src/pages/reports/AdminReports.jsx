@@ -69,7 +69,19 @@ const AdminReports = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
-  const [activeSection, setActiveSection] = useState('overview');
+  // Read the 'tab' from the URL, default to 'overview' if none exists
+  const [activeSection, setActiveSection] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'overview';
+  });
+
+  // Update the URL quietly when a user clicks different tabs manually
+  useEffect(() => {
+    const url = new URL(window.location);
+    url.searchParams.set('tab', activeSection);
+    window.history.pushState({}, '', url);
+  }, [activeSection]);
+
   const [showCharts, setShowCharts] = useState(true);
   const [timePeriod, setTimePeriod] = useState('monthly');
   const [staff, setStaff] = useState([]);
@@ -119,14 +131,14 @@ const AdminReports = () => {
      search: searchTerm || "",
      sort_by: sortBy,
      sort_order: sortOrder,
-        page: transactionPage, // 👈 ADDED: Send current page
-        limit: 50              // 👈 ADDED: Send limit
+        page: transactionPage, 
+        limit: 50              
     });
 
     if (dateFilter.fromDate) params.append("from", dateFilter.fromDate);
     if (dateFilter.toDate) params.append("to", dateFilter.toDate);
 
-    fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions?${params.toString()}`, {
+    fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions/?${params.toString()}`, {
      headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`
      }
@@ -138,112 +150,98 @@ const AdminReports = () => {
       // 👈 ADDED transactionPage to the dependency array below so it refetches on click
    }, [activeSection, searchTerm, sortBy, sortOrder, dateFilter, transactionPage]);
 
-  // Statistics calculation
+// Statistics calculation (Adapted for the new Analytics BFF structure)
   const stats = useMemo(() => {
-    if (!data) return {};
+    if (!data || !data.stats) return {};
 
-    const currentMonth = new Date().getMonth();
-    const lastMonth = currentMonth > 0 ? currentMonth - 1 : 11;
-    
-    const currentMonthRevenue = data.revenue[currentMonth] || 0;
-    const lastMonthRevenue = data.revenue[lastMonth] || 0;
-    const revenueChange = lastMonthRevenue > 0 
-      ? ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1)
-      : 0;
-
-    const currentMonthExpenses = data.expenses[currentMonth] || 0;
-    const lastMonthExpenses = data.expenses[lastMonth] || 0;
-    const expenseChange = lastMonthExpenses > 0 
-      ? ((currentMonthExpenses - lastMonthExpenses) / lastMonthExpenses * 100).toFixed(1)
-      : 0;
-
-    const currentMonthProfit = data.profit[currentMonth] || 0;
-    const lastMonthProfit = data.profit[lastMonth] || 0;
-    const profitChange = lastMonthProfit > 0 
-      ? ((currentMonthProfit - lastMonthProfit) / lastMonthProfit * 100).toFixed(1)
-      : 0;
-
-    const totalRevenue = data.revenue.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
-    const totalExpenses = data.expenses.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
-    const totalProfit = totalRevenue - totalExpenses;
-
-    const totalTransactions = data.transactions.length;
-    const pendingTransactions = data.transactions.filter(t => t.status === 'Pending').length;
-    const completedTransactions = data.transactions.filter(t => t.status === 'Completed').length;
-
-    const averageTransaction = totalTransactions > 0 
-      ? Math.round(data.transactions.reduce((a, b) => a + b.amount, 0) / totalTransactions)
-      : 0;
-
-    // Wallet totals
-    const totalWalletBalance = data.wallets.reduce((sum, wallet) => sum + wallet.currentBalance, 0);
-    const totalCashInHand = data.wallets.find(w => w.name === 'Cash in Hand')?.currentBalance || 0;
-    const totalBankBalance = data.wallets.filter(w => w.type.includes('Bank')).reduce((sum, w) => sum + w.currentBalance, 0);
-    const totalDigitalBalance = data.wallets.filter(w => w.type.includes('Digital') || w.type.includes('Wallet')).reduce((sum, w) => sum + w.currentBalance, 0);
-
-    // Daily cash flow
-    const totalCashInToday = data.wallets.reduce((sum, wallet) => sum + wallet.todayIn, 0);
-    const totalCashOutToday = data.wallets.reduce((sum, wallet) => sum + wallet.todayOut, 0);
-    const netCashFlowToday = totalCashInToday - totalCashOutToday;
-
-    // Accounting stats
-    const todayExpenses = accountingData?.expenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0) || 0;
+    const todayExpenses = accountingData?.expenses?.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0) || 0;
 
     return {
-      totalRevenue: `₹${totalRevenue.toLocaleString()}`,
-      totalExpenses: `₹${totalExpenses.toLocaleString()}`,
-      totalProfit: `₹${totalProfit.toLocaleString()}`,
-      totalTransactions: totalTransactions.toLocaleString(),
-      pendingTransactions: pendingTransactions.toLocaleString(),
-      completedTransactions: completedTransactions.toLocaleString(),
-      averageTransaction: `₹${averageTransaction.toLocaleString()}`,
-      totalWalletBalance: `₹${totalWalletBalance.toLocaleString()}`,
-      totalCashInHand: `₹${totalCashInHand.toLocaleString()}`,
-      totalBankBalance: `₹${totalBankBalance.toLocaleString()}`,
-      totalDigitalBalance: `₹${totalDigitalBalance.toLocaleString()}`,
-      totalCashInToday: `₹${totalCashInToday.toLocaleString()}`,
-      totalCashOutToday: `₹${totalCashOutToday.toLocaleString()}`,
-      netCashFlowToday: `₹${netCashFlowToday.toLocaleString()}`,
+      totalRevenue: `₹${(data.stats.todayRevenue || 0).toLocaleString()}`,
+      totalExpenses: `₹${(data.stats.todayExpenses || 0).toLocaleString()}`,
+      totalProfit: `₹${(data.stats.todayProfit || 0).toLocaleString()}`,
+      totalTransactions: (data.lists?.recentTransactions?.length || 0).toLocaleString(),
+      pendingTransactions: (data.stats.pendingPayments || 0).toLocaleString(),
+      completedTransactions: (data.stats.servicesCompleted || 0).toLocaleString(),
+      averageTransaction: `₹${(data.stats.averageOrderValue || 0).toLocaleString()}`,
+      totalWalletBalance: `₹${(data.stats.totalWalletBalance || 0).toLocaleString()}`,
+      totalCashInHand: `₹${(data.stats.cashInHand || 0).toLocaleString()}`,
+      totalBankBalance: `₹${(data.stats.bankBalance || 0).toLocaleString()}`,
+      totalDigitalBalance: `₹${(data.stats.digitalBalance || 0).toLocaleString()}`,
+      totalCashInToday: `₹${(data.stats.todayRevenue || 0).toLocaleString()}`,
+      totalCashOutToday: `₹${(data.stats.todayExpenses || 0).toLocaleString()}`,
+      netCashFlowToday: `₹${(data.stats.todayProfit || 0).toLocaleString()}`,
       todayExpenses: `₹${todayExpenses.toLocaleString()}`,
-      revenueChange: parseFloat(revenueChange),
-      expenseChange: parseFloat(expenseChange),
-      profitChange: parseFloat(profitChange),
-      currentMonthRevenue: `₹${currentMonthRevenue.toLocaleString()}`,
-      currentMonthProfit: `₹${currentMonthProfit.toLocaleString()}`
+
+      todayProfit: `₹${(data.stats.todayProfit || 0).toLocaleString()}`,
+      todayServiceCharge: `₹${(data.stats.todayServiceCharge || 0).toLocaleString()}`,
+
+      revenueChange: 0,
+      expenseChange: 0,
+      profitChange: 0,
+      currentMonthRevenue: `₹${(data.stats.monthlyRevenue || 0).toLocaleString()}`,
+      currentMonthProfit: `₹0`
     };
   }, [data, accountingData]);
 
-  // Get unique values for filters
+  // Bridge the new BFF data structure to the old OverviewSection chart format
+  const overviewData = useMemo(() => {
+    if (!data || !data.stats) return null;
+    return {
+      months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      revenue: data.charts?.monthlyRevenue || [],
+      expenses: new Array(12).fill(0), // Backend skips heavy monthly expense array now
+      wallets: [
+        { name: 'Cash', currentBalance: data.stats.cashInHand || 0 },
+        { name: 'Bank', currentBalance: data.stats.bankBalance || 0 },
+        { name: 'Digital', currentBalance: data.stats.digitalBalance || 0 }
+      ],
+      staffPerformance: (data.lists?.topStaff || []).map(s => ({
+        name: s.staff_name,
+        revenue: Number(s.total_revenue)
+      })),
+      
+      transactions: (data.lists?.recentTransactions || []).map(t => ({
+        category: t.category || 'Transaction',
+        date: t.created_at,
+        status: 'Completed',
+        type: t.transactionType,
+        amount: t.amount
+      }))
+    };
+  }, [data]);
+
+  // Get unique values for filters (Safely mapped for the new backend structure)
   const paymentMethods = useMemo(() => {
-    if (!data) return [];
-    return [...new Set(data.transactions.map(t => t.paymentMethod))];
+    if (!data || !data.lists || !data.lists.recentTransactions) return [];
+    return [...new Set(data.lists.recentTransactions.map(t => t.type || 'Unknown'))];
   }, [data]);
 
   const serviceTypes = useMemo(() => {
-    if (!data) return [];
-    return [...new Set(data.transactions.map(t => t.serviceType))];
+    if (!data || !data.lists || !data.lists.recentTransactions) return [];
+    return [...new Set(data.lists.recentTransactions.map(t => t.category || 'Unknown'))];
   }, [data]);
 
   const statuses = useMemo(() => {
-    if (!data) return [];
-    return [...new Set(data.transactions.map(t => t.status))];
+    if (!data || !data.lists || !data.lists.recentTransactions) return [];
+    return [...new Set(data.lists.recentTransactions.map(t => t.status || 'Completed'))];
   }, [data]);
 
   const walletsList = useMemo(() => {
-    if (!data) return [];
-    return [...new Set(data.transactions.map(t => t.wallet))];
+    if (!data || !data.lists || !data.lists.recentTransactions) return [];
+    return [...new Set(data.lists.recentTransactions.map(t => t.walletName || 'Wallet'))];
   }, [data]);
 
   // Reset filters function
   const resetFilters = () => {
     setSearchTerm('');
-    setStatusFilter('all');
-    setPaymentMethodFilter('all');
-    setServiceTypeFilter('all');
-    setWalletFilter('all');
-    setDateRange('all');
-    setAmountRange('all');
-    alert('Filters reset');
+    setSortBy('date');
+    setSortOrder('desc');
+    setTransactionPage(1);
+    
+    // Reset date to today
+    const today = new Date().toISOString().split('T')[0];
+    setDateFilter({ fromDate: today, toDate: today });
   };
 
   // Handle accounting data updates
@@ -254,8 +252,26 @@ const AdminReports = () => {
     }));
   };
 
-useEffect(() => {
-    setLoading(false);
+  useEffect(() => {
+    setLoading(true);
+    
+    fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/my-centre`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to fetch analytics");
+        return res.json();
+      })
+      .then(result => {
+        setData(result); // This populates the data state!
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load analytics', err);
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {
@@ -347,22 +363,22 @@ useEffect(() => {
         {/* Main Content */}
         <div className="px-6 py-6">
           {/* Overview Section */}
-            {activeSection === 'overview' && (
-              data ? (
-                <OverviewSection
-                  data={data}
-                  stats={stats}
-                  showCharts={showCharts}
-                  timePeriod={timePeriod}
-                  setTimePeriod={setTimePeriod}
-                  setActiveSection={setActiveSection}
-                />
-              ) : (
-                <div className="bg-white rounded-xl border p-6 text-gray-600">
-                  Overview will be available once analytics API is connected.
-                </div>
-              )
-            )}
+          {activeSection === 'overview' && (
+            data && overviewData ? (
+              <OverviewSection
+                data={overviewData}  // Use the mapped data here
+                stats={stats}
+                showCharts={showCharts}
+                timePeriod={timePeriod}
+                setTimePeriod={setTimePeriod}
+                setActiveSection={setActiveSection}
+              />
+            ) : (
+              <div className="bg-white rounded-xl border p-6 text-gray-600">
+                Overview data is loading...
+              </div>
+            )
+          )}
 
           {/* Wallets Section */}
           {activeSection === 'wallets' && (
