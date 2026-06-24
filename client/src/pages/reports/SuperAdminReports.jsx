@@ -35,7 +35,7 @@ const SuperAdminReports = () => {
   useEffect(() => {
     if (selectedCentre) {
       setDataLoading(true);
-      fetch(`${import.meta.env.VITE_API_URL}/api/analytics/centre/${selectedCentre.id}`, {
+      fetch(`${import.meta.env.VITE_API_URL}/api/analytics/superadmin/centre/${selectedCentre.id}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
         .then(res => res.json())
@@ -48,35 +48,65 @@ const SuperAdminReports = () => {
   }, [selectedCentre]);
 
   const stats = useMemo(() => {
-    // CRITICAL FIX: Ensure all arrays exist before calculating
-    if (!data || !data.revenue || !data.expenses || !data.wallets) {
-      return { totalRevenue: "₹0", totalProfit: "₹0", totalWalletBalance: "₹0", revenueChange: 0 };
+    // Safely return defaults if data isn't ready
+    if (!data) {
+      return { 
+        totalRevenue: "₹0", totalProfit: "₹0", totalWalletBalance: "₹0", 
+        revenueChange: 0, averageTransaction: "₹0", totalCashInHand: "₹0" 
+      };
     }
 
     const currentMonth = new Date().getMonth();
     const lastMonth = currentMonth > 0 ? currentMonth - 1 : 11;
     
-    const totalRevenue = data.revenue.reduce((a, b) => a + b, 0);
-    const totalExpenses = data.expenses.reduce((a, b) => a + b, 0);
-    const totalProfit = totalRevenue - totalExpenses;
+    // Array Fallbacks to prevent crashes
+    const revenue = data.revenue || [];
+    const expenses = data.expenses || [];
+    const profit = data.profit || [];
+    const transactions = data.transactions || [];
+    const wallets = data.wallets || [];
 
-    const revChange = data.revenue[lastMonth] > 0 
-      ? ((data.revenue[currentMonth] - data.revenue[lastMonth]) / data.revenue[lastMonth] * 100).toFixed(1)
+    const currentMonthRevenue = revenue[currentMonth] || 0;
+    const lastMonthRevenue = revenue[lastMonth] || 0;
+    const revenueChange = lastMonthRevenue > 0 
+      ? ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1)
       : 0;
 
-    const totalWalletBalance = data.wallets.reduce((sum, w) => sum + (Number(w.currentBalance) || 0), 0);
-    const totalCashInToday = data.wallets.reduce((sum, w) => sum + (Number(w.todayIn) || 0), 0);
-    const totalCashOutToday = data.wallets.reduce((sum, w) => sum + (Number(w.todayOut) || 0), 0);
+    const currentMonthProfit = profit[currentMonth] || 0;
+    const lastMonthProfit = profit[lastMonth] || 0;
+    const profitChange = lastMonthProfit > 0 
+      ? ((currentMonthProfit - lastMonthProfit) / lastMonthProfit * 100).toFixed(1)
+      : 0;
+
+    const totalRevenue = revenue.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
+    const totalExpenses = expenses.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
+    const totalProfit = totalRevenue - totalExpenses;
+
+    // Transaction stats
+    const totalTransactions = transactions.length;
+    const averageTransaction = totalTransactions > 0 
+      ? Math.round(transactions.reduce((a, b) => a + Number(b.amount || 0), 0) / totalTransactions)
+      : 0;
+
+    // Wallet stats
+    const totalWalletBalance = wallets.reduce((sum, w) => sum + Number(w.currentBalance || 0), 0);
+    const totalCashInHand = Number(wallets.find(w => w.name === 'Cash in Hand')?.currentBalance || 0);
+    const totalCashInToday = wallets.reduce((sum, w) => sum + Number(w.todayIn || 0), 0);
+    const totalCashOutToday = wallets.reduce((sum, w) => sum + Number(w.todayOut || 0), 0);
+    const netCashFlowToday = totalCashInToday - totalCashOutToday;
 
     return {
       totalRevenue: `₹${totalRevenue.toLocaleString()}`,
       totalProfit: `₹${totalProfit.toLocaleString()}`,
       totalWalletBalance: `₹${totalWalletBalance.toLocaleString()}`,
-      netCashFlowToday: `₹${(totalCashInToday - totalCashOutToday).toLocaleString()}`,
-      revenueChange: parseFloat(revChange),
-      profitChange: 0, 
-      todayProfit: "₹0",
-      totalCashInToday: `₹${totalCashInToday.toLocaleString()}`
+      netCashFlowToday: `₹${netCashFlowToday.toLocaleString()}`,
+      revenueChange: parseFloat(revenueChange),
+      profitChange: parseFloat(profitChange),
+      todayProfit: `₹${netCashFlowToday.toLocaleString()}`,
+      totalCashInToday: `₹${totalCashInToday.toLocaleString()}`,
+      averageTransaction: `₹${averageTransaction.toLocaleString()}`,
+      totalCashInHand: `₹${totalCashInHand.toLocaleString()}`,
+      todayServiceCharge: `₹0`
     };
   }, [data]);
 
