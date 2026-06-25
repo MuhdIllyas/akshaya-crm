@@ -1,11 +1,12 @@
 import { useState, useRef } from "react";
 import { FiX, FiUser, FiPlus } from "react-icons/fi";
+import { toast } from "react-toastify";
 
 const AddStaffForm = ({ onAdd, onClose }) => {
   const [formData, setFormData] = useState({
     username: "",
     name: "",
-    role: "",
+    role: "staff", // Default to a valid role
     department: "",
     email: "",
     phone: "",
@@ -19,7 +20,11 @@ const AddStaffForm = ({ onAdd, onClose }) => {
     dateOfBirth: "",
     gender: "Male",
     emergencyContact: "",
-    emergencyRelationship: ""
+    emergencyRelationship: "",
+    start_time: "09:00",
+    end_time: "17:00",
+    effective_from: new Date().toISOString().split('T')[0],
+    password: "", // Add password to initial state
   });
   
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -49,25 +54,67 @@ const AddStaffForm = ({ onAdd, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Client-side validation
+    const requiredFields = ['username', 'name', 'role', 'email', 'password'];
+    const missingFields = requiredFields.filter(field => !formData[field] || formData[field].trim() === "");
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in: ${missingFields.join(", ")}`, {
+        position: "top-right",
+        autoClose: 5000,
+        theme: "light",
+      });
+      return;
+    }
+
+    if (formData.role !== "superadmin") {
+      const scheduleFields = ['start_time', 'end_time', 'effective_from'];
+      const missingScheduleFields = scheduleFields.filter(field => !formData[field] || formData[field].trim() === "");
+      if (missingScheduleFields.length > 0) {
+        toast.error(`Please fill in: ${missingScheduleFields.join(", ")}`, {
+          position: "top-right",
+          autoClose: 5000,
+          theme: "light",
+        });
+        return;
+      }
+    }
+
+    // Ensure centre_id is included for non-superadmin roles
+    const centreId = localStorage.getItem("centre_id");
+    if (formData.role !== "superadmin" && !formData.centre_id && centreId) {
+      setFormData(prev => ({ ...prev, centre_id: centreId }));
+    }
+
     try {
-      const response = await fetch('http://localhost:5000/api/staff/add', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/add`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(formData),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        alert(`Staff added! Temporary password: ${data.password}`);
-        onAdd(data.staff);
+        toast.success(`Staff added! Temporary password: ${data.password}`, {
+          position: "top-right",
+          autoClose: 3000,
+          theme: "light",
+        });
+        onAdd();
         onClose();
       } else {
-        alert(`Error: ${data.error}`);
+        throw new Error(data.error || "Failed to add staff");
       }
     } catch (err) {
-      console.error(err);
-      alert('Failed to connect to server');
+      console.error("Error adding staff:", err);
+      toast.error(`Failed to add staff: ${err.message}`, {
+        position: "top-right",
+        autoClose: 5000,
+        theme: "light",
+      });
     }
   };
 
@@ -173,16 +220,19 @@ const AddStaffForm = ({ onAdd, onClose }) => {
             <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
               Role
             </label>
-            <input
-              type="text"
+            <select
               id="role"
               name="role"
               value={formData.role}
               onChange={handleChange}
               required
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
-              placeholder="Staff / Supervisor / Admin"
-            />
+            >
+              <option value="staff">Staff</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="admin">Admin</option>
+              {localStorage.getItem("role") === "superadmin" && <option value="superadmin">Superadmin</option>}
+            </select>
           </div>
         </div>
         
@@ -203,6 +253,7 @@ const AddStaffForm = ({ onAdd, onClose }) => {
               <option value="Part-time">Part-time</option>
               <option value="Contract">Contract</option>
               <option value="Freelance">Freelance</option>
+              <option value="Probation">Probation</option>
             </select>
           </div>
           
@@ -218,6 +269,7 @@ const AddStaffForm = ({ onAdd, onClose }) => {
               onChange={handleChange}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               placeholder="Manager's Name"
+              disabled
             />
           </div>
         </div>
@@ -395,6 +447,88 @@ const AddStaffForm = ({ onAdd, onClose }) => {
             />
           </div>
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              placeholder="Enter password"
+            />
+          </div>
+          {localStorage.getItem("role") === "superadmin" && (
+            <div>
+              <label htmlFor="centre_id" className="block text-sm font-medium text-gray-700 mb-1">
+                Centre ID
+              </label>
+              <input
+                type="text"
+                id="centre_id"
+                name="centre_id"
+                value={formData.centre_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+                placeholder="Centre ID"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Schedule Fields */}
+        {formData.role !== "superadmin" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 mb-1">
+                Start Time
+              </label>
+              <input
+                type="time"
+                id="start_time"
+                name="start_time"
+                value={formData.start_time}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 mb-1">
+                End Time
+              </label>
+              <input
+                type="time"
+                id="end_time"
+                name="end_time"
+                value={formData.end_time}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label htmlFor="effective_from" className="block text-sm font-medium text-gray-700 mb-1">
+                Effective From
+              </label>
+              <input
+                type="date"
+                id="effective_from"
+                name="effective_from"
+                value={formData.effective_from}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        )}
         
         <div className="pt-4 flex justify-end space-x-3">
           <button

@@ -10,9 +10,9 @@ import {
   deleteService,
   addSubcategory,
   deleteSubcategory,
+  updateSubcategory
 } from "@/services/serviceService";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 
 // Icons
 const WalletIcon = () => (
@@ -64,6 +64,17 @@ const ServiceManagement = () => {
   const [newServiceDocuments, setNewServiceDocuments] = useState("");
   const [editServiceDocuments, setEditServiceDocuments] = useState("");
   const [newServiceRequiresWallet, setNewServiceRequiresWallet] = useState(true);
+  const [requiresWorkflow, setRequiresWorkflow] = useState(true);
+
+  //sub category - editing
+  const [showEditSubcategoryModal, setShowEditSubcategoryModal] = useState(false);
+  const [editingSubcategory, setEditingSubcategory] = useState(null);
+  const [editingSubcategoryServiceId, setEditingSubcategoryServiceId] = useState(null);
+  const [editSubcategoryName, setEditSubcategoryName] = useState("");
+  const [editSubcategoryDeptCharges, setEditSubcategoryDeptCharges] = useState("");
+  const [editSubcategoryServiceCharges, setEditSubcategoryServiceCharges] = useState("");
+  const [editSubcategoryDocuments, setEditSubcategoryDocuments] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -232,6 +243,54 @@ const ServiceManagement = () => {
     setShowEditModal(true);
   };
 
+  // Open Edit Subcategory Modal
+  const openEditSubcategoryModal = (serviceId, subcategory) => {
+    setEditingSubcategoryServiceId(serviceId);
+    setEditingSubcategory(subcategory);
+    setEditSubcategoryName(subcategory.name);
+    setEditSubcategoryDeptCharges(subcategory.department_charges);
+    setEditSubcategoryServiceCharges(subcategory.service_charges);
+    setEditSubcategoryDocuments(subcategory.required_documents?.map(doc => doc.document_name).join('\n') || '');
+    setShowEditSubcategoryModal(true);
+  };
+
+  // Handle Edit Subcategory Submit
+  const handleEditSubcategory = async (e) => {
+    e.preventDefault();
+    if (!editSubcategoryName.trim()) {
+      toast.error("Subcategory name is required.");
+      return;
+    }
+
+    const documents = editSubcategoryDocuments
+      .split("\n")
+      .map((doc) => doc.trim())
+      .filter((doc) => doc.length > 0);
+
+    try {
+      const subcategoryData = {
+        name: editSubcategoryName,
+        department_charges: parseInt(editSubcategoryDeptCharges) || 0,
+        service_charges: parseInt(editSubcategoryServiceCharges) || 0,
+        requires_wallet: services.find((s) => s.id === editingSubcategoryServiceId)?.requires_wallet || false,
+        requiredDocuments: documents,
+      };
+
+      await updateSubcategory(editingSubcategoryServiceId, editingSubcategory.id, subcategoryData);
+      
+      // Refetch services to get updated data
+      const servicesResponse = await getServices(searchQuery);
+      setServices(Array.isArray(servicesResponse.data) ? servicesResponse.data : []);
+
+      setShowEditSubcategoryModal(false);
+      setEditingSubcategory(null);
+      toast.success("Subcategory updated successfully!");
+    } catch (err) {
+      console.error("Error updating subcategory:", err);
+      toast.error(err.response?.data?.error || "Failed to update subcategory.");
+    }
+  };
+
   // Add new service
   const handleAddService = async (e) => {
     e.preventDefault();
@@ -260,6 +319,7 @@ const ServiceManagement = () => {
         department_charges: parseInt(formData.get("departmentCharges")) || 0,
         service_charges: parseInt(formData.get("serviceCharges")) || 0,
         requires_wallet: requiresWallet,
+        requires_workflow: requiresWorkflow,
         requiredDocuments: documents,
         has_expiry: newServiceHasExpiry,
       };
@@ -308,6 +368,7 @@ const ServiceManagement = () => {
         department_charges: parseInt(formData.get("departmentCharges")) || 0,
         service_charges: parseInt(formData.get("serviceCharges")) || 0,
         requires_wallet: requiresWallet,
+        requires_workflow: requiresWorkflow,
         requiredDocuments: documents,
         has_expiry: editServiceHasExpiry,
       };
@@ -330,7 +391,7 @@ const ServiceManagement = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <ToastContainer />
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-gray-100">
@@ -478,9 +539,21 @@ const ServiceManagement = () => {
                             <DocumentIcon />
                           </div>
                           <div>
-                            <h2 className="text-lg font-bold text-gray-900">
-                              {highlightMatch(service.name)}
-                            </h2>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h2 className="text-lg font-bold text-gray-900">
+                                {highlightMatch(service.name)}
+                              </h2>
+
+                              {service.requires_workflow === false ? (
+                                <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                  Quick Service
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                  Workflow Service
+                                </span>
+                              )}
+                            </div>
                             <span
                               className={`mt-1 px-2.5 py-1 rounded-full text-xs font-medium ${
                                 service.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-800"
@@ -641,7 +714,33 @@ const ServiceManagement = () => {
                               </div>
                             </div>
                           </div>
-                          
+
+                          {/* Workflow - Quick Service  */}
+                          <div className="mb-6 border border-gray-100 bg-purple-50 rounded-xl p-4">
+                            <div className="flex items-center">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5 text-purple-500"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM9 9V7a1 1 0 112 0v2a1 1 0 01-2 0zm0 4a1 1 0 112 0 1 1 0 01-2 0z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              <div className="ml-2">
+                                <p className="text-sm font-medium text-gray-900">Service Type</p>
+                                <p className="text-gray-700 mt-1">
+                                  {service.requires_workflow === false
+                                    ? 'Quick Service (No workflow / tracking)'
+                                    : 'Workflow Service (Has tracking & stages)'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
                           {/* Sub-Categories Section */}
                           <div className="mt-6">
                             <div className="flex justify-between items-center mb-4">
@@ -711,16 +810,26 @@ const ServiceManagement = () => {
                                                 </div>
                                               )}
                           
-                                              <div className="flex justify-end">
+                                              <div className="flex justify-end gap-2"> {/* Note: Added gap-2 here */}
+                                                <motion.button
+                                                  whileHover={{ scale: 1.03 }}
+                                                  whileTap={{ scale: 0.98 }}
+                                                  onClick={() => openEditSubcategoryModal(service.id, subCat)}
+                                                  className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center px-3 py-1.5 bg-indigo-50 rounded-lg"
+                                                >
+                                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                  </svg>
+                                                  Edit
+                                                </motion.button>
+
                                                 <motion.button
                                                   whileHover={{ scale: 1.03 }}
                                                   whileTap={{ scale: 0.98 }}
                                                   onClick={() => handleDeleteSubcategory(service.id, subCat.id)}
                                                   className="text-red-500 hover:text-red-700 text-sm flex items-center px-3 py-1.5 bg-red-50 rounded-lg"
                                                 >
-                                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                  </svg>
+                                                  {/* Delete SVG */}
                                                   Delete Sub-category
                                                 </motion.button>
                                               </div>
@@ -929,6 +1038,19 @@ const ServiceManagement = () => {
                           className="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5"
                         />
                         <span className="ml-3 text-sm text-gray-700 font-medium">Requires Wallet Integration</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          name="requiresWorkflow"
+                          checked={!requiresWorkflow}
+                          onChange={(e) => setRequiresWorkflow(!e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5"
+                        />
+                        <span className="ml-3 text-sm text-gray-700 font-medium">This is a Quick Service (no workflow)</span>
                       </label>
                     </div>
                     
@@ -1168,6 +1290,93 @@ const ServiceManagement = () => {
                       whileTap={{ scale: 0.98 }}
                       type="submit" 
                       className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium"
+                    >
+                      Save Changes
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Sub-Category Modal */}
+        <AnimatePresence>
+          {showEditSubcategoryModal && editingSubcategory && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-gray-200"
+              >
+                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 rounded-t-2xl">
+                  <h2 className="text-xl font-bold text-white">Edit Sub-Category</h2>
+                </div>
+                <form onSubmit={handleEditSubcategory} className="p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2 font-medium">Name *</label>
+                      <input
+                        type="text"
+                        value={editSubcategoryName}
+                        onChange={(e) => setEditSubcategoryName(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-700 mb-2 font-medium">Dept. Charges (₹) *</label>
+                        <input
+                          type="number"
+                          value={editSubcategoryDeptCharges}
+                          onChange={(e) => setEditSubcategoryDeptCharges(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-700 mb-2 font-medium">Service Charges (₹) *</label>
+                        <input
+                          type="number"
+                          value={editSubcategoryServiceCharges}
+                          onChange={(e) => setEditSubcategoryServiceCharges(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 mb-2 font-medium">Required Documents (one per line)</label>
+                      <textarea
+                        value={editSubcategoryDocuments}
+                        onChange={(e) => setEditSubcategoryDocuments(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        rows={3}
+                      ></textarea>
+                    </div>
+                  </div>
+                  <div className="mt-8 flex justify-end gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="button"
+                      onClick={() => setShowEditSubcategoryModal(false)}
+                      className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium"
+                    >
+                      Cancel
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="submit"
+                      className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium"
                     >
                       Save Changes
                     </motion.button>

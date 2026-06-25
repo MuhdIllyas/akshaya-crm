@@ -24,6 +24,9 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
     emergencyRelationship: "",
     centre_id: "",
     password: "",
+    start_time: "09:00", // New field
+    end_time: "17:00",   // New field
+    effective_from: new Date().toISOString().split("T")[0], // New field
   });
   const [supervisors, setSupervisors] = useState([]);
   const [errors, setErrors] = useState({});
@@ -35,7 +38,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
   useEffect(() => {
     const fetchSupervisors = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/api/staff/all", {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
           params: { role: "admin,superadmin,supervisor" },
         });
@@ -66,9 +69,14 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
     if (!formData.password.trim()) newErrors.password = "Password is required";
     else if (formData.password.length < 6) newErrors.password = "Password must be at least 6 characters";
     if (!formData.role) newErrors.role = "Role is required";
-    if (!formData.centre_id) newErrors.centre_id = "Centre is required";
+    if (!formData.centre_id && formData.role !== "superadmin") newErrors.centre_id = "Centre is required";
     if (!formData.status) newErrors.status = "Status is required";
     if (!formData.employeeId.trim()) newErrors.employeeId = "Employee ID is required";
+    if (formData.role !== "superadmin") {
+      if (!formData.start_time) newErrors.start_time = "Start time is required";
+      if (!formData.end_time) newErrors.end_time = "End time is required";
+      if (!formData.effective_from) newErrors.effective_from = "Effective from date is required";
+    }
     return newErrors;
   };
 
@@ -105,7 +113,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
     setLoading(true);
     try {
       console.log("Sending staff creation request:", formData);
-      const response = await axios.post("http://localhost:5000/api/staff/add", formData, {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/staff/add`, formData, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
           "Content-Type": "application/json",
@@ -144,6 +152,9 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
         emergencyRelationship: "",
         centre_id: "",
         password: "",
+        start_time: "09:00",
+        end_time: "17:00",
+        effective_from: new Date().toISOString().split("T")[0],
       });
       setPhotoPreview(null);
       setErrors({});
@@ -341,7 +352,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               name="centre_id"
               value={formData.centre_id}
               onChange={handleChange}
-              required
+              required={formData.role !== "superadmin"}
               className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent ${
                 errors.centre_id ? "border-red-500" : "border-gray-300"
               }`}
@@ -370,13 +381,14 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               value={formData.employmentType}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               disabled={loading}
             >
               <option value="Full-time">Full-time</option>
               <option value="Part-time">Part-time</option>
               <option value="Contract">Contract</option>
               <option value="Freelance">Freelance</option>
+              <option value="Freelance">Probation</option>
             </select>
           </div>
 
@@ -389,7 +401,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               name="reportsTo"
               value={formData.reportsTo}
               onChange={handleChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               disabled={loading}
             >
               <option value="">Select Supervisor</option>
@@ -414,7 +426,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               value={formData.department}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               disabled={loading}
             >
               <option value="">Select Department</option>
@@ -462,7 +474,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               name="salary"
               value={formData.salary}
               onChange={handleChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               placeholder="Monthly salary"
               disabled={loading}
             />
@@ -478,7 +490,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               name="dateOfBirth"
               value={formData.dateOfBirth}
               onChange={handleChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               disabled={loading}
             />
           </div>
@@ -495,7 +507,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               name="gender"
               value={formData.gender}
               onChange={handleChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               disabled={loading}
             >
               <option value="Male">Male</option>
@@ -515,7 +527,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               name="emergencyContact"
               value={formData.emergencyContact}
               onChange={handleChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               placeholder="Emergency phone number"
               disabled={loading}
             />
@@ -534,7 +546,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               name="emergencyRelationship"
               value={formData.emergencyRelationship}
               onChange={handleChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               placeholder="Relationship (e.g., Father, Spouse)"
               disabled={loading}
             />
@@ -551,7 +563,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               value={formData.joinDate}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               disabled={loading}
             />
           </div>
@@ -590,12 +602,72 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
               value={formData.phone}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent"
               placeholder="+91 98765 43210"
               disabled={loading}
             />
           </div>
         </div>
+
+        {/* Schedule Fields */}
+        {formData.role !== "superadmin" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 mb-1">
+                Start Time
+              </label>
+              <input
+                type="time"
+                id="start_time"
+                name="start_time"
+                value={formData.start_time}
+                onChange={handleChange}
+                required
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent ${
+                  errors.start_time ? "border-red-500" : "border-gray-300"
+                }`}
+                disabled={loading}
+              />
+              {errors.start_time && <p className="mt-1 text-sm text-red-600">{errors.start_time}</p>}
+            </div>
+            <div>
+              <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 mb-1">
+                End Time
+              </label>
+              <input
+                type="time"
+                id="end_time"
+                name="end_time"
+                value={formData.end_time}
+                onChange={handleChange}
+                required
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent ${
+                  errors.end_time ? "border-red-500" : "border-gray-300"
+                }`}
+                disabled={loading}
+              />
+              {errors.end_time && <p className="mt-1 text-sm text-red-600">{errors.end_time}</p>}
+            </div>
+            <div>
+              <label htmlFor="effective_from" className="block text-sm font-medium text-gray-700 mb-1">
+                Effective From
+              </label>
+              <input
+                type="date"
+                id="effective_from"
+                name="effective_from"
+                value={formData.effective_from}
+                onChange={handleChange}
+                required
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent ${
+                  errors.effective_from ? "border-red-500" : "border-gray-300"
+                }`}
+                disabled={loading}
+              />
+              {errors.effective_from && <p className="mt-1 text-sm text-red-600">{errors.effective_from}</p>}
+            </div>
+          </div>
+        )}
 
         <div className="pt-4 flex justify-end space-x-3">
           <button

@@ -11,10 +11,10 @@ const SuperadminDashboard = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const centresResponse = await axios.get("http://localhost:5000/api/centres", {
+        const centresResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
-        const staffResponse = await axios.get("http://localhost:5000/api/staff/all", {
+        const staffResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         setCentres(centresResponse.data);

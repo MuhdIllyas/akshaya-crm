@@ -28,7 +28,7 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
   useEffect(() => {
     const fetchReportsToOptions = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/api/staff/all", {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         setReportsToOptions(response.data.filter(staff => staff.role === "superadmin" || staff.role === "admin"));
@@ -72,22 +72,19 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.username || !formData.name || !formData.email) {
-      toast.error("Username, name, and email are required", {
-        position: "top-right",
-        autoClose: 5000,
-        theme: "light"
-      });
+      toast.error("Username, name, and email are required");
       return;
     }
-
+  
     setLoading(true);
     try {
       const response = await axios.post(
-        "http://localhost:5000/api/staff/add",
+        `${import.meta.env.VITE_API_URL}/api/staff/add`,
         {
           ...formData,
           role: "admin",
-          centre_id: centreId
+          centre_id: centreId,
+          password: "Abcd@1234" 
         },
         {
           headers: {

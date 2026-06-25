@@ -26,6 +26,9 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
     emergencyContact: "",
     emergencyRelationship: "",
     centre_id: "",
+    start_time: "09:00",
+    end_time: "17:00",
+    effective_from: new Date().toISOString().split("T")[0],
   });
   const [photoPreview, setPhotoPreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,59 +38,122 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
   const fileInputRef = useRef(null);
   const userRole = localStorage.getItem("role");
 
+  // Helper to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      throw new Error("No authentication token found. Please log in again.");
+    }
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
 
-        // If staff prop is provided (from modal), use it; otherwise, fetch by ID
-        if (staff) {
-          setFormData({
-            ...staff,
-            joinDate: staff.joinDate ? new Date(staff.joinDate).toISOString().split("T")[0] : "",
-            dob: staff.dob ? new Date(staff.dob).toISOString().split("T")[0] : "",
-            centre_id: staff.centre_id || "",
-          });
-          setPhotoPreview(staff.photo || null);
-        } else {
-          const response = await axios.get(`http://localhost:5000/api/staff/${id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-          });
-          const data = response.data;
-          setFormData({
-            ...data,
-            joinDate: data.joinDate ? new Date(data.joinDate).toISOString().split("T")[0] : "",
-            dob: data.dob ? new Date(data.dob).toISOString().split("T")[0] : "",
-            centre_id: data.centre_id || "",
-          });
-          setPhotoPreview(data.photo || null);
+        const staffId = id || staff?.id;
+        if (!staffId && !staff) {
+          throw new Error("Staff ID is missing");
         }
 
-        // Fetch centres for dropdown
-        const centresResponse = await axios.get("http://localhost:5000/api/centres", {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        setCentres(centresResponse.data);
+        let staffData;
+        if (staff) {
+          staffData = staff;
+        } else {
+          const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/staff/${staffId}`,
+            { headers: getAuthHeaders() }
+          );
+          staffData = response.data;
+        }
 
-        // Fetch reportsTo options
-        const staffResponse = await axios.get("http://localhost:5000/api/staff/all", {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        // Fetch current schedule
+        let schedule = {};
+        if (staffData.role !== "superadmin") {
+          try {
+            const scheduleResponse = await axios.get(
+              `${import.meta.env.VITE_API_URL}/api/staff/schedule/${staffId}`,
+              {
+                headers: getAuthHeaders(),
+                params: { date: new Date().toISOString().split("T")[0] },
+              }
+            );
+            schedule = scheduleResponse.data;
+          } catch (err) {
+            console.warn("Could not fetch schedule:", err);
+          }
+        }
+
+        // Determine centre_id: for admin, use their own centre from localStorage
+        let finalCentreId = staffData.centre_id || "";
+        if (userRole === "admin") {
+          const adminCentreId = localStorage.getItem("centre_id");
+          if (adminCentreId) {
+            finalCentreId = adminCentreId;
+          } else {
+            console.warn("Admin has no centre_id in localStorage");
+          }
+        }
+
+        setFormData({
+          ...staffData,
+          joinDate: staffData.joinDate
+            ? new Date(staffData.joinDate).toISOString().split("T")[0]
+            : "",
+          dob: staffData.dob
+            ? new Date(staffData.dob).toISOString().split("T")[0]
+            : "",
+          centre_id: finalCentreId,
+          start_time: schedule?.start_time || "09:00",
+          end_time: schedule?.end_time || "17:00",
+          effective_from:
+            schedule?.effective_from || new Date().toISOString().split("T")[0],
         });
-        setReportsToOptions(staffResponse.data.filter(s => s.role === "superadmin" || s.role === "admin"));
+        setPhotoPreview(staffData.photo || null);
+
+        // Fetch centres ONLY if user is superadmin
+        if (userRole === "superadmin") {
+          try {
+            const centresResponse = await axios.get(
+              `${import.meta.env.VITE_API_URL}/api/centres`,
+              { headers: getAuthHeaders() }
+            );
+            setCentres(centresResponse.data);
+          } catch (err) {
+            console.warn("Could not fetch centres:", err);
+            // Not a critical error, continue
+          }
+        }
+
+        // Fetch reportsTo options (superadmins and admins) – always needed
+        const staffResponse = await axios.get(
+          `${import.meta.env.VITE_API_URL}/api/staff/all`,
+          { headers: getAuthHeaders() }
+        );
+        setReportsToOptions(
+          staffResponse.data.filter(
+            (s) => s.role === "superadmin" || s.role === "admin"
+          )
+        );
 
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
-        setError(err.response?.data?.error || "Failed to load staff data");
+        setError(err.response?.data?.error || err.message || "Failed to load staff data");
         setLoading(false);
       }
     };
     fetchData();
-  }, [id, staff]);
+  }, [id, staff, userRole]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoChange = (e) => {
@@ -104,7 +170,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result);
-        setFormData(prev => ({ ...prev, photo: reader.result }));
+        setFormData((prev) => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(file);
     }
@@ -116,6 +182,8 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validation
     if (!formData.username || !formData.name || !formData.email || !formData.role) {
       toast.error("Username, name, email, and role are required", {
         position: "top-right",
@@ -124,18 +192,36 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       });
       return;
     }
+    if (
+      formData.role !== "superadmin" &&
+      (!formData.start_time || !formData.end_time || !formData.effective_from)
+    ) {
+      toast.error(
+        "Start time, end time, and effective from date are required for non-superadmin roles",
+        {
+          position: "top-right",
+          autoClose: 5000,
+          theme: "light",
+        }
+      );
+      return;
+    }
 
     try {
       setLoading(true);
-      const response = await axios.put(
-        `http://localhost:5000/api/staff/${id || staff.id}`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "Content-Type": "application/json",
-          },
-        }
+      const staffId = id || staff?.id;
+      if (!staffId) throw new Error("Staff ID missing");
+
+      // For admin, force centre_id to their own centre (prevent overriding)
+      let submitData = { ...formData };
+      if (userRole === "admin") {
+        submitData.centre_id = localStorage.getItem("centre_id");
+      }
+
+      await axios.put(
+        `${import.meta.env.VITE_API_URL}/api/staff/${staffId}`,
+        submitData,
+        { headers: getAuthHeaders() }
       );
 
       toast.success("Staff profile updated successfully", {
@@ -145,9 +231,9 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
       });
 
       if (onUpdate) {
-        onUpdate(); // For modal usage
+        onUpdate();
       } else {
-        navigate(`/dashboard/admin/staff/${id}`);
+        navigate(`/dashboard/admin/staff/${staffId}`);
       }
     } catch (err) {
       console.error("Error updating staff:", err);
@@ -163,7 +249,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
 
   const handleClose = () => {
     if (onClose) {
-      onClose(); // For modal usage
+      onClose();
     } else {
       navigate(`/dashboard/admin/staff/${id}`);
     }
@@ -297,27 +383,35 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
               <option value="supervisor">Supervisor</option>
             </select>
           </div>
+          {/* Centre field - show only for superadmin, for admin show disabled with auto value */}
           <div>
             <label htmlFor="centre_id" className="block text-sm font-medium text-gray-700 mb-1.5">
               Centre
             </label>
-            <select
-              id="centre_id"
-              name="centre_id"
-              value={formData.centre_id}
-              onChange={handleChange}
-              disabled={loading || userRole !== "superadmin"}
-              className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition ${
-                userRole !== "superadmin" ? "bg-gray-100 cursor-not-allowed" : ""
-              }`}
-            >
-              <option value="">Select a centre</option>
-              {centres.map((centre) => (
-                <option key={centre.id} value={centre.id}>
-                  {centre.name}
-                </option>
-              ))}
-            </select>
+            {userRole === "superadmin" ? (
+              <select
+                id="centre_id"
+                name="centre_id"
+                value={formData.centre_id}
+                onChange={handleChange}
+                disabled={loading}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+              >
+                <option value="">Select a centre</option>
+                {centres.map((centre) => (
+                  <option key={centre.id} value={centre.id}>
+                    {centre.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={centres.find(c => c.id == formData.centre_id)?.name || "Your Centre"}
+                disabled
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl bg-gray-100 cursor-not-allowed"
+              />
+            )}
           </div>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -535,6 +629,57 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
             />
           </div>
         </div>
+
+        {/* Schedule Fields */}
+        {formData.role !== "superadmin" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div>
+              <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Start Time <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                id="start_time"
+                name="start_time"
+                value={formData.start_time}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+              />
+            </div>
+            <div>
+              <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 mb-1.5">
+                End Time <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="time"
+                id="end_time"
+                name="end_time"
+                value={formData.end_time}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+              />
+            </div>
+            <div>
+              <label htmlFor="effective_from" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Effective From <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                id="effective_from"
+                name="effective_from"
+                value={formData.effective_from}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end pt-4 space-x-3">
           <button

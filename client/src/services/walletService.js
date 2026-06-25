@@ -1,25 +1,63 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 // Create a new wallet
 export const createWallet = async (walletData) => {
-  const response = await axios.post(`${API_URL}/api/wallet/create`, walletData);
+  const token = localStorage.getItem("token");
+  if (!token) {
+    throw new Error("No authentication token found");
+  }
+
+  const response = await axios.post(`${API_URL}/api/wallet/create`, walletData, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
   return response;
 };
 
 // Update a wallet
 export const updateWallet = async (walletId, walletData) => {
-  const response = await axios.put(`${API_URL}/api/wallet/${walletId}`, walletData);
+  const token = localStorage.getItem("token");
+  if (!token) {
+    throw new Error("No authentication token found");
+  }
+
+  const response = await axios.put(`${API_URL}/api/wallet/${walletId}`, walletData, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
   return response;
 };
 
 // Delete a wallet
-export const deleteWallet = async (walletId, walletData) => {
-  return response;
+export const deleteWallet = async (walletId) => {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    throw new Error("No authentication token found");
+  }
+
+  try {
+    const response = await axios.delete(`${API_URL}/api/wallet/${walletId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    console.log("deleteWallet response:", response.data);
+    return response;
+  } catch (error) {
+    console.error("deleteWallet Error:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    throw error;
+  }
 };
 
-// audits log
+// Get audit logs
 export const getAuditLogs = async () => {
   const token = localStorage.getItem("token");
   if (!token) {
@@ -30,7 +68,7 @@ export const getAuditLogs = async () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     console.log("getAuditLogs response:", response.data);
-    return response; // Return full response, let fetchAuditLogs handle data.data
+    return response;
   } catch (error) {
     console.error("getAuditLogs Error:", {
       message: error.message,
@@ -43,8 +81,19 @@ export const getAuditLogs = async () => {
 
 // Get all wallets (used by WalletManagement)
 export const getWallets = async () => {
+  const token = localStorage.getItem("token");
+  console.log("getWallets: Requesting wallets with token:", token ? "Present" : "Missing");
+
+  if (!token) {
+    throw new Error("No authentication token found");
+  }
+
   try {
-    const response = await axios.get(`${API_URL}/api/wallet/wallets`);
+    const response = await axios.get(`${API_URL}/api/wallet/wallets`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
     console.log("getWallets response:", response.data);
     return response;
   } catch (error) {
@@ -55,6 +104,16 @@ export const getWallets = async () => {
     });
     throw error;
   }
+};
+
+export const getWalletsForCentre = async () => {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("No authentication token found");
+
+  const response = await axios.get(`${API_URL}/api/wallet/my-centre-wallets`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
 };
 
 // Get a single wallet by ID (for WalletActivity)
@@ -87,25 +146,27 @@ export const getWalletById = async (walletId) => {
   }
 };
 
-// Get transactions for a specific wallet (for WalletActivity)
-export const getWalletTransactions = async (walletId) => {
+// Get transactions for a specific wallet (for WalletActivity) - OPTIMIZED with pagination
+export const getWalletTransactions = async (walletId, limit = 100, offset = 0) => {
   if (!walletId) {
     console.error("getWalletTransactions: No walletId provided");
     throw new Error("Wallet ID is required");
   }
   const token = localStorage.getItem("token");
-  console.log("getWalletTransactions: Requesting walletId:", walletId, "Token:", token ? "Present" : "Missing");
+  console.log("getWalletTransactions: Requesting walletId:", walletId, "limit:", limit, "offset:", offset);
   if (!token) {
     throw new Error("No authentication token found");
   }
   try {
-    const response = await axios.get(`${API_URL}/api/wallet/transactions/${walletId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await axios.get(
+      `${API_URL}/api/wallet/transactions/${walletId}?limit=${limit}&offset=${offset}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
     console.log("getWalletTransactions response:", response.data);
-    console.log("Calling getWalletTransactions for walletId:", walletId);
     return response;
   } catch (error) {
     console.error("getWalletTransactions Error:", {
@@ -118,10 +179,22 @@ export const getWalletTransactions = async (walletId) => {
   }
 };
 
-// Get all transactions (used by WalletManagement)
-export const getTransactions = async () => {
+// Get all transactions with pagination (optimized)
+export const getTransactions = async (limit = 50, offset = 0) => {
+  const token = localStorage.getItem("token");
+  console.log("getTransactions: Requesting with limit/offset:", limit, offset);
+
+  if (!token) {
+    throw new Error("No authentication token found");
+  }
+
   try {
-    const response = await axios.get(`${API_URL}/api/wallet/transactions`);
+    const response = await axios.get(
+      `${API_URL}/api/wallet/transactions?limit=${limit}&offset=${offset}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
     console.log("getTransactions response:", response.data);
     return response;
   } catch (error) {
@@ -174,15 +247,11 @@ export const rechargeWallet = async (rechargeData) => {
       category: rechargeData.category,
       staff_id: rechargeData.staff_id,
     };
-    const response = await axios.post(
-      `${API_URL}/api/wallet/transactions`,
-      transactionData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const response = await axios.post(`${API_URL}/api/wallet/transactions`, transactionData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
     console.log("rechargeWallet response:", response.data);
     return response;
   } catch (error) {
@@ -203,11 +272,9 @@ export const transferWallet = async (transferData) => {
   }
   try {
     console.log("transferWallet: Sending payload:", transferData);
-    const response = await axios.post(
-      `${API_URL}/api/wallet/transfer`,
-      transferData,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    const response = await axios.post(`${API_URL}/api/wallet/transfer`, transferData, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     console.log("transferWallet response:", response.data);
     return response;
   } catch (error) {
@@ -224,3 +291,56 @@ export const transferWallet = async (transferData) => {
   }
 };
 
+// superadmin - centre wise wallet selection for salary creation
+export const getWalletsByCentre = async (centreId) => {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("No authentication token");
+
+  const response = await axios.get(`${API_URL}/api/wallet/centre/${centreId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return response.data;
+};
+
+// for quickservicemodal wallet transactions
+export const createWalletTransaction = async (data) => {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("No authentication token");
+
+  return axios.post(
+    `${API_URL}/api/wallet/transactions`,
+    {
+      wallet_id: data.wallet_id,
+      amount: data.amount,
+      type: data.type,
+      description: data.description,
+      category: data.category,
+      staff_id: data.staff_id,
+      service_entry_id: data.service_entry_id || null,
+      reference: data.reference || null,
+    },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};
+
+// daily balances auto updates
+export const getWalletTodayBalance = async (walletId) => {
+  const res = await axios.get(`${API_URL}/api/wallet/${walletId}/today-balance`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const getWalletDailyBalances = async (walletId, from, to) => {
+  const res = await axios.get(`${API_URL}/api/wallet/${walletId}/daily-balances`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};

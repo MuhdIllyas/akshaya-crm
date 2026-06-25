@@ -118,3 +118,16 @@
     @apply bg-background text-foreground;
   }
 }
+
+.chat-scroll{
+  scroll-behavior:smooth;
+}
+
+.chat-scroll::-webkit-scrollbar{
+  width:6px;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb{
+  background:#d1d5db;
+  border-radius:6px;
+}

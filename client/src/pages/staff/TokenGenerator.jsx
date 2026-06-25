@@ -1,661 +1,576 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FiUser, FiPhone, FiBriefcase, FiSend, FiX, FiChevronDown, FiCalendar, FiBook, FiAward, FiClock, FiRefreshCw } from 'react-icons/fi';
-import { ToastContainer, toast } from 'react-toastify';
+import { motion } from 'framer-motion';
+import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDown, FiClock, FiAward, FiSearch, FiFileText } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { getServices, createToken, getTokens, getCampaigns, getStaff, assignToken } from '/src/services/campaignService';
 
 const TokenGenerator = () => {
-  // Service categories
-  const serviceCategories = {
-    'Passport': ['New Passport', 'Minor Passport', 'Renewal', 'Lost Passport'],
-    'Visa': ['Tourist Visa', 'Business Visa', 'Student Visa'],
-    'Notary': ['Document Notarization', 'Apostille'],
-    'Other': ['Consultation', 'Documentation']
-  };
-
-  // Campaign categories with end dates
-  const campaignCategories = {
-    'Scholarship': {
-      types: ['Merit Scholarship', 'Sports Scholarship', 'Need-Based'],
-      endDate: '2023-12-31'
-    },
-    'HSCap': {
-      types: ['New Application', 'Renewal', 'Transfer'],
-      endDate: '2023-11-15'
-    },
-    'Government': {
-      types: ['Subsidy Application', 'Grant Request', 'License Renewal'],
-      endDate: '2024-01-20'
-    }
-  };
-
-  // State management
-  const [activeTab, setActiveTab] = useState('service');
   const [formData, setFormData] = useState({
     customerName: '',
     phone: '',
-    assignedStaff: '',
-    serviceCategory: '',
-    serviceSubCategory: '',
-    campaignCategory: '',
-    campaignSubCategory: '',
+    category: '',
+    subcategory: '',
+    campaign: '',
+    centreId: localStorage.getItem('centre_id') || '',
   });
   
-  const [staffList] = useState([
-    { id: 'staff1', name: 'John Doe', role: 'Agent' },
-    { id: 'staff2', name: 'Jane Smith', role: 'Manager' },
-    { id: 'staff3', name: 'Mike Johnson', role: 'Agent' }
-  ]);
+  const [categories, setCategories] = useState([]);
+  const [filteredSubcategories, setFilteredSubcategories] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
+  const [tokens, setTokens] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+  const [tokenView, setTokenView] = useState('active'); // 'active' or 'campaign'
+  
+  const userRole = localStorage.getItem('role');
+  const userId = localStorage.getItem('id');
 
-  const [recentTokens, setRecentTokens] = useState([]);
-  const [dailyCount, setDailyCount] = useState(1);
-  const [campaignCounts, setCampaignCounts] = useState({
-    Scholarship: 1,
-    HSCap: 1,
-    Government: 1
-  });
-  const [lastResetDate, setLastResetDate] = useState(new Date().toISOString().split('T')[0]);
-
-  // Check if we need to reset daily tokens
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    if (today !== lastResetDate) {
-      resetDailyTokens();
-      setLastResetDate(today);
-      toast.info("Daily service tokens have been reset");
-    }
-  }, []);
+    const fetchData = async () => {
+      try {
+        const categoriesRes = await getServices();
+        setCategories(categoriesRes.data);
 
-  // Reset daily tokens
-  const resetDailyTokens = () => {
-    setDailyCount(1);
-    toast.info("Service tokens have been reset for the new day");
-  };
+        const campaignsRes = await getCampaigns();
+        setCampaigns(campaignsRes.data);
 
-  // Handle form changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => {
-      if (name === 'serviceCategory') {
-        return { ...prev, [name]: value, serviceSubCategory: '' };
+        const tokensRes = await getTokens();
+        setTokens(tokensRes.data);
+
+        const staffRes = await getStaff(formData.centreId);
+        setStaffList(staffRes.data);
+      } catch (err) {
+        console.error('TokenGenerator.jsx: Error fetching data:', err.response?.data || err.message);
+        setError('Failed to load data.');
+        toast.error('Failed to load data: ' + (err.response?.data?.error || err.message));
       }
-      if (name === 'campaignCategory') {
-        return { ...prev, [name]: value, campaignSubCategory: '' };
-      }
-      return { ...prev, [name]: value };
-    });
-  };
-
-  // Generate token ID
-  const generateTokenId = () => {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}${(today.getMonth()+1).toString().padStart(2, '0')}${today.getDate().toString().padStart(2, '0')}`;
-    
-    if (activeTab === 'service') {
-      const tokenId = `#S-${dateStr}-${dailyCount.toString().padStart(3, '0')}`;
-      setDailyCount(prev => prev + 1);
-      return tokenId;
-    } else {
-      const campaignKey = formData.campaignCategory;
-      if (!campaignKey) return '#C-ERROR-001';
-      
-      const count = campaignCounts[campaignKey] || 1;
-      const tokenId = `#C-${campaignKey.slice(0,3).toUpperCase()}-${count.toString().padStart(3, '0')}`;
-      
-      setCampaignCounts(prev => ({
-        ...prev,
-        [campaignKey]: count + 1
-      }));
-      
-      return tokenId;
-    }
-  };
-
-  // Handle form submission
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    // Form validation
-    if (!formData.customerName || !formData.phone) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-    
-    if (activeTab === 'service' && (!formData.serviceCategory || !formData.serviceSubCategory)) {
-      toast.error('Please select a service category and sub-category');
-      return;
-    }
-    
-    if (activeTab === 'campaign' && (!formData.campaignCategory || !formData.campaignSubCategory)) {
-      toast.error('Please select a campaign category and sub-category');
-      return;
-    }
-    
-    // Generate token
-    const tokenId = generateTokenId();
-    const serviceType = activeTab === 'service' ? 
-      `${formData.serviceCategory} - ${formData.serviceSubCategory}` : 
-      `${formData.campaignCategory} - ${formData.campaignSubCategory}`;
-    
-    // Add to recent tokens
-    const newToken = {
-      id: tokenId,
-      customer: formData.customerName,
-      service: serviceType,
-      status: 'Pending',
-      type: activeTab,
-      timestamp: new Date().toISOString()
     };
-    
-    setRecentTokens(prev => [newToken, ...prev.slice(0, 9)]);
-    
-    // Show success toast
-    toast.success(
-      <div>
-        <div className="font-bold">Token Generated Successfully!</div>
-        <div className="text-sm mt-1">ID: {tokenId}</div>
-        <div className="text-sm">For: {formData.customerName}</div>
-      </div>
-    );
-    
-    // Reset form
-    setFormData({
-      customerName: '',
-      phone: '',
-      assignedStaff: '',
-      serviceCategory: '',
-      serviceSubCategory: '',
-      campaignCategory: '',
-      campaignSubCategory: '',
-    });
+    fetchData();
+  }, [formData.centreId]);
+
+  useEffect(() => {
+    if (formData.category && categories.length > 0) {
+      const category = categories.find(cat => cat.id === parseInt(formData.category));
+      setFilteredSubcategories(category?.subcategories || []);
+    } else {
+      setFilteredSubcategories([]);
+    }
+  }, [formData.category, categories]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Status colors
-  const statusColor = (status) => {
-    switch(status) {
-      case 'Completed': return 'bg-green-100 text-green-800';
-      case 'Approved': return 'bg-blue-100 text-blue-800';
-      case 'Processing': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const errors = [];
+    if (!formData.customerName || formData.customerName.trim().length < 2) {
+      errors.push('Customer name is required and must be at least 2 characters');
+    }
+    if (!formData.phone || !/^\d{10}$/.test(formData.phone)) {
+      errors.push('Valid 10-digit phone number is required');
+    }
+    if (!formData.centreId || isNaN(parseInt(formData.centreId))) {
+      errors.push('Valid centre ID is required');
+    }
+    if (formData.category && isNaN(parseInt(formData.category))) {
+      errors.push('Valid category ID is required');
+    }
+    if (formData.subcategory && isNaN(parseInt(formData.subcategory))) {
+      errors.push('Valid subcategory ID is required');
+    }
+    if (formData.campaign && isNaN(parseInt(formData.campaign))) {
+      errors.push('Valid campaign ID is required');
+    }
+
+    if (errors.length > 0) {
+      errors.forEach(error => toast.error(error));
+      return;
+    }
+
+    try {
+      const submissionData = {
+        customerName: formData.customerName.trim(),
+        phone: formData.phone.trim(),
+        categoryId: formData.category ? parseInt(formData.category) : null,
+        subcategoryId: formData.subcategory ? parseInt(formData.subcategory) : null,
+        campaignId: formData.campaign ? parseInt(formData.campaign) : null,
+        centreId: parseInt(formData.centreId) || null,
+        type: formData.campaign ? 'campaign' : 'normal'
+      };
+
+      await createToken(submissionData);
+      toast.success('Token created successfully!');
+
+      setFormData({
+        customerName: '',
+        phone: '',
+        category: '',
+        subcategory: '',
+        campaign: '',
+        centreId: formData.centreId,
+      });
+      setFilteredSubcategories([]);
+
+      const tokensRes = await getTokens();
+      setTokens(tokensRes.data);
+    } catch (err) {
+      if (err.response?.data?.details) {
+        err.response.data.details.forEach(detail => toast.error(detail));
+      } else {
+        toast.error(err.response?.data?.error || 'Failed to create token.');
+      }
     }
   };
 
-  // Get icon for token type
-  const getIcon = (type) => {
-    if (type === 'campaign') return <FiAward className="h-5 w-5 text-purple-600" />;
-    return <FiBriefcase className="h-5 w-5 text-indigo-600" />;
+  const handleAssignToken = async (tokenId, staffId) => {
+    if (!staffId) return;
+    try {
+      await assignToken(tokenId, staffId);
+      toast.success('Token reassigned successfully!');
+      
+      const tokensRes = await getTokens();
+      setTokens(tokensRes.data);
+    } catch (err) {
+      toast.error('Failed to assign token: ' + (err.response?.data?.error || err.message));
+    }
   };
 
-  // Calculate days until campaign ends
-  const daysUntilEnd = (endDate) => {
-    const today = new Date();
-    const end = new Date(endDate);
-    const diffTime = end - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-    return diffDays > 0 ? diffDays : 0;
+  const getCategoryName = (categoryId) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    return category ? category.name : 'N/A';
   };
+
+  const getSubcategoryName = (categoryId, subcategoryId) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    const subcategory = category?.subcategories?.find(sub => sub.id === subcategoryId);
+    return subcategory ? subcategory.name : 'N/A';
+  };
+
+  const getCampaignName = (campaignId) => {
+    const campaign = campaigns.find(cmp => cmp.id === campaignId);
+    return campaign ? campaign.name : 'N/A';
+  };
+
+  const statusStyles = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    processed: 'bg-green-100 text-green-800',
+    cancelled: 'bg-red-100 text-red-800',
+    completed: 'bg-blue-100 text-blue-800'
+  };
+
+  const typeStyles = {
+    normal: 'bg-blue-100 text-blue-800',
+    campaign: 'bg-purple-100 text-purple-800'
+  };
+
+  // Filter tokens based on view, active status tab, and search
+  const filteredTokens = tokens
+    .filter(token => {
+      // First filter by token view (active or campaign)
+      if (tokenView === 'campaign') {
+        return token.type === 'campaign';
+      }
+      return true; // 'active' shows all
+    })
+    .filter(token => {
+      if (activeTab === 'all') return true;
+      return token.status === activeTab;
+    })
+    .filter(token => {
+      return token.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             token.tokenId?.toLowerCase().includes(searchTerm.toLowerCase());
+    });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-6">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden"
-      >
+    <div className="min-h-screen bg-gray-50 p-6">
+      
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white p-6 flex items-center justify-between">
-          <div className="flex items-center">
-            <FiCalendar className="h-8 w-8 mr-3" />
-            <div>
-              <h1 className="text-2xl font-bold">Token Management System</h1>
-              <p className="text-indigo-200">Generate service and campaign tokens</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="bg-white/20 p-2 rounded-lg flex items-center">
-              <FiClock className="mr-2" />
-              <div>
-                <span className="text-xs block">Last Reset</span>
-                <span className="font-medium">{lastResetDate}</span>
-              </div>
-            </div>
-            <div className="bg-white/20 p-2 rounded-lg">
-              <div className="text-center">
-                <span className="text-xs block">Today's Date</span>
-                <span className="font-medium">{new Date().toLocaleDateString()}</span>
-              </div>
-            </div>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Token Generator</h1>
+          <p className="text-gray-600 mt-2">Create and manage customer service tokens</p>
         </div>
-        
-        <div className="p-6">
-          {/* Token Type Tabs */}
-          <div className="flex border-b border-gray-200 mb-6">
-            <button
-              className={`px-6 py-3 font-medium flex items-center ${activeTab === 'service' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
-              onClick={() => setActiveTab('service')}
-            >
-              <FiBriefcase className="mr-2" />
-              Service Token
-            </button>
-            <button
-              className={`px-6 py-3 font-medium flex items-center ${activeTab === 'campaign' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-gray-500'}`}
-              onClick={() => setActiveTab('campaign')}
-            >
-              <FiAward className="mr-2" />
-              Campaign Token
-            </button>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center">
+              <div className="p-3 bg-blue-100 rounded-xl">
+                <FiHash className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-sm text-gray-500">Total Tokens</h3>
+                <p className="text-2xl font-bold">{tokens.length}</p>
+              </div>
+            </div>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column - Customer Info */}
-            <div className="lg:col-span-2">
-              <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">Customer Information</h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Customer Name */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 flex items-center">
-                      <FiUser className="mr-2 text-indigo-600" />
-                      Customer Name *
-                    </label>
-                    <input
-                      type="text"
-                      name="customerName"
-                      value={formData.customerName}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Full name"
-                    />
-                  </div>
-                  
-                  {/* Phone Number */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 flex items-center">
-                      <FiPhone className="mr-2 text-indigo-600" />
-                      Phone Number *
-                    </label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="+91 XXXXXXXXXX"
-                    />
-                  </div>
-                </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center">
+              <div className="p-3 bg-green-100 rounded-xl">
+                <FiCheckCircle className="h-6 w-6 text-green-600" />
               </div>
-              
-              {/* Service/Campaign Selection */}
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">
-                  {activeTab === 'service' ? 'Service Selection' : 'Campaign Details'}
-                </h2>
-                
-                {activeTab === 'service' ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Service Category */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Service Category *
-                      </label>
-                      <div className="relative">
-                        <select
-                          name="serviceCategory"
-                          value={formData.serviceCategory}
-                          onChange={handleChange}
-                          required
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
-                        >
-                          <option value="">Select a category</option>
-                          {Object.keys(serviceCategories).map((category, index) => (
-                            <option key={index} value={category}>
-                              {category}
-                            </option>
-                          ))}
-                        </select>
-                        <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
-                    
-                    {/* Service Sub-Category */}
-                    {formData.serviceCategory && (
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Service Type *
-                        </label>
-                        <div className="relative">
-                          <select
-                            name="serviceSubCategory"
-                            value={formData.serviceSubCategory}
-                            onChange={handleChange}
-                            required
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
-                          >
-                            <option value="">Select a type</option>
-                            {serviceCategories[formData.serviceCategory].map((sub, index) => (
-                              <option key={index} value={sub}>
-                                {sub}
-                              </option>
-                            ))}
-                          </select>
-                          <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                      {/* Campaign Category */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Campaign *
-                        </label>
-                        <div className="relative">
-                          <select
-                            name="campaignCategory"
-                            value={formData.campaignCategory}
-                            onChange={handleChange}
-                            required
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 appearance-none"
-                          >
-                            <option value="">Select campaign</option>
-                            {Object.keys(campaignCategories).map((category, index) => (
-                              <option key={index} value={category}>
-                                {category}
-                              </option>
-                            ))}
-                          </select>
-                          <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        </div>
-                      </div>
-                      
-                      {/* Campaign Sub-Category */}
-                      {formData.campaignCategory && (
-                        <div className="space-y-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Application Type *
-                          </label>
-                          <div className="relative">
-                            <select
-                              name="campaignSubCategory"
-                              value={formData.campaignSubCategory}
-                              onChange={handleChange}
-                              required
-                              className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 appearance-none"
-                            >
-                              <option value="">Select type</option>
-                              {campaignCategories[formData.campaignCategory].types.map((sub, index) => (
-                                <option key={index} value={sub}>
-                                  {sub}
-                                </option>
-                              ))}
-                            </select>
-                            <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Campaign Info */}
-                    {formData.campaignCategory && (
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className={`mt-4 p-4 rounded-lg border bg-purple-50 border-purple-200`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center">
-                            <div className="bg-purple-100 p-2 rounded-lg mr-3">
-                              <FiAward className="h-5 w-5 text-purple-600" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-700">Campaign End Date</p>
-                              <p className="font-bold">
-                                {new Date(campaignCategories[formData.campaignCategory].endDate).toLocaleDateString()}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium text-gray-700">Days Remaining</p>
-                            <p className="font-bold text-purple-700">
-                              {daysUntilEnd(campaignCategories[formData.campaignCategory].endDate)} days
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-                
-                {(formData.serviceCategory && formData.serviceSubCategory) || 
-                (formData.campaignCategory && formData.campaignSubCategory) ? (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className={`mt-4 p-4 rounded-lg border ${
-                      activeTab === 'service' 
-                        ? 'bg-indigo-50 border-indigo-200' 
-                        : 'bg-purple-50 border-purple-200'
-                    }`}
-                  >
-                    <div className="flex items-center">
-                      <div className={`p-2 rounded-lg mr-3 ${
-                        activeTab === 'service' 
-                          ? 'bg-indigo-100' 
-                          : 'bg-purple-100'
-                      }`}>
-                        {activeTab === 'service' ? 
-                          <FiBriefcase className="h-5 w-5 text-indigo-600" /> : 
-                          <FiAward className="h-5 w-5 text-purple-600" />
-                        }
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Selected {activeTab === 'service' ? 'Service' : 'Campaign'}</p>
-                        <p className="font-bold">
-                          {activeTab === 'service' ? 
-                            `${formData.serviceCategory} - ${formData.serviceSubCategory}` : 
-                            `${formData.campaignCategory} - ${formData.campaignSubCategory}`
-                          }
-                        </p>
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : null}
+              <div className="ml-4">
+                <h3 className="text-sm text-gray-500">Processed</h3>
+                <p className="text-2xl font-bold">
+                  {tokens.filter(t => t.status === 'processed' || t.status === 'completed').length}
+                </p>
               </div>
             </div>
-            
-            {/* Right Column - Token Actions */}
-            <div>
-              <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">Token Details</h2>
-                  {activeTab === 'service' && (
-                    <button 
-                      onClick={resetDailyTokens}
-                      className="flex items-center text-sm text-indigo-600 hover:text-indigo-800"
-                    >
-                      <FiRefreshCw className="mr-1" /> Reset Daily
-                    </button>
-                  )}
-                </div>
-                
-                <div className={`p-5 rounded-xl mb-6 ${
-                  activeTab === 'service' 
-                    ? 'bg-indigo-50 border border-indigo-200' 
-                    : 'bg-purple-50 border border-purple-200'
-                }`}>
-                  <div className="text-center">
-                    <span className="text-xs block mb-1">
-                      {activeTab === 'service' ? 'Service Token ID' : 'Campaign Token ID'}
-                    </span>
-                    <div className={`text-2xl font-bold ${
-                      activeTab === 'service' ? 'text-indigo-900' : 'text-purple-900'
-                    }`}>
-                      {activeTab === 'service' ? (
-                        <>
-                          #S-{new Date().toISOString().slice(0,10).replace(/-/g, '')}
-                          <span className="text-indigo-600">-{dailyCount.toString().padStart(3, '0')}</span>
-                        </>
-                      ) : formData.campaignCategory ? (
-                        `#C-${formData.campaignCategory.slice(0,3).toUpperCase()}-${(campaignCounts[formData.campaignCategory] || 1).toString().padStart(3, '0')}`
-                      ) : (
-                        '#C-SELECT-000'
-                      )}
-                    </div>
-                    <div className="mt-2 text-xs">
-                      {activeTab === 'service' 
-                        ? 'Resets daily at midnight' 
-                        : `Expires on ${formData.campaignCategory ? new Date(campaignCategories[formData.campaignCategory].endDate).toLocaleDateString() : 'campaign end'}`}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Staff Assignment */}
-                <div className="space-y-2 mb-6">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Assign to Staff (Optional)
-                  </label>
-                  <div className="relative">
-                    <select
-                      name="assignedStaff"
-                      value={formData.assignedStaff}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
-                    >
-                      <option value="">Unassigned (available to all)</option>
-                      {staffList.map(staff => (
-                        <option key={staff.id} value={staff.id}>
-                          {staff.name} - {staff.role}
-                        </option>
-                      ))}
-                    </select>
-                    <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-                  <div className="text-xs text-gray-500 p-2 bg-blue-50 rounded-lg mt-2">
-                    {formData.assignedStaff 
-                      ? 'Selected staff will be notified immediately' 
-                      : 'All staff will see this token in their queue'}
-                  </div>
-                </div>
-                
-                {/* Action Buttons */}
-                <div className="flex flex-col gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="submit"
-                    onClick={handleSubmit}
-                    className={`px-5 py-3 text-white rounded-xl font-medium flex items-center justify-center shadow-md ${
-                      activeTab === 'service' 
-                        ? 'bg-indigo-600 hover:bg-indigo-700' 
-                        : 'bg-purple-600 hover:bg-purple-700'
-                    }`}
-                  >
-                    <FiSend className="mr-2" />
-                    Generate Token
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="button"
-                    onClick={() => setFormData({
-                      customerName: '',
-                      phone: '',
-                      assignedStaff: '',
-                      serviceCategory: '',
-                      serviceSubCategory: '',
-                      campaignCategory: '',
-                      campaignSubCategory: '',
-                    })}
-                    className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium flex items-center justify-center"
-                  >
-                    <FiX className="mr-2" />
-                    Clear Form
-                  </motion.button>
-                </div>
+          </div>
+          
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center">
+              <div className="p-3 bg-yellow-100 rounded-xl">
+                <FiClock className="h-6 w-6 text-yellow-600" />
               </div>
-              
-              {/* Recent Tokens */}
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">Recent Tokens</h2>
-                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                    {recentTokens.length} tokens
-                  </span>
-                </div>
-                <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                  <AnimatePresence>
-                    {recentTokens.map((token, index) => (
-                      <motion.div 
-                        key={token.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className={`flex items-center p-3 rounded-lg border ${
-                          token.type === 'service' 
-                            ? 'bg-indigo-50 border-indigo-100' 
-                            : 'bg-purple-50 border-purple-100'
-                        }`}
-                      >
-                        <div className="mr-3">
-                          {getIcon(token.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline">
-                            <span className="font-medium truncate">{token.customer}</span>
-                            <span className="text-xs ml-2 bg-gray-200 px-1 rounded">{token.id}</span>
-                          </div>
-                          <p className="text-sm text-gray-500 truncate">{token.service}</p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {new Date(token.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                          </p>
-                        </div>
-                        <div>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor(token.status)}`}>
-                            {token.status}
-                          </span>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                  
-                  {recentTokens.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <FiClock className="mx-auto h-8 w-8 text-gray-400" />
-                      <p className="mt-2">No tokens generated yet</p>
-                    </div>
-                  )}
-                </div>
+              <div className="ml-4">
+                <h3 className="text-sm text-gray-500">Pending</h3>
+                <p className="text-2xl font-bold">{tokens.filter(t => t.status === 'pending').length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center">
+              <div className="p-3 bg-purple-100 rounded-xl">
+                <FiAward className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-sm text-gray-500">Campaign Tokens</h3>
+                <p className="text-2xl font-bold">{tokens.filter(t => t.type === 'campaign').length}</p>
               </div>
             </div>
           </div>
         </div>
-        
-        <div className="bg-gray-50 p-4 border-t border-gray-200 text-center text-sm text-gray-600">
-          Token Management System • Daily Reset: {lastResetDate}
+
+        {/* Token Generation Form */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-indigo-100 p-3 rounded-xl">
+              <FiPlus className="h-6 w-6 text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Generate New Token</h2>
+              <p className="text-gray-600 text-sm">Create a new token for customer service</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Customer Name</label>
+                <div className="relative">
+                  <FiUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    name="customerName"
+                    value={formData.customerName}
+                    onChange={handleInputChange}
+                    className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    placeholder="Enter customer name"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Phone Number</label>
+                <div className="relative">
+                  <FiPhone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    placeholder="Enter phone number"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Centre ID</label>
+                <input
+                  type="text"
+                  name="centreId"
+                  value={formData.centreId}
+                  onChange={handleInputChange}
+                  className={`px-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${userRole !== 'superadmin' ? 'bg-gray-50' : ''}`}
+                  placeholder="Enter centre ID"
+                  disabled={userRole !== 'superadmin'}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Service Category</label>
+                <div className="relative">
+                  <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    className="px-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Subcategory</label>
+                <div className="relative">
+                  <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    name="subcategory"
+                    value={formData.subcategory}
+                    onChange={handleInputChange}
+                    className="px-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all"
+                    disabled={!formData.category}
+                  >
+                    <option value="">Select subcategory</option>
+                    {filteredSubcategories.map(sub => (
+                      <option key={sub.id} value={sub.id}>{sub.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Campaign (Optional)</label>
+                <div className="relative">
+                  <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    name="campaign"
+                    value={formData.campaign}
+                    onChange={handleInputChange}
+                    className="px-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all"
+                  >
+                    <option value="">Select campaign</option>
+                    {campaigns.map(cmp => (
+                      <option key={cmp.id} value={cmp.id}>{cmp.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end pt-4">
+              <button
+                type="submit"
+                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
+              >
+                <FiPlus className="h-5 w-5" />
+                Generate Token
+              </button>
+            </div>
+          </form>
+        </motion.div>
+
+        {/* Token View Tabs (same as AdminTokenManagement) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
+          <div className="flex flex-wrap gap-2">
+            <button
+              className={`px-6 py-2 rounded-xl text-sm font-medium transition-all ${
+                tokenView === 'active' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              onClick={() => { setTokenView('active'); setActiveTab('all'); }}
+            >
+              <div className="flex items-center gap-2">
+                <FiHash className="h-4 w-4" />
+                Active Tokens
+              </div>
+            </button>
+            <button
+              className={`px-6 py-2 rounded-xl text-sm font-medium transition-all ${
+                tokenView === 'campaign' 
+                  ? 'bg-purple-600 text-white shadow-md' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              onClick={() => { setTokenView('campaign'); setActiveTab('all'); }}
+            >
+              <div className="flex items-center gap-2">
+                <FiFileText className="h-4 w-4" />
+                Campaign Tokens
+              </div>
+            </button>
+          </div>
+          {tokenView === 'campaign' && (
+            <div className="mt-4 bg-purple-50 p-3 rounded-xl">
+              <p className="text-sm text-purple-700 flex items-center">
+                <FiAward className="mr-2" />
+                Showing only campaign tokens (all statuses)
+              </p>
+            </div>
+          )}
         </div>
-      </motion.div>
-      
-      {/* Toast Container */}
-      <ToastContainer 
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
+
+        {/* Token List Controls */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex flex-wrap gap-2">
+              <button 
+                className={`px-4 py-2 rounded-xl text-sm font-medium ${activeTab === 'all' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('all')}
+              >
+                All {tokenView === 'campaign' ? 'Campaign' : 'Active'} Tokens
+              </button>
+              <button 
+                className={`px-4 py-2 rounded-xl text-sm font-medium ${activeTab === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('pending')}
+              >
+                Pending
+              </button>
+              <button 
+                className={`px-4 py-2 rounded-xl text-sm font-medium ${activeTab === 'processed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('processed')}
+              >
+                Processed
+              </button>
+              <button 
+                className={`px-4 py-2 rounded-xl text-sm font-medium ${activeTab === 'completed' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('completed')}
+              >
+                Completed
+              </button>
+              <button 
+                className={`px-4 py-2 rounded-xl text-sm font-medium ${activeTab === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('cancelled')}
+              >
+                Cancelled
+              </button>
+            </div>
+            
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search tokens..."
+                className="pl-10 pr-4 py-2 w-full md:w-64 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Token Table */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="py-4 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token Details</th>
+                  <th className="py-4 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service Information</th>
+                  <th className="py-4 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="py-4 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredTokens.map(token => (
+                  <tr key={token.id || token.tokenId} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-4 px-6">
+                      <div className="flex items-center">
+                        <div className={`p-2 rounded-lg ${token.type === 'campaign' ? 'bg-purple-100' : 'bg-indigo-100'}`}>
+                          <FiHash className={`h-5 w-5 ${token.type === 'campaign' ? 'text-purple-600' : 'text-indigo-600'}`} />
+                        </div>
+                        <div className="ml-4">
+                          <div className="font-medium text-gray-900 flex items-center">
+                            <span className={token.type === 'campaign' ? 'font-mono' : ''}>
+                              {token.tokenId}
+                            </span>
+                            <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${typeStyles[token.type]}`}>
+                              {token.type}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-500">{token.customerName}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-sm text-gray-500 flex items-center">
+                        <FiPhone className="h-4 w-4 mr-1" />
+                        {token.phone}
+                      </div>
+                    </td>
+                    
+                    <td className="py-4 px-6">
+                      <div className="font-medium text-gray-900">{getCategoryName(token.categoryId)}</div>
+                      <div className="text-sm text-gray-500">{getSubcategoryName(token.categoryId, token.subcategoryId)}</div>
+                      {token.campaignId && (
+                        <div className="mt-1 text-xs text-purple-600 flex items-center">
+                          <FiAward className="h-3 w-3 mr-1" />
+                          {getCampaignName(token.campaignId)}
+                        </div>
+                      )}
+                    </td>
+                    
+                    <td className="py-4 px-6">
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusStyles[token.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {token.status}
+                      </span>
+                      <div className="text-xs text-gray-500 mt-1 flex items-center">
+                        <FiClock className="h-3 w-3 mr-1" />
+                        {new Date(token.createdAt).toLocaleDateString()}
+                      </div>
+                    </td>
+                    
+                    {/* Assigned To Column */}
+                    <td className="py-4 px-6">
+                      {token.status === 'pending' ? (
+                        <div className="relative">
+                          <select
+                            value={token.staffId || ''}
+                            onChange={(e) => handleAssignToken(token.tokenId, e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none bg-white cursor-pointer"
+                          >
+                            <option value="" disabled>Unassigned</option>
+                            {staffList.map(staff => (
+                              <option key={staff.id} value={staff.id}>{staff.name}</option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                            <FiChevronDown className="h-4 w-4" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                            <FiUser className="h-4 w-4 text-gray-600" />
+                          </div>
+                          <div className="ml-3">
+                            <div className="text-sm font-medium text-gray-900">{token.staffName || 'Unassigned'}</div>
+                            <div className="text-xs text-gray-500">{token.centreName}</div>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {filteredTokens.length === 0 && (
+            <div className="text-center py-12">
+              <FiHash className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No tokens found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {tokenView === 'campaign' 
+                  ? 'No campaign tokens available.'
+                  : 'No active tokens available. Create a new token to get started.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

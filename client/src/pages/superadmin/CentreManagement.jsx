@@ -20,7 +20,7 @@ const CentreManagement = () => {
   const fetchCentres = async () => {
     setLoading(true);
     try {
-      const response = await axios.get("http://localhost:5000/api/centres", {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       setCentres(response.data);
@@ -44,7 +44,7 @@ const CentreManagement = () => {
   const fetchCentreDetails = async (centreId) => {
     setLoading(true);
     try {
-      const response = await axios.get(`http://localhost:5000/api/centres/${centreId}/staff`, {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/${centreId}/staff`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       setShowCentreDetails(response.data);
@@ -70,7 +70,7 @@ const CentreManagement = () => {
     setLoading(true);
     try {
       if (editingCentreId) {
-        const response = await axios.put(`http://localhost:5000/api/centres/${editingCentreId}`, centreForm, {
+        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/centres/${editingCentreId}`, centreForm, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         toast.success(response.data.message || "Centre updated successfully", {
@@ -79,7 +79,7 @@ const CentreManagement = () => {
           theme: "light"
         });
       } else {
-        const response = await axios.post("http://localhost:5000/api/centres", centreForm, {
+        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/centres`, centreForm, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         toast.success(response.data.message || "Centre created successfully", {
@@ -119,7 +119,7 @@ const CentreManagement = () => {
     if (window.confirm("Are you sure you want to delete this centre?")) {
       setLoading(true);
       try {
-        const response = await axios.delete(`http://localhost:5000/api/centres/${id}`, {
+        const response = await axios.delete(`${import.meta.env.VITE_API_URL}/api/centres/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
         toast.success(response.data.message || "Centre deleted successfully", {

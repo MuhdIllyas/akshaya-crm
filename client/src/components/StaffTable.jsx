@@ -73,9 +73,14 @@ const StaffTable = ({ staffList }) => {
                   {staff.joinDate}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
-                  <Link 
-                    to={`/dashboard/admin/staff/${staff.id}`} 
+                  <Link
+                    to={`/dashboard/admin/staff/edit/${staff.id}`}
+                    className="text-blue-600 hover:text-blue-900 mr-3"
+                  >
+                    Edit
+                  </Link>
+                  <Link
+                    to={`/dashboard/admin/staff/${staff.id}`}
                     className="text-gray-600 hover:text-gray-900"
                   >
                     View

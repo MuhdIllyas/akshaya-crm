@@ -1,0 +1,772 @@
+import express from "express";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+
+const router = express.Router();
+
+// same auth used everywhere else
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: "Invalid token" });
+    req.user = user;
+    next();
+  });
+};
+
+router.use(authenticateToken);
+
+// ========== DAILY SUMMARY ==========
+router.get('/daily-summary', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { date, centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId) {
+      return res.status(400).json({ error: "centreId is required" });
+    }
+
+    if (!date) {
+      return res.status(400).json({ error: 'date is required' });
+    }
+
+    await client.query('BEGIN');
+
+/* --------------------------------------------------
+       1. OPENING BALANCES (yesterday closing)
+    -------------------------------------------------- */
+    const openingRes = await client.query(
+      `
+      SELECT
+        w.wallet_type,
+        COALESCE(SUM(wdb.closing_balance), 0) AS opening_balance
+      FROM wallet_daily_balances wdb
+      JOIN wallets w ON w.id = wdb.wallet_id
+      WHERE w.centre_id = $1
+        AND wdb.date = ($2::date - INTERVAL '1 day')
+      GROUP BY w.wallet_type
+      `,
+      [centreId, date]
+    );
+
+    let cashOpening = 0;
+    let bankOpening = 0;
+    let digitalOpening = 0;
+
+    openingRes.rows.forEach(row => {
+      const amt = Number(row.opening_balance);
+      if (row.wallet_type === 'cash') cashOpening += amt;
+      else if (row.wallet_type === 'bank') bankOpening += amt;
+      else digitalOpening += amt;
+    });
+    
+    // Total opening balance is the sum of all three
+    const totalOpeningBalance = cashOpening + bankOpening + digitalOpening;
+
+    /* --------------------------------------------------
+       2. TODAY TRANSACTIONS 
+    -------------------------------------------------- */
+    const txRes = await client.query(
+      `
+      WITH latest_transactions AS (
+        SELECT DISTINCT ON (COALESCE(NULLIF(wt.correction_group_id::text, ''), wt.id::text))
+          wt.type,
+          wt.amount,
+          wt.category,
+          wt.is_reversal,
+          w.wallet_type
+        FROM wallet_transactions wt
+        JOIN wallets w ON w.id = wt.wallet_id
+        WHERE w.centre_id = $1
+          AND wt.created_at >= $2::date
+          AND wt.created_at < ($2::date + INTERVAL '1 day')
+          -- 🔥 TRANSFERS ARE NOW INCLUDED! No longer filtered out.
+        ORDER BY COALESCE(NULLIF(wt.correction_group_id::text, ''), wt.id::text), wt.created_at DESC, wt.id DESC
+      )
+      SELECT
+        lt.type,
+        lt.wallet_type,
+        lt.category,
+        SUM(lt.amount) AS amount
+      FROM latest_transactions lt
+      WHERE (lt.is_reversal IS NULL OR lt.is_reversal = FALSE)
+      GROUP BY lt.type, lt.wallet_type, lt.category
+      `,
+      [centreId, date]
+    );
+
+    // Business Inflow / Outflow
+    let cashInflow = 0, digitalInflow = 0, bankInflow = 0;
+    let cashOutflow = 0, digitalOutflow = 0, bankOutflow = 0;
+    
+    // Internal Transfers (Liquidity Movements)
+    let cashTransferIn = 0, digitalTransferIn = 0, bankTransferIn = 0;
+    let cashTransferOut = 0, digitalTransferOut = 0, bankTransferOut = 0;
+
+    txRes.rows.forEach(row => {
+      const amount = Number(row.amount);
+      const walletType = row.wallet_type;
+      const isCash = walletType === 'cash';
+      const isBank = walletType === 'bank';
+      const isDigital = !isCash && !isBank;
+      
+      const isTransfer = row.category === 'Transfer' || row.category === 'Internal Transfer';
+
+      if (isTransfer) {
+        if (row.type === 'credit') {
+          if (isCash) cashTransferIn += amount;
+          else if (isBank) bankTransferIn += amount;
+          else if (isDigital) digitalTransferIn += amount;
+        } else if (row.type === 'debit') {
+          if (isCash) cashTransferOut += amount;
+          else if (isBank) bankTransferOut += amount;
+          else if (isDigital) digitalTransferOut += amount;
+        }
+      } else {
+        // Standard Inflow/Outflow for Revenue and Expenses
+        if (row.type === 'credit') {
+          if (isCash) cashInflow += amount;
+          else if (isBank) bankInflow += amount;
+          else if (isDigital) digitalInflow += amount;
+        } else if (row.type === 'debit') {
+          if (isCash) cashOutflow += amount;
+          else if (isBank) bankOutflow += amount;
+          else if (isDigital) digitalOutflow += amount;
+        }
+      }
+    });
+
+    await client.query('COMMIT');
+
+    const closureRes = await client.query(
+      `SELECT actual_cash FROM daily_accounting_closure WHERE centre_id = $1 AND accounting_date = $2`,
+      [centreId, date]
+    );
+    const actualCashInHand = closureRes.rows.length > 0 ? Number(closureRes.rows[0].actual_cash) : 0;
+
+    res.json({
+          date,
+          derived: {
+            openingBalance: totalOpeningBalance,
+            cashOpening,      
+            bankOpening,      
+            digitalOpening,   
+
+            cashInflow,
+            digitalInflow,
+            bankInflow,
+
+            cashOutflow,
+            digitalOutflow,
+            bankOutflow,
+
+            cashTransferIn,
+            digitalTransferIn,
+            bankTransferIn,
+
+            cashTransferOut,
+            digitalTransferOut,
+            bankTransferOut
+          },
+          actualCashInHand: actualCashInHand
+        });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Daily summary error:', err);
+    res.status(500).json({ error: 'Failed to load daily summary' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== SAVE ACTUAL CASH (DAILY SUMMARY) ==========
+router.post('/daily-summary/actual-cash', async (req, res) => {
+  const client = await req.db.connect();
+  try {
+    const { date, actual_cash } = req.body;
+    const centreId = req.user.centre_id;
+    const userId = req.user.id;
+
+    await client.query(
+      `INSERT INTO daily_accounting_closure 
+        (centre_id, accounting_date, opening_balance, closing_balance, actual_cash, cash_variance, closed_by)
+       VALUES ($1, $2, 0, 0, $3, 0, $4)
+       ON CONFLICT (centre_id, accounting_date) 
+       DO UPDATE SET 
+        actual_cash = EXCLUDED.actual_cash,
+        closed_by = EXCLUDED.closed_by`,
+      [centreId, date, actual_cash, userId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Actual cash save error:', err);
+    res.status(500).json({ error: 'Failed to save actual cash' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== ADD MISCELLANEOUS INCOME / OVERAGE ==========
+router.post('/misc-income', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { amount, wallet_id, description, date } = req.body;
+    const staffId = req.user.id;
+    const centreId = req.user.centre_id;
+
+    if (!amount || !wallet_id) {
+      return res.status(400).json({ error: "Amount and Wallet ID are required" });
+    }
+
+    await client.query('BEGIN');
+
+    const walletRes = await client.query(
+      `SELECT id FROM wallets WHERE id = $1 AND centre_id = $2`,
+      [wallet_id, centreId]
+    );
+
+    if (walletRes.rows.length === 0) {
+      throw new Error("Invalid wallet for your centre");
+    }
+
+    const groupId = crypto.randomUUID();
+
+    await client.query(
+      `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
+      [amount, wallet_id]
+    );
+
+    await client.query(
+      `INSERT INTO wallet_transactions (
+        wallet_id, staff_id, type, amount, description, category, 
+        correction_group_id, created_at
+      )
+       VALUES ($1, $2, 'credit', $3, $4, 'Misc Income', $5, $6)`,
+      [
+        wallet_id, 
+        staffId, 
+        amount, 
+        description || 'Miscellaneous Income / Cash Overage', 
+        groupId,
+        date ? new Date(date) : new Date()
+      ]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Income recorded successfully" });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Misc income error:', err);
+    res.status(500).json({ error: err.message || 'Failed to record income' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== LEDGER (FIXED - COALESCE to prevent NULL collapse) ==========
+router.get('/ledger', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId) {
+      return res.status(400).json({ error: "centreId is required" });
+    }
+    const {
+      from,
+      to,
+      staff_id,
+      wallet_id,
+      category,
+      service_id
+    } = req.query;
+
+    const params = [centreId];
+    let whereClause = `WHERE w.centre_id = $1`;
+
+    if (from) {
+      params.push(from);
+      whereClause += ` AND wt.created_at >= $${params.length}::date `;
+    }
+    if (to) {
+      params.push(to);
+      whereClause += ` AND wt.created_at < ($${params.length}::date + INTERVAL '1 day') `;
+    }
+    if (staff_id) {
+      params.push(staff_id);
+      whereClause += ` AND wt.staff_id = $${params.length} `;
+    }
+    if (wallet_id) {
+      params.push(wallet_id);
+      whereClause += ` AND wt.wallet_id = $${params.length} `;
+    }
+    if (category) {
+      params.push(category);
+      whereClause += ` AND wt.category = $${params.length} `;
+    }
+    if (service_id) {
+      params.push(service_id);
+      whereClause += ` AND se.category_id = $${params.length} `;
+    }
+
+    const ledgerRes = await client.query(
+      `
+      SELECT * FROM (
+        SELECT DISTINCT ON (COALESCE(wt.correction_group_id::text, wt.id::text))
+          wt.id,
+          wt.created_at,
+          wt.type,
+          wt.amount,
+          wt.category,
+          wt.correction_group_id,
+          wt.is_reversal,
+          wt.reference_type,
+
+          w.id AS wallet_id,
+          w.name AS wallet_name,
+          w.wallet_type,
+
+          s.name AS staff_name,
+          sv.name AS service_name
+
+        FROM wallet_transactions wt
+        JOIN wallets w ON w.id = wt.wallet_id
+
+        LEFT JOIN staff s
+          ON s.id = wt.staff_id
+
+        LEFT JOIN service_entries se
+          ON se.id = wt.reference_id
+          AND wt.category IN ('Service Payment', 'Department Payment', 'Service Charge')
+
+        LEFT JOIN services sv
+          ON sv.id = se.category_id
+
+        ${whereClause}
+          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+
+        ORDER BY COALESCE(wt.correction_group_id::text, wt.id::text), wt.created_at DESC
+      ) AS distinct_transactions
+      ORDER BY created_at DESC
+      LIMIT 500
+      `,
+      params
+    );
+
+    res.json({
+      count: ledgerRes.rowCount,
+      rows: ledgerRes.rows
+    });
+
+  } catch (err) {
+    console.error('Ledger filter error:', err);
+    res.status(500).json({ error: 'Failed to load ledger' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== INCOME REPORT ==========
+router.get('/income', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId) {
+      return res.status(400).json({ error: "centreId is required" });
+    }
+    const { date, from, to, staff_id, wallet_id } = req.query;
+
+    const params = [centreId];
+    let whereClause = `WHERE s.centre_id = $1`;
+
+    if (date) {
+      params.push(date);
+      whereClause += ` AND wt.created_at::date = $${params.length} `;
+    }
+    if (from) {
+      params.push(from);
+      whereClause += ` AND wt.created_at >= $${params.length}::date `;
+    }
+    if (to) {
+      params.push(to);
+      whereClause += ` AND wt.created_at < ($${params.length}::date + INTERVAL '1 day') `;
+    }
+    if (staff_id) {
+      params.push(staff_id);
+      whereClause += ` AND se.staff_id = $${params.length} `;
+    }
+    if (wallet_id) {
+      params.push(wallet_id);
+      whereClause += ` AND wt.wallet_id = $${params.length} `;
+    }
+
+    const incomeRes = await client.query(
+      `
+      WITH latest_transactions AS (
+        SELECT DISTINCT ON (COALESCE(correction_group_id::text, id::text))
+          id,
+          wallet_id,
+          amount,
+          created_at,
+          reference_id,
+          correction_group_id,
+          category,
+          type,
+          reference_type,
+          is_reversal
+        FROM wallet_transactions
+        WHERE category = 'Service Payment'
+          AND type = 'credit'
+          AND reference_type = 'payment'
+          AND (is_reversal IS NULL OR is_reversal = FALSE)
+        ORDER BY COALESCE(correction_group_id::text, id::text), created_at DESC
+      )
+      SELECT
+        se.id AS service_entry_id,
+        se.customer_name,
+        sv.name AS service_name,
+        s.name AS staff_name,
+        se.created_at AS service_date,
+        se.service_charges,
+        se.department_charges,
+        (se.service_charges + se.department_charges) AS service_total,
+        SUM(wt.amount) AS received_amount,
+        STRING_AGG(DISTINCT w.name, ', ') AS payment_wallets,
+        JSON_AGG(
+          JSONB_BUILD_OBJECT(
+            'wallet', w.name,
+            'amount', wt.amount,
+            'received_at', wt.created_at
+          )
+          ORDER BY wt.created_at
+        ) AS wallet_breakdown,
+        MAX(wt.created_at) AS received_at,
+        CASE
+          WHEN MAX(wt.created_at)::date > se.created_at::date
+          THEN true
+          ELSE false
+        END AS was_pending
+      FROM latest_transactions wt
+      JOIN service_entries se ON se.id = wt.reference_id
+      JOIN staff s ON s.id = se.staff_id
+      JOIN services sv ON sv.id = se.category_id
+      JOIN wallets w ON w.id = wt.wallet_id
+      ${whereClause}
+      GROUP BY
+        se.id,
+        se.customer_name,
+        sv.name,
+        s.name,
+        se.created_at,
+        se.service_charges,
+        se.department_charges
+      ORDER BY MAX(wt.created_at) DESC;
+      `,
+      params
+    );
+
+    res.json({
+      count: incomeRes.rowCount,
+      rows: incomeRes.rows
+    });
+
+  } catch (err) {
+    console.error('Income report error:', err);
+    res.status(500).json({ error: 'Failed to load income report' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== WALLET BALANCES ==========
+router.get('/wallet-balances', async (req, res) => {
+  const client = await req.db.connect();
+  try {
+    const { centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId) {
+      return res.status(400).json({ error: "centreId is required" });
+    }
+
+    const result = await client.query(`
+      SELECT
+        id,
+        name,
+        wallet_type,
+        balance AS current_balance
+      FROM wallets
+      WHERE centre_id = $1
+      ORDER BY name ASC
+    `, [centreId]);
+
+    res.json(result.rows);
+  } finally {
+    client.release();
+  }
+});
+
+// ========== GET WALLET RECONCILIATIONS ==========
+router.get('/wallet-reconciliations', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { date, centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId || !date) {
+      return res.status(400).json({ error: "centreId and date are required" });
+    }
+
+    const result = await client.query(`
+      SELECT DISTINCT ON (wr.wallet_id)
+        wr.wallet_id,
+        wr.book_balance, 
+        wr.actual_balance, 
+        wr.variance
+      FROM wallet_reconciliations wr
+      JOIN wallets w ON w.id = wr.wallet_id
+      WHERE w.centre_id = $1 
+        AND wr.reconciled_at::date = $2::date
+      ORDER BY wr.wallet_id, wr.reconciled_at DESC
+    `, [centreId, date]);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error("Error fetching reconciliations:", err);
+    res.status(500).json({ error: 'Failed to fetch wallet reconciliations' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== WALLET RECONCILIATION ==========
+router.post('/wallet-reconcile', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { reconciliations } = req.body;
+    const userId = req.user.id;
+
+    await client.query('BEGIN');
+
+    for (const r of reconciliations) {
+      await client.query(
+        `
+        INSERT INTO wallet_reconciliations
+          (wallet_id, book_balance, actual_balance, variance, reconciled_by)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [r.wallet_id, r.book_balance, r.actual_balance, r.variance, userId]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Wallet reconciliation failed' });
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/wallet-book-balances', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { centreId: queryCentreId, date } = req.query; 
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+    if (isSuperAdmin && queryCentreId) centreId = Number(queryCentreId);
+    
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    const result = await client.query(`
+      SELECT
+        w.id,
+        w.name,
+        w.wallet_type,
+        COALESCE(wdb.closing_balance, w.balance) AS book_balance
+      FROM wallets w
+      LEFT JOIN wallet_daily_balances wdb 
+        ON w.id = wdb.wallet_id 
+        AND wdb.date = $2
+      WHERE w.centre_id = $1
+      ORDER BY w.name ASC
+    `, [centreId, targetDate]);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error('Error fetching book balances:', err);
+    res.status(500).json({ error: 'Failed to fetch book balances' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== WALLET LEDGER BALANCES ==========
+router.get('/wallet-ledger-balances', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId) {
+      return res.status(400).json({ error: "centreId is required" });
+    }
+
+    const result = await client.query(
+      `
+      SELECT
+        id,
+        name,
+        wallet_type,
+        balance AS book_balance
+      FROM wallets
+      WHERE centre_id = $1
+      ORDER BY name ASC
+      `,
+      [centreId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Wallet ledger balance error:', err);
+    res.status(500).json({ error: 'Failed to fetch wallet ledger balances' });
+  } finally {
+    client.release();
+  }
+});
+
+//Accounting Nighty Closing
+router.post('/nightly-close', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const centreId = req.user.centre_id;
+    const userId = req.user.id;
+
+    const {
+      date, opening_balance, closing_balance,
+      actual_cash, cash_variance, checklist, notes
+    } = req.body;
+
+    await client.query(
+      `
+      INSERT INTO daily_accounting_closure
+        (centre_id, accounting_date, opening_balance, closing_balance,
+         actual_cash, cash_variance, checklist, notes, closed_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      ON CONFLICT (centre_id, accounting_date)
+      DO UPDATE SET
+        closing_balance = EXCLUDED.closing_balance,
+        actual_cash = EXCLUDED.actual_cash,
+        cash_variance = EXCLUDED.cash_variance,
+        checklist = EXCLUDED.checklist,
+        notes = EXCLUDED.notes,
+        closed_by = EXCLUDED.closed_by,
+        closed_at = NOW()
+      `,
+      [ centreId, date, opening_balance, closing_balance, actual_cash, cash_variance, checklist, notes, userId ]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Nightly close error:', err);
+    res.status(500).json({ error: 'Failed to close accounting day' });
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/nightly-close', async (req, res) => {
+  const client = await req.db.connect();
+
+  try {
+    const { date, centreId: queryCentreId } = req.query;
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    let centreId = req.user.centre_id;
+
+    if (isSuperAdmin && queryCentreId) {
+      centreId = Number(queryCentreId);
+    }
+
+    if (!centreId) {
+      return res.status(400).json({ error: "centreId is required" });
+    }
+
+    const result = await client.query(
+      `
+      SELECT *
+      FROM daily_accounting_closure
+      WHERE centre_id = $1 AND accounting_date = $2
+      `,
+      [centreId, date]
+    );
+
+    res.json(result.rows[0] || null);
+  } finally {
+    client.release();
+  }
+});
+
+export default router;
