@@ -8,7 +8,7 @@ import pool from '../../db.js'; // Adjust path if your db.js is located elsewher
  * @param {string} customerPhone - The recipient's WhatsApp number
  * @param {Array} templateParams - Array of variables to inject into the template (e.g., [CustomerName, Status, Notes])
  */
-export const triggerNotification = async ({ eventKey, centreId, customerPhone, templateParams = [] }) => {
+export const triggerNotification = async ({ eventKey, centreId, customerPhone, templateParams = [], customComponents = null }) => {
   try {
     // 1. Find which Communication Account this centre uses
     const accountQuery = await pool.query(`
@@ -17,15 +17,14 @@ export const triggerNotification = async ({ eventKey, centreId, customerPhone, t
       WHERE c.id = $1 AND ca.is_active = true
     `, [centreId]);
 
-    // FALLBACK SAFETY NET (Ensures your live system doesn't break while transitioning)
     if (accountQuery.rows.length === 0) {
-      console.warn(`[Notification Engine] No mapped account for Centre ${centreId}. Skipping or falling back to Legacy ENV.`);
+      console.warn(`[Notification Engine] No mapped account for Centre ${centreId}. Skipping.`);
       return { success: false, reason: 'no_account_mapped' };
     }
 
     const account = accountQuery.rows[0];
 
-    // 2. Find the exact Meta Template Name approved for this specific account and event
+    // 2. Find the exact Meta Template Name
     const templateQuery = await pool.query(`
       SELECT provider_template_name, language_code 
       FROM communication_template_mappings 
@@ -38,50 +37,43 @@ export const triggerNotification = async ({ eventKey, centreId, customerPhone, t
     }
 
     const template = templateQuery.rows[0];
+    const formattedPhone = customerPhone.startsWith('+91') ? customerPhone : `+91${customerPhone.replace(/^\+91/, '')}`;
 
-    // 3. Format the phone number (Libromi requires country code)
-    const formattedPhone = customerPhone.startsWith('+91') 
-      ? customerPhone 
-      : `+91${customerPhone.replace(/^\+91/, '')}`;
+    // 🔥 NEW: Use custom components if provided, otherwise default to standard body parameters
+    const componentsToUse = customComponents || [
+      {
+        type: "body",
+        parameters: templateParams.map(param => ({
+          type: "text",
+          text: String(param || "")
+        }))
+      }
+    ];
 
-    // 4. Construct the Libromi / Meta API Payload
+    // 4. Construct the Payload
     const payload = {
       to: formattedPhone,
       type: 'template',
       template: {
         name: template.provider_template_name,
-        language: {
-          code: template.language_code || 'en'
-        },
-        components: [
-          {
-            type: "body",
-            parameters: templateParams.map(param => ({
-              type: "text",
-              text: String(param || "") // Ensure all params are strings to prevent Libromi crashes
-            }))
-          }
-        ]
+        language: { code: template.language_code || 'en' },
+        components: componentsToUse // 👈 Uses our dynamic components
       }
     };
 
-    // 5. Dispatch the API Request to Libromi
-    const response = await axios.post(
-      `${account.base_url}/messages`,
-      payload,
-      {
-        headers: {
-          'Authorization': `Bearer ${account.access_token}`,
-          'Content-Type': 'application/json'
-        }
+    // 5. Dispatch
+    const response = await axios.post(`${account.base_url}/messages`, payload, {
+      headers: {
+        'Authorization': `Bearer ${account.access_token}`,
+        'Content-Type': 'application/json'
       }
-    );
+    });
 
-    console.log(`[Notification Engine] ✅ Successfully sent '${eventKey}' to ${formattedPhone} via Account: ${account.name}`);
+    console.log(`[Notification Engine] ✅ Successfully sent '${eventKey}' to ${formattedPhone}`);
     return { success: true, data: response.data };
 
   } catch (err) {
     console.error(`[Notification Engine] ❌ Failed to send '${eventKey}' to ${customerPhone}:`, err.response?.data || err.message);
-    return { success: false, error: err.message };
+    return { success: false, error: err.response?.data || err.message };
   }
 };

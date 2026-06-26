@@ -42,13 +42,26 @@ export async function createReviewRequest({
 
     // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
     const notificationResult = await triggerNotification({
-      eventKey: 'review_request', 
+      eventKey: 'review_request',
       centreId: centreId,         
       customerPhone: customerPhone,
-      templateParams: [
-        customerName || "Customer",
-        centreName || "our centre",
-        reviewUrl
+      
+      // 👇 We use customComponents to match Meta's dynamic URL Button requirements
+      customComponents: [
+        {
+          type: "body"
+        },
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [
+            {
+              type: "text",
+              text: token // Just the token ID appended to your dynamic URL
+            }
+          ]
+        }
       ]
     });
 
