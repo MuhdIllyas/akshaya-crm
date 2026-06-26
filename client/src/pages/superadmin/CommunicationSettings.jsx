@@ -19,6 +19,9 @@ const CommunicationSettings = () => {
     access_token: "",
   });
 
+  const [selectedMappingAccount, setSelectedMappingAccount] = useState("");
+  const [mappings, setMappings] = useState({});
+
   const systemEvents = [
     { key: "pending_payment", label: "Pending Payment Reminder" },
     { key: "service_tracking", label: "Service Status Update" },
@@ -110,6 +113,50 @@ const CommunicationSettings = () => {
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2000);
     toast.info("Webhook URL copied to clipboard");
+  };
+
+  // Fetch existing mappings when an account is selected
+  useEffect(() => {
+    if (selectedMappingAccount) {
+      fetchMappings(selectedMappingAccount);
+    } else {
+      setMappings({});
+    }
+  }, [selectedMappingAccount]);
+
+  const fetchMappings = async (accountId) => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/communication/accounts/${accountId}/mappings`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      // Convert array of database rows into a simple key-value object
+      const mappingObj = {};
+      response.data.forEach(m => {
+        mappingObj[m.event_key] = m.provider_template_name;
+      });
+      setMappings(mappingObj);
+    } catch (err) {
+      console.error("Failed to fetch mappings", err);
+    }
+  };
+
+  const handleSaveMappings = async () => {
+    if (!selectedMappingAccount) {
+      toast.warning("Please select an account first");
+      return;
+    }
+    setLoading(true);
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/communication/accounts/${selectedMappingAccount}/mappings`, 
+        { mappings }, 
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      toast.success("Template mappings saved successfully!");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to save mappings");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -233,7 +280,11 @@ const CommunicationSettings = () => {
 
             <div className="mb-6 max-w-md">
               <label className="block text-sm font-medium text-gray-700 mb-2">Select Account to Configure</label>
-              <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]">
+              <select 
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
+                value={selectedMappingAccount}
+                onChange={(e) => setSelectedMappingAccount(e.target.value)}
+              >
                 <option value="">-- Select Account --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>{acc.name} ({acc.phone_number})</option>
@@ -257,7 +308,10 @@ const CommunicationSettings = () => {
                     <input 
                       type="text" 
                       placeholder={`e.g., ${event.key}_v1`}
-                      className="w-full max-w-md px-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-[#1e3a5f]"
+                      value={mappings[event.key] || ""}
+                      onChange={(e) => setMappings({...mappings, [event.key]: e.target.value})}
+                      disabled={!selectedMappingAccount}
+                      className="w-full max-w-md px-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-100"
                     />
                   </div>
                 </div>
@@ -265,8 +319,12 @@ const CommunicationSettings = () => {
             </div>
             
             <div className="mt-6 flex justify-end">
-              <button className="bg-[#1e3a5f] hover:bg-[#172a45] text-white px-6 py-2.5 rounded-lg font-medium transition-colors">
-                Save Mappings
+              <button 
+                onClick={handleSaveMappings}
+                disabled={loading || !selectedMappingAccount}
+                className="bg-[#1e3a5f] hover:bg-[#172a45] disabled:bg-gray-400 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+              >
+                {loading ? "Saving..." : "Save Mappings"}
               </button>
             </div>
           </div>

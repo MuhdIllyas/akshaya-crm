@@ -138,4 +138,64 @@ router.patch('/accounts/:id/status', authenticateSuperadmin, async (req, res) =>
   }
 });
 
+// GET mappings for a specific account
+router.get('/accounts/:id/mappings', authenticateSuperadmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT event_key, provider_template_name 
+       FROM communication_template_mappings 
+       WHERE communication_account_id = $1`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching template mappings:', err);
+    res.status(500).json({ error: 'Failed to fetch mappings' });
+  }
+});
+
+// PUT (Upsert) mappings for a specific account
+router.put('/accounts/:id/mappings', authenticateSuperadmin, async (req, res) => {
+  const { id } = req.params;
+  const { mappings } = req.body; // Expected format: { pending_payment: "template_1", review_request: "template_2" }
+
+  if (!mappings || typeof mappings !== 'object') {
+    return res.status(400).json({ error: 'Invalid mappings data' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Loop through the submitted mappings
+    for (const [eventKey, templateName] of Object.entries(mappings)) {
+      if (templateName && templateName.trim() !== '') {
+        // If a template name is provided, Insert or Update it
+        await client.query(`
+          INSERT INTO communication_template_mappings (communication_account_id, event_key, provider_template_name)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (communication_account_id, event_key) 
+          DO UPDATE SET provider_template_name = EXCLUDED.provider_template_name
+        `, [id, eventKey, templateName.trim()]);
+      } else {
+        // If the field was cleared out, delete the mapping from the database
+        await client.query(`
+          DELETE FROM communication_template_mappings 
+          WHERE communication_account_id = $1 AND event_key = $2
+        `, [id, eventKey]);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'Mappings updated successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating template mappings:', err);
+    res.status(500).json({ error: 'Failed to update mappings' });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
