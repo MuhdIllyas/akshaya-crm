@@ -39,7 +39,7 @@ export const authMiddleware = (allowedRoles) => async (req, res, next) => {
   }
 };
 
-router.get('/communication-accounts', authenticateToken, async (req, res) => {
+router.get('/communication-accounts', authMiddleware, async (req, res) => {
   try {
     // Superadmins can see all accounts. You might want to filter this based on role later.
     const result = await pool.query(
