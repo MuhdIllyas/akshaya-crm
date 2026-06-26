@@ -255,6 +255,32 @@ const CentreManagement = () => {
                   ) : editingCentreId ? "Update Centre" : "Create Centre"} 
                 </button>
               </div>
+
+              {/* Communication Account Assignment */}
+              <div className="md:col-span-2 border-t border-gray-100 pt-4 mt-2">
+                <label htmlFor="communication_account_id" className="block text-sm font-medium text-gray-700 mb-2">
+                  WhatsApp Communication Mode
+                </label>
+                <select
+                  id="communication_account_id"
+                  name="communication_account_id"
+                  value={centreForm.communication_account_id || ""}
+                  onChange={(e) => setCentreForm({ ...centreForm, communication_account_id: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                  disabled={loading}
+                >
+                  <option value="">No WhatsApp (System Only)</option>
+                  {/* Map through available communication accounts fetched from the backend */}
+                  {availableCommAccounts.map(account => (
+                    <option key={account.id} value={account.id}>
+                      {account.name} ({account.phone_number})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-2">
+                  Select which WhatsApp number this centre will use to talk to customers.
+                </p>
+              </div>
             </form>
           </div>
         )}
