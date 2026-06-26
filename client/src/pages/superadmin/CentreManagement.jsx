@@ -23,7 +23,7 @@ const CentreManagement = () => {
 
   const fetchAdmins = async () => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff`, {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       // Filter the staff list so only admins appear in the dropdown
