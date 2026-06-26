@@ -3,6 +3,7 @@ import pool from '../db.js';
 import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
 import { logActivity } from "../utils/activityLogger.js";
+import { triggerNotification } from '../utils/communication/notificationEngine.js';
 import sendTokenUpdateWhatsApp from '../utils/sendTokenUpdateWhatsapp.js';
 import crypto from 'crypto';
 import axios from "axios";
@@ -28,10 +29,9 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-const LIBROMI_ACCESS_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
-const LIBROMI_PHONE_NUMBER = process.env.LIBROMI_PHONE_NUMBER;
-const LIBROMI_BASE_URL = process.env.LIBROMI_BASE_URL;
-
+// ==========================================
+// CENTRAL COMMUNICATION ENGINE INTEGRATION
+// ==========================================
 const sendPendingPaymentWhatsApp = async ({
   customerName,
   serviceName,
@@ -39,79 +39,45 @@ const sendPendingPaymentWhatsApp = async ({
   pendingAmount,
   dueDate,
   phone,
+  centreId // 👈 NEW: Required for routing
 }) => {
   try {
-    if (!LIBROMI_ACCESS_TOKEN) {
-      throw new Error("LIBROMI_ACCESS_TOKEN missing");
-    }
-
     const formattedPhone = phone.startsWith("+91")
       ? phone
       : `+91${phone.replace(/^\+91/, "")}`;
 
-    const response = await axios.post(
-      `${LIBROMI_BASE_URL}/messages`,
-      {
-        to: formattedPhone,
-        type: "template",
-        template: {
-          name: "pending_payments",
-          language: {
-            code: "en",
-            policy: "deterministic",
-          },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                {
-                  type: "text",
-                  text: customerName || "Customer",
-                },
-                {
-                  type: "text",
-                  text: serviceName || "Service",
-                },
-                {
-                  type: "text",
-                  text: subcategoryName || "General",
-                },
-                {
-                  type: "text",
-                  text: pendingAmount.toString(),
-                },
-                {
-                  type: "text",
-                  text: dueDate || "Today",
-                },
-              ],
-            },
-          ],
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${LIBROMI_ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    // Map parameters exactly as your Libromi template expects them
+    const templateParams = [
+      customerName || "Customer",
+      serviceName || "Service",
+      subcategoryName || "General",
+      pendingAmount.toString(),
+      dueDate || "Today"
+    ];
 
-    console.log("Pending payment WhatsApp sent:", response.data);
+    // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
+    const response = await triggerNotification({
+      eventKey: 'pending_payment', // Matches the key in CommunicationSettings.jsx
+      centreId: centreId,          
+      customerPhone: formattedPhone,
+      templateParams: templateParams
+    });
+
+    if (!response.success) {
+      throw new Error(response.error || response.reason);
+    }
+
+    console.log("Pending payment WhatsApp sent via Engine");
 
     return {
       success: true,
       data: response.data,
     };
   } catch (err) {
-    console.error(
-      "Pending payment WhatsApp failed:",
-      err.response?.data || err.message
-    );
-
+    console.error("Pending payment WhatsApp failed:", err.message);
     return {
       success: false,
-      error: err.response?.data || err.message,
+      error: err.message,
     };
   }
 };
@@ -4300,6 +4266,7 @@ router.post("/pending-payments/:id/send-whatsapp",
           pendingAmount,
           dueDate: new Date().toLocaleDateString("en-IN"),
           phone: entry.phone,
+          centreId: access.centre_id
         });
 
       if (!whatsappResult.success) {
