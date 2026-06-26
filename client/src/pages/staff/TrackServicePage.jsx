@@ -426,78 +426,75 @@ const TrackServicePage = () => {
     }
   };
 
-  const transformBackendData = async (trackingData, serviceEntries) => {
-    const transformed = [];
-    
-    for (const trackingEntry of trackingData) {
-      const paymentData = await fetchPaymentDetails(
-        trackingEntry.service_entry_id,
-        serviceEntries
-      );
+  // Transform backend data (Instantly process using pre-calculated backend data)
+  const transformBackendData = async (trackingData) => {
+    return trackingData.map((trackingEntry) => {
+      // Extract payments directly from backend JSON
+      const totalCharge = parseFloat(trackingEntry.total_charges || 0);
+      const totalReceived = parseFloat(trackingEntry.total_received || 0);
+      const payments = trackingEntry.payment_details_array || [];
 
-      const updatedDate = new Date(trackingEntry.updated_at);
+      let paymentStatus = 'Pending';
+      if (totalCharge <= 0) paymentStatus = 'Not Applicable';
+      else if (totalReceived >= totalCharge) paymentStatus = 'Received';
+      else if (totalReceived > 0) paymentStatus = 'Partial';
+
+      const paymentDetailsStr = payments.length > 0 
+        ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
+        : 'No payments recorded';
+
+      const updatedDate = new Date(trackingEntry.updated_at || Date.now());
       const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
-      const calculatedProgress = calculateProgress(
+      const calculatedProgress = trackingEntry.progress || calculateProgress(
         statusMap[trackingEntry.status] || 'Pending',
         trackingEntry.current_step || 'Submitted'
       );
 
-      const workSource = trackingEntry.work_source || 
-                        (trackingEntry.customer_service_id ? 'online' : 'offline');
+      const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
 
-      transformed.push({
+      return {
         id: trackingEntry.id.toString(),
         serviceEntryId: trackingEntry.service_entry_id?.toString(),
         trackingId: `TR-${trackingEntry.id}`,
         applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
-        
         customerName: trackingEntry.customer_name || 'Unknown',
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
-        
         serviceType: trackingEntry.service_name || 'Unknown',
         serviceName: trackingEntry.service_name || 'Unknown',
         subcategoryName: trackingEntry.subcategory_name || 'N/A',
         categoryId: trackingEntry.category_id,
         subcategoryId: trackingEntry.subcategory_id,
-        
         staffName: trackingEntry.assigned_to_name || 'Unassigned',
         staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
         assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
         assignedToId: trackingEntry.assigned_to,
-        
         serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
         departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
-        totalCharge: paymentData.totalCharge || 0,
-        cost: paymentData.totalCharge || 0,
-        
+        totalCharge: totalCharge,
+        cost: totalCharge,
         status: statusMap[trackingEntry.status] || 'Pending',
         currentStep: trackingEntry.current_step || 'Submitted',
         progress: calculatedProgress,
         priority: trackingEntry.priority || 'medium',
-        
         date: dateStr,
         time: timeStr,
-        estimatedDelivery: formatDate(trackingEntry.estimated_delivery),
-        expiryDate: formatDate(trackingEntry.expiry_date),
+        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? new Date(trackingEntry.estimated_delivery).toISOString() : 'Not set',
+        expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'N/A',
         createdAt: trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
-        
         duration: null,
         notes: trackingEntry.notes || 'No notes available',
         rating: null,
         followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
-        
-        paymentStatus: paymentData.paymentStatus,
-        paymentDetails: paymentData.paymentDetails,
-        payments: paymentData.payments,
-        
+        paymentStatus: paymentStatus,
+        paymentDetails: paymentDetailsStr,
+        payments: payments,
         phone: trackingEntry.phone || 'N/A',
         email: trackingEntry.email || '',
         aadhaar: trackingEntry.aadhaar || '',
-        
         steps: Array.isArray(trackingEntry.steps) ? trackingEntry.steps.map(step => ({
           id: step.id,
           name: step.name,
@@ -507,22 +504,16 @@ const TrackServicePage = () => {
           step_order: step.step_order,
           estimated_days: step.estimated_days
         })) : [],
-
         averageTime: trackingEntry.average_time || '7 days',
-
         rawEstimatedDelivery: trackingEntry.estimated_delivery,
         rawExpiryDate: trackingEntry.expiry_date,
-
         workSource: workSource,
-
         serviceRating: trackingEntry.service_rating,
         staffRating: trackingEntry.staff_rating,
         reviewText: trackingEntry.review_text,
         reviewSubmittedAt: trackingEntry.submitted_at
-      });
-    }
-    
-    return transformed;
+      };
+    });
   };
 
   const fetchStats = async () => {
@@ -546,17 +537,12 @@ const TrackServicePage = () => {
         getStaff()
       ]);
       
-      console.log('Single entry response:', response);
-      
-      const entryResponse = await getServiceEntries();
-      const entryData = Array.isArray(entryResponse) ? entryResponse : 
-                      Array.isArray(entryResponse?.data) ? entryResponse.data : [];
-      
       const staffData = Array.isArray(staffResponse) ? staffResponse : 
                       Array.isArray(staffResponse?.data) ? staffResponse.data : [];
       setStaffList(staffData);
       
-      const transformed = await transformBackendData([response], entryData);
+      // 🔥 FIX: No longer downloading the database here
+      const transformed = await transformBackendData([response]);
       
       if (transformed.length > 0) {
         setServices(transformed);
@@ -611,9 +597,9 @@ const TrackServicePage = () => {
         aadhaar: debouncedAadhaar || undefined
       };
 
-      const [trackingResponse, entryResponse, staffResponse, categoriesResponse] = await Promise.all([
+      // 🔥 FIX: Removed getServiceEntries() to prevent full DB download
+      const [trackingResponse, staffResponse, categoriesResponse] = await Promise.all([
         getTrackingEntries(params),
-        getServiceEntries(),
         getStaff(),
         getCategories()
       ]);
@@ -628,14 +614,13 @@ const TrackServicePage = () => {
         : Array.isArray(trackingResponse) ? trackingResponse : [];
 
       const staffData = Array.isArray(staffResponse?.data) ? staffResponse.data : Array.isArray(staffResponse) ? staffResponse : [];
-      const entryData = Array.isArray(entryResponse?.data) ? entryResponse.data : Array.isArray(entryResponse) ? entryResponse : [];
       const categoriesData = Array.isArray(categoriesResponse?.data) ? categoriesResponse.data : Array.isArray(categoriesResponse) ? categoriesResponse : [];
 
       setStaffList(staffData);
       setCategories(categoriesData);
-      setEntryServices(entryData);
 
-      const transformedServices = await transformBackendData(trackingData, entryData);
+      // 🔥 FIX: Transform directly uses backend data
+      const transformedServices = await transformBackendData(trackingData);
       setServices(transformedServices);
       setIsSidebarVisible(true);
       
@@ -644,7 +629,6 @@ const TrackServicePage = () => {
       toast.error('Failed to fetch data');
       setStaffList([]);
       setCategories([]);
-      setEntryServices([]);
     }
   };
 
@@ -1055,7 +1039,7 @@ const TrackServicePage = () => {
     );
   };
 
-  // Add this new helper function right here:
+  // Add this new helper function to fetch all filtered data for export:
   const fetchAllFilteredDataForExport = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
     
@@ -1079,7 +1063,8 @@ const TrackServicePage = () => {
         ? trackingResponse.data 
         : Array.isArray(trackingResponse) ? trackingResponse : [];
 
-      const transformedData = await transformBackendData(trackingData, entryServices);
+      // 🔥 FIX: No longer requires the local entryServices array
+      const transformedData = await transformBackendData(trackingData);
       return transformedData;
     } catch (error) {
       console.error('Error fetching export data:', error);
