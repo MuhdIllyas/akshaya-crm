@@ -29,6 +29,7 @@ import AttendanceSuperAdmin from './pages/superadmin/AttendanceSuperAdmin';
 import CampaignManagementSuperAdmin from './pages/superadmin/CampaignManagementSuperAdmin';
 import SuperAdminReports from './pages/reports/SuperAdminReports';
 import Messenger from './pages/superadmin/MessengerPage';
+import CommunicationSettings from './pages/superadmin/CommunicationSettings';
 import TeamManagement from "./pages/team/TeamManagement";
 import TokenGenerator from "./pages/staff/TokenGenerator";
 import NotesPage from './pages/staff/NotesPage';
@@ -339,6 +340,10 @@ const App = () => {
               path="superadmin/campaigns"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><CampaignManagementSuperAdmin /></ProtectedRoute>}
             />  
+            <Route
+              path="superadmin/settings"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><CommunicationSettings /></ProtectedRoute>}
+            />
             <Route
               path="staff/token"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><TokenGenerator /></ProtectedRoute>}
