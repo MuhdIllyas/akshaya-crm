@@ -1105,7 +1105,20 @@ router.get('/:id', authenticateToken, async (req, res) => {
         s.name AS service_name,
         sc.name AS subcategory_name,
         staff.name AS staff_name,
-        staff.centre_id
+        staff.centre_id,
+        
+        -- 🔥 NEW: Calculate payments for the single view
+        COALESCE((
+          SELECT SUM(amount::numeric) 
+          FROM payments p 
+          WHERE p.service_entry_id = se.id AND p.status = 'received'
+        ), 0) AS total_received,
+        COALESCE((
+          SELECT json_agg(json_build_object('method', p.method, 'amount', p.amount, 'status', p.status))
+          FROM payments p 
+          WHERE p.service_entry_id = se.id
+        ), '[]'::json) AS payment_details_array
+
       FROM service_entries se
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
@@ -1164,6 +1177,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
       service_charges: parseFloat(serviceEntry.service_charges),
       department_charges: parseFloat(serviceEntry.department_charges),
       total_charges: parseFloat(serviceEntry.total_charges),
+
+      total_received: parseFloat(serviceEntry.total_received),
+      payment_details_array: serviceEntry.payment_details_array,
+
       assigned_to: tracking.assigned_to,
       assigned_to_name: assignedToName,
       status: tracking.status,
