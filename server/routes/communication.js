@@ -53,11 +53,88 @@ router.post('/accounts', authenticateSuperadmin, async (req, res) => {
     res.status(201).json({ message: 'Account created', account: result.rows[0] });
   } catch (err) {
     console.error('Error creating account:', err);
-    // Handle unique constraint violation for phone_number
     if (err.code === '23505') {
       return res.status(400).json({ error: 'An account with this phone number already exists' });
     }
     res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// PUT update an existing communication account
+router.put('/accounts/:id', authenticateSuperadmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, phone_number, access_token } = req.body;
+
+  if (!name || !phone_number) {
+    return res.status(400).json({ error: 'Name and phone number are required' });
+  }
+
+  try {
+    let query;
+    let values;
+
+    // If a new token is provided, update all fields
+    if (access_token && access_token.trim() !== "") {
+      query = `
+        UPDATE communication_accounts 
+        SET name = $1, phone_number = $2, access_token = $3 
+        WHERE id = $4 
+        RETURNING id, name, phone_number, is_active
+      `;
+      values = [name, phone_number, access_token, id];
+    } else {
+      // If no token is provided, update only name and phone, leaving the token untouched
+      query = `
+        UPDATE communication_accounts 
+        SET name = $1, phone_number = $2 
+        WHERE id = $3 
+        RETURNING id, name, phone_number, is_active
+      `;
+      values = [name, phone_number, id];
+    }
+
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    res.json({ message: 'Account updated successfully', account: result.rows[0] });
+  } catch (err) {
+    console.error('Error updating account:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'An account with this phone number already exists' });
+    }
+    res.status(500).json({ error: 'Failed to update account' });
+  }
+});
+
+// PATCH toggle account active status
+router.patch('/accounts/:id/status', authenticateSuperadmin, async (req, res) => {
+  const { id } = req.params;
+  const { is_active } = req.body;
+
+  if (typeof is_active !== 'boolean') {
+    return res.status(400).json({ error: 'is_active boolean status is required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE communication_accounts 
+       SET is_active = $1 
+       WHERE id = $2 
+       RETURNING id, name, phone_number, is_active`,
+      [is_active, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    res.json({ message: 'Account status updated', account: result.rows[0] });
+  } catch (err) {
+    console.error('Error updating account status:', err);
+    res.status(500).json({ error: 'Failed to update status' });
   }
 });
 
