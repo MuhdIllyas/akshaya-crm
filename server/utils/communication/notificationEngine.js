@@ -67,7 +67,7 @@ export const triggerNotification = async ({ eventKey, centreId, customerPhone, t
 
     // 5. Dispatch the API Request to Libromi
     const response = await axios.post(
-      `${account.base_url}/${account.phone_number}/messages`,
+      `${account.base_url}/messages`,
       payload,
       {
         headers: {
