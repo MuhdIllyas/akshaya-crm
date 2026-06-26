@@ -52,6 +52,9 @@ import eventsRoutes from "./routes/events.js";
 
 import notesRoutes from "./routes/notes.js";
 
+//communication routes
+import communicationRoutes from "./routes/communication.js";
+
 dotenv.config();
 
 import "./routes/scheduler.js";
@@ -311,6 +314,9 @@ app.use("/api/events", eventsRoutes);
 
 /* Notes */
 app.use("/api/notes", notesRoutes);
+
+/* Communication */
+app.use("/api/communication", communicationRoutes);
 
 /* ================================
    STATIC FILES

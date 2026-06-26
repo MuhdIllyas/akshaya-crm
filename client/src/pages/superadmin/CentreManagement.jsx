@@ -6,6 +6,7 @@ import { FiPlus } from "react-icons/fi";
 
 const CentreManagement = () => {
   const [centres, setCentres] = useState([]);
+  const [availableCommAccounts, setAvailableCommAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [centreForm, setCentreForm] = useState({ name: "", admin_id: "" });
   const [editingCentreId, setEditingCentreId] = useState(null);
@@ -15,6 +16,7 @@ const CentreManagement = () => {
 
   useEffect(() => {
     fetchCentres();
+    fetchCommAccounts();
   }, []);
 
   const fetchCentres = async () => {
@@ -38,6 +40,18 @@ const CentreManagement = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCommAccounts = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/communication-accounts`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      setAvailableCommAccounts(response.data);
+    } catch (err) {
+      console.error("Error fetching communication accounts:", err);
+      // We don't necessarily need a toast error here to avoid overwhelming the user if it fails
     }
   };
 
