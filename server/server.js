@@ -58,8 +58,6 @@ import notesRoutes from "./routes/notes.js";
 //communication routes
 import communicationRoutes from "./routes/communication.js";
 
-dotenv.config();
-
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -84,13 +82,7 @@ app.use(cors({
 
 const io = new Server(httpServer, {
   cors: {
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || /^https:\/\/akshaya-crm-.*-muhdillyas-projects\.vercel\.app$/.test(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    origin: process.env.FRONTEND_URL || "*",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   },
