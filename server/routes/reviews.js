@@ -46,10 +46,16 @@ export async function createReviewRequest({
       centreId: centreId,         
       customerPhone: customerPhone,
       
-      // 👇 We use customComponents to match Meta's dynamic URL Button requirements
+      // 👇 Updated to include the body parameter (Centre Name) AND the URL button parameter
       customComponents: [
         {
-          type: "body"
+          type: "body",
+          parameters: [
+            {
+              type: "text",
+              text: centreName || "our centre" // Injects the dynamic centre name into the body
+            }
+          ]
         },
         {
           type: "button",
@@ -58,7 +64,7 @@ export async function createReviewRequest({
           parameters: [
             {
               type: "text",
-              text: token // Just the token ID appended to your dynamic URL
+              text: token // Injects the token ID into the dynamic URL button
             }
           ]
         }
