@@ -35,7 +35,7 @@ const sendTokenUpdateWhatsApp = async ({
 
     // 🔥 DISPATCH VIA CENTRAL ENGINE
     const response = await triggerNotification({
-      eventKey: 'token_generated', // 👈 Must match the key mapped in the frontend settings
+      eventKey: 'campaigns', 
       centreId: centreId,
       customerPhone: formattedPhone,
       templateParams: templateParams
