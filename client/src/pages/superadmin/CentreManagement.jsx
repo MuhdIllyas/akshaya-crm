@@ -7,6 +7,7 @@ import { FiPlus } from "react-icons/fi";
 const CentreManagement = () => {
   const [centres, setCentres] = useState([]);
   const [availableCommAccounts, setAvailableCommAccounts] = useState([]);
+  const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(false);
   const [centreForm, setCentreForm] = useState({ name: "", admin_id: "" });
   const [editingCentreId, setEditingCentreId] = useState(null);
