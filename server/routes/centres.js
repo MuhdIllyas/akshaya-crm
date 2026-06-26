@@ -1,7 +1,6 @@
 import express from "express";
 import pool from "../db.js";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 
 const router = express.Router();
 
@@ -9,7 +8,6 @@ const router = express.Router();
 const authMiddleware = (allowedRoles) => async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
-    console.log("Auth middleware: No token provided");
     return res.status(401).json({ error: "No token provided" });
   }
 
@@ -17,13 +15,11 @@ const authMiddleware = (allowedRoles) => async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const result = await pool.query("SELECT role, centre_id FROM staff WHERE id = $1", [decoded.id]);
     if (result.rows.length === 0) {
-      console.log(`Auth middleware: User not found for ID ${decoded.id}`);
       return res.status(401).json({ error: "User not found" });
     }
 
     const userRole = result.rows[0].role;
     if (!allowedRoles.includes(userRole)) {
-      console.log(`Auth middleware: Role ${userRole} not allowed. Required: ${allowedRoles}`);
       return res.status(403).json({ error: "Unauthorized access" });
     }
 
@@ -41,7 +37,7 @@ router.get("/", authMiddleware(["superadmin"]), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT c.id, c.name, c.created_by, s1.name AS created_by_name,
-             c.admin_id, s2.name AS admin_name
+             c.admin_id, s2.name AS admin_name, c.communication_account_id
       FROM centres c
       LEFT JOIN staff s1 ON c.created_by = s1.id
       LEFT JOIN staff s2 ON c.admin_id = s2.id
@@ -61,7 +57,7 @@ router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
   try {
     const result = await pool.query(`
       SELECT c.id, c.name, c.created_by, s1.name AS created_by_name,
-             c.admin_id, s2.name AS admin_name
+             c.admin_id, s2.name AS admin_name, c.communication_account_id
       FROM centres c
       LEFT JOIN staff s1 ON c.created_by = s1.id
       LEFT JOIN staff s2 ON c.admin_id = s2.id
@@ -89,7 +85,7 @@ router.get("/:id/staff", authMiddleware(["admin", "superadmin"]), async (req, re
   try {
     const centreResult = await pool.query(`
       SELECT c.id, c.name, c.created_by, s1.name AS created_by_name,
-             c.admin_id, s2.name AS admin_name
+             c.admin_id, s2.name AS admin_name, c.communication_account_id
       FROM centres c
       LEFT JOIN staff s1 ON c.created_by = s1.id
       LEFT JOIN staff s2 ON c.admin_id = s2.id
@@ -127,8 +123,8 @@ router.get("/:id/staff", authMiddleware(["admin", "superadmin"]), async (req, re
 
 // POST /api/centres
 router.post("/", authMiddleware(["superadmin"]), async (req, res) => {
-  const { name, admin_id } = req.body;
-  console.log("POST /api/centres request body:", req.body);
+  const { name, admin_id, communication_account_id } = req.body;
+  
   if (!name) {
     return res.status(400).json({ error: "Centre name is required" });
   }
@@ -142,12 +138,14 @@ router.post("/", authMiddleware(["superadmin"]), async (req, res) => {
     }
 
     const result = await pool.query(
-      "INSERT INTO centres (name, created_by, admin_id) VALUES ($1, $2, $3) RETURNING *",
-      [name, req.user.id, admin_id || null]
+      "INSERT INTO centres (name, created_by, admin_id, communication_account_id) VALUES ($1, $2, $3, $4) RETURNING *",
+      [name, req.user.id, admin_id || null, communication_account_id || null]
     );
+    
     const centre = result.rows[0];
     const createdByResult = await pool.query("SELECT name FROM staff WHERE id = $1", [centre.created_by]);
     const adminResult = centre.admin_id ? await pool.query("SELECT name FROM staff WHERE id = $1", [centre.admin_id]) : null;
+    
     res.status(201).json({
       message: "Centre created successfully",
       centre: {
@@ -168,8 +166,7 @@ router.post("/", authMiddleware(["superadmin"]), async (req, res) => {
 // PUT /api/centres/:id
 router.put("/:id", authMiddleware(["superadmin"]), async (req, res) => {
   const { id } = req.params;
-  const { name, admin_id } = req.body;
-  console.log("PUT /api/centres/:id request body:", req.body);
+  const { name, admin_id, communication_account_id } = req.body;
 
   try {
     const centreCheck = await pool.query("SELECT id FROM centres WHERE id = $1", [id]);
@@ -185,12 +182,18 @@ router.put("/:id", authMiddleware(["superadmin"]), async (req, res) => {
     }
 
     const result = await pool.query(
-      "UPDATE centres SET name = COALESCE($1, name), admin_id = COALESCE($2, admin_id) WHERE id = $3 RETURNING *",
-      [name, admin_id, id]
+      `UPDATE centres 
+       SET name = COALESCE($1, name), 
+           admin_id = $2,
+           communication_account_id = $3 
+       WHERE id = $4 RETURNING *`,
+      [name, admin_id || null, communication_account_id || null, id]
     );
+    
     const centre = result.rows[0];
     const createdByResult = await pool.query("SELECT name FROM staff WHERE id = $1", [centre.created_by]);
     const adminResult = centre.admin_id ? await pool.query("SELECT name FROM staff WHERE id = $1", [centre.admin_id]) : null;
+    
     res.json({
       message: "Centre updated successfully",
       centre: {
@@ -211,7 +214,6 @@ router.put("/:id", authMiddleware(["superadmin"]), async (req, res) => {
 // DELETE /api/centres/:id
 router.delete("/:id", authMiddleware(["superadmin"]), async (req, res) => {
   const { id } = req.params;
-  console.log(`DELETE /api/centres/${id} requested`);
 
   try {
     const centreCheck = await pool.query("SELECT id, name, created_by, admin_id FROM centres WHERE id = $1", [id]);
