@@ -17,7 +17,21 @@ const CentreManagement = () => {
   useEffect(() => {
     fetchCentres();
     fetchCommAccounts();
+    fetchAdmins();
   }, []);
+
+  const fetchAdmins = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      // Filter the staff list so only admins appear in the dropdown
+      const adminList = response.data.filter(staff => staff.role === 'admin');
+      setAdmins(adminList);
+    } catch (err) {
+      console.error("Error fetching admins:", err);
+    }
+  };
 
   const fetchCentres = async () => {
     setLoading(true);
@@ -119,7 +133,11 @@ const CentreManagement = () => {
   };
 
   const handleEditCentre = (centre) => {
-    setCentreForm({ name: centre.name, admin_id: centre.admin_id || "" });
+    setCentreForm({ 
+      name: centre.name, 
+      admin_id: centre.admin_id || "",
+      communication_account_id: centre.communication_account_id || "" // 👈 ADD THIS LINE
+    });
     setEditingCentreId(centre.id);
     setShowForm(true);
     toast.info("Editing centre: " + centre.name, {
@@ -223,21 +241,30 @@ const CentreManagement = () => {
                     disabled={loading}
                   />
                 </div>
-                <div>
-                  <label htmlFor="centre-admin_id" className="block text-sm font-medium text-gray-700 mb-2">
-                    Admin ID
-                  </label>
-                  <input
-                    type="number"
-                    id="centre-admin_id"
-                    name="admin_id"
-                    value={centreForm.admin_id}
-                    onChange={(e) => setCentreForm({ ...centreForm, admin_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                    placeholder="Enter admin ID"
-                    disabled={loading}
-                  />
-                </div>
+                  <div>
+                    <label htmlFor="centre-admin_id" className="block text-sm font-medium text-gray-700 mb-2">
+                      Assign Admin
+                    </label>
+                    <select
+                      id="centre-admin_id"
+                      name="admin_id"
+                      value={centreForm.admin_id || ""}
+                      onChange={(e) => setCentreForm({ ...centreForm, admin_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                      disabled={loading}
+                    >
+                      <option value="">-- Select an Admin (Optional) --</option>
+                      {admins.map(admin => (
+                        <option key={admin.id} value={admin.id}>
+                          {admin.name} (ID: {admin.id})
+                        </option>
+                      ))}
+                      {/* Failsafe: If the assigned admin was deleted or changed roles, still show their ID */}
+                      {centreForm.admin_id && !admins.find(a => String(a.id) === String(centreForm.admin_id)) && (
+                        <option value={centreForm.admin_id}>Unknown Admin (ID: {centreForm.admin_id})</option>
+                      )}
+                    </select>
+                  </div>
               </div>
               <div className="flex justify-end pt-4">
                 <button
