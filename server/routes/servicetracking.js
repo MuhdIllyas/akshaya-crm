@@ -2204,39 +2204,26 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     
     // 🔹 AUTO CREATE REVIEW ONLY FOR NON-REGISTERED CUSTOMERS
     if (status === 'completed') {
-
-      console.log("🔥 STATUS COMPLETED BLOCK ENTERED");
       const entryData = serviceEntry.rows[0];
       
-      console.log("🔥 customer_service_id value:", entryData.customer_service_id);
-      console.log("🔥 Condition check (!entryData.customer_service_id):", !entryData.customer_service_id);
-
       // Only create token review if NOT booked through portal
       if (!entryData.customer_service_id) {
-
-        console.log("🔥 INSIDE NON-PORTAL BLOCK - About to create review");
-        
         try {
           const existingReview = await client.query(
             'SELECT id FROM service_reviews WHERE tracking_id = $1 AND is_submitted = true',
             [updatedEntry.id]
           );
 
-          console.log("🔥 Existing review check result:", existingReview.rows.length);
-
           if (existingReview.rows.length === 0) {
-            console.log("🔥 CALLING createReviewRequest NOW...");
             
-            console.log("🔥 Review params:", {
-              centreId: centreId,
-              trackingId: updatedEntry.id,
-              serviceId: null,
-              staffId: entryData.staff_id,
-              customerName: entryData.customer_name,
-              customerPhone: entryData.phone,
-              centreName: "Your Centre Name"
-            });
-            
+            // 🔥 NEW: Fetch the actual centre name from the database!
+            const centreNameResult = await client.query(
+              'SELECT name FROM centres WHERE id = $1', 
+              [centreId]
+            );
+            const actualCentreName = centreNameResult.rows[0]?.name || "Akshaya Sahayi";
+
+            // Fire and forget the review request
             createReviewRequest({
               centreId: centreId,
               trackingId: updatedEntry.id,
@@ -2244,22 +2231,15 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
               staffId: entryData.staff_id,
               customerName: entryData.customer_name,
               customerPhone: entryData.phone,
-              centreName: "Your Centre Name"
+              centreName: actualCentreName // 👈 Dynamically injects the exact centre name
             }).catch(err =>
               console.error("Review auto-send failed:", err)
             );
             
-            console.log("🔥 createReviewRequest CALLED - function executed");
-          } else {
-            console.log("🔥 Review already exists - skipping");
           }
-
         } catch (err) {
           console.error("Review trigger error:", err);
         }
-
-      } else {
-        console.log("Portal booking detected → No token review created");
       }
     }
 
