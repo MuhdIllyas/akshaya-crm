@@ -39,7 +39,7 @@ const sendPendingPaymentWhatsApp = async ({
   pendingAmount,
   dueDate,
   phone,
-  centreId // 👈 NEW: Required for routing
+  centreId 
 }) => {
   try {
     const formattedPhone = phone.startsWith("+91")
@@ -57,7 +57,7 @@ const sendPendingPaymentWhatsApp = async ({
 
     // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
     const response = await triggerNotification({
-      eventKey: 'pending_payment', // Matches the key in CommunicationSettings.jsx
+      eventKey: 'pending_payment',
       centreId: centreId,          
       customerPhone: formattedPhone,
       templateParams: templateParams
