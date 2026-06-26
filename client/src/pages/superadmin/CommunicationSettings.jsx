@@ -223,13 +223,54 @@ const CommunicationSettings = () => {
           </div>
         )}
 
-        {/* Tab 2: Template Mappings (Unchanged) */}
+        {/* Tab 2: Template Mappings */}
         {activeTab === "templates" && (
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-            {/* ... Existing Template Mappings UI ... */}
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Map Libromi Templates to CRM Events</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Select an account and link your approved Meta template names to the automated events in Akshaya CRM.
+            </p>
+
+            <div className="mb-6 max-w-md">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Account to Configure</label>
+              <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]">
+                <option value="">-- Select Account --</option>
+                {accounts.map(acc => (
+                  <option key={acc.id} value={acc.id}>{acc.name} ({acc.phone_number})</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="grid grid-cols-12 bg-gray-50 p-4 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase">
+                <div className="col-span-4">CRM Event (Trigger)</div>
+                <div className="col-span-8">Approved Meta Template Name</div>
+              </div>
+              
+              {systemEvents.map((event, index) => (
+                <div key={event.key} className={`grid grid-cols-12 items-center p-4 ${index !== systemEvents.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                  <div className="col-span-4">
+                    <span className="block font-medium text-gray-800">{event.label}</span>
+                    <span className="block text-xs text-gray-400 font-mono mt-1">{event.key}</span>
+                  </div>
+                  <div className="col-span-8">
+                    <input 
+                      type="text" 
+                      placeholder={`e.g., ${event.key}_v1`}
+                      className="w-full max-w-md px-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-[#1e3a5f]"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <button className="bg-[#1e3a5f] hover:bg-[#172a45] text-white px-6 py-2.5 rounded-lg font-medium transition-colors">
+                Save Mappings
+              </button>
+            </div>
           </div>
         )}
-      </div>
 
       {/* Add / Edit Account Modal */}
       {showAddModal && (
@@ -301,6 +342,7 @@ const CommunicationSettings = () => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

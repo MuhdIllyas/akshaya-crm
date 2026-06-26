@@ -6,29 +6,21 @@ import axios from 'axios';
 import { logActivity } from "../utils/activityLogger.js"; // Add this import
 
 import { createReviewRequest } from './reviews.js';
+import { triggerNotification } from '../utils/communication/notificationEngine.js';
 
 const router = express.Router();
 
-// Libromi configuration
-const LIBROMI_ACCESS_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
-const LIBROMI_PHONE_NUMBER = process.env.LIBROMI_PHONE_NUMBER;
-const LIBROMI_BASE_URL = process.env.LIBROMI_BASE_URL || 'https://wa-api.cloud/api/v1';
-const CENTRE_PHONE = process.env.CENTRE_PHONE || '+919961900071';
-const TEMPLATE_NAME = 'akshaya';
-
-// Helper to send WhatsApp notification via Libromi API
+// ==========================================
+// CENTRAL COMMUNICATION ENGINE INTEGRATION
+// ==========================================
 const sendStatusNotification = async (serviceEntryId, status, currentStep, notes) => {
-  if (!LIBROMI_ACCESS_TOKEN || !LIBROMI_PHONE_NUMBER) {
-    console.warn('servicetracking.js: Libromi credentials not configured. Skipping WhatsApp notification.');
-    return { success: false, error: 'Libromi credentials missing' };
-  }
-
   const client = await pool.connect();
   try {
-    // Fetch service entry details
+    // 1. Fetch service entry details AND the centre_id (crucial for routing)
     const serviceEntryResult = await client.query(
       `SELECT se.customer_name, se.phone, se.created_at, se.token_id, se.category_id, se.subcategory_id, se.staff_id, se.customer_service_id,
-              s.name AS service_name, sub.name AS subcategory_name, st.name AS staff_name
+              s.name AS service_name, sub.name AS subcategory_name, st.name AS staff_name,
+              st.centre_id 
        FROM service_entries se
        LEFT JOIN services s ON se.category_id = s.id
        LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
@@ -71,23 +63,21 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
        WHERE st.service_entry_id = $1 AND sts.completed = false`,
       [serviceEntryId]
     );
-    const totalEstimatedDays = parseInt(stepsResult.rows[0].total_estimated_days) || 0;
+    const totalEstimatedDays = parseInt(stepsResult.rows[0]?.total_estimated_days) || 0;
     const estimatedDeliveryDate = new Date(entry.created_at || new Date());
     estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + totalEstimatedDays);
     const deliDate = estimatedDeliveryDate.toLocaleDateString('en-IN');
 
-    // Format status for display - this is the key change!
-    // Convert backend status (pending, in_progress, etc.) to display format (Pending, In Progress, etc.)
+    // Format status for display
     let displayStatus = 'Submitted';
     if (status) {
-      // Handle different status formats
       if (status === 'pending') displayStatus = 'Pending';
       else if (status === 'in_progress') displayStatus = 'In Progress';
       else if (status === 'completed') displayStatus = 'Completed';
       else if (status === 'rejected') displayStatus = 'Delayed';
       else if (status === 'resubmit') displayStatus = 'Resubmit';
       else if (status === 'paid') displayStatus = 'Paid';
-      else displayStatus = status; // fallback
+      else displayStatus = status;
     }
 
     const templateParams = [
@@ -96,63 +86,51 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
       submissionDate,
       entry.service_name || 'Service',
       entry.subcategory_name || 'N/A',
-      displayStatus, // Use the formatted status, NOT currentStep
+      displayStatus, 
       deliDate,
       entry.staff_name || 'Staff',
       notes || 'No additional notes'
     ];
 
-    const response = await axios.post(
-      `${LIBROMI_BASE_URL}/messages`,
-      {
-        to: formattedPhone,
-        type: 'template',
-        template: {
-          name: TEMPLATE_NAME,
-          language: { code: 'en', policy: 'deterministic' },
-          components: [
-            {
-              type: 'body',
-              parameters: templateParams.map(param => ({ type: 'text', text: param.toString() }))
-            }
-          ]
-        }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${LIBROMI_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
+    const response = await triggerNotification({
+      eventKey: 'service_tracking', // Must match the key mapped by the Superadmin
+      centreId: entry.centre_id,    // Routes to the correct WhatsApp Number
+      customerPhone: formattedPhone,
+      templateParams: templateParams
+    });
 
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
-      [
-        'WhatsApp Notification Sent',
-        'system',
-        `Sent status notification to ${formattedPhone} for service entry ${serviceEntryId}: ${displayStatus} with application number ${appNum}`,
-        entry.centre_id || null
-      ]
-    );
+    if (response.success) {
+      await client.query(
+        `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [
+          'WhatsApp Notification Sent',
+          'system',
+          `Sent status notification to ${formattedPhone} for service entry ${serviceEntryId}: ${displayStatus} with application number ${appNum}`,
+          entry.centre_id || null
+        ]
+      );
+      return { success: true, data: response };
+    } else {
+      // Triggered if WhatsApp is disabled for the centre, or Libromi failed
+      throw new Error(response.error || response.reason);
+    }
 
-    console.log(`servicetracking.js: WhatsApp notification sent to ${formattedPhone} for service ${serviceEntryId} with status ${displayStatus} and application number ${appNum}:`, response.data);
-    return { success: true, data: response.data };
   } catch (err) {
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,
       [
-        'WhatsApp Notification Failed',
+        'WhatsApp Notification Skipped/Failed',
         'system',
-        `Failed to send notification for service entry ${serviceEntryId}: ${err.response?.data?.error || err.message}`,
+        `Notification for service entry ${serviceEntryId} skipped/failed: ${err.message}`,
         null
       ]
     );
 
-    console.error(`servicetracking.js: Failed to send WhatsApp notification for service ${serviceEntryId}:`, err.response?.data || err.message);
-    return { success: false, error: err.response?.data?.error || err.message };
+    console.warn(`servicetracking.js: WhatsApp notification skipped/failed:`, err.message);
+    return { success: false, error: err.message };
   } finally {
     client.release();
   }
