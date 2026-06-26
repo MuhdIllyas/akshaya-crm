@@ -45,7 +45,7 @@ const CentreManagement = () => {
 
   const fetchCommAccounts = async () => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/communication-accounts`, {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/communication/communication-accounts`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
       });
       setAvailableCommAccounts(response.data);
