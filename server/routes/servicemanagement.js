@@ -3244,7 +3244,8 @@ router.post('/tokens', authenticateToken, async (req, res) => {
       phone: token.phone,
       tokenNumber: token.token_id,
       status: token.status,
-      assignedStaff: 'Waiting for Assignment'
+      assignedStaff: 'Waiting for Assignment',
+      centreId: token.centre_id
     }).catch(err => console.error('WhatsApp notification failed:', err));
 
     res.status(201).json({ message: 'Token created successfully', token });
@@ -3480,7 +3481,8 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
       phone: token.phone,
       tokenNumber: tokenId,
       status: token.status,
-      assignedStaff: staffName
+      assignedStaff: staffName,
+      centreId: token.centre_id
     }).catch(err => console.error('WhatsApp assignment notification failed:', err));
 
     res.json({ message: 'Token assigned successfully' });
@@ -3541,7 +3543,8 @@ router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
       phone: tokenData.phone,
       tokenNumber: tokenId,
       status: status,
-      assignedStaff: tokenData.staff_name || 'Waiting for Assignment'
+      assignedStaff: tokenData.staff_name || 'Waiting for Assignment',
+      centreId: token.centre_id
     }).catch(err => console.error('WhatsApp status notification failed:', err));
 
     res.json({ message: 'Token status updated successfully' });
