@@ -1,53 +1,63 @@
-import express from "express";
-import bcrypt from "bcryptjs";
-import pool from "../db.js";
-import jwt from "jsonwebtoken";
+import express from 'express';
+import pool from '../db.js';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
-// ==============================================
-// Middleware (case‑insensitive role check)
-// ==============================================
-export const authMiddleware = (allowedRoles) => async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    console.log("Auth middleware: No token provided");
-    return res.status(401).json({ error: "No token provided" });
-  }
+// Middleware to verify superadmin token
+const authenticateSuperadmin = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.status(401).json({ error: 'Access token required' });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const result = await pool.query("SELECT role, centre_id FROM staff WHERE id = $1", [decoded.id]);
-    if (result.rows.length === 0) {
-      console.log(`Auth middleware: User not found for ID ${decoded.id}`);
-      return res.status(401).json({ error: "User not found" });
+    if (decoded.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Superadmin privileges required' });
     }
-
-    // Normalize role to lowercase for comparison
-    const userRole = result.rows[0].role.toLowerCase();
-    if (!allowedRoles.includes(userRole)) {
-      console.log(`Auth middleware: Role ${userRole} not allowed. Required: ${allowedRoles}`);
-      return res.status(403).json({ error: "Unauthorized access" });
-    }
-
     req.user = decoded;
-    req.user.centre_id = result.rows[0].centre_id;
     next();
   } catch (err) {
-    console.error("Auth middleware error:", err.message);
-    res.status(401).json({ error: "Invalid or expired token" });
+    return res.status(403).json({ error: 'Invalid or expired token' });
   }
 };
 
-router.get('/communication-accounts', authMiddleware, async (req, res) => {
+// GET all communication accounts
+router.get('/accounts', authenticateSuperadmin, async (req, res) => {
   try {
-    // Superadmins can see all accounts. You might want to filter this based on role later.
     const result = await pool.query(
-      `SELECT id, name, phone_number FROM communication_accounts WHERE is_active = true ORDER BY name ASC`
+      `SELECT id, name, phone_number, is_active FROM communication_accounts ORDER BY id ASC`
     );
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error fetching accounts:', err);
+    res.status(500).json({ error: 'Failed to fetch accounts' });
+  }
+});
+
+// POST create a new communication account
+router.post('/accounts', authenticateSuperadmin, async (req, res) => {
+  const { name, phone_number, access_token } = req.body;
+  
+  if (!name || !phone_number || !access_token) {
+    return res.status(400).json({ error: 'Name, phone number, and access token are required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO communication_accounts (name, phone_number, access_token, is_active) 
+       VALUES ($1, $2, $3, true) RETURNING id, name, phone_number, is_active`,
+      [name, phone_number, access_token]
+    );
+    res.status(201).json({ message: 'Account created', account: result.rows[0] });
+  } catch (err) {
+    console.error('Error creating account:', err);
+    // Handle unique constraint violation for phone_number
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'An account with this phone number already exists' });
+    }
+    res.status(500).json({ error: 'Failed to create account' });
   }
 });
 
