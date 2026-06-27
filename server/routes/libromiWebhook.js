@@ -1,39 +1,46 @@
 import express from "express";
 import axios from "axios";
+import pool from "../db.js"; 
 
 const router = express.Router();
 
-const LIBROMI_BASE_URL = "https://server2-wc.libromi.cloud/api/v1";
 const WEBHOOK_URL = process.env.WEBHOOK_URL || "https://akshaya-crm.onrender.com/api/webhook/whatsapp";
 
-// 🔥 Register webhook
-router.post("/register-webhook", async (req, res) => {
+// 🔥 Register webhook dynamically for a specific account
+router.post("/register-webhook/:accountId", async (req, res) => {
   try {
-    const LIBROMI_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
+    const { accountId } = req.params;
 
-    if (!LIBROMI_TOKEN) {
-      return res.status(500).json({
-        error: "LIBROMI_ACCESS_TOKEN not set"
-      });
+    // 1. Fetch the specific token and base URL for this account
+    const accountQuery = await pool.query(
+      `SELECT access_token, base_url, name FROM communication_accounts WHERE id = $1 AND is_active = true`,
+      [accountId]
+    );
+
+    if (accountQuery.rows.length === 0) {
+      return res.status(404).json({ error: "Communication account not found or inactive" });
     }
 
-    console.log("🚀 Registering webhook:", WEBHOOK_URL);
+    const { access_token, base_url, name } = accountQuery.rows[0];
 
+    console.log(`🚀 Registering webhook for '${name}' at:`, WEBHOOK_URL);
+
+    // 2. Dispatch to Libromi using the dynamic credentials
     const response = await axios.post(
-      `${LIBROMI_BASE_URL}/webhook`,
+      `${base_url}/webhook`,
       {
         webhook_url: WEBHOOK_URL
       },
       {
         headers: {
-          Authorization: `Bearer ${LIBROMI_TOKEN}`,
+          Authorization: `Bearer ${access_token}`,
           "Content-Type": "application/json",
           Accept: "application/json"
         }
       }
     );
 
-    console.log("✅ Webhook registered:", response.data);
+    console.log(`✅ Webhook registered for ${name}:`, response.data);
 
     // 🔍 Validate response
     if (!response.data?.webhook_url) {
@@ -46,7 +53,7 @@ router.post("/register-webhook", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Webhook registered successfully",
+      message: `Webhook registered successfully for account: ${name}`,
       data: response.data
     });
 
@@ -60,16 +67,27 @@ router.post("/register-webhook", async (req, res) => {
   }
 });
 
-// 🔍 Check webhook
-router.get("/check-webhook", async (req, res) => {
+// 🔍 Check webhook for a specific account
+router.get("/check-webhook/:accountId", async (req, res) => {
   try {
-    const LIBROMI_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
+    const { accountId } = req.params;
+
+    const accountQuery = await pool.query(
+      `SELECT access_token, base_url FROM communication_accounts WHERE id = $1`,
+      [accountId]
+    );
+
+    if (accountQuery.rows.length === 0) {
+      return res.status(404).json({ error: "Communication account not found" });
+    }
+
+    const { access_token, base_url } = accountQuery.rows[0];
 
     const response = await axios.get(
-      `${LIBROMI_BASE_URL}/webhook`,
+      `${base_url}/webhook`,
       {
         headers: {
-          Authorization: `Bearer ${LIBROMI_TOKEN}`,
+          Authorization: `Bearer ${access_token}`,
           Accept: "application/json"
         }
       }
@@ -95,7 +113,7 @@ router.get("/check-webhook", async (req, res) => {
 // 🔧 Optional: quick browser check
 router.get("/register-webhook", (req, res) => {
   res.json({
-    message: "Use POST method to register webhook"
+    message: "Use POST method with /register-webhook/:accountId to register webhook"
   });
 });
 
