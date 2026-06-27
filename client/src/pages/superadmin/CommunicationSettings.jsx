@@ -26,7 +26,8 @@ const CommunicationSettings = () => {
     { key: "pending_payment", label: "Pending Payment Reminder" },
     { key: "service_tracking", label: "Service Status Update" },
     { key: "review_request", label: "Customer Review Request" },
-    { key: "token_generated", label: "New Token Generated" }
+    { key: "token_generated", label: "New Token Generated" },
+    { key: "reengagement_message", label: "Reengagement Request" },
   ];
 
   useEffect(() => {
