@@ -3,12 +3,12 @@ import pool from "../db.js";
 /**
  * Helper: Add staff to conversation
  */
-export async function addStaffToConversation(conversationId, staffId) {
+export async function addStaffToConversation(conversationId, staffId, role = 'member') {
   await pool.query(
     `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
-     VALUES ($1, $2, 'staff', 'member', NOW())
+     VALUES ($1, $2, 'staff', $3, NOW())
      ON CONFLICT (conversation_id, staff_id) DO NOTHING`,
-    [conversationId, staffId]
+    [conversationId, staffId, role]
   );
 }
 
@@ -37,7 +37,8 @@ export async function resolveConversation({
   created_by,
   name = null,
   is_group = false,
-  participant_ids = null  // For direct staff chats - array of staff IDs
+  participant_ids = null,  // For direct staff chats - array of staff IDs
+  communication_account_id = null // 🔥 NEW: Required for Multi-Tenant WhatsApp routing
 }) {
   let conversation;
 
@@ -54,7 +55,7 @@ export async function resolveConversation({
        WHERE c.is_group = false 
          AND c.channel = $3 
          AND c.status = 'active'
-         AND c.context_type IS NULL  -- No context for direct staff chats
+         AND c.context_type IS NULL
        LIMIT 1`,
       [staff1, staff2, channel]
     );
@@ -106,15 +107,17 @@ export async function resolveConversation({
   }
 
   /* =========================
-     4. WHATSAPP FALLBACK (by phone number)
+     4. WHATSAPP FALLBACK (By phone AND communication account)
   ========================= */
   if (channel === "whatsapp" && phone_number) {
     const res = await pool.query(
       `SELECT * FROM chat_conversations
-       WHERE channel = 'whatsapp' AND phone_number = $1
+       WHERE channel = 'whatsapp' 
+         AND phone_number = $1
+         AND (communication_account_id = $2 OR communication_account_id IS NULL)
        AND status != 'deleted'
        LIMIT 1`,
-      [phone_number]
+      [phone_number, communication_account_id]
     );
 
     if (res.rows.length) {
@@ -126,7 +129,6 @@ export async function resolveConversation({
      5. CREATE NEW CONVERSATION
   ========================= */
 
-  // Generate conversation name if not provided
   let conversationName = name;
   if (!conversationName) {
     conversationName = await generateConversationName({
@@ -141,17 +143,16 @@ export async function resolveConversation({
     });
   }
 
-  // For direct staff chat, don't set customer_id (it's NULL)
   const finalCustomerId = (context_type === "customer") ? customer_id : null;
   const finalContextType = (!is_group && participant_ids && participant_ids.length === 2) 
-    ? null  // Direct staff chats have no context
+    ? null  
     : context_type;
 
   const insertRes = await pool.query(
     `INSERT INTO chat_conversations
     (name, is_group, channel, context_type, context_id, centre_id, 
-     customer_id, phone_number, created_by, assigned_staff_id, status, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',NOW())
+     customer_id, phone_number, created_by, assigned_staff_id, communication_account_id, status, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',NOW())
     RETURNING *`,
     [
       conversationName,
@@ -160,10 +161,11 @@ export async function resolveConversation({
       finalContextType,
       context_id,
       centre_id,
-      finalCustomerId,  // NULL for staff chats
+      finalCustomerId, 
       phone_number,
       created_by,
-      (channel === 'whatsapp' ? created_by : null)  // Only for WhatsApp
+      (channel === 'whatsapp' ? created_by : null),
+      communication_account_id // 🔥 Multi-Tenant Link
     ]
   );
 
@@ -174,33 +176,33 @@ export async function resolveConversation({
      6. ADD PARTICIPANTS BASED ON CONTEXT
   ========================= */
   if (!is_group && participant_ids && participant_ids.length === 2) {
-    // Direct staff chat – add both staff
     for (const staffId of participant_ids) {
       await addStaffToConversation(conversation.id, staffId);
     }
   } else if (context_type === "service_entry" && context_id) {
-    // Service conversation: add creator and all service participants
-    await addStaffToConversation(conversation.id, created_by);
+    await addStaffToConversation(conversation.id, created_by, 'owner');
     const participantsRes = await pool.query(
       `SELECT staff_id FROM service_participants WHERE service_entry_id = $1`,
       [context_id]
     );
     for (const row of participantsRes.rows) {
-      await addStaffToConversation(conversation.id, row.staff_id);
+      await addStaffToConversation(conversation.id, row.staff_id, 'collaborator');
     }
   } else if (context_type === "customer" && customer_id) {
-    // Customer conversation: add the customer and assigned staff (if any)
     await addCustomerToConversation(conversation.id, customer_id);
     if (conversation.assigned_staff_id) {
       await addStaffToConversation(conversation.id, conversation.assigned_staff_id);
     }
   } else if (channel === "whatsapp" && phone_number) {
-    // WhatsApp conversation: add the customer (if customer_id exists) and assigned staff
-    if (customer_id) {
-      await addCustomerToConversation(conversation.id, customer_id);
-    }
-    if (conversation.assigned_staff_id) {
-      await addStaffToConversation(conversation.id, conversation.assigned_staff_id);
+    if (customer_id) await addCustomerToConversation(conversation.id, customer_id);
+    if (conversation.assigned_staff_id) await addStaffToConversation(conversation.id, conversation.assigned_staff_id);
+  }
+
+  // 🔥 NEW: Automatically add Centre Admin as a reviewer to external chats
+  if ((channel === "whatsapp" || channel === "portal") && centre_id) {
+    const adminRes = await pool.query(`SELECT admin_id FROM centres WHERE id = $1`, [centre_id]);
+    if (adminRes.rows.length > 0 && adminRes.rows[0].admin_id) {
+      await addStaffToConversation(conversation.id, adminRes.rows[0].admin_id, 'reviewer');
     }
   }
 
@@ -217,8 +219,6 @@ async function generateConversationName({
   is_group,
   participant_ids
 }) {
-  
-  // Service conversation
   if (context_type === "service_entry" && context_id) {
     const res = await pool.query(
       `SELECT se.id, s.name as service_name, se.customer_name
@@ -235,7 +235,6 @@ async function generateConversationName({
     }
   }
 
-  // Customer conversation (portal or WhatsApp)
   if (customer_id) {
     const res = await pool.query(
       `SELECT name FROM customers WHERE id = $1`,
@@ -247,12 +246,10 @@ async function generateConversationName({
     }
   }
 
-  // WhatsApp conversation (fallback if customer not yet created)
   if (channel === "whatsapp" && phone_number) {
     return `WhatsApp: ${phone_number}`;
   }
 
-  // Direct staff-to-staff conversation - Get names from participants
   if (!is_group && participant_ids && participant_ids.length >= 2) {
     const staffNames = await pool.query(
       `SELECT name FROM staff WHERE id = ANY($1::int[]) ORDER BY id`,
@@ -266,7 +263,6 @@ async function generateConversationName({
     }
   }
 
-  // Group conversation
   if (is_group) {
     return "Group Conversation";
   }
@@ -288,7 +284,6 @@ export async function addParticipantsToConversation({
   try {
     await client.query('BEGIN');
     
-    // Add staff participants
     for (const staffId of staff_ids) {
       await client.query(
         `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
@@ -298,7 +293,6 @@ export async function addParticipantsToConversation({
       );
     }
     
-    // Add customer participants
     for (const customerId of customer_ids) {
       await client.query(
         `INSERT INTO chat_participants (conversation_id, customer_id, participant_type, role, joined_at)
