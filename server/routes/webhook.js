@@ -1,26 +1,37 @@
 import express from 'express';
-import pool from '../db.js';
 import { resolveConversation } from '../utils/conversationService.js';
 import { sendMessage } from '../utils/messageRouter.js';
+import pool from '../db.js';
 
 const router = express.Router();
 
+// Helper to safely extract text from any API provider structure
+const extractText = (msg) => {
+  if (!msg) return null;
+  if (typeof msg === 'string') return msg;
+  if (typeof msg.text === 'string') return msg.text;
+  if (msg.text?.body) return msg.text.body;
+  if (msg.button?.text) return msg.button.text;
+  if (msg.interactive?.button_reply?.title) return msg.interactive.button_reply.title;
+  if (msg.interactive?.list_reply?.title) return msg.interactive.list_reply.title;
+  if (msg.message) return typeof msg.message === 'string' ? msg.message : msg.message.body;
+  if (msg.body) return msg.body;
+  return null;
+};
+
 router.post('/whatsapp', async (req, res) => {
-  // 🔥 BUG FIX 3: Immediately tell Libromi "We got it!" to prevent retries/duplicates
+  // 🔥 1. Immediately tell Libromi we got it to prevent duplicates
   res.sendStatus(200);
 
-  const client = await pool.connect();
-
   try {
+    const body = req.body;
     console.log("🔥 LIBROMI WEBHOOK HIT");
-    
+    // console.log("📩 RAW BODY:", JSON.stringify(body, null, 2)); // Uncomment if you need to deeply debug the payload
+
     let from = null;
     let text = null;
     let message_id = null;
-    let timestamp = null;
-    let recipientPhone = null; // 👈 NEW: We need to know which Centre received this
-
-    const body = req.body;
+    let recipientPhone = null;
 
     // ===============================
     // 🔥 FORMAT 1: META / WHATSAPP CLOUD STYLE
@@ -29,59 +40,33 @@ router.post('/whatsapp', async (req, res) => {
       const changes = body.entry[0]?.changes;
       if (changes && changes.length > 0) {
         const value = changes[0]?.value;
-        
-        // Extract the receiving WhatsApp number
         recipientPhone = value?.metadata?.display_phone_number; 
 
         const messages = value?.messages;
         if (messages && messages.length > 0) {
           const msg = messages[0];
           from = msg.from;
-          text =
-            msg.text?.body ||
-            msg.button?.text ||
-            msg.interactive?.button_reply?.title ||
-            msg.interactive?.list_reply?.title;
-
+          text = extractText(msg);
           message_id = msg.id;
-          timestamp = msg.timestamp;
         }
       }
     }
     // ===============================
-    // 🔥 FORMAT 2: Flat structure
-    // ===============================
-    else if (body.from && body.text) {
-      from = body.from;
-      text = body.text;
-      message_id = body.message_id || body.id;
-      timestamp = body.timestamp;
-    }
-    // ===============================
-    // 🔥 FORMAT 3: messages array
+    // 🔥 FORMAT 2: Flat / Alternative Libromi Structures
     // ===============================
     else if (body.messages && Array.isArray(body.messages)) {
       const msg = body.messages[0];
       from = msg.from;
-      text =
-        msg.text?.body ||
-        msg.message ||
-        msg.body ||
-        msg.button?.text ||
-        msg.interactive?.button_reply?.title;
-
+      text = extractText(msg);
       message_id = msg.id;
-      timestamp = msg.timestamp;
-    }
-    // ===============================
-    // 🔥 FORMAT 4: Alternative structure
-    // ===============================
-    else if (body.data) {
-      const msg = body.data;
-      from = msg.from || msg.phone || msg.sender;
-      text = msg.text || msg.message || msg.body;
-      message_id = msg.id;
-      timestamp = msg.timestamp;
+    } else if (body.data) {
+      from = body.data.from || body.data.phone || body.data.sender;
+      text = extractText(body.data);
+      message_id = body.data.id;
+    } else if (body.from) {
+      from = body.from;
+      text = extractText(body);
+      message_id = body.message_id || body.id;
     }
 
     // ===============================
@@ -93,20 +78,20 @@ router.post('/whatsapp', async (req, res) => {
     }
 
     // ===============================
-    // ❌ VALIDATION (DO NOT BREAK WEBHOOK)
+    // ❌ VALIDATION 
     // ===============================
     if (!from || !text) {
-      // Don't log errors for read/delivery receipts, just silently exit
+      console.log(`⚠️ Webhook Ignored. It was likely a read/delivery receipt. (From: ${from}, Text: ${text})`);
       return; 
     }
 
-    await client.query('BEGIN');
-
-    // 🔥 NEW: Find the Communication Account ID based on the receiving number
+    // ===============================
+    // 🔍 FIND ACCOUNTS AND CUSTOMERS
+    // ===============================
     let communicationAccountId = null;
     if (recipientPhone) {
         const formattedRecipient = recipientPhone.startsWith('+') ? recipientPhone : `+${recipientPhone}`;
-        const accountQuery = await client.query(
+        const accountQuery = await pool.query(
             `SELECT id FROM communication_accounts WHERE phone_number = $1 OR phone_number = $2 LIMIT 1`,
             [formattedRecipient, recipientPhone]
         );
@@ -115,8 +100,7 @@ router.post('/whatsapp', async (req, res) => {
         }
     }
 
-    // 🔥 NEW: Find the Customer ID based on their phone number
-    const customerQuery = await client.query(
+    const customerQuery = await pool.query(
         `SELECT id, name FROM customers WHERE primary_phone = $1 OR primary_phone = $2 LIMIT 1`,
         [from, from.replace('+', '')]
     );
@@ -130,35 +114,33 @@ router.post('/whatsapp', async (req, res) => {
       channel: 'whatsapp',
       context_type: customerId ? 'customer' : null,
       context_id: null,
-      customer_id: customerId, // 👈 Ensures the conversation is linked to the CRM Profile
+      customer_id: customerId,
       phone_number: from,
-      communication_account_id: communicationAccountId, // 🔥 BUG FIX 1: Passes the exact routing account
+      communication_account_id: communicationAccountId,
       name: `WhatsApp - ${customerName}`,
       is_group: false,
     });
 
     // ===============================
-    // 💾 SAVE MESSAGE
+    // 💾 SAVE MESSAGE & EMIT SOCKET
     // ===============================
-    const savedMessage = await sendMessage({
+    const io = req.app.get('io') || req.io;
+
+    await sendMessage({
       conversation_id: conversation.id,
-      sender_id: customerId, // 👈 Associates the message with the actual CRM customer
+      sender_id: customerId, // Will associate with customer if they exist
       sender_type: 'customer',
       message: text,
       message_type: 'text',
       direction: 'incoming',
-      io: req.app.get('io'), // 🔥 BUG FIX 2: Safely fetches the Socket instance
+      io: io,
       external_message_id: message_id
     });
 
-    await client.query('COMMIT');
-    console.log(`✅ Message saved and routed from ${from}`);
+    console.log(`✅ Message safely routed and saved from ${from}: "${text.substring(0, 20)}..."`);
 
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('❌ WhatsApp webhook processing error:', err);
-  } finally {
-    client.release();
   }
 });
 
