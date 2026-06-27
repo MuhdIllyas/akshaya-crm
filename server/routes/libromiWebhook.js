@@ -4,7 +4,7 @@ import pool from "../db.js";
 
 const router = express.Router();
 
-const WEBHOOK_URL = process.env.WEBHOOK_URL || "https://akshaya-crm.onrender.com/api/webhook/whatsapp";
+const WEBHOOK_URL = "https://staging-api.akshayasahayi.com/api/webhook/whatsapp";
 
 // 🔥 Register webhook dynamically for a specific account
 router.post("/register-webhook/:accountId", async (req, res) => {
