@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import pool from "../db.js";
 import jwt from "jsonwebtoken";
+import { upload } from "../utils/upload.js";
 import { logActivity } from "../utils/activityLogger.js";
 
 const router = express.Router();
@@ -66,8 +67,18 @@ router.get("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"])
 });
 
 // Update own profile
-router.put("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
-  const { name, phone, emergencyContact, emergencyRelationship, photo } = req.body;
+router.put("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), upload.single('photo'), async (req, res) => {
+  // Removed 'photo' from destructuring here
+  const { name, phone, emergencyContact, emergencyRelationship } = req.body;
+  
+  // NEW: Handle photo URL
+  // If the frontend sends the existing URL as text, keep it. 
+  let photoUrl = req.body.photo || null; 
+  if (req.file) {
+    // If a new file was uploaded, overwrite with the new URL
+    photoUrl = `/uploads/staff/${req.file.filename}`;
+  }
+
   try {
     const result = await pool.query(
       `UPDATE staff SET name = $1, phone = $2, emergency_contact = $3, emergency_relationship = $4, photo = $5
@@ -76,7 +87,7 @@ router.put("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"])
          employment_type AS "employmentType", reports_to AS "reportsTo",
          salary, dob, gender, emergency_contact AS "emergencyContact",
          emergency_relationship AS "emergencyRelationship", centre_id AS "centreId"`,
-      [name, phone, emergencyContact, emergencyRelationship, photo, req.user.id]
+      [name, phone, emergencyContact, emergencyRelationship, photoUrl, req.user.id] // Passed photoUrl
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "Staff not found" });
     res.json(result.rows[0]);
@@ -108,7 +119,7 @@ router.post("/me/change-password", authMiddleware(["staff", "supervisor", "admin
 // ==============================================
 
 // Add new staff member
-router.post("/add", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('photo'), async (req, res) => {
   const client = await pool.connect();
   try {
     const {
@@ -129,13 +140,21 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), async (req, res) =>
       emergencyContact,
       emergencyRelationship,
       centre_id,
-      photo,
       password,
       permissions,
       start_time,
       end_time,
       effective_from,
     } = req.body;
+
+    // ==========================================
+    // NEW: Handle the photo URL from Multer
+    // ==========================================
+    let photoUrl = req.body.photo || null; 
+    if (req.file) {
+      // If a file was uploaded, save the public URL to the database
+      photoUrl = `/uploads/staff/${req.file.filename}`;
+    }
 
     if (!username || !name || !role || !email || !password) {
       return res.status(400).json({ error: "Username, name, role, email, and password are required" });
@@ -183,7 +202,9 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), async (req, res) =>
         created_at`,
       [
         username, name, role, department || null, email, phone || null, status || "Active",
-        joinDate || new Date().toISOString(), photo || null, employeeId || null,
+        joinDate || new Date().toISOString(), 
+        photoUrl, // <-- CHANGED: Using our new photoUrl variable here
+        employeeId || null,
         employmentType || null, reportsTo || null, salary || null, dateOfBirth || null,
         gender || null, emergencyContact || null, emergencyRelationship || null,
         centreId || null, hashedPassword, permissions || null,
@@ -422,14 +443,20 @@ router.get("/schedule/:id", authMiddleware(["admin", "superadmin"]), async (req,
 });
 
 // Update staff by ID
-router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo'), async (req, res) => {
   const { id } = req.params;
   const {
-    username, name, role, department, email, phone, status, joinDate, photo,
+    username, name, role, department, email, phone, status, joinDate,
     employeeId, employmentType, reportsTo, salary, dateOfBirth, gender,
     emergencyContact, emergencyRelationship, centre_id, permissions,
     start_time, end_time, effective_from,
-  } = req.body;
+  } = req.body; // 'photo' removed from destructuring
+
+  // NEW: Handle photo URL
+  let photoUrl = req.body.photo || null; 
+  if (req.file) {
+    photoUrl = `/uploads/staff/${req.file.filename}`;
+  }
 
   const client = await pool.connect();
   try {
@@ -471,7 +498,9 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
         created_at`,
       [
         username, name, role, department || null, email, phone || null, status || "Active",
-        joinDate || new Date().toISOString(), photo || null, employeeId || null,
+        joinDate || new Date().toISOString(), 
+        photoUrl, // <-- CHANGED: Using our new photoUrl variable here
+        employeeId || null,
         employmentType || null, reportsTo || null, salary || null, dateOfBirth || null,
         gender || null, emergencyContact || null, emergencyRelationship || null,
         targetCentreId || null, permissions || null, id
