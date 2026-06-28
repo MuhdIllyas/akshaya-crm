@@ -150,87 +150,48 @@ const AdminReports = () => {
       // 👈 ADDED transactionPage to the dependency array below so it refetches on click
    }, [activeSection, searchTerm, sortBy, sortOrder, dateFilter, transactionPage]);
 
-// Statistics calculation (Adapted for the new Analytics BFF structure)
+  // Statistics calculation (Mapped directly to V3 Analytics Engine)
   const stats = useMemo(() => {
     if (!data || !data.stats) return {};
 
     const todayExpenses = accountingData?.expenses?.filter(e => e.status === 'approved').reduce((sum, e) => sum + e.amount, 0) || 0;
 
     return {
-      totalRevenue: `₹${(data.stats.todayRevenue || 0).toLocaleString()}`,
-      totalExpenses: `₹${(data.stats.todayExpenses || 0).toLocaleString()}`,
-      totalProfit: `₹${(data.stats.todayProfit || 0).toLocaleString()}`,
+      // YTD / Core Metrics
+      totalRevenue: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`, // Update to YTD later if needed
+      totalExpenses: `₹${(data.stats.todayOperatingExpenses || 0).toLocaleString()}`, // Update to YTD later if needed
+      totalProfit: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`,
+      
+      // Activity Stats
       totalTransactions: (data.lists?.recentTransactions?.length || 0).toLocaleString(),
       pendingTransactions: (data.stats.pendingPayments || 0).toLocaleString(),
       completedTransactions: (data.stats.servicesCompleted || 0).toLocaleString(),
       averageTransaction: `₹${(data.stats.averageOrderValue || 0).toLocaleString()}`,
+      
+      // Wallet Stats
       totalWalletBalance: `₹${(data.stats.totalWalletBalance || 0).toLocaleString()}`,
       totalCashInHand: `₹${(data.stats.cashInHand || 0).toLocaleString()}`,
       totalBankBalance: `₹${(data.stats.bankBalance || 0).toLocaleString()}`,
       totalDigitalBalance: `₹${(data.stats.digitalBalance || 0).toLocaleString()}`,
-      totalCashInToday: `₹${(data.stats.todayRevenue || 0).toLocaleString()}`,
-      totalCashOutToday: `₹${(data.stats.todayExpenses || 0).toLocaleString()}`,
-      netCashFlowToday: `₹${(data.stats.todayProfit || 0).toLocaleString()}`,
-      todayExpenses: `₹${todayExpenses.toLocaleString()}`,
-
-      todayProfit: `₹${(data.stats.todayProfit || 0).toLocaleString()}`,
-      todayServiceCharge: `₹${(data.stats.todayServiceCharge || 0).toLocaleString()}`,
-
+      
+      // Today's Flow
+      totalCashInToday: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`,
+      totalCashOutToday: `₹${(data.stats.todayOperatingExpenses || 0).toLocaleString()}`,
+      netCashFlowToday: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`,
+      
+      // Breakdown Stats
+      todayExpenses: `₹${(data.stats.todayOperatingExpenses || 0).toLocaleString()}`, // Trust backend over local accountingData
+      todayProfit: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`,
+      todayServiceCharge: `₹${(data.stats.todayGrossProfit || 0).toLocaleString()}`,
+      
+      // Trends & Tracking
       revenueChange: 0,
       expenseChange: 0,
       profitChange: 0,
-      currentMonthRevenue: `₹${(data.stats.monthlyRevenue || 0).toLocaleString()}`,
-      currentMonthProfit: `₹0`
+      currentMonthRevenue: `₹${(data.charts?.financialTrend?.revenueCollected?.[new Date().getMonth()] || 0).toLocaleString()}`,
+      currentMonthProfit: `₹${(data.charts?.financialTrend?.netProfit?.[new Date().getMonth()] || 0).toLocaleString()}`
     };
   }, [data, accountingData]);
-
-  // Bridge the new BFF data structure to the old OverviewSection chart format
-  const overviewData = useMemo(() => {
-    if (!data || !data.stats) return null;
-    return {
-      months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      revenue: data.charts?.monthlyRevenue || [],
-      expenses: new Array(12).fill(0), // Backend skips heavy monthly expense array now
-      wallets: [
-        { name: 'Cash', currentBalance: data.stats.cashInHand || 0 },
-        { name: 'Bank', currentBalance: data.stats.bankBalance || 0 },
-        { name: 'Digital', currentBalance: data.stats.digitalBalance || 0 }
-      ],
-      staffPerformance: (data.lists?.topStaff || []).map(s => ({
-        name: s.staff_name,
-        revenue: Number(s.total_revenue)
-      })),
-      
-      transactions: (data.lists?.recentTransactions || []).map(t => ({
-        category: t.category || 'Transaction',
-        date: t.created_at,
-        status: 'Completed',
-        type: t.transactionType,
-        amount: t.amount
-      }))
-    };
-  }, [data]);
-
-  // Get unique values for filters (Safely mapped for the new backend structure)
-  const paymentMethods = useMemo(() => {
-    if (!data || !data.lists || !data.lists.recentTransactions) return [];
-    return [...new Set(data.lists.recentTransactions.map(t => t.type || 'Unknown'))];
-  }, [data]);
-
-  const serviceTypes = useMemo(() => {
-    if (!data || !data.lists || !data.lists.recentTransactions) return [];
-    return [...new Set(data.lists.recentTransactions.map(t => t.category || 'Unknown'))];
-  }, [data]);
-
-  const statuses = useMemo(() => {
-    if (!data || !data.lists || !data.lists.recentTransactions) return [];
-    return [...new Set(data.lists.recentTransactions.map(t => t.status || 'Completed'))];
-  }, [data]);
-
-  const walletsList = useMemo(() => {
-    if (!data || !data.lists || !data.lists.recentTransactions) return [];
-    return [...new Set(data.lists.recentTransactions.map(t => t.walletName || 'Wallet'))];
-  }, [data]);
 
   // Reset filters function
   const resetFilters = () => {
@@ -364,9 +325,9 @@ const AdminReports = () => {
         <div className="px-6 py-6">
           {/* Overview Section */}
           {activeSection === 'overview' && (
-            data && overviewData ? (
+            data ? (
               <OverviewSection
-                data={overviewData}  // Use the mapped data here
+                data={data} // <-- Changed from overviewData to data
                 stats={stats}
                 showCharts={showCharts}
                 timePeriod={timePeriod}
