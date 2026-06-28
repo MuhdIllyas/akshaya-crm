@@ -1360,7 +1360,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       paramIndex += 2;
     }
 
-    // Fire ALL queries concurrently in PostgreSQL (Mapped safely to your exact schema)
+    // Fire ALL queries concurrently in PostgreSQL 
     const [
       performanceRes,
       ratingsRes,
@@ -1398,11 +1398,11 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         ORDER BY due_date ASC NULLS LAST
       `, [staffId]),
 
-      // 4. Events (Aliased to match frontend expectations)
+      // 4. Events (Aliased safely to your exact table columns)
       client.query(`
         SELECT 
           id, title, description, date, start_datetime, 
-          COALESCE(event_type, type) as source, 
+          type as source, 
           related_service_id as tracking_id
         FROM calendar_events
         WHERE (visibility = 'global' OR (visibility = 'centre' AND centre_id = $1))
@@ -1424,20 +1424,20 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         LIMIT 20
       `, [staffId]),
 
-      // 6. Online Bookings (Pending - Removed failing centre_id filter)
+      // 6. Online Bookings (Pending - Fixed: using 'customers' table)
       client.query(`
-        SELECT cs.*, u.name as customer_name, u.phone
+        SELECT cs.*, c.name as customer_name, c.phone
         FROM customer_services cs
-        LEFT JOIN users u ON cs.customer_id = u.id
+        LEFT JOIN customers c ON cs.customer_id = c.id
         WHERE cs.status = 'under_review'
         ORDER BY cs.applied_at DESC
       `),
 
-      // 7. Online Bookings (Processing by this staff - Removed failing centre_id filter)
+      // 7. Online Bookings (Processing by this staff - Fixed: using 'customers' table)
       client.query(`
-        SELECT cs.*, u.name as customer_name, u.phone
+        SELECT cs.*, c.name as customer_name, c.phone
         FROM customer_services cs
-        LEFT JOIN users u ON cs.customer_id = u.id
+        LEFT JOIN customers c ON cs.customer_id = c.id
         WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1
         ORDER BY cs.taken_at DESC
       `, [staffId])
