@@ -562,13 +562,29 @@ const StaffDashboard = () => {
     try {
       setAttendanceLoading(true);
       const isPunchOut = todayAttendance && todayAttendance.punch_in && !todayAttendance.punch_out;
-      const action = isPunchOut ? 'punch_out' : 'punch_in';
       
-      await postAttendance(staffId, action, 'Office');
+      // Get exact current time formatted for Asia/Kolkata to match backend validation perfectly
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+      const formattedTime = now.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      }); // HH:mm
+      
+      // Send the exact payload the backend expects
+      await postAttendance({
+        punch_type: isPunchOut ? 'out' : 'in',
+        date: formattedDate,
+        time: formattedTime
+      });
+      
       toast.success(`Successfully punched ${isPunchOut ? 'out' : 'in'}`);
-      await fetchWorkspaceInit(); // Instantly refresh the dashboard to update the banner!
+      await fetchWorkspaceInit(); // Instantly refresh the dashboard!
     } catch (err) {
-      toast.error('Failed to update attendance');
+      console.error('Attendance Punch Error:', err.response?.data || err.message);
+      toast.error(err.response?.data?.error || 'Failed to update attendance');
     } finally {
       setAttendanceLoading(false);
     }
