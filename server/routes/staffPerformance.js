@@ -1393,7 +1393,8 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       onlinePendingRes,
       onlineProcessingRes,
       deliveriesRes,
-      expiriesRes
+      expiriesRes,
+      todayAttendanceRes
     ] = await Promise.all([
       // 1. Performance Summary
       client.query(`
@@ -1505,7 +1506,15 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
           AND se.expiry_date IS NOT NULL
           AND se.is_expiry_dismissed = FALSE
           ${applyEventFilter('se.expiry_date')}
+      `, [staffId]),
+
+      // 10. Today's Attendance (NEW)
+      client.query(`
+        SELECT id, status, punch_in, punch_out, total_hours
+        FROM attendance
+        WHERE staff_id = $1 AND date = CURRENT_DATE
       `, [staffId])
+
     ]);
 
     // --- FORMAT DYNAMIC EVENTS ---
@@ -1556,6 +1565,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       data: {
+        todayAttendance: todayAttendanceRes.rows[0] || null,
         performance: {
           summary: {
             total_services: totalServices,

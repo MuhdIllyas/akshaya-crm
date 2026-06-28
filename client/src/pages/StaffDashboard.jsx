@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import { getCategories, getTokens } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
+import { postAttendance } from '/src/services/salaryService';
 import QuickServiceModal from '@/components/QuickServiceModal';
 import api from '@/services/serviceService';
 import { socket, connectSocket } from '@/services/socket';
@@ -56,6 +57,8 @@ const StaffDashboard = () => {
   const [categories, setCategories] = useState([]);
   const [recentServiceEntries, setRecentServiceEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [todayAttendance, setTodayAttendance] = useState(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -211,7 +214,9 @@ const StaffDashboard = () => {
       if (!response.ok) throw new Error('Failed to fetch workspace data');
       
       const result = await response.json();
-      const { performance: perfData, tasks, events, recentActivity, onlinePending, onlineProcessing } = result.data;
+      const { performance: perfData, tasks, events, recentActivity, onlinePending, onlineProcessing, todayAttendance: att } = result.data;
+
+      setTodayAttendance(att);
       
       // 1. Set Performance
       setPerformance({
@@ -553,6 +558,22 @@ const StaffDashboard = () => {
     }
   };
 
+  const handleQuickPunch = async () => {
+    try {
+      setAttendanceLoading(true);
+      const isPunchOut = todayAttendance && todayAttendance.punch_in && !todayAttendance.punch_out;
+      const action = isPunchOut ? 'punch_out' : 'punch_in';
+      
+      await postAttendance(staffId, action, 'Office');
+      toast.success(`Successfully punched ${isPunchOut ? 'out' : 'in'}`);
+      await fetchWorkspaceInit(); // Instantly refresh the dashboard to update the banner!
+    } catch (err) {
+      toast.error('Failed to update attendance');
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
   const handleStartOnlineService = (booking) => {
     setProcessingBookings(prev => prev.filter(b => b.id !== booking.id));
     navigate(`/dashboard/staff/online-service/${booking.id}`, {
@@ -669,6 +690,62 @@ const StaffDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
+      <AnimatePresence>
+        {!loading && (!todayAttendance || !todayAttendance.punch_in || !todayAttendance.punch_out) && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className={`border-l-4 shadow-sm ${
+              !todayAttendance || !todayAttendance.punch_in 
+                ? 'bg-rose-50 border-rose-500' 
+                : 'bg-emerald-50 border-emerald-500'
+            }`}
+          >
+            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {!todayAttendance || !todayAttendance.punch_in ? (
+                  <>
+                    <div className="p-2 bg-rose-100 rounded-full">
+                      <FiAlertCircle className="h-5 w-5 text-rose-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-rose-900">You haven't punched in yet!</h3>
+                      <p className="text-xs text-rose-700 mt-0.5">Please punch in to start tracking your hours for today.</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-2 bg-emerald-100 rounded-full">
+                      <FiCheckCircle className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
+                      <p className="text-xs text-emerald-700 mt-0.5">
+                        Since {new Date(`1970-01-01T${todayAttendance.punch_in}Z`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleQuickPunch}
+                disabled={attendanceLoading}
+                className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
+                  !todayAttendance || !todayAttendance.punch_in 
+                    ? 'bg-rose-600 hover:bg-rose-700' 
+                    : 'bg-gray-800 hover:bg-gray-900'
+                }`}
+              >
+                {attendanceLoading ? 'Processing...' : (!todayAttendance || !todayAttendance.punch_in ? 'Punch In Now' : 'Punch Out')}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* ========================================= */}
       
       {/* Original Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
