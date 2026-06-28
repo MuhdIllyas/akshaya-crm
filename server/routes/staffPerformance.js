@@ -1508,11 +1508,13 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
           ${applyEventFilter('se.expiry_date')}
       `, [staffId]),
 
-      // 10. Today's Attendance (Fixed: using 'hours' instead of 'total_hours')
+      // 10. Today's Latest Attendance Session
       client.query(`
         SELECT id, status, punch_in, punch_out, hours as total_hours
         FROM attendance
         WHERE staff_id = $1 AND date = CURRENT_DATE
+        ORDER BY id DESC
+        LIMIT 1
       `, [staffId])
 
     ]);

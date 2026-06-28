@@ -709,7 +709,7 @@ const StaffDashboard = () => {
 
       {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
       <AnimatePresence>
-        {!loading && (!todayAttendance || !todayAttendance.punch_in || !todayAttendance.punch_out) && (
+        {!loading && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -717,7 +717,9 @@ const StaffDashboard = () => {
             className={`border-l-4 shadow-sm ${
               !todayAttendance || !todayAttendance.punch_in 
                 ? 'bg-rose-50 border-rose-500' 
-                : 'bg-emerald-50 border-emerald-500'
+                : (!todayAttendance.punch_out 
+                    ? 'bg-emerald-50 border-emerald-500' 
+                    : 'bg-amber-50 border-amber-500')
             }`}
           >
             <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -732,7 +734,7 @@ const StaffDashboard = () => {
                       <p className="text-xs text-rose-700 mt-0.5">Please punch in to start tracking your hours for today.</p>
                     </div>
                   </>
-                ) : (
+                ) : !todayAttendance.punch_out ? (
                   <>
                     <div className="p-2 bg-emerald-100 rounded-full">
                       <FiCheckCircle className="h-5 w-5 text-emerald-600" />
@@ -744,6 +746,18 @@ const StaffDashboard = () => {
                       </p>
                     </div>
                   </>
+                ) : (
+                  <>
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <FiClock className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-amber-900">You are currently punched out</h3>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Punched out at {new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}. Remember to punch back in!
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
               <button
@@ -752,10 +766,12 @@ const StaffDashboard = () => {
                 className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
                   !todayAttendance || !todayAttendance.punch_in 
                     ? 'bg-rose-600 hover:bg-rose-700' 
-                    : 'bg-gray-800 hover:bg-gray-900'
+                    : (!todayAttendance.punch_out 
+                        ? 'bg-gray-800 hover:bg-gray-900' 
+                        : 'bg-amber-600 hover:bg-amber-700')
                 }`}
               >
-                {attendanceLoading ? 'Processing...' : (!todayAttendance || !todayAttendance.punch_in ? 'Punch In Now' : 'Punch Out')}
+                {attendanceLoading ? 'Processing...' : (!todayAttendance || !todayAttendance.punch_in ? 'Punch In Now' : (!todayAttendance.punch_out ? 'Punch Out' : 'Punch Back In'))}
               </button>
             </div>
           </motion.div>
@@ -768,7 +784,7 @@ const StaffDashboard = () => {
         <div className="px-6 py-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
                 <FiTrendingUp className="text-white h-6 w-6" />
               </div>
               <div>
