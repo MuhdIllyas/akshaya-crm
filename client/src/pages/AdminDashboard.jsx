@@ -591,7 +591,7 @@ const AdminDashboard = () => {
   
   const [loading, setLoading] = useState(true);
   const [recentActivity, setRecentActivity] = useState([]);
-  const [services, setServices] = useState([]);
+  const [services, setServices] = useState({});
   const [attendanceData, setAttendanceData] = useState([]);
   const [salaryData, setSalaryData] = useState([]);
   const [staffList, setStaffList] = useState([]);
