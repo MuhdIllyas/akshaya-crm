@@ -740,7 +740,7 @@ const StaffDashboard = () => {
                     <div>
                       <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
                       <p className="text-xs text-emerald-700 mt-0.5">
-                        Since {new Date(`1970-01-01T${todayAttendance.punch_in}Z`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        Since {new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   </>
