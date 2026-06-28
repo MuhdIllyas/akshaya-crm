@@ -1368,7 +1368,9 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       eventsRes,
       recentActivityRes,
       onlinePendingRes,
-      onlineProcessingRes
+      onlineProcessingRes,
+      deliveriesRes, 
+      expiriesRes
     ] = await Promise.all([
       // 1. Performance Summary
       client.query(`
@@ -1451,8 +1453,70 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         LEFT JOIN customers c ON cs.customer_id = c.id
         WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1
         ORDER BY cs.taken_at DESC
+      `, [staffId]),
+
+      // 8. Deliveries (Dynamic events from service_tracking)
+      client.query(`
+        SELECT
+          tr.id as tracking_id,
+          tr.service_entry_id as related_service_id,
+          se.customer_name,
+          sv.name AS service_name,
+          sc.name AS subcategory_name,
+          tr.estimated_delivery as date
+        FROM service_tracking tr
+        LEFT JOIN service_entries se ON se.id = tr.service_entry_id
+        LEFT JOIN services sv ON sv.id = se.category_id
+        LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+        WHERE tr.status NOT IN ('completed', 'paid', 'delivered')
+          AND tr.assigned_to = $1
+          AND tr.estimated_delivery IS NOT NULL
+      `, [staffId]),
+
+      // 9. Expiries (Dynamic events from service_entries)
+      client.query(`
+        SELECT
+          se.id as related_service_id,
+          se.customer_name,
+          sv.name AS service_name,
+          sc.name AS subcategory_name,
+          se.expiry_date as date,
+          (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) AS tracking_id
+        FROM service_entries se
+        LEFT JOIN services sv ON sv.id = se.category_id
+        LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+        WHERE se.staff_id = $1
+          AND se.expiry_date IS NOT NULL
+          AND se.is_expiry_dismissed = FALSE
       `, [staffId])
     ]);
+
+    // --- FORMAT DYNAMIC EVENTS ---
+    const formattedDeliveries = deliveriesRes.rows.map(row => ({
+      id: `delivery-${row.tracking_id}`,
+      title: `${row.subcategory_name ? row.service_name + ' - ' + row.subcategory_name : row.service_name} Delivery`,
+      description: row.customer_name ? `Customer: ${row.customer_name}` : null,
+      date: row.date,
+      source: 'service_delivery',
+      related_service_id: row.related_service_id,
+      tracking_id: row.tracking_id
+    }));
+
+    const formattedExpiries = expiriesRes.rows.map(row => ({
+      id: `expiry-${row.related_service_id}`,
+      title: `${row.subcategory_name ? row.service_name + ' - ' + row.subcategory_name : row.service_name} Expiry`,
+      description: row.customer_name ? `Customer: ${row.customer_name}` : null,
+      date: row.date,
+      source: 'service_expiry',
+      related_service_id: row.related_service_id,
+      tracking_id: row.tracking_id
+    }));
+
+    const combinedEvents = [
+      ...eventsRes.rows,
+      ...formattedDeliveries,
+      ...formattedExpiries
+    ];
 
     const summary = performanceRes.rows[0];
     const ratings = ratingsRes.rows[0];
@@ -1489,7 +1553,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
           }
         },
         tasks: tasksRes.rows,
-        events: eventsRes.rows,
+        events: combinedEvents,
         recentActivity: recentActivityRes.rows,
         onlinePending: onlinePendingRes.rows,
         onlineProcessing: onlineProcessingRes.rows
