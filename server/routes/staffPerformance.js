@@ -1424,18 +1424,18 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         LIMIT 20
       `, [staffId]),
 
-      // 6. Online Bookings (Pending - Fixed: using 'customers' table)
+      // 6. Online Bookings (Pending - Fixed: using 'primary_phone')
       client.query(`
-        SELECT cs.*, c.name as customer_name, c.phone
+        SELECT cs.*, c.name as customer_name, c.primary_phone as phone
         FROM customer_services cs
         LEFT JOIN customers c ON cs.customer_id = c.id
         WHERE cs.status = 'under_review'
         ORDER BY cs.applied_at DESC
       `),
 
-      // 7. Online Bookings (Processing by this staff - Fixed: using 'customers' table)
+      // 7. Online Bookings (Processing by this staff - Fixed: using 'primary_phone')
       client.query(`
-        SELECT cs.*, c.name as customer_name, c.phone
+        SELECT cs.*, c.name as customer_name, c.primary_phone as phone
         FROM customer_services cs
         LEFT JOIN customers c ON cs.customer_id = c.id
         WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1
