@@ -80,14 +80,32 @@ export const getAdminDashboardData = async (centreId) => {
 
       // 5. Today's Financial Summary
       client.query(`
-        SELECT 
-          COALESCE(SUM(wt.amount) FILTER (WHERE wt.type = 'credit'), 0) as today_revenue,
-          COALESCE(SUM(wt.amount) FILTER (WHERE wt.type = 'debit'), 0) as today_expenses
-        FROM wallet_transactions wt 
-        JOIN wallets w ON w.id = wt.wallet_id 
-        WHERE w.centre_id = $1 AND wt.created_at::date = $2 
-        AND wt.category <> 'Transfer' 
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+      SELECT
+        COALESCE(
+            (
+                SELECT SUM(wt.amount)
+                FROM wallet_transactions wt
+                JOIN wallets w ON w.id = wt.wallet_id
+                WHERE w.centre_id = $1
+                  AND wt.created_at::date = $2
+                  AND wt.type = 'credit'
+                  AND wt.category <> 'Transfer'
+                  AND COALESCE(wt.is_reversal,FALSE)=FALSE
+            ),
+            0
+        ) AS today_revenue,
+
+        COALESCE(
+            (
+                SELECT SUM(e.amount)
+                FROM expenses e
+                WHERE e.centre_id = $1
+                  AND e.expense_date = $2
+                  AND e.status IN ('approved','auto_approved')
+                  AND COALESCE(e.is_reversal,FALSE)=FALSE
+            ),
+            0
+        ) AS today_expenses
       `, [centreId, today]),
 
       // 6. Live Wallet Balances
@@ -122,8 +140,31 @@ export const getAdminDashboardData = async (centreId) => {
 
       // 9. Monthly Revenue Chart (Current Year)
       client.query(`
-        SELECT EXTRACT(MONTH FROM d.date) as month_num, COALESCE(SUM(d.total_credit), 0) as revenue
-        FROM wallet_daily_balances d JOIN wallets w ON d.wallet_id = w.id
+        SELECT
+          m.month,
+
+          COALESCE((
+              SELECT SUM(wdb.total_credit)
+              FROM wallet_daily_balances wdb
+              JOIN wallets w
+                  ON w.id = wdb.wallet_id
+              WHERE w.centre_id = $1
+                AND EXTRACT(MONTH FROM wdb.date)=m.month
+                AND EXTRACT(YEAR FROM wdb.date)=EXTRACT(YEAR FROM CURRENT_DATE)
+          ),0) AS revenue,
+
+          COALESCE((
+              SELECT SUM(e.amount)
+              FROM expenses e
+              WHERE e.centre_id = $1
+                AND e.status IN ('approved','auto_approved')
+                AND COALESCE(e.is_reversal,FALSE)=FALSE
+                AND EXTRACT(MONTH FROM e.expense_date)=m.month
+                AND EXTRACT(YEAR FROM e.expense_date)=EXTRACT(YEAR FROM CURRENT_DATE)
+          ),0) AS expenses
+
+      FROM generate_series(1,12) AS m(month)
+      ORDER BY m.month
         WHERE w.centre_id = $1 AND EXTRACT(YEAR FROM d.date) = EXTRACT(YEAR FROM CURRENT_DATE)
         GROUP BY month_num ORDER BY month_num ASC
       `, [centreId]),
@@ -170,9 +211,12 @@ export const getAdminDashboardData = async (centreId) => {
     });
 
     // Format Monthly Chart Array
-    const monthlyData = new Array(12).fill(0);
+    const monthlyRevenue = new Array(12).fill(0);
+    const monthlyExpenses = new Array(12).fill(0);
+
     monthlyChartRes.rows.forEach(r => {
-      monthlyData[parseInt(r.month_num) - 1] = Number(r.revenue);
+        monthlyRevenue[r.month - 1] = Number(r.revenue);
+        monthlyExpenses[r.month - 1] = Number(r.expenses);
     });
 
     const totalStaff = Number(staffRes.rows[0].total_staff);
@@ -198,7 +242,8 @@ export const getAdminDashboardData = async (centreId) => {
         todayRevenue,
         todayExpenses,
         todayProfit: todayRevenue - todayExpenses,
-        monthlyRevenue: monthlyData[new Date().getMonth()],
+        monthlyRevenue: monthlyRevenue[new Date().getMonth()],
+        monthlyExpenses: monthlyExpenses[new Date().getMonth()],
         
         // Pending payments safely using se.status and p.status = 'received'
         pendingPayments: Number(pendingPaymentRes.rows[0].count),
@@ -220,7 +265,8 @@ export const getAdminDashboardData = async (centreId) => {
           labels: dailyChartRes.rows.map(r => r.label),
           data: dailyChartRes.rows.map(r => Number(r.revenue))
         },
-        monthlyRevenue: monthlyData
+        monthlyRevenue: monthlyRevenue,
+        monthlyExpenses: monthlyExpenses
       },
       lists: {
         topStaff: staffPerfRes.rows,
