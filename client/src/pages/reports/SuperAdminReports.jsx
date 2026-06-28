@@ -70,7 +70,7 @@ const SuperAdminReports = () => {
         totalCashInHand: `₹${(data.stats.cashInHand || 0).toLocaleString()}`,
         
         // Today's Activity
-        netCashFlowToday: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`,
+        netCashFlowToday: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`, 
         todayProfit: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`,
         totalCashInToday: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`,
         
