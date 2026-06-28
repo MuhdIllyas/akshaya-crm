@@ -643,12 +643,12 @@ const StaffDashboard = () => {
     <div className="min-h-screen bg-gray-50">
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
-      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
+      <div className="bg-linear-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-start gap-4 mb-3">
-                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
+                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold shrink-0">
                   {staffInitials}
                 </div>
                 <div>
@@ -707,78 +707,6 @@ const StaffDashboard = () => {
         </div>
       </div>
 
-      {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
-      <AnimatePresence>
-        {!loading && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className={`border-l-4 shadow-sm ${
-              !todayAttendance || !todayAttendance.punch_in 
-                ? 'bg-rose-50 border-rose-500' 
-                : (!todayAttendance.punch_out 
-                    ? 'bg-emerald-50 border-emerald-500' 
-                    : 'bg-amber-50 border-amber-500')
-            }`}
-          >
-            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {!todayAttendance || !todayAttendance.punch_in ? (
-                  <>
-                    <div className="p-2 bg-rose-100 rounded-full">
-                      <FiAlertCircle className="h-5 w-5 text-rose-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-rose-900">You haven't punched in yet!</h3>
-                      <p className="text-xs text-rose-700 mt-0.5">Please punch in to start tracking your hours for today.</p>
-                    </div>
-                  </>
-                ) : !todayAttendance.punch_out ? (
-                  <>
-                    <div className="p-2 bg-emerald-100 rounded-full">
-                      <FiCheckCircle className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
-                      <p className="text-xs text-emerald-700 mt-0.5">
-                        Since {new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="p-2 bg-amber-100 rounded-full">
-                      <FiClock className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-amber-900">You are currently punched out</h3>
-                      <p className="text-xs text-amber-700 mt-0.5">
-                        Punched out at {new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}. Remember to punch back in!
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-              <button
-                onClick={handleQuickPunch}
-                disabled={attendanceLoading}
-                className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
-                  !todayAttendance || !todayAttendance.punch_in 
-                    ? 'bg-rose-600 hover:bg-rose-700' 
-                    : (!todayAttendance.punch_out 
-                        ? 'bg-gray-800 hover:bg-gray-900' 
-                        : 'bg-amber-600 hover:bg-amber-700')
-                }`}
-              >
-                {attendanceLoading ? 'Processing...' : (!todayAttendance || !todayAttendance.punch_in ? 'Punch In Now' : (!todayAttendance.punch_out ? 'Punch Out' : 'Punch Back In'))}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {/* ========================================= */}
-      
       {/* Original Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="px-6 py-6">
