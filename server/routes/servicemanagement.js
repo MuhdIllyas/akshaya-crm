@@ -3544,7 +3544,7 @@ router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
       tokenNumber: tokenId,
       status: status,
       assignedStaff: tokenData.staff_name || 'Waiting for Assignment',
-      centreId: token.centre_id
+      centreId: tokenData.centre_id
     }).catch(err => console.error('WhatsApp status notification failed:', err));
 
     res.json({ message: 'Token status updated successfully' });
