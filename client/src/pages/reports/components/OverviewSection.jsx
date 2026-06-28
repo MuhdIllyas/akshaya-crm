@@ -357,8 +357,8 @@ const OverviewSection = ({
               {safeTransactions.slice(0, 8).map((tx, idx) => (
                 <div key={idx} className="flex items-center justify-between pb-4 border-b border-gray-50 last:border-0 last:pb-0">
                   <div className="flex items-center space-x-3">
-                    <div className={`p-2.5 rounded-xl ${tx.type === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                      {tx.type === 'credit' ? <FiArrowDownLeft className="h-4 w-4" /> : <FiArrowUpRight className="h-4 w-4" />}
+                    <div className={`p-2.5 rounded-xl ${(tx.transactionType || tx.type) === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                      {(tx.transactionType || tx.type) === 'credit' ? <FiArrowDownLeft className="h-4 w-4" /> : <FiArrowUpRight className="h-4 w-4" />}
                     </div>
                     <div>
                       <p className="text-sm font-bold text-gray-900 truncate max-w-37.5">{tx.category}</p>
@@ -371,8 +371,8 @@ const OverviewSection = ({
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-black ${tx.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {tx.type === 'credit' ? '+' : '-'}₹{Number(tx.amount).toLocaleString()}
+                    <p className={`text-sm font-black ${(tx.transactionType || tx.type) === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {(tx.transactionType || tx.type) === 'credit' ? '+' : '-'}₹{Number(tx.amount).toLocaleString()}
                     </p>
                   </div>
                 </div>

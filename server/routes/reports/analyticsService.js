@@ -307,6 +307,7 @@ const buildDashboardCharts = (analytics) => ({
 
 const buildDashboardLists = (analytics) => ({
   topStaff: analytics.staff.performance,
+  wallets: analytics.wallets,
   recentTransactions: analytics.activity.transactions.map(t => ({
     ...t,
     localTime: new Date(t.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
