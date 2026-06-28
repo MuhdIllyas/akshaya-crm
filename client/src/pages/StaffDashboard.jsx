@@ -229,10 +229,7 @@ const StaffDashboard = () => {
       // 2. Set Tasks & Events
       setMyTasks(tasks || []);
       
-      const today = new Date();
-      today.setHours(0,0,0,0);
       const validEvents = (events || [])
-        .filter(e => new Date(e.date || e.start_datetime) >= today)
         .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
       setUpcomingEvents(validEvents);
 

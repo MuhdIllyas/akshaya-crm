@@ -1334,7 +1334,7 @@ router.get('/daily-log', async (req, res) => {
 });
 
 /* ==============================================================
-   NEW: HYBRID BFF WORKSPACE INIT ROUTE
+   HYBRID BFF WORKSPACE INIT ROUTE
    Aggregates Performance, Tasks, Events, Recent Activity & Bookings
 ============================================================== */
 router.get('/workspace-init', authenticateToken, async (req, res) => {
@@ -1344,23 +1344,46 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
     const centreId = req.user.centre_id;
     const { period = 'month', from, to } = req.query;
 
-    // Date Filtering Logic for Performance
+    // Date Filtering Logic
     let dateFilter = '';
-    let queryParams = [staffId];
-    let paramIndex = 2;
+    let eventDateFilter = ''; 
 
-    if (period === 'today') dateFilter = `AND se.created_at::date = CURRENT_DATE`;
-    else if (period === 'week') dateFilter = `AND se.created_at >= date_trunc('week', CURRENT_DATE)`;
-    else if (period === 'month') dateFilter = `AND se.created_at >= date_trunc('month', CURRENT_DATE)`;
-    else if (period === 'quarter') dateFilter = `AND se.created_at >= date_trunc('quarter', CURRENT_DATE)`;
-    else if (period === 'year') dateFilter = `AND se.created_at >= date_trunc('year', CURRENT_DATE)`;
-    else if (period === 'custom' && from && to) {
-      dateFilter = `AND se.created_at::date BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
-      queryParams.push(from, to);
-      paramIndex += 2;
+    // Safely sanitize custom dates for direct SQL injection
+    const safeFrom = from ? from.replace(/[^0-9-]/g, '') : null;
+    const safeTo = to ? to.replace(/[^0-9-]/g, '') : null;
+
+    if (period === 'today') {
+      dateFilter = `AND se.created_at::date = CURRENT_DATE`;
+      eventDateFilter = `AND {col}::date = CURRENT_DATE`;
+    }
+    else if (period === 'week') {
+      dateFilter = `AND se.created_at >= date_trunc('week', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('week', CURRENT_DATE) AND {col}::date < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')`;
+    }
+    else if (period === 'month') {
+      dateFilter = `AND se.created_at >= date_trunc('month', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('month', CURRENT_DATE) AND {col}::date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')`;
+    }
+    else if (period === 'quarter') {
+      dateFilter = `AND se.created_at >= date_trunc('quarter', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('quarter', CURRENT_DATE) AND {col}::date < (date_trunc('quarter', CURRENT_DATE) + INTERVAL '3 months')`;
+    }
+    else if (period === 'year') {
+      dateFilter = `AND se.created_at >= date_trunc('year', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('year', CURRENT_DATE) AND {col}::date < (date_trunc('year', CURRENT_DATE) + INTERVAL '1 year')`;
+    }
+    else if (period === 'custom' && safeFrom && safeTo) {
+      dateFilter = `AND se.created_at::date BETWEEN '${safeFrom}' AND '${safeTo}'`;
+      eventDateFilter = `AND {col}::date BETWEEN '${safeFrom}' AND '${safeTo}'`;
     }
 
-    // Fire ALL queries concurrently in PostgreSQL 
+    // Helper to dynamically apply the event date filter to different table columns
+    const applyEventFilter = (colName) => {
+      if (!eventDateFilter) return '';
+      return eventDateFilter.replace(/\{col\}/g, colName);
+    };
+
+    // Fire ALL queries concurrently in PostgreSQL
     const [
       performanceRes,
       ratingsRes,
@@ -1369,7 +1392,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       recentActivityRes,
       onlinePendingRes,
       onlineProcessingRes,
-      deliveriesRes, 
+      deliveriesRes,
       expiriesRes
     ] = await Promise.all([
       // 1. Performance Summary
@@ -1381,7 +1404,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         FROM service_entries se
         LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
         WHERE se.staff_id = $1 AND se.status = 'completed' ${dateFilter}
-      `, queryParams),
+      `, [staffId]),
 
       // 2. Ratings
       client.query(`
@@ -1392,7 +1415,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE sr.staff_id = $1 AND sr.is_submitted = true
       `, [staffId]),
 
-      // 3. Tasks (Pending)
+      // 3. Tasks (Unfiltered so staff never lose track of old pending tasks)
       client.query(`
         SELECT id, title, due_date
         FROM tasks
@@ -1400,7 +1423,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         ORDER BY due_date ASC NULLS LAST
       `, [staffId]),
 
-      // 4. Events (Fixed Issue #3: Aliased to match the 'service_delivery' names the frontend expects)
+      // 4. Events (Dynamically respects the dropdown period!)
       client.query(`
         SELECT 
           id, title, description, date, start_datetime, 
@@ -1412,32 +1435,24 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
           related_service_id as tracking_id
         FROM calendar_events
         WHERE (visibility = 'global' OR (visibility = 'centre' AND centre_id = $1))
-          AND COALESCE(date, start_datetime::date) >= CURRENT_DATE
-          AND COALESCE(date, start_datetime::date) <= CURRENT_DATE + INTERVAL '7 days'
+          ${applyEventFilter('COALESCE(date, start_datetime::date)')}
         ORDER BY COALESCE(date, start_datetime::date) ASC
-        LIMIT 10
+        LIMIT 50
       `, [centreId]),
 
-      // 5. Recent Activity (Fixed Issue #2: Mapped snake_case to the exact camelCase the frontend expects)
+      // 5. Recent Activity
       client.query(`
         SELECT
-          se.id, 
-          se.created_at, 
-          se.customer_name as "customerName", 
-          se.phone, 
-          se.status,
-          se.category_id as category, 
-          se.token_id as "tokenId",
-          se.is_edited, 
-          se.work_source as "workSource", 
-          se.id as tracking_id
+          se.id, se.created_at, se.customer_name as "customerName", se.phone, se.status,
+          se.category_id as category, se.token_id as "tokenId",
+          se.is_edited, se.work_source as "workSource", se.id as tracking_id
         FROM service_entries se
         WHERE se.staff_id = $1
         ORDER BY se.created_at DESC
         LIMIT 20
       `, [staffId]),
 
-      // 6. Online Bookings (Pending - Fixed: using 'primary_phone')
+      // 6. Online Bookings (Pending)
       client.query(`
         SELECT cs.*, c.name as customer_name, c.primary_phone as phone
         FROM customer_services cs
@@ -1446,7 +1461,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         ORDER BY cs.applied_at DESC
       `),
 
-      // 7. Online Bookings (Processing by this staff - Fixed: using 'primary_phone')
+      // 7. Online Bookings (Processing)
       client.query(`
         SELECT cs.*, c.name as customer_name, c.primary_phone as phone
         FROM customer_services cs
@@ -1455,7 +1470,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         ORDER BY cs.taken_at DESC
       `, [staffId]),
 
-      // 8. Deliveries (Dynamic events from service_tracking)
+      // 8. Deliveries (Dynamically respects the dropdown period!)
       client.query(`
         SELECT
           tr.id as tracking_id,
@@ -1471,9 +1486,10 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE tr.status NOT IN ('completed', 'paid', 'delivered')
           AND tr.assigned_to = $1
           AND tr.estimated_delivery IS NOT NULL
+          ${applyEventFilter('tr.estimated_delivery')}
       `, [staffId]),
 
-      // 9. Expiries (Dynamic events from service_entries)
+      // 9. Expiries (Dynamically respects the dropdown period!)
       client.query(`
         SELECT
           se.id as related_service_id,
@@ -1488,6 +1504,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE se.staff_id = $1
           AND se.expiry_date IS NOT NULL
           AND se.is_expiry_dismissed = FALSE
+          ${applyEventFilter('se.expiry_date')}
       `, [staffId])
     ]);
 
