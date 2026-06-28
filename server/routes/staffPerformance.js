@@ -1444,9 +1444,16 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       // 5. Recent Activity
       client.query(`
         SELECT
-          se.id, se.created_at, se.customer_name as "customerName", se.phone, se.status,
-          se.category_id as category, se.token_id as "tokenId",
-          se.is_edited, se.work_source as "workSource", se.id as tracking_id
+          se.id, 
+          se.created_at, 
+          se.customer_name as "customerName", 
+          se.phone, 
+          se.status,
+          se.category_id as category, 
+          se.token_id as "tokenId",
+          se.is_edited, 
+          se.work_source as "workSource", 
+          (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) as tracking_id
         FROM service_entries se
         WHERE se.staff_id = $1
         ORDER BY se.created_at DESC
