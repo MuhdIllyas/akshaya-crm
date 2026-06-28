@@ -165,8 +165,7 @@ export const getAdminDashboardData = async (centreId) => {
 
       FROM generate_series(1,12) AS m(month)
       ORDER BY m.month
-        WHERE w.centre_id = $1 AND EXTRACT(YEAR FROM d.date) = EXTRACT(YEAR FROM CURRENT_DATE)
-        GROUP BY month_num ORDER BY month_num ASC
+        
       `, [centreId]),
 
       // 10. Staff Leaderboard (This Month)
@@ -215,8 +214,10 @@ export const getAdminDashboardData = async (centreId) => {
     const monthlyExpenses = new Array(12).fill(0);
 
     monthlyChartRes.rows.forEach(r => {
-        monthlyRevenue[r.month - 1] = Number(r.revenue);
-        monthlyExpenses[r.month - 1] = Number(r.expenses);
+        const month = Number(r.month);
+
+        monthlyRevenue[month - 1] = Number(r.revenue);
+        monthlyExpenses[month - 1] = Number(r.expenses);
     });
 
     const totalStaff = Number(staffRes.rows[0].total_staff);
