@@ -309,15 +309,14 @@ const AttendanceTrendChart = ({ attendanceData = [] }) => {
 };
 
 const ServiceStatusChart = ({ services = {} }) => {
-  // Backend now returns the exact counts object directly
   const data = {
     labels: ['Pending', 'In Progress', 'Completed', 'Delayed'],
     datasets: [{
       data: [
-        Number(services?.pending_services || 0),
-        Number(services?.in_progress_services || 0),
-        Number(services?.completed_services || 0),
-        Number(services?.delayed_services || 0)
+        Number(services?.pending || services?.pending_services || 0), // Maps to new V3 key
+        Number(services?.in_progress || services?.in_progress_services || 0),
+        Number(services?.completed || services?.completed_services || 0),
+        Number(services?.delayed || services?.delayed_services || 0)
       ],
       backgroundColor: [
         'rgba(245, 158, 11, 0.8)',
