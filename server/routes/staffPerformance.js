@@ -1333,4 +1333,159 @@ router.get('/daily-log', async (req, res) => {
   }
 });
 
+/* ==============================================================
+   NEW: HYBRID BFF WORKSPACE INIT ROUTE
+   Aggregates Performance, Tasks, Events, Recent Activity & Bookings
+============================================================== */
+router.get('/workspace-init', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const staffId = req.user.id;
+    const centreId = req.user.centre_id;
+    const { period = 'month', from, to } = req.query;
+
+    // Date Filtering Logic for Performance
+    let dateFilter = '';
+    let queryParams = [staffId];
+    let paramIndex = 2;
+
+    if (period === 'today') dateFilter = `AND se.created_at::date = CURRENT_DATE`;
+    else if (period === 'week') dateFilter = `AND se.created_at >= date_trunc('week', CURRENT_DATE)`;
+    else if (period === 'month') dateFilter = `AND se.created_at >= date_trunc('month', CURRENT_DATE)`;
+    else if (period === 'quarter') dateFilter = `AND se.created_at >= date_trunc('quarter', CURRENT_DATE)`;
+    else if (period === 'year') dateFilter = `AND se.created_at >= date_trunc('year', CURRENT_DATE)`;
+    else if (period === 'custom' && from && to) {
+      dateFilter = `AND se.created_at::date BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
+      queryParams.push(from, to);
+      paramIndex += 2;
+    }
+
+    // Fire ALL queries concurrently in PostgreSQL
+    const [
+      performanceRes,
+      ratingsRes,
+      tasksRes,
+      eventsRes,
+      recentActivityRes,
+      onlinePendingRes,
+      onlineProcessingRes
+    ] = await Promise.all([
+      // 1. Performance Summary
+      client.query(`
+        SELECT
+          COUNT(se.id) as total_services,
+          COALESCE(SUM(se.total_charges), 0) as total_amount,
+          COALESCE(SUM(p.received_amount), 0) as total_collected
+        FROM service_entries se
+        LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+        WHERE se.staff_id = $1 AND se.status = 'completed' ${dateFilter}
+      `, queryParams),
+
+      // 2. Ratings
+      client.query(`
+        SELECT
+          COUNT(sr.id) as total_reviews,
+          COALESCE(AVG(sr.staff_rating), 0) as avg_rating
+        FROM service_reviews sr
+        WHERE sr.staff_id = $1 AND sr.is_submitted = true
+      `, [staffId]),
+
+      // 3. Tasks (Pending)
+      client.query(`
+        SELECT id, title, due_date
+        FROM tasks
+        WHERE assigned_to = $1 AND status = 'pending'
+        ORDER BY due_date ASC NULLS LAST
+      `, [staffId]),
+
+      // 4. Events (Next 7 days)
+      client.query(`
+        SELECT id, title, description, date, start_datetime, source, tracking_id
+        FROM calendar_events
+        WHERE (visibility = 'global' OR (visibility = 'centre' AND centre_id = $1))
+          AND COALESCE(date, start_datetime::date) >= CURRENT_DATE
+          AND COALESCE(date, start_datetime::date) <= CURRENT_DATE + INTERVAL '7 days'
+        ORDER BY COALESCE(date, start_datetime::date) ASC
+        LIMIT 10
+      `, [centreId]),
+
+      // 5. Recent Activity (Service Entries)
+      client.query(`
+        SELECT
+          se.id, se.created_at, se.customer_name, se.phone, se.status,
+          se.category_id as category, se.token_id as "tokenId",
+          se.is_edited, se.work_source, se.id as tracking_id
+        FROM service_entries se
+        WHERE se.staff_id = $1
+        ORDER BY se.created_at DESC
+        LIMIT 20
+      `, [staffId]),
+
+      // 6. Online Bookings (Pending queue for this centre)
+      client.query(`
+        SELECT cs.*, u.name as customer_name, u.phone
+        FROM customer_services cs
+        LEFT JOIN users u ON cs.customer_id = u.id
+        WHERE cs.status = 'under_review' AND cs.centre_id = $1
+      `, [centreId]),
+
+      // 7. Online Bookings (Processing by this staff)
+      client.query(`
+        SELECT cs.*, u.name as customer_name, u.phone
+        FROM customer_services cs
+        LEFT JOIN users u ON cs.customer_id = u.id
+        WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1
+      `, [staffId])
+    ]);
+
+    const summary = performanceRes.rows[0];
+    const ratings = ratingsRes.rows[0];
+
+    const totalServices = parseInt(summary.total_services) || 0;
+    const totalCollected = parseFloat(summary.total_collected) || 0;
+    const totalAmount = parseFloat(summary.total_amount) || 0;
+
+    const collectionRate = totalAmount > 0 ? Math.round((totalCollected / totalAmount) * 100) : 0;
+    const avgTransactionValue = totalServices > 0 ? Math.round(totalCollected / totalServices) : 0;
+    const avgRating = parseFloat(ratings.avg_rating) || 0;
+
+    // Basic Incentive Score Calculation
+    const incentiveScore = Math.min(100, Math.round(
+      (collectionRate * 0.5) +
+      (totalServices > 10 ? 30 : totalServices * 3) +
+      (avgRating * 4) // 5 * 4 = 20
+    ));
+
+    res.json({
+      success: true,
+      data: {
+        performance: {
+          summary: {
+            total_services: totalServices,
+            total_collected: totalCollected,
+            collection_rate: collectionRate,
+            avg_transaction_value: avgTransactionValue,
+            incentive_score: incentiveScore
+          },
+          ratings: {
+            avg_rating: avgRating.toFixed(1),
+            total_reviews: parseInt(ratings.total_reviews)
+          }
+        },
+        tasks: tasksRes.rows,
+        events: eventsRes.rows,
+        recentActivity: recentActivityRes.rows,
+        onlinePending: onlinePendingRes.rows,
+        onlineProcessing: onlineProcessingRes.rows
+      }
+    });
+
+  } catch (err) {
+    console.error('Workspace Init Error:', err);
+    res.status(500).json({ error: 'Failed to initialize workspace' });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;

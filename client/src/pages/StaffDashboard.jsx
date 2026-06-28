@@ -188,43 +188,10 @@ const StaffDashboard = () => {
     }
   }, [centreId]);
 
-
-  // --- Fetch service entries (optimized) ---
-  const fetchServiceEntries = useCallback(async () => {
+  // --- Fetch Entire Workspace (Hybrid BFF) ---
+  const fetchWorkspaceInit = useCallback(async () => {
     try {
-      // Pass staffId AND a strict limit of 20 to stop massive network payloads!
-      const serviceEntriesRes = await getServiceEntries(false, staffId, 20);
-      
-      const entries = serviceEntriesRes.data || [];
-      setRecentServiceEntries(entries); 
-      return entries;
-    } catch (err) {
-      console.error('Error fetching service entries:', err);
-      return [];
-    }
-  }, [staffId]);
-
-  // --- Fetch online bookings (optimized) ---
-  const fetchOnlineBookings = useCallback(async () => {
-    try {
-      // Fetch concurrently and REMOVE the massive double-fetch of service entries
-      const [pendingRes, processingRes] = await Promise.all([
-        api.get('/customer-services', { params: { status: 'under_review' } }),
-        api.get('/customer-services', { params: { status: 'processing', staff_id: staffId } })
-      ]);
-
-      setOnlineBookings(pendingRes.data || []);
-      setProcessingBookings(processingRes.data || []);
-    } catch (err) {
-      console.error('Error fetching online bookings:', err);
-      toast.error('Failed to load online bookings');
-    }
-  }, [staffId]);
-
-  // --- Fetch performance metrics with period support ---
-  const fetchPerformance = useCallback(async () => {
-    setPerformanceLoading(true);
-    try {
+      setPerformanceLoading(true);
       const token = localStorage.getItem('token');
       let params = new URLSearchParams();
       
@@ -237,71 +204,50 @@ const StaffDashboard = () => {
       }
       
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/workspace-init?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      if (!response.ok) throw new Error('Failed to fetch performance data');
+      if (!response.ok) throw new Error('Failed to fetch workspace data');
       
       const result = await response.json();
-      const { summary, ratings } = result.data;
+      const { performance: perfData, tasks, events, recentActivity, onlinePending, onlineProcessing } = result.data;
       
+      // 1. Set Performance
       setPerformance({
-        completionRate: summary.collection_rate || 0,
-        avgTransactionValue: summary.avg_transaction_value || 0,
-        customerSatisfaction: ratings?.avg_rating ? `${ratings.avg_rating}/5` : 'N/A',
-        totalServices: summary.total_services || 0,
-        totalCollected: summary.total_collected || 0,
-        collectionRate: summary.collection_rate || 0,
-        incentiveScore: summary.incentive_score || 0,
-        avgRating: ratings?.avg_rating || 0,
-        totalReviews: ratings?.total_reviews || 0,
+        completionRate: perfData.summary.collection_rate || 0,
+        avgTransactionValue: perfData.summary.avg_transaction_value || 0,
+        customerSatisfaction: perfData.ratings?.avg_rating ? `${perfData.ratings.avg_rating}/5` : 'N/A',
+        totalServices: perfData.summary.total_services || 0,
+        totalCollected: perfData.summary.total_collected || 0,
+        collectionRate: perfData.summary.collection_rate || 0,
+        incentiveScore: perfData.summary.incentive_score || 0,
+        avgRating: perfData.ratings?.avg_rating || 0,
+        totalReviews: perfData.ratings?.total_reviews || 0,
       });
+
+      // 2. Set Tasks & Events
+      setMyTasks(tasks || []);
+      
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const validEvents = (events || [])
+        .filter(e => new Date(e.date || e.start_datetime) >= today)
+        .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
+      setUpcomingEvents(validEvents);
+
+      // 3. Set Activities & Bookings
+      setRecentServiceEntries(recentActivity || []);
+      setOnlineBookings(onlinePending || []);
+      setProcessingBookings(onlineProcessing || []);
+
     } catch (err) {
-      console.error('Error fetching performance:', err);
-      toast.error('Failed to load performance data');
+      console.error('Error fetching workspace:', err);
+      toast.error('Failed to load workspace data');
     } finally {
       setPerformanceLoading(false);
     }
   }, [period, customDateRange]);
-
-  // --- Fetch Tasks & Events ---
-  const fetchTasksAndEvents = useCallback(async () => {
-    try {
-      const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-      const eventsUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'events');
-
-      // 1. Fetch Pending Tasks
-      const tasksRes = await api.get('/all', {
-        baseURL: tasksUrl,
-        params: { assigned_to: staffId, status: 'pending' }
-      });
-      setMyTasks(tasksRes.data || []);
-
-      // 2. Fetch Upcoming Events (Next 7 days)
-      const today = new Date();
-      const nextWeek = new Date(today);
-      nextWeek.setDate(nextWeek.getDate() + 7);
-
-      const eventsRes = await api.get('/', {
-        baseURL: eventsUrl,
-        params: { 
-          start: today.toISOString().split('T')[0], 
-          end: nextWeek.toISOString().split('T')[0] 
-        }
-      });
-      
-      // Filter out past events and sort
-      today.setHours(0,0,0,0);
-      const validEvents = (eventsRes.data || [])
-        .filter(e => new Date(e.date || e.start_datetime) >= today)
-        .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
-      
-      setUpcomingEvents(validEvents.slice(0, 10)); // Keep top 10
-    } catch (err) {
-      console.error('Error fetching tasks/events:', err);
-    }
-  }, [staffId]);
 
   // --- Auto-cycle Events Tabs ---
   useEffect(() => {
@@ -323,7 +269,7 @@ const StaffDashboard = () => {
       const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
       await api.patch(`/${taskId}/status`, { status: 'completed' }, { baseURL: tasksUrl });
       toast.success('Task completed!');
-      fetchTasksAndEvents(); // Refresh lists
+      fetchWorkspaceInit(); // 👈 And this here!
     } catch (err) {
       toast.error('Failed to complete task');
     }
@@ -361,45 +307,39 @@ const StaffDashboard = () => {
 
   // Initial data fetch
   useEffect(() => {
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
-      
-      // Fire all API requests concurrently
-      const [categoriesRes] = await Promise.all([
-        getCategories(),
-        refreshTokens(),
-        fetchServiceEntries(),
-        fetchOnlineBookings(),
-        fetchPerformance(),
-        fetchTasksAndEvents()
-      ]);
-
-      // Set state for the ones that don't handle their own state inside their functions
-      setCategories(categoriesRes.data || []);
-      
-    } catch (err) {
-      setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  fetchData();
-  }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance, fetchTasksAndEvents]);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
+        
+        // Load the 3 main pillars concurrently
+        await Promise.all([
+          getCategories().then(res => setCategories(res.data || [])),
+          refreshTokens(),
+          fetchWorkspaceInit()
+        ]);
+        
+      } catch (err) {
+        setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [staffId, centreId, refreshTokens, fetchWorkspaceInit]);
 
   const isMounted = useRef(false);
 
-  // Refetch performance when period changes
+  // Refetch when period changes
   useEffect(() => {
     if (isMounted.current && !loading) {
-      fetchPerformance();
+      fetchWorkspaceInit();
     } else if (!loading) {
       isMounted.current = true;
     }
-  }, [period, customDateRange, fetchPerformance, loading]);
+  }, [period, customDateRange, fetchWorkspaceInit, loading]);
 
   // --- Socket events (unchanged) ---
   useEffect(() => {
@@ -422,10 +362,8 @@ const StaffDashboard = () => {
     const onServiceEntryCreated = async (data) => {
       const entryStaffId = String(data.staff_id || '').trim();
       if (!entryStaffId || entryStaffId === String(staffId).trim()) {
-        await fetchServiceEntries();
-        await fetchOnlineBookings();
         await refreshTokens();
-        await fetchPerformance();
+        await fetchWorkspaceInit();
       }
     };
 
@@ -612,7 +550,7 @@ const StaffDashboard = () => {
     try {
       await api.put(`/customer-services/${bookingId}/take`);
       toast.success('Work assigned to you');
-      await fetchOnlineBookings();
+      await fetchWorkspaceInit(); // 👈 Just call this to refresh everything!
     } catch (err) {
       toast.error(err.response?.data?.error || 'Already taken by another staff');
     }
