@@ -28,23 +28,25 @@ const formatDate = (date) => {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-// Stat Card Component – refreshed modern style
+// Stat Card Component
 const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
   <motion.div
-    whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.08)' }}
-    className="bg-white rounded-2xl border border-gray-100 p-5 transition-all duration-200 flex items-center gap-4"
+    whileHover={{ y: -2 }}
+    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 p-5"
   >
-    <div className={`rounded-xl ${color} p-3 shadow-sm`}>
-      <Icon className="text-white h-5 w-5" />
-    </div>
-    <div className="flex-1">
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{title}</p>
-      {loading ? (
-        <div className="h-6 w-16 bg-gray-100 animate-pulse rounded mt-1"></div>
-      ) : (
-        <p className="text-xl font-bold text-gray-900 mt-0.5">{value}</p>
-      )}
-      {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
+        {loading ? (
+          <div className="h-8 w-20 bg-gray-200 animate-pulse rounded"></div>
+        ) : (
+          <p className="font-bold text-gray-900 text-2xl">{value}</p>
+        )}
+        {subtitle && <p className="text-gray-500 text-sm mt-1">{subtitle}</p>}
+      </div>
+      <div className={`rounded-xl ${color} p-3`}>
+        <Icon className="text-white h-6 w-6" />
+      </div>
     </div>
   </motion.div>
 );
@@ -269,7 +271,7 @@ const StaffDashboard = () => {
       const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
       await api.patch(`/${taskId}/status`, { status: 'completed' }, { baseURL: tasksUrl });
       toast.success('Task completed!');
-      fetchWorkspaceInit();
+      fetchWorkspaceInit(); // 👈 And this here!
     } catch (err) {
       toast.error('Failed to complete task');
     }
@@ -280,11 +282,16 @@ const StaffDashboard = () => {
     const eventIdStr = String(event.id || "");
     let targetTrackingId;
     
+    // 1. FOR EXPIRIES
     if (eventIdStr.startsWith("expiry-")) {
       targetTrackingId = event.tracking_id; 
-    } else if (eventIdStr.startsWith("delivery-")) {
+    } 
+    // 2. FOR DELIVERIES
+    else if (eventIdStr.startsWith("delivery-")) {
       targetTrackingId = eventIdStr.replace("delivery-", ""); 
-    } else if (event.tracking_id) {
+    } 
+    // 3. FALLBACK FOR CUSTOM TASKS
+    else if (event.tracking_id) {
       targetTrackingId = event.tracking_id;
     }
 
@@ -307,6 +314,7 @@ const StaffDashboard = () => {
       try {
         if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
         
+        // Load the 3 main pillars concurrently
         await Promise.all([
           getCategories().then(res => setCategories(res.data || [])),
           refreshTokens(),
@@ -414,7 +422,7 @@ const StaffDashboard = () => {
       setShowCancelModal(false);
       setCancelTokenData(null);
       setCancelReason('');
-      refreshTokens();
+      refreshTokens(); // Refresh the list to remove the token
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || 'Failed to cancel token');
@@ -426,6 +434,7 @@ const StaffDashboard = () => {
     if (trackingId) {
       navigate(`/dashboard/staff/track_service/${trackingId}`);
     } else if (tokenId) {
+      // Fallback just in case it's a legacy token without a tracking entry
       navigate(`/dashboard/staff/token/${tokenId}/details`);
     } else {
       toast.info("No tracking details available for this quick service.");
@@ -480,23 +489,31 @@ const StaffDashboard = () => {
 
   const filteredTokens = useMemo(() => {
     let source = activeView === 'active' ? activeTokens : activeView === 'completed' ? completedTokens : campaignTokens;
+    
+    // 1. Calculate search string ONCE outside the loop (Performance)
     const searchLower = searchQuery.toLowerCase().trim();
     
+    // 2. Safely calculate Dates ONCE outside the loop
     const todayObj = new Date();
-    todayObj.setHours(0, 0, 0, 0);
+    todayObj.setHours(0, 0, 0, 0); // Normalize today to midnight
+    
     const yesterdayObj = new Date(todayObj);
     yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    
     const weekAgoObj = new Date(todayObj);
     weekAgoObj.setDate(weekAgoObj.getDate() - 7);
+
     const todayStr = todayObj.toDateString();
     const yesterdayStr = yesterdayObj.toDateString();
 
     return source.filter(token => {
+      // 3. Safe string conversion to prevent crashes if a number is passed
       const matchesSearch = !searchLower || 
                             String(token.customerName || '').toLowerCase().includes(searchLower) ||
                             String(token.tokenId || '').toLowerCase().includes(searchLower) ||
                             String(token.phone || '').toLowerCase().includes(searchLower);
 
+      // 4. Accurate date matching ignoring the exact hour/minute
       const tokenDateObj = new Date(token.createdAt);
       tokenDateObj.setHours(0, 0, 0, 0);
       const tokenDateStr = tokenDateObj.toDateString();
@@ -504,7 +521,7 @@ const StaffDashboard = () => {
       const matchesDate = activeDate === 'today' ? tokenDateStr === todayStr :
                           activeDate === 'yesterday' ? tokenDateStr === yesterdayStr :
                           activeDate === 'week' ? tokenDateObj >= weekAgoObj : 
-                          true;
+                          true; // Fallback for 'all'
 
       return matchesSearch && matchesDate;
     });
@@ -535,7 +552,7 @@ const StaffDashboard = () => {
     try {
       await api.put(`/customer-services/${bookingId}/take`);
       toast.success('Work assigned to you');
-      await fetchWorkspaceInit();
+      await fetchWorkspaceInit(); // 👈 Just call this to refresh everything!
     } catch (err) {
       toast.error(err.response?.data?.error || 'Already taken by another staff');
     }
@@ -546,15 +563,17 @@ const StaffDashboard = () => {
       setAttendanceLoading(true);
       const isPunchOut = todayAttendance && todayAttendance.punch_in && !todayAttendance.punch_out;
       
+      // Get exact current time formatted for Asia/Kolkata to match backend validation perfectly
       const now = new Date();
-      const formattedDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const formattedDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
       const formattedTime = now.toLocaleTimeString('en-GB', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
         timeZone: 'Asia/Kolkata'
-      });
+      }); // HH:mm
       
+      // Send the exact payload the backend expects
       await postAttendance({
         punch_type: isPunchOut ? 'out' : 'in',
         date: formattedDate,
@@ -562,7 +581,7 @@ const StaffDashboard = () => {
       });
       
       toast.success(`Successfully punched ${isPunchOut ? 'out' : 'in'}`);
-      await fetchWorkspaceInit();
+      await fetchWorkspaceInit(); // Instantly refresh the dashboard!
     } catch (err) {
       console.error('Attendance Punch Error:', err.response?.data || err.message);
       toast.error(err.response?.data?.error || 'Failed to update attendance');
@@ -586,15 +605,15 @@ const StaffDashboard = () => {
 
   const getStatusBadgeColor = (status) => {
     switch(status) {
-      case 'completed': return 'bg-emerald-50 text-emerald-700';
-      case 'in-progress': case 'processing': return 'bg-blue-50 text-blue-700';
-      case 'pending': return 'bg-amber-50 text-amber-700';
-      default: return 'bg-gray-50 text-gray-700';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'in-progress': case 'processing': return 'bg-blue-100 text-blue-800';
+      case 'pending': return 'bg-amber-100 text-amber-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
   const getStatusIcon = (status) => {
     switch(status) {
-      case 'completed': return <FiCheckCircle className="h-4 w-4 text-emerald-500" />;
+      case 'completed': return <FiCheckCircle className="h-4 w-4 text-green-500" />;
       case 'in-progress': case 'processing': return <FiPlayCircle className="h-4 w-4 text-blue-500" />;
       case 'pending': return <FiClock className="h-4 w-4 text-amber-500" />;
       default: return null;
@@ -603,16 +622,16 @@ const StaffDashboard = () => {
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center"><div className="w-12 h-12 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="text-gray-600">Loading dashboard...</p></div>
+      <div className="text-center"><div className="w-12 h-12 border-3 border-gray-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="text-gray-600">Loading dashboard...</p></div>
     </div>
   );
   if (error) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-8 max-w-md w-full border border-gray-200 text-center shadow-sm">
+      <div className="bg-white rounded-lg p-8 max-w-md w-full border border-gray-200 text-center">
         <FiAlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Data Loading Error</h3>
         <p className="text-gray-600 mb-6">{error}</p>
-        <button onClick={() => window.location.reload()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700">Try Again</button>
+        <button onClick={() => window.location.reload()} className="px-6 py-3 bg-blue-700 text-white rounded-lg hover:bg-blue-800">Try Again</button>
       </div>
     </div>
   );
@@ -620,135 +639,157 @@ const StaffDashboard = () => {
   // Find the wallet assigned to the logged-in staff member
   const myWallet = wallets.find(w => String(w.assigned_staff_id) === String(staffId));
 
-  // Determine attendance state for banner integration
-  const attendanceState = !todayAttendance || !todayAttendance.punch_in 
-    ? 'not_punched' 
-    : (!todayAttendance.punch_out ? 'punched_in' : 'punched_out');
-
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ===== MODERN WELCOME BANNER WITH INTEGRATED ATTENDANCE ===== */}
-      <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 text-white px-6 py-8 relative overflow-hidden">
-        {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
-        
-        <div className="max-w-7xl mx-auto relative">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-            {/* Left: Greeting & Profile */}
+      {/* ===== DARK BLUE WELCOME BANNER ===== */}
+      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-2xl font-bold shadow-inner">
+              <div className="flex items-start gap-4 mb-3">
+                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
                   {staffInitials}
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold tracking-tight">
+                  <h2 className="text-2xl font-bold">
                     {getGreeting()}, {staffName}!
                   </h2>
-                  <p className="text-white/80 text-sm mt-1">
+                  <p className="text-white/80 text-lg mt-0.5">
                     Welcome back to your workspace.
                   </p>
                 </div>
               </div>
-              
-              {/* Attendance status integrated inline */}
-              <div className="flex items-center gap-3 mt-3">
-                <div className={`p-2 rounded-lg ${
-                  attendanceState === 'not_punched' ? 'bg-rose-500/20' : 
-                  attendanceState === 'punched_in' ? 'bg-emerald-500/20' : 'bg-amber-500/20'
-                }`}>
-                  {attendanceState === 'not_punched' && <FiAlertCircle className="h-5 w-5 text-rose-300" />}
-                  {attendanceState === 'punched_in' && <FiCheckCircle className="h-5 w-5 text-emerald-300" />}
-                  {attendanceState === 'punched_out' && <FiClock className="h-5 w-5 text-amber-300" />}
-                </div>
-                <div>
-                  {attendanceState === 'not_punched' && (
-                    <p className="text-sm font-medium text-white/90">You haven't punched in yet</p>
-                  )}
-                  {attendanceState === 'punched_in' && (
-                    <p className="text-sm font-medium text-white/90">
-                      Punched in at {new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  )}
-                  {attendanceState === 'punched_out' && (
-                    <p className="text-sm font-medium text-white/90">
-                      Punched out at {new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={handleQuickPunch}
-                  disabled={attendanceLoading}
-                  className={`ml-4 px-5 py-2 rounded-xl text-sm font-semibold shadow-lg transition-all disabled:opacity-50 flex items-center gap-2 ${
-                    attendanceState === 'not_punched' ? 'bg-rose-500 hover:bg-rose-600' : 
-                    attendanceState === 'punched_in' ? 'bg-gray-800 hover:bg-gray-900' : 
-                    'bg-amber-500 hover:bg-amber-600'
-                  }`}
-                >
-                  {attendanceLoading ? 'Processing...' : (
-                    attendanceState === 'not_punched' ? 'Punch In Now' : 
-                    attendanceState === 'punched_in' ? 'Punch Out' : 'Punch Back In'
-                  )}
-                </button>
-              </div>
-              
-              <div className="flex items-center gap-4 text-sm text-white/80 mt-4">
+              <div className="flex items-center gap-4 text-sm text-white/90 mt-2 mb-6">
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 bg-emerald-400 rounded-full"></span>
+                  <span className="h-2 w-2 bg-green-400 rounded-full"></span>
                   <span>Online</span>
                 </div>
                 <button
                   onClick={() => navigate('/dashboard/my-profile')}
-                  className="underline hover:text-white/90"
+                  className="underline hover:text-white/80"
                 >
                   View Profile
                 </button>
               </div>
-            </div>
-
-            {/* Right: Time & Quick Actions */}
-            <div className="lg:text-right flex flex-col items-start lg:items-end gap-4">
               <div>
-                <p className="text-4xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
-                <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => navigate('/dashboard/staff/token')}
-                  className="px-4 py-2 bg-white/15 rounded-xl text-sm font-medium hover:bg-white/25 transition backdrop-blur"
-                >
-                  New Token
-                </button>
-                <button
-                  onClick={() => setShowQuickService(true)}
-                  className="px-4 py-2 bg-white/15 rounded-xl text-sm font-medium hover:bg-white/25 transition backdrop-blur"
-                >
-                  Quick Service
-                </button>
-                <button
-                  onClick={() => navigate('/dashboard/staff/performance')}
-                  className="px-4 py-2 bg-white/15 rounded-xl text-sm font-medium hover:bg-white/25 transition backdrop-blur"
-                >
-                  Reports
-                </button>
+                <p className="text-xs uppercase tracking-wider text-white/70 mb-2 font-semibold">Quick Actions</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => navigate('/dashboard/staff/token')}
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                  >
+                    New Token
+                  </button>
+                  <button
+                    onClick={() => setShowQuickService(true)}
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                  >
+                    Quick Service
+                  </button>
+                  <button
+                    onClick={() => navigate('/dashboard/staff/performance')}
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                  >
+                    View Reports
+                  </button>
+                </div>
               </div>
             </div>
+            <div className="md:text-right">
+              <p className="text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
+              <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
+            </div>
+          </div>
+          <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
+            ✨ Gave the Recent Activity feed a massive glow-up! 💅 Now you can track services instantly with the new 'Details' button! 🔍🕒
           </div>
         </div>
       </div>
 
-      {/* Original Header (sticky) with updated style */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm backdrop-blur bg-white/90">
-        <div className="px-6 py-4">
+      {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
+      <AnimatePresence>
+        {!loading && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className={`border-l-4 shadow-sm ${
+              !todayAttendance || !todayAttendance.punch_in 
+                ? 'bg-rose-50 border-rose-500' 
+                : (!todayAttendance.punch_out 
+                    ? 'bg-emerald-50 border-emerald-500' 
+                    : 'bg-amber-50 border-amber-500')
+            }`}
+          >
+            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {!todayAttendance || !todayAttendance.punch_in ? (
+                  <>
+                    <div className="p-2 bg-rose-100 rounded-full">
+                      <FiAlertCircle className="h-5 w-5 text-rose-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-rose-900">You haven't punched in yet!</h3>
+                      <p className="text-xs text-rose-700 mt-0.5">Please punch in to start tracking your hours for today.</p>
+                    </div>
+                  </>
+                ) : !todayAttendance.punch_out ? (
+                  <>
+                    <div className="p-2 bg-emerald-100 rounded-full">
+                      <FiCheckCircle className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
+                      <p className="text-xs text-emerald-700 mt-0.5">
+                        Since {new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <FiClock className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-amber-900">You are currently punched out</h3>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Punched out at {new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}. Remember to punch back in!
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleQuickPunch}
+                disabled={attendanceLoading}
+                className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
+                  !todayAttendance || !todayAttendance.punch_in 
+                    ? 'bg-rose-600 hover:bg-rose-700' 
+                    : (!todayAttendance.punch_out 
+                        ? 'bg-gray-800 hover:bg-gray-900' 
+                        : 'bg-amber-600 hover:bg-amber-700')
+                }`}
+              >
+                {attendanceLoading ? 'Processing...' : (!todayAttendance || !todayAttendance.punch_in ? 'Punch In Now' : (!todayAttendance.punch_out ? 'Punch Out' : 'Punch Back In'))}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* ========================================= */}
+      
+      {/* Original Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="px-6 py-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md">
-                <FiTrendingUp className="text-white h-5 w-5" />
+              <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                <FiTrendingUp className="text-white h-6 w-6" />
               </div>
               <div>
-                <h1 className="font-bold text-gray-900 text-xl">Service Dashboard</h1>
-                <p className="text-gray-500 text-sm">Manage tokens, track services, and view performance</p>
+                <h1 className="font-bold text-gray-900 text-2xl">Service Dashboard</h1>
+                <p className="text-gray-600 text-sm">Manage tokens, track services, and view performance</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -756,7 +797,7 @@ const StaffDashboard = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="flex items-center space-x-2 px-4 py-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <FiCalendar className="h-4 w-4 text-gray-500" />
                   <span className="text-sm">
@@ -778,37 +819,60 @@ const StaffDashboard = () => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-xl shadow-xl z-50 w-64"
+                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64"
                       >
                         <div className="p-3">
-                          {['today', 'week', 'month', 'quarter', 'year'].map(opt => (
-                            <button
-                              key={opt}
-                              onClick={() => { setPeriod(opt); setShowDatePicker(false); }}
-                              className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === opt ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                            >
-                              {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                            </button>
-                          ))}
+                          <button
+                            onClick={() => { setPeriod('today'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'today' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            Today
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('week'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'week' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Week
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('month'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'month' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Month
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('quarter'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'quarter' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Quarter
+                          </button>
+                          <button
+                            onClick={() => { setPeriod('year'); setShowDatePicker(false); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'year' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                          >
+                            This Year
+                          </button>
                           <div className="border-t border-gray-200 my-2"></div>
                           <div className="space-y-2">
                             <input
                               type="date"
                               value={customDateRange.from}
                               onChange={(e) => setCustomDateRange(prev => ({ ...prev, from: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              placeholder="From Date"
                             />
                             <input
                               type="date"
                               value={customDateRange.to}
                               onChange={(e) => setCustomDateRange(prev => ({ ...prev, to: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              placeholder="To Date"
                             />
                             <button
                               onClick={() => { setPeriod('custom'); setShowDatePicker(false); }}
                               className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
                             >
-                              Apply Custom
+                              Apply
                             </button>
                           </div>
                         </div>
@@ -818,10 +882,10 @@ const StaffDashboard = () => {
                 </AnimatePresence>
               </div>
               
-              <span className="text-xs text-gray-400 hidden sm:block">Updated {lastUpdated.toLocaleTimeString()}</span>
+              <span className="text-xs text-gray-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
               <button
                 onClick={refreshTokens}
-                className="p-2 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 title="Refresh"
               >
                 <FiRefreshCw className="h-4 w-4 text-gray-600" />
@@ -837,7 +901,7 @@ const StaffDashboard = () => {
           {/* Floating Action Button */}
           <button
             onClick={() => setShowQuickService(true)}
-            className="fixed bottom-8 right-8 bg-indigo-600 text-white p-4 rounded-full shadow-xl hover:bg-indigo-700 transition-all z-20"
+            className="fixed bottom-8 right-8 bg-blue-700 text-white p-4 rounded-full shadow-lg hover:bg-blue-800 transition-all z-20"
           >
             <FiPlus className="h-6 w-6" />
           </button>
@@ -851,10 +915,10 @@ const StaffDashboard = () => {
                 placeholder="Search by token, customer name, or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2.5 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <select value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2.5 bg-white">
+            <select value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2.5">
               <option value="today">Today</option>
               <option value="yesterday">Yesterday</option>
               <option value="week">This Week</option>
@@ -865,7 +929,7 @@ const StaffDashboard = () => {
             {myWallet && (
               <motion.div
                 whileHover={{ y: -1 }}
-                className="inline-flex items-center gap-2 bg-white border border-indigo-100 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                className="inline-flex items-center gap-2 bg-white border border-indigo-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
               >
                 <div className="p-1 bg-indigo-100 rounded-full">
                   <FiBriefcase className="h-3.5 w-3.5 text-indigo-600" />
@@ -880,12 +944,12 @@ const StaffDashboard = () => {
             )}
           </div>
 
-          {/* Stats Row - Token Metrics (refreshed design) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+          {/* Stats Row - Token Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
             <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
             <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
             <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
-            <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-emerald-500" />
+            <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
             <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
           </div>
 
@@ -895,21 +959,21 @@ const StaffDashboard = () => {
             {/* Left Column – Unified Workspace */}
             <div className="xl:col-span-2 flex flex-col gap-6">
               
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col h-[850px]">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[850px]">
                 
                 {/* Master Workspace Tabs */}
-                <div className="flex p-3 border-b border-gray-100 bg-gray-50/50 gap-2 overflow-x-auto hide-scrollbar">
-                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-indigo-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                <div className="flex p-3 border-b border-gray-200 bg-gray-50/80 gap-2 overflow-x-auto hide-scrollbar">
+                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-indigo-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiUsers className="h-4 w-4" />
                     Walk-in Tokens
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'}`}>{statusCounts.total}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-blue-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-blue-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiGlobe className="h-4 w-4" />
                     Online Queue
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'queue' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>{onlineBookings.length}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiPlayCircle className="h-4 w-4" />
                     My Online Work
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
@@ -957,10 +1021,10 @@ const StaffDashboard = () => {
                                   const isUnassigned = !token.staffId || token.staffId === 'null';
                                   
                                   return (
-                                    <div key={token.tokenId} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl hover:shadow-md hover:border-indigo-200 transition-all group">
+                                    <div key={token.tokenId} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all group">
                                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
-                                          activeView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                                          activeView === 'completed' ? 'bg-green-50 text-green-700 border border-green-100' :
                                           activeView === 'campaign' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
                                           'bg-indigo-50 text-indigo-700 border border-indigo-100'
                                         }`}>
@@ -1030,7 +1094,7 @@ const StaffDashboard = () => {
                         onlineBookings.map(booking => (
                           <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-blue-100 rounded-xl hover:shadow-md transition-all group">
                             <div className="flex items-center gap-4 min-w-0">
-                              <div className="w-10 h-10 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
+                              <div className="w-10 h-10 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
                               <div className="min-w-0">
                                 <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
                                 <p className="text-xs text-gray-500 mt-0.5 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
@@ -1058,7 +1122,7 @@ const StaffDashboard = () => {
                         processingBookings.map(booking => (
                           <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-emerald-100 rounded-xl hover:shadow-md transition-all group">
                             <div className="flex items-center gap-4 min-w-0">
-                              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
+                              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 mb-0.5">
                                   <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
@@ -1083,8 +1147,8 @@ const StaffDashboard = () => {
             {/* Right Column – Performance, Tasks & Events */}
             <div className="space-y-6">
               
-              {/* ===== MY TASKS ===== */}
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+              {/* ===== NEW: MY TASKS ===== */}
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900 text-sm flex items-center">
                     <FiCheckSquare className="h-4 w-4 mr-2 text-indigo-600" />
@@ -1096,13 +1160,13 @@ const StaffDashboard = () => {
                 </div>
                 
                 {myTasks.length === 0 ? (
-                  <div className="text-center py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <div className="text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                     <p className="text-sm text-gray-500">No pending tasks! 🎉</p>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                     {myTasks.map(task => (
-                      <div key={task.id} className="flex gap-3 items-start p-3 border border-gray-100 rounded-xl bg-gray-50 hover:bg-white transition shadow-sm">
+                      <div key={task.id} className="flex gap-3 items-start p-3 border border-gray-100 rounded-lg bg-gray-50 hover:bg-white transition shadow-sm">
                         <button 
                           onClick={() => handleCompleteTask(task.id)}
                           className="mt-0.5 text-gray-400 hover:text-emerald-500 transition-colors"
@@ -1124,9 +1188,9 @@ const StaffDashboard = () => {
                 )}
               </div>
 
-              {/* ===== UPCOMING EVENTS (AUTO-CYCLING) ===== */}
+              {/* ===== NEW: UPCOMING EVENTS (AUTO-CYCLING) ===== */}
               <div 
-                className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm"
+                className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
                 onMouseEnter={() => setIsEventsHovered(true)}
                 onMouseLeave={() => setIsEventsHovered(false)}
               >
@@ -1190,7 +1254,7 @@ const StaffDashboard = () => {
 
                     if (filteredEvents.length === 0) {
                       return (
-                        <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                           <p className="text-sm text-gray-500">No {activeEventTab.toLowerCase()} scheduled.</p>
                         </div>
                       );
@@ -1220,8 +1284,8 @@ const StaffDashboard = () => {
                       }
 
                       return (
-                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-xl border ${typeColor} shadow-sm transition-all hover:shadow-md group`}>
-                          <div className={`mt-0.5 p-1.5 rounded-lg bg-white shadow-sm shrink-0`}>
+                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-lg border ${typeColor} shadow-sm transition-all hover:shadow-md group`}>
+                          <div className={`mt-0.5 p-1.5 rounded-md bg-white shadow-sm shrink-0`}>
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -1240,6 +1304,7 @@ const StaffDashboard = () => {
                             </div>
                           </div>
                           
+                          {/* 🔥 The Action Button */}
                           <div className="shrink-0 flex flex-col items-center justify-center self-stretch ml-1">
                             <button
                               onClick={() => handleViewService(event)}
@@ -1257,7 +1322,7 @@ const StaffDashboard = () => {
               </div>
               
               {/* Performance Score Card */}
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900 text-sm flex items-center">
                     <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
@@ -1304,16 +1369,16 @@ const StaffDashboard = () => {
               </div>
 
               {/* Performance Metrics */}
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
                   <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
                   Performance Metrics
                 </h3>
                 {performanceLoading ? (
                   <div className="space-y-3">
-                    <div className="h-8 bg-gray-100 animate-pulse rounded"></div>
-                    <div className="h-8 bg-gray-100 animate-pulse rounded"></div>
-                    <div className="h-8 bg-gray-100 animate-pulse rounded"></div>
+                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1322,8 +1387,8 @@ const StaffDashboard = () => {
                         <span className="text-gray-600">Completion Rate</span>
                         <span className="font-medium text-gray-900">{performance.completionRate}%</span>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
                       </div>
                     </div>
 
@@ -1332,9 +1397,9 @@ const StaffDashboard = () => {
                         <span className="text-gray-600">Avg Transaction Value</span>
                         <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
-                          className="bg-blue-500 h-2 rounded-full"
+                          className="bg-blue-600 h-2 rounded-full"
                           style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
                         />
                       </div>
@@ -1345,9 +1410,9 @@ const StaffDashboard = () => {
                         <span className="text-gray-600">Customer Satisfaction</span>
                         <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
-                          className="bg-purple-500 h-2 rounded-full"
+                          className="bg-purple-600 h-2 rounded-full"
                           style={{ width: `${(performance.avgRating / 5) * 100}%` }}
                         />
                       </div>
@@ -1372,8 +1437,8 @@ const StaffDashboard = () => {
               </div>
 
               {/* Recent Activity (Compact Version) */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-                <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between rounded-t-2xl">
+              <div className="bg-white rounded-xl border border-gray-200">
+                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
                   <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-sm">
                     {recentServiceEntries.length} items
@@ -1384,6 +1449,8 @@ const StaffDashboard = () => {
                     <div className="space-y-6">
                       {Object.entries(groupedRecentActivities).map(([date, entries]) => (
                         <div key={date} className="relative">
+                          
+                          {/* Compact Date Sticky Header */}
                           <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
                             <div className="p-1 bg-gray-100 rounded text-gray-500">
                               <FiCalendar className="h-3 w-3" />
@@ -1394,20 +1461,29 @@ const StaffDashboard = () => {
                             <div className="h-px bg-gray-200 flex-1 ml-1"></div>
                           </div>
 
+                          {/* Compact Timeline Entries */}
                           <div className="space-y-2.5 relative">
                             {entries.map((entry, index) => (
                               <div key={entry.id} className="group relative flex gap-3">
+                                {/* Timeline Vertical Line - Centered for smaller avatar */}
                                 {index !== entries.length - 1 && (
                                   <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
                                 )}
+                                
+                                {/* Smaller Activity Avatar */}
                                 <div className="w-8 h-8 mt-1 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
                                   <FiUser className="h-3.5 w-3.5 text-indigo-600" />
                                 </div>
 
+                                {/* Compact Activity Card */}
                                 <div className="flex-1 bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200 flex flex-col justify-center">
+                                  
+                                  {/* Top Row: Name, Status, Time */}
                                   <div className="flex justify-between items-center mb-1.5 gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
                                       <p className="text-sm font-bold text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
+                                      
+                                      {/* Status Pill moved next to name */}
                                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                                         entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
                                         entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700' :
@@ -1417,20 +1493,25 @@ const StaffDashboard = () => {
                                         {entry.status?.replace('-', ' ')}
                                       </span>
                                     </div>
+                                    
                                     <span className="text-[10px] font-medium text-gray-400 shrink-0">
                                       {formatTime(entry.created_at)}
                                     </span>
                                   </div>
+                                  
+                                  {/* Bottom Row: Service, Info, Actions */}
                                   <div className="flex justify-between items-end gap-2">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <p className="text-[11px] font-medium text-gray-600 truncate max-w-[160px]">
                                         {getCategoryName(entry.category)}
                                       </p>
+                                      
                                       {entry.tokenId && (
                                         <span className="text-[10px] text-gray-400 font-mono font-bold before:content-['•'] before:mr-1.5">
                                           {shortenTokenId(entry.tokenId)}
                                         </span>
                                       )}
+                                      
                                       {entry.workSource === 'online' && (
                                         <span className="text-[9px] text-blue-600 font-bold uppercase border border-blue-100 bg-blue-50 px-1 rounded flex items-center gap-0.5 ml-1">
                                           <FiGlobe className="h-2 w-2" /> Online
@@ -1442,6 +1523,8 @@ const StaffDashboard = () => {
                                         </span>
                                       )}
                                     </div>
+                                    
+                                    {/* Action Button moved into flow */}
                                     {(entry.tokenId || entry.tracking_id) && (
                                       <button 
                                         onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
@@ -1472,41 +1555,41 @@ const StaffDashboard = () => {
         </motion.div>
       </div>
       {/* Cancel Modal */}
-      {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
-            <p className="text-gray-600 mb-4">
-              Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenId}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
-            </p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
-              <textarea 
-                value={cancelReason} 
-                onChange={(e) => setCancelReason(e.target.value)} 
-                rows="3" 
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500" 
-                placeholder="e.g., customer requested, duplicate entry..." 
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button 
-                onClick={() => setShowCancelModal(false)} 
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition"
-              >
-                No, Keep Token
-              </button>
-              <button 
-                onClick={handleCancelConfirm} 
-                disabled={cancelling} 
-                className="px-4 py-2 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition disabled:opacity-50"
-              >
-                {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
-              </button>
+        {showCancelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenId}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
+                <textarea 
+                  value={cancelReason} 
+                  onChange={(e) => setCancelReason(e.target.value)} 
+                  rows="3" 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500" 
+                  placeholder="e.g., customer requested, duplicate entry..." 
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button 
+                  onClick={() => setShowCancelModal(false)} 
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition"
+                >
+                  No, Keep Token
+                </button>
+                <button 
+                  onClick={handleCancelConfirm} 
+                  disabled={cancelling} 
+                  className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       <QuickServiceModal open={showQuickService} onClose={() => setShowQuickService(false)} wallets={wallets} />
     </div>
