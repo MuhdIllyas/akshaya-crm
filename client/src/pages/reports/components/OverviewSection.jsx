@@ -303,11 +303,17 @@ const OverviewSection = ({
                 </h2>
                 <div className="flex items-center space-x-2">
                   <FiCalendar className="h-4 w-4 text-gray-500" />
-                  <select
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    value={timePeriod}
-                    onChange={(e) => setTimePeriod(e.target.value)}
-                  >
+                    <select
+                      className="border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={timePeriod || 'monthly'}
+                      onChange={(e) => {
+                        if (typeof setTimePeriod === 'function') {
+                          setTimePeriod(e.target.value);
+                        } else {
+                          console.warn("setTimePeriod prop is missing in OverviewSection!");
+                        }
+                      }}
+                    >
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
                     <option value="yearly">Yearly</option>
@@ -357,7 +363,7 @@ const OverviewSection = ({
                     <div>
                       <p className="text-sm font-bold text-gray-900 truncate max-w-37.5">{tx.category}</p>
                       <p className="text-xs text-gray-500 font-medium">
-                        {new Date(tx.date).toLocaleDateString()}
+                        {tx.created_at ? new Date(tx.created_at).toLocaleDateString() : 'Just now'}
                         <span className={`ml-2 ${tx.status === 'Completed' ? 'text-emerald-600' : 'text-amber-500'}`}>
                           • {tx.status}
                         </span>
