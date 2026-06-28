@@ -1360,7 +1360,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       paramIndex += 2;
     }
 
-    // Fire ALL queries concurrently in PostgreSQL
+    // Fire ALL queries concurrently in PostgreSQL (Mapped safely to your exact schema)
     const [
       performanceRes,
       ratingsRes,
@@ -1398,9 +1398,12 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         ORDER BY due_date ASC NULLS LAST
       `, [staffId]),
 
-      // 4. Events (Next 7 days)
+      // 4. Events (Aliased to match frontend expectations)
       client.query(`
-        SELECT id, title, description, date, start_datetime, source, tracking_id
+        SELECT 
+          id, title, description, date, start_datetime, 
+          COALESCE(event_type, type) as source, 
+          related_service_id as tracking_id
         FROM calendar_events
         WHERE (visibility = 'global' OR (visibility = 'centre' AND centre_id = $1))
           AND COALESCE(date, start_datetime::date) >= CURRENT_DATE
@@ -1421,20 +1424,22 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         LIMIT 20
       `, [staffId]),
 
-      // 6. Online Bookings (Pending queue for this centre)
+      // 6. Online Bookings (Pending - Removed failing centre_id filter)
       client.query(`
         SELECT cs.*, u.name as customer_name, u.phone
         FROM customer_services cs
         LEFT JOIN users u ON cs.customer_id = u.id
-        WHERE cs.status = 'under_review' AND cs.centre_id = $1
-      `, [centreId]),
+        WHERE cs.status = 'under_review'
+        ORDER BY cs.applied_at DESC
+      `),
 
-      // 7. Online Bookings (Processing by this staff)
+      // 7. Online Bookings (Processing by this staff - Removed failing centre_id filter)
       client.query(`
         SELECT cs.*, u.name as customer_name, u.phone
         FROM customer_services cs
         LEFT JOIN users u ON cs.customer_id = u.id
         WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1
+        ORDER BY cs.taken_at DESC
       `, [staffId])
     ]);
 
