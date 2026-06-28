@@ -1398,11 +1398,15 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         ORDER BY due_date ASC NULLS LAST
       `, [staffId]),
 
-      // 4. Events (Aliased safely to your exact table columns)
+      // 4. Events (Fixed Issue #3: Aliased to match the 'service_delivery' names the frontend expects)
       client.query(`
         SELECT 
           id, title, description, date, start_datetime, 
-          type as source, 
+          CASE 
+            WHEN type ILIKE '%delivery%' OR event_type ILIKE '%delivery%' THEN 'service_delivery'
+            WHEN type ILIKE '%expiry%' OR event_type ILIKE '%expiry%' THEN 'service_expiry'
+            ELSE 'task'
+          END as source, 
           related_service_id as tracking_id
         FROM calendar_events
         WHERE (visibility = 'global' OR (visibility = 'centre' AND centre_id = $1))
@@ -1412,12 +1416,19 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         LIMIT 10
       `, [centreId]),
 
-      // 5. Recent Activity (Service Entries)
+      // 5. Recent Activity (Fixed Issue #2: Mapped snake_case to the exact camelCase the frontend expects)
       client.query(`
         SELECT
-          se.id, se.created_at, se.customer_name, se.phone, se.status,
-          se.category_id as category, se.token_id as "tokenId",
-          se.is_edited, se.work_source, se.id as tracking_id
+          se.id, 
+          se.created_at, 
+          se.customer_name as "customerName", 
+          se.phone, 
+          se.status,
+          se.category_id as category, 
+          se.token_id as "tokenId",
+          se.is_edited, 
+          se.work_source as "workSource", 
+          se.id as tracking_id
         FROM service_entries se
         WHERE se.staff_id = $1
         ORDER BY se.created_at DESC
