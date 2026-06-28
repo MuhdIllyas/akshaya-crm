@@ -631,15 +631,22 @@ const AdminDashboard = () => {
 
         if (!isMountedRef.current) return;
 
-        // Instantly populate all dashboard states from the single response
-        setStats(dashboardData.stats);
-        setReviewStats(dashboardData.customerSatisfaction);
+        // 1. We manually append monthlyRevenue so the top stat card still works
+        setStats({
+          ...dashboardData.stats,
+          monthlyRevenue: dashboardData.charts?.financialTrend?.revenueCollected?.[new Date().getMonth()] || 0
+        });
         
+        setReviewStats(dashboardData.customerSatisfaction);
         setAttendanceData(dashboardData.charts.attendanceTrend);
         setServices(dashboardData.charts.serviceStatus); 
-        setDailyRevenueData(dashboardData.charts.dailyRevenue.data);
-        setDailyRevenueLabels(dashboardData.charts.dailyRevenue.labels);
-        setMonthlyRevenueData(dashboardData.charts.monthlyRevenue);
+        
+        // 2. V3 Backend removed dailyRevenue to speed up queries, so we clear it
+        setDailyRevenueData([]);
+        setDailyRevenueLabels([]);
+        
+        // 3. Map to the new V3 financialTrend array
+        setMonthlyRevenueData(dashboardData.charts?.financialTrend?.revenueCollected || []);
         
         setTopStaffData(dashboardData.lists.topStaff);
         setRecentTransactions(dashboardData.lists.recentTransactions);
@@ -844,11 +851,11 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
         <StatCard
           title="Today's Revenue"
-          value={`₹${(stats.todayRevenue || 0).toLocaleString('en-IN')}`}
-          subtitle={`₹${(stats.todayProfit || 0).toLocaleString('en-IN')} profit`}
+          value={`₹${(stats.todayRevenueCollected || 0).toLocaleString('en-IN')}`}
+          subtitle={`₹${(stats.todayNetProfit || 0).toLocaleString('en-IN')} profit`}
+          trend={stats.todayNetProfit > 0 ? 8.5 : -2.1}
           icon={FiTrendingUp}
           color="bg-emerald-600"
-          trend={stats.todayProfit > 0 ? 8.5 : -2.1}
           onClick={navigateToReports}
         />
         <StatCard
@@ -924,26 +931,6 @@ const AdminDashboard = () => {
         </DashboardCard>
       </div>
 
-      {/* Daily Revenue Chart */}
-      <div className="mt-6">
-        <DashboardCard 
-          title="Daily Revenue (Last 7 Days)" 
-          icon={FiDollarSign}
-          headerAction={
-            <div className="flex items-center space-x-2">
-              <span className="text-xs text-gray-500">
-                Today: ₹{(stats.todayRevenue || 0).toLocaleString('en-IN')}
-              </span>
-              <button onClick={navigateToReports} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-                View Reports
-              </button>
-            </div>
-          }
-        >
-          <DailyRevenueChart dailyData={dailyRevenueData} labels={dailyRevenueLabels} />
-        </DashboardCard>
-      </div>
-
       {/* Monthly Revenue Chart */}
       <div className="mt-6">
         <DashboardCard 
@@ -1001,8 +988,8 @@ const AdminDashboard = () => {
                    <div className="flex justify-between text-sm mb-1">
                      <span className="text-gray-600">Today's Profit Margin</span>
                      <span className="font-bold text-gray-900">
-                        {stats.todayRevenue > 0 ? Math.round((stats.todayProfit / stats.todayRevenue) * 100) : 0}%
-                     </span>
+                      {stats.todayRevenueCollected > 0 ? Math.round((stats.todayNetProfit / stats.todayRevenueCollected) * 100) : 0}%
+                    </span>
                    </div>
                    <div className="w-full bg-gray-200 rounded-full h-2">
                      <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${stats.todayRevenue > 0 ? Math.max(0, Math.min((stats.todayProfit / stats.todayRevenue) * 100, 100)) : 0}%` }}></div>
@@ -1100,27 +1087,27 @@ const AdminDashboard = () => {
           </div>
         </DashboardCard>
 
-        <DashboardCard title="Today's Financial Summary" icon={FiPieChart}>
+          <DashboardCard title="Today's Financial Summary" icon={FiPieChart}>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Revenue Collected</span>
-              <span className="font-bold text-emerald-600">₹{(stats.todayRevenue || 0).toLocaleString('en-IN')}</span>
+              <span className="font-bold text-emerald-600">₹{(stats.todayRevenueCollected || 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Expenses</span>
-              <span className="font-bold text-rose-600">₹{(stats.todayExpenses || 0).toLocaleString('en-IN')}</span>
+              <span className="text-sm text-gray-600">Operating Expenses</span>
+              <span className="font-bold text-rose-600">₹{(stats.todayOperatingExpenses || 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="border-t border-gray-200 pt-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">Net Profit</span>
-                <span className={`font-bold ${(stats.todayProfit || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  ₹{(stats.todayProfit || 0).toLocaleString('en-IN')}
+                <span className={`font-bold ${(stats.todayNetProfit || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  ₹{(stats.todayNetProfit || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                 <div 
-                  className={`h-2 rounded-full ${(stats.todayProfit || 0) >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                  style={{ width: `${stats.todayRevenue > 0 ? Math.min(Math.abs((stats.todayProfit / stats.todayRevenue) * 100), 100) : 0}%` }}
+                  className={`h-2 rounded-full ${(stats.todayNetProfit || 0) >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                  style={{ width: `${stats.todayRevenueCollected > 0 ? Math.min(Math.abs((stats.todayNetProfit / stats.todayRevenueCollected) * 100), 100) : 0}%` }}
                 ></div>
               </div>
             </div>
