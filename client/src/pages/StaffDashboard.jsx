@@ -1436,109 +1436,116 @@ const StaffDashboard = () => {
                 )}
               </div>
 
-              {/* Recent Activity */}
+              {/* Recent Activity (Compact Version) */}
               <div className="bg-white rounded-xl border border-gray-200">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                  <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
+                  <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-sm">
+                    {recentServiceEntries.length} items
+                  </span>
                 </div>
-                  <div className="p-6 overflow-y-auto max-h-[500px]">
-                    {Object.keys(groupedRecentActivities).length > 0 ? (
-                      <div className="space-y-8">
-                        {Object.entries(groupedRecentActivities).map(([date, entries]) => (
-                          <div key={date} className="relative">
-                            {/* Date Sticky Header */}
-                            <div className="flex items-center gap-3 mb-4 sticky top-0 bg-white/90 backdrop-blur-sm py-2 z-20 -mx-2 px-2">
-                              <div className="p-1.5 bg-gray-100 rounded-md">
-                                <FiCalendar className="h-3.5 w-3.5 text-gray-600" />
-                              </div>
-                              <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-                                {formatDateUI(date)}
-                              </h4>
-                              <div className="h-px bg-gray-200 flex-1 ml-2"></div>
+                <div className="p-4 overflow-y-auto max-h-[500px]">
+                  {Object.keys(groupedRecentActivities).length > 0 ? (
+                    <div className="space-y-6">
+                      {Object.entries(groupedRecentActivities).map(([date, entries]) => (
+                        <div key={date} className="relative">
+                          
+                          {/* Compact Date Sticky Header */}
+                          <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
+                            <div className="p-1 bg-gray-100 rounded text-gray-500">
+                              <FiCalendar className="h-3 w-3" />
                             </div>
+                            <h4 className="text-[10px] font-bold text-gray-800 uppercase tracking-widest">
+                              {formatDateUI(date)}
+                            </h4>
+                            <div className="h-px bg-gray-200 flex-1 ml-1"></div>
+                          </div>
 
-                            {/* Timeline Entries */}
-                            <div className="space-y-4 relative">
-                              {entries.map((entry, index) => (
-                                <div key={entry.id} className="group relative flex gap-4">
-                                  {/* Timeline Vertical Line (hides on the very last item of the day) */}
-                                  {index !== entries.length - 1 && (
-                                    <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
-                                  )}
+                          {/* Compact Timeline Entries */}
+                          <div className="space-y-2.5 relative">
+                            {entries.map((entry, index) => (
+                              <div key={entry.id} className="group relative flex gap-3">
+                                {/* Timeline Vertical Line - Centered for smaller avatar */}
+                                {index !== entries.length - 1 && (
+                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
+                                )}
+                                
+                                {/* Smaller Activity Avatar */}
+                                <div className="w-8 h-8 mt-1 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
+                                  <FiUser className="h-3.5 w-3.5 text-indigo-600" />
+                                </div>
+
+                                {/* Compact Activity Card */}
+                                <div className="flex-1 bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200 flex flex-col justify-center">
                                   
-                                  {/* Activity Avatar */}
-                                  <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
-                                    <FiUser className="h-4 w-4 text-indigo-600" />
-                                  </div>
-
-                                  {/* Activity Card */}
-                                  <div className="flex-1 bg-white border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200">
-                                    <div className="flex justify-between items-start mb-2">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-sm font-bold text-gray-900">{entry.customerName || 'Customer'}</p>
-                                        
-                                        {/* Upgraded Badges */}
-                                        <div className="flex items-center gap-1.5">
-                                          {entry.workSource === 'online' && (
-                                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase tracking-wider border border-blue-100">
-                                              <FiGlobe className="h-3 w-3" /> Online
-                                            </span>
-                                          )}
-                                          {entry.is_edited && (
-                                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-bold uppercase tracking-wider border border-gray-200">
-                                              Edited
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
+                                  {/* Top Row: Name, Status, Time */}
+                                  <div className="flex justify-between items-center mb-1.5 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <p className="text-sm font-bold text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
-                                      {/* Time Tag */}
-                                      <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 px-2 py-1 rounded-md shrink-0 border border-gray-100">
-                                        {formatTime(entry.created_at)}
+                                      {/* Status Pill moved next to name */}
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                        entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
+                                        entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700' :
+                                        entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
+                                        'bg-gray-50 text-gray-700'
+                                      }`}>
+                                        {entry.status?.replace('-', ' ')}
                                       </span>
                                     </div>
                                     
-                                    <p className="text-xs font-medium text-gray-600 mb-3">{getCategoryName(entry.category)} service</p>
-                                    
-                                    {/* Action & Status Row */}
-                                    <div className="flex justify-between items-center pt-3 border-t border-gray-50">
-                                      <div className="flex items-center gap-2">
-                                        {/* Upgraded Status Pills */}
-                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                          entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                          entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                                          entry.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 
-                                          'bg-gray-50 text-gray-700 border border-gray-200'
-                                        }`}>
-                                          {entry.status?.replace('-', ' ')}
-                                        </span>
-                                        
-                                        {entry.tokenId && (
-                                          <span className="text-[11px] text-gray-500 font-mono font-medium pl-2 border-l border-gray-200">
-                                            {shortenTokenId(entry.tokenId)}
-                                          </span>
-                                        )}
-                                      </div>
+                                    <span className="text-[10px] font-medium text-gray-400 shrink-0">
+                                      {formatTime(entry.created_at)}
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Bottom Row: Service, Info, Actions */}
+                                  <div className="flex justify-between items-end gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="text-[11px] font-medium text-gray-600 truncate max-w-[160px]">
+                                        {getCategoryName(entry.category)}
+                                      </p>
                                       
-                                      {/* Enhanced Details Button */}
-                                      {(entry.tokenId || entry.tracking_id) && (
-                                        <button 
-                                          onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider shadow-sm transition-all shrink-0"
-                                        >
-                                          <FiBarChart2 className="h-3.5 w-3.5" /> Details
-                                        </button>
+                                      {entry.tokenId && (
+                                        <span className="text-[10px] text-gray-400 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                          {shortenTokenId(entry.tokenId)}
+                                        </span>
+                                      )}
+                                      
+                                      {entry.workSource === 'online' && (
+                                        <span className="text-[9px] text-blue-600 font-bold uppercase border border-blue-100 bg-blue-50 px-1 rounded flex items-center gap-0.5 ml-1">
+                                          <FiGlobe className="h-2 w-2" /> Online
+                                        </span>
+                                      )}
+                                      {entry.is_edited && (
+                                        <span className="text-[9px] text-gray-500 font-bold uppercase border border-gray-200 bg-gray-50 px-1 rounded ml-1">
+                                          Edited
+                                        </span>
                                       )}
                                     </div>
+                                    
+                                    {/* Action Button moved into flow */}
+                                    {(entry.tokenId || entry.tracking_id) && (
+                                      <button 
+                                        onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
+                                        className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1"
+                                      >
+                                        Details <FiChevronRight className="h-3 w-3" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                    <div className="text-center py-8 text-gray-500">No recent activity</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                      <FiActivity className="h-8 w-8 mb-2 opacity-20" />
+                      <p className="text-sm font-medium">No recent activity</p>
+                    </div>
                   )}
                 </div>
               </div>
