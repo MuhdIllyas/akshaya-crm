@@ -9,7 +9,7 @@ import {
   FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign, FiGlobe,
   FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiExternalLink
 } from 'react-icons/fi';
-import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
+import { getCategories, getTokens } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
 import QuickServiceModal from '@/components/QuickServiceModal';
 import api from '@/services/serviceService';
@@ -380,7 +380,7 @@ const StaffDashboard = () => {
       socket.off('tokenReassigned', onTokenReassigned);
       socket.off('serviceEntryCreated', onServiceEntryCreated);
     };
-  }, [centreId, staffId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance]);
+  }, [centreId, staffId, refreshTokens, fetchWorkspaceInit]);
 
   // --- Helper functions (unchanged) ---
   const getCategoryName = (id) => categories.find(c => c.id === id)?.name || 'N/A';
