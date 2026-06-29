@@ -578,72 +578,95 @@ const ServiceEntry = () => {
     setInvoiceModalOpen(true);
   };
 
-  // Note the 'async' keyword here
   const generateInvoicePDF = async () => {
     const doc = new jsPDF();
     const navy = '#0F172A';        
-    const white = '#FFFFFF';
+    const textDark = '#333333';
+    const textLight = '#666666';
+    const rightMargin = 196; // 210mm width - 14mm margin
 
-    // ---- HEADER BAND ----
-    doc.setFillColor(navy);
-    doc.rect(0, 0, 210, 35, 'F');   
+    // ---- HEADER BAND (LIGHT THEME) ----
+    // Remove the dark background rectangle so the logo is clearly visible on white
+    doc.setDrawColor(226, 232, 240); // Light slate gray (#E2E8F0)
+    doc.setLineWidth(0.5);
+    doc.line(14, 42, rightMargin, 42); // Subtle separator line
 
-    // ---- DYNAMIC LOGO HANDLING ----
+    // ---- DYNAMIC LOGO HANDLING (LEFT) ----
     try {
       if (centreDetails.logo) {
-        // 1. Build the full URL (e.g., http://localhost:5000/uploads/123-logo.png)
         const fullLogoUrl = centreDetails.logo.startsWith('http') 
           ? centreDetails.logo 
           : `${import.meta.env.VITE_API_URL}${centreDetails.logo}`;
         
-        // 2. Wait for the image to convert to Base64
         const base64Img = await getBase64ImageFromUrl(fullLogoUrl);
-        
-        // 3. Add the Base64 image to the PDF
-        doc.addImage(base64Img, 'PNG', 10, 5, 22, 22);
+        doc.addImage(base64Img, 'PNG', 14, 10, 26, 26); 
+      } else {
+        throw new Error("No logo available");
       }
     } catch (e) {
       console.warn("Could not load invoice logo:", e);
-      // Fallback: If no logo exists or it fails to load, print the text on the left
-      doc.setTextColor(white);
+      // Fallback: If no logo exists or it fails to load, print the text on the left in dark text
+      doc.setTextColor(navy);
       doc.setFontSize(16);
-      doc.text(centreDetails.name || 'Akshaya e Centre', 14, 20);
+      doc.setFont('helvetica', 'bold');
+      doc.text(centreDetails.name || 'Akshaya e Centre', 14, 24);
     }
 
-    // ---- DYNAMIC CENTRE DETAILS ON THE RIGHT ----
-    doc.setTextColor(white);
+    // ---- DYNAMIC CENTRE DETAILS (RIGHT ALIGNED) ----
+    // Use dark text instead of white so it shows on the white background
+    doc.setTextColor(navy);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(centreDetails.name || 'Akshaya e Centre', rightMargin, 16, { align: 'right' });
     
-    doc.setFontSize(14);
-    doc.text(centreDetails.name || 'Akshaya e Centre', 120, 16);
-    
-    doc.setFontSize(8);
+    doc.setTextColor('#475569'); // Slate gray for address to look professional
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
     
     const addrParts = [centreDetails.address, centreDetails.district].filter(Boolean);
     if (addrParts.length > 0) {
-      doc.text(addrParts.join(', '), 120, 22);
+      doc.text(addrParts.join(', '), rightMargin, 22, { align: 'right' });
     }
     
     const stateParts = [centreDetails.state, centreDetails.pincode ? `Pin - ${centreDetails.pincode}` : null].filter(Boolean);
     if (stateParts.length > 0) {
-      doc.text(stateParts.join(', '), 120, 26);
+      doc.text(stateParts.join(', '), rightMargin, 27, { align: 'right' });
     }
     
     if (centreDetails.phone) {
-      doc.text(`Phone: ${centreDetails.phone}`, 120, 30);
+      doc.text(`Phone: ${centreDetails.phone}`, rightMargin, 32, { align: 'right' });
     }
 
-    // ---- INVOICE TITLE & CUSTOMER INFO ----
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('INVOICE', 14, 50);
-    doc.setFont('helvetica', 'normal');
+    // ---- TWO-COLUMN INFO SECTION ----
+    // LEFT COLUMN: BILL TO
     doc.setFontSize(10);
-    doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 58);
-    doc.text(`Customer: ${invoiceData.customerName}`, 14, 64);
-    doc.text(`Phone: ${invoiceData.phone}`, 14, 70);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(textLight);
+    doc.text('BILL TO:', 14, 52);
+    
+    doc.setTextColor(textDark);
+    doc.setFontSize(12);
+    doc.text(invoiceData.customerName, 14, 58);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Phone: ${invoiceData.phone}`, 14, 64);
 
-    // ---------- SERVICE & STAFF ----------
+    // RIGHT COLUMN: INVOICE META
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(navy);
+    doc.text('INVOICE', rightMargin, 52, { align: 'right' });
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(textDark);
+    doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, rightMargin, 60, { align: 'right' });
+    
+    const staffName = localStorage.getItem('name') || 'Staff';
+    doc.text(`Served by: ${staffName}`, rightMargin, 66, { align: 'right' });
+
+    // ---- SERVICES RENDERED (FULL WIDTH ROW) ----
     const serviceNamesList = (formData.services || [])
       .filter(svc => svc.category)
       .map(svc => {
@@ -652,18 +675,15 @@ const ServiceEntry = () => {
         return subName !== 'N/A' ? `${catName} (${subName})` : catName;
       });
 
-    const serviceName = serviceNamesList.length > 0 
-      ? serviceNamesList.join(', ') 
-      : 'General Service';
+    const serviceName = serviceNamesList.length > 0 ? serviceNamesList.join(', ') : 'General Service';
+    const displayServiceName = serviceName.length > 80 ? serviceName.substring(0, 77) + '...' : serviceName;
 
-    const staffName = localStorage.getItem('name') || 'Staff';
-    const displayServiceName = serviceName.length > 60 ? serviceName.substring(0, 57) + '...' : serviceName;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Service Summary:', 14, 78);
+    doc.setFont('helvetica', 'normal');
+    doc.text(displayServiceName, 14, 84);
 
-    doc.setFontSize(10);
-    doc.text(`Service: ${displayServiceName}`, 14, 78);
-    doc.text(`Served by: ${staffName}`, 14, 84);
-
-    // ---- ITEMS TABLE ----
+    // ---- STYLED ITEMS TABLE ----
     const tableBody = invoiceData.items.map((item, idx) => [
       idx + 1,
       item.description,
@@ -675,28 +695,52 @@ const ServiceEntry = () => {
       startY: 92,  
       head: [['#', 'Description', 'Amount (Rs.)']],
       body: tableBody,
-      foot: [['', 'Total', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
-      theme: 'plain',
-      styles: { font: 'helvetica', fontSize: 10, cellPadding: 4 },
-      headStyles: { fillColor: navy, textColor: white, fontStyle: 'bold' },
-      footStyles: { fillColor: '#f1f5f9', textColor: navy, fontStyle: 'bold' },
-      columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 'auto' }, 2: { halign: 'right' } },
+      foot: [['', 'Total Amount', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
+      theme: 'striped',
+      styles: { 
+        font: 'helvetica', 
+        fontSize: 10, 
+        cellPadding: 5 
+      },
+      headStyles: { 
+        fillColor: navy, 
+        textColor: '#FFFFFF', 
+        fontStyle: 'bold' 
+      },
+      footStyles: { 
+        fillColor: '#E2E8F0', // Light slate gray background for the total
+        textColor: navy, 
+        fontStyle: 'bold' 
+      },
+      alternateRowStyles: {
+        fillColor: '#F8FAFC' // Very faint blue-gray for alternating rows
+      },
+      columnStyles: { 
+        0: { cellWidth: 12 }, 
+        1: { cellWidth: 'auto' }, 
+        2: { halign: 'right', cellWidth: 40 } 
+      },
     });
 
     // ---- NOTES & FOOTER ----
-    let finalY = doc.lastAutoTable.finalY + 10;
+    let finalY = doc.lastAutoTable.finalY + 12;
 
     if (invoiceData.notes) {
-      doc.setFontSize(9);
-      doc.setTextColor(80, 80, 80);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(textDark);
       doc.text('Notes:', 14, finalY);
-      doc.text(invoiceData.notes, 14, finalY + 5);
-      finalY += 15;
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(textLight);
+      doc.text(invoiceData.notes, 14, finalY + 6);
+      finalY += 16;
     }
 
     doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Thank you for your visit — ${centreDetails.name}`, 14, finalY + 4);
+    doc.setTextColor('#94A3B8');
+    doc.text(`Thank you for your visit — ${centreDetails.name}`, 105, finalY + 10, { align: 'center' });
 
     doc.save(`invoice_${Date.now()}.pdf`);
     setInvoiceModalOpen(false);
