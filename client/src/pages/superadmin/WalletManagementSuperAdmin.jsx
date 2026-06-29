@@ -21,6 +21,7 @@ import {
   getWalletTodayBalance
 } from "@/services/walletService";
 import { Link } from "react-router-dom";
+const API_BASE = import.meta.env.VITE_API_URL;
 
 // ----- Icons -----
 const WalletIcon = () => (
@@ -1339,8 +1340,14 @@ const WalletManagementSuperAdmin = () => {
                       {!wallet.is_shared && wallet.assigned_staff_id && (
                         <div className="mt-3 flex items-center text-sm bg-gray-50 rounded-2xl px-4 py-2.5 border border-gray-100/50">
                           {staff.photoUrl ? (
-                            <img src={staff.photoUrl} alt={staff.name} className="w-6 h-6 rounded-full object-cover mr-2.5" />
-                          ) : (
+                              <img 
+                                src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
+                                  ? staff.photoUrl 
+                                  : `${API_BASE}${staff.photoUrl}`} 
+                                alt={staff.name} 
+                                className="w-6 h-6 rounded-full object-cover mr-2.5" 
+                              />
+                            ) : (
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium ${staff.avatarColor} mr-2.5`}>
                               {staff.name.charAt(0)}
                             </div>
@@ -1668,12 +1675,14 @@ const WalletManagementSuperAdmin = () => {
                                     <WalletIcon className="h-4 w-4 text-gray-500" />
                                   </div>
                                 ) : staff.photoUrl ? (
-                                  <img
-                                    src={staff.photoUrl}
-                                    alt={`${staff.name}'s avatar`}
-                                    className="w-8 h-8 rounded-full mr-3"
-                                  />
-                                ) : (
+                                    <img
+                                      src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
+                                        ? staff.photoUrl 
+                                        : `${API_BASE}${staff.photoUrl}`}
+                                      alt={`${staff.name}'s avatar`}
+                                      className="w-8 h-8 rounded-full mr-3"
+                                    />
+                                  ) : (
                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${staff.avatarColor} text-white mr-3`}>
                                     {staff.name.charAt(0).toUpperCase()}
                                   </div>
@@ -1836,13 +1845,15 @@ const WalletManagementSuperAdmin = () => {
                     whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
                   >
                     <div className="p-5 flex items-center">
-                      {staff.photoUrl ? (
-                        <img 
-                          src={staff.photoUrl} 
-                          alt={staff.name} 
-                          className="w-12 h-12 rounded-full object-cover mr-4"
-                        />
-                      ) : (
+                        {staff.photoUrl ? (
+                          <img 
+                            src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
+                              ? staff.photoUrl 
+                              : `${API_BASE}${staff.photoUrl}`} 
+                            alt={staff.name} 
+                            className="w-12 h-12 rounded-full object-cover mr-4"
+                          />
+                        ) : (
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white bg-slate-700 mr-4`}>
                           {staff.name.charAt(0)}
                         </div>
