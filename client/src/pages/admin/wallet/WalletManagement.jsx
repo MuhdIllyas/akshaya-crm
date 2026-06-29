@@ -456,7 +456,7 @@ const WalletManagement = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
       
       {/* Recharge Modal */}
       <AnimatePresence>
@@ -979,8 +979,14 @@ const WalletManagement = () => {
                       {!wallet.is_shared && wallet.assigned_staff_id && (
                         <div className="mt-3 flex items-center text-sm bg-gray-50 rounded-2xl px-4 py-2.5 border border-gray-100/50">
                           {staff.photoUrl ? (
-                            <img src={staff.photoUrl} alt={staff.name} className="w-6 h-6 rounded-full object-cover mr-2.5" />
-                          ) : (
+                              <img 
+                                src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
+                                  ? staff.photoUrl 
+                                  : `${API_BASE}${staff.photoUrl}`} 
+                                alt={staff.name} 
+                                className="w-6 h-6 rounded-full object-cover mr-2.5" 
+                              />
+                            ) : (
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium ${staff.avatarColor} mr-2.5`}>
                               {staff.name.charAt(0)}
                             </div>
@@ -1271,7 +1277,9 @@ const WalletManagement = () => {
                                   </div>
                                 ) : staff.photoUrl ? (
                                   <img 
-                                    src={staff.photoUrl} 
+                                    src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
+                                      ? staff.photoUrl 
+                                      : `${API_BASE}${staff.photoUrl}`} 
                                     alt={staff.name} 
                                     className="w-8 h-8 rounded-full object-cover mr-2"
                                   />
@@ -1458,13 +1466,15 @@ const WalletManagement = () => {
                     className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5 flex items-center"
                     whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
                   >
-                    {staff.photoUrl ? (
-                      <img 
-                        src={staff.photoUrl} 
-                        alt={staff.name} 
-                        className="w-12 h-12 rounded-full object-cover mr-4"
-                      />
-                    ) : (
+                      {staff.photoUrl ? (
+                        <img 
+                          src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
+                            ? staff.photoUrl 
+                            : `${API_BASE}${staff.photoUrl}`} 
+                          alt={staff.name} 
+                          className="w-12 h-12 rounded-full object-cover mr-4"
+                        />
+                      ) : (
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white bg-slate-700 mr-4`}>
                         {staff.name.charAt(0)}
                       </div>
