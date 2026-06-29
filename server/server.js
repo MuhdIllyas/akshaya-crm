@@ -1,8 +1,5 @@
 import express from "express";
 import dotenv from "dotenv";
-
-dotenv.config();
-
 import path from "path";
 import cors from "cors";
 import jwt from "jsonwebtoken";
@@ -58,6 +55,8 @@ import notesRoutes from "./routes/notes.js";
 //communication routes
 import communicationRoutes from "./routes/communication.js";
 
+dotenv.config();
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -71,7 +70,8 @@ const httpServer = createServer(app);
 
 app.use(cors({
   origin: [
-    process.env.FRONTEND_URL || "http://localhost:5173"
+    "https://akshayasahayi.com",
+    "https://www.akshayasahayi.com"
   ],
   credentials: true
 }));
@@ -241,8 +241,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.PG_URI,
-  // Only force SSL if we are in production mode
-  ssl: process.env.NODE_ENV === "production"
+  ssl: process.env.DATABASE_URL
     ? { rejectUnauthorized: false }
     : false,
 });
