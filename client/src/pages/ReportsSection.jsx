@@ -250,26 +250,42 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const [activeTab, setActiveTab] = useState('preview');
     const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
-    // Safely extract data from the V3 Backend JSON structure
-    const financials = previewData?.data?.financials?.today || {};
-    const staffData = previewData?.data?.staff?.staff || {};
-    const monthlyTrendRaw = previewData?.data?.financials?.monthlyTrend || {};
+    // 1. SAFELY EXTRACT API DATA 
+    // We default everything to empty objects/arrays so React never crashes
+    const apiData = previewData?.data || {};
+    const financials = apiData.financials?.today || {};
+    const staffData = apiData.staff?.staff || {};
+    
+    // Note: V3 Analytics returns 'monthly', not 'monthlyTrend'
+    const monthlyTrendRaw = apiData.financials?.monthly || {}; 
 
-    // Transform V3 monthly arrays into Recharts format
+    // 2. TRANSFORM MONTHLY TREND FOR RECHARTS
     const monthlyTrend = monthlyTrendRaw.revenueCollected ? 
         monthlyTrendRaw.revenueCollected.map((rev, i) => ({
             month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i],
             revenue: rev,
             expenses: monthlyTrendRaw.operatingExpenses[i] || 0
-        })).filter(m => m.revenue > 0 || m.expenses > 0) // Only show months with data
+        })).filter(m => m.revenue > 0 || m.expenses > 0)
         : [];
+
+    // 3. SAFE FALLBACKS FOR UN-WIRED TABS 
+    // We use mock data here temporarily so the Data/Charts tabs don't throw .map() errors!
+    const fallbackWallets = [
+        { name: 'Cash', value: 85000 },
+        { name: 'Bank', value: 465000 },
+        { name: 'Digital', value: 210000 },
+    ];
+    const fallbackServices = [
+        { name: 'Photocopy', revenue: 320000 },
+        { name: 'Printing', revenue: 280000 },
+    ];
 
     return (
         <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" />
 
             <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col w-full max-w-4xl">
-                {/* Header (Same as before) */}
+                {/* Header */}
                 <div className="border-b border-gray-200 bg-gray-50/80">
                     <div className="flex items-center justify-between p-4">
                         <div className="flex items-center space-x-2">
@@ -309,20 +325,21 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                         <div className="flex justify-center items-center h-full text-gray-500">Loading preview data...</div>
                     ) : activeTab === 'preview' && (
                         <div className="space-y-6">
-                            {/* V3 Financial Summary Cards */}
-                            {financials.revenueCollected !== undefined && (
+                            
+                            {/* V3 Financial Summary Cards (Now Guaranteed to Render) */}
+                            {Object.keys(financials).length > 0 && (
                                 <div className="grid grid-cols-4 gap-3">
-                                    <StatCard title="Revenue Collected" value={`₹${financials.revenueCollected.toLocaleString()}`} subtitle="Selected Period" icon={FiTrendingUp} color="bg-emerald-600" />
-                                    <StatCard title="Operating Expenses" value={`₹${financials.operatingExpenses.toLocaleString()}`} subtitle="Selected Period" icon={FiFileText} color="bg-rose-600" />
-                                    <StatCard title="Net Profit" value={`₹${financials.netProfit.toLocaleString()}`} subtitle="Selected Period" icon={FiDollarSign} color="bg-indigo-600" />
+                                    <StatCard title="Revenue Collected" value={`₹${(financials.revenueCollected || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiTrendingUp} color="bg-emerald-600" />
+                                    <StatCard title="Operating Expenses" value={`₹${(financials.operatingExpenses || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiFileText} color="bg-rose-600" />
+                                    <StatCard title="Net Profit" value={`₹${(financials.netProfit || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiDollarSign} color="bg-indigo-600" />
                                 </div>
                             )}
 
                             {/* V3 Staff Summary Cards */}
-                            {staffData.total_staff !== undefined && (
+                            {Object.keys(staffData).length > 0 && (
                                 <div className="grid grid-cols-3 gap-3">
-                                    <StatCard title="Total Staff" value={staffData.total_staff} subtitle="Active" icon={FiUsers} color="bg-blue-600" />
-                                    <StatCard title="Present Today" value={staffData.present_today} subtitle="Clocked In" icon={FiUserCheck} color="bg-emerald-600" />
+                                    <StatCard title="Total Staff" value={staffData.total_staff || 0} subtitle="Active" icon={FiUsers} color="bg-blue-600" />
+                                    <StatCard title="Present Today" value={staffData.present_today || 0} subtitle="Clocked In" icon={FiUserCheck} color="bg-emerald-600" />
                                 </div>
                             )}
 
@@ -345,72 +362,29 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             )}
                         </div>
                     )}
-
+                    
+                    {/* DATA TAB - SAFE RENDERING */}
                     {activeTab === 'data' && (
-                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                            <table className="w-full text-sm">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                    {[1, 2, 3, 4, 5].map((i) => (
-                                        <tr key={i} className="hover:bg-gray-50">
-                                            <td className="px-4 py-2 text-xs text-gray-600">2026-06-{String(i).padStart(2, '0')}</td>
-                                            <td className="px-4 py-2 text-xs text-gray-900">Transaction #{i}</td>
-                                            <td className="px-4 py-2 text-xs font-medium text-right">₹{(Math.random() * 50000 + 10000).toLocaleString()}</td>
-                                            <td className="px-4 py-2 text-right">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
-                                                    Completed
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden p-6 text-center text-gray-500">
+                            Raw ledger data view is under construction.
                         </div>
                     )}
 
+                    {/* CHARTS TAB - SAFE RENDERING (No .map crashes) */}
                     {activeTab === 'charts' && (
                         <div className="space-y-4">
                             <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Distribution</h3>
+                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Distribution (Preview)</h3>
                                 <ResponsiveContainer width="100%" height={250}>
                                     <PieChart>
-                                        <Pie
-                                            data={previewData.walletBalances}
-                                            dataKey="value"
-                                            nameKey="name"
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={50}
-                                            outerRadius={80}
-                                            paddingAngle={2}
-                                            cornerRadius={4}
-                                        >
-                                            {previewData.walletBalances.map((_, idx) => (
+                                        <Pie data={fallbackWallets} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} cornerRadius={4}>
+                                            {fallbackWallets.map((_, idx) => (
                                                 <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                                             ))}
                                         </Pie>
                                         <Tooltip />
                                         <Legend />
                                     </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Revenue Breakdown</h3>
-                                <ResponsiveContainer width="100%" height={200}>
-                                    <BarChart data={previewData.topServices}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                        <Tooltip />
-                                        <Bar dataKey="revenue" name="Revenue" fill="#10B981" radius={[2, 2, 0, 0]} />
-                                    </BarChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
