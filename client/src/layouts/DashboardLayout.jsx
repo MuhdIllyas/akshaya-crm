@@ -188,7 +188,8 @@ const DashboardLayout = () => {
       { path: "/dashboard/admin/teams", label: "Teams", icon: TeamIcon },
       { path: "/dashboard/admin/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/admin/settings", label: "Settings", icon: SettingsIcon },
-      { path: "/dashboard/admin/reports", label: "Reports", icon: ReportsIcon }
+      { path: "/dashboard/admin/reports", label: "Reports", icon: ReportsIcon },
+      { path: "/dashboard/admin/analytics", label: "Analytics", icon: AnalyticsIcon }
     ],
     staff: [
       { path: "/dashboard/staff", label: "My Dashboard", icon: DashboardIcon },

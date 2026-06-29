@@ -1,0 +1,1016 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+    FiFileText, FiDownload, FiCalendar, FiFilter, FiSearch,
+    FiTrendingUp, FiDollarSign, FiPieChart, FiUsers, FiUser,
+    FiBriefcase, FiStar, FiClock, FiCheckCircle, FiX,
+    FiArrowLeft, FiPrinter, FiEye, FiRefreshCw, FiPlus,
+    FiChevronRight, FiClock as FiClockIcon, FiMail,
+    FiBarChart2, FiActivity, FiAward, FiHome, FiCreditCard,
+    FiSmartphone, FiUserCheck, FiBook, FiDatabase, FiSettings,
+    FiStar as FiStarIcon, FiTrendingDown, FiCalendar as FiCalendarIcon
+} from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+    CartesianGrid, LineChart, Line, PieChart, Pie, Cell,
+    Legend, ComposedChart
+} from 'recharts';
+
+// ─── StatCard Component (matching existing design) ───
+const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
+    <motion.div
+        whileHover={{ y: -2 }}
+        className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer p-3"
+        onClick={onClick}
+    >
+        <div className="flex items-center justify-between">
+            <div>
+                <p className="font-medium text-gray-600 mb-1 text-xs">{title}</p>
+                <p className="font-bold text-gray-900 mb-1 text-lg">{value}</p>
+                <div className="flex items-center">
+                    <p className="text-gray-500 text-xs">{subtitle}</p>
+                    {trend && (
+                        <span className={`ml-2 flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {trend > 0 ? <FiTrendingUp className="mr-1" /> : <FiTrendingDown className="mr-1" />}
+                            {Math.abs(trend)}%
+                        </span>
+                    )}
+                </div>
+            </div>
+            <div className={`rounded-lg ${color} p-2`}>
+                <Icon className="text-white h-4 w-4" />
+            </div>
+        </div>
+    </motion.div>
+);
+
+// ─── InfoTooltip (matching existing design) ───
+const InfoTooltip = ({ content, placement = "top", children }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const tooltipRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (tooltipRef.current && !tooltipRef.current.contains(event.target)) {
+                setIsVisible(false);
+            }
+        };
+        if (isVisible) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isVisible]);
+
+    return (
+        <div
+            ref={tooltipRef}
+            className="relative inline-block"
+            onMouseEnter={() => setIsVisible(true)}
+            onMouseLeave={() => setIsVisible(false)}
+            onClick={(e) => e.stopPropagation()}
+        >
+            {children || <FiEye className="h-3 w-3 text-gray-400 cursor-pointer hover:text-gray-600" />}
+            <AnimatePresence>
+                {isVisible && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className={`absolute z-[100] ${placement === 'top' ? 'bottom-full left-0 mb-2' : 'top-full left-0 mt-2'} min-w-[240px] max-w-[280px]`}
+                        style={{ left: '50%', transform: 'translateX(-50%)' }}
+                    >
+                        <div className="relative bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl">
+                            {content}
+                            <div className={`absolute w-3 h-3 bg-gray-900 transform rotate-45 ${placement === 'top' ? '-bottom-1.5 left-1/2 -translate-x-1/2' : '-top-1.5 left-1/2 -translate-x-1/2'}`} />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+// ─── Report Card Component ───
+const ReportCard = ({ report, onClick, isFavourite, onToggleFavourite }) => {
+    const iconMap = {
+        'Executive Financial Summary': FiTrendingUp,
+        'Profit & Loss Statement': FiDollarSign,
+        'Revenue Report': FiBarChart2,
+        'Expense Report': FiFileText,
+        'Wallet Summary': FiSmartphone,
+        'Cash Flow Report': FiActivity,
+        'Ledger Report': FiBook,
+        'Pending Collections': FiClock,
+        'Attendance Report': FiUserCheck,
+        'Performance Report': FiAward,
+        'Salary Report': FiDollarSign,
+        'Incentive Report': FiStar,
+        'Review Report': FiStarIcon,
+        'Leave Report': FiCalendarIcon,
+        'Service Revenue': FiBriefcase,
+        'Service Profit': FiTrendingUp,
+        'Pending Services': FiClock,
+        'Completed Services': FiCheckCircle,
+        'Staff-wise Services': FiUsers,
+        'Service Time Analysis': FiClockIcon,
+        'Customer Summary': FiUsers,
+        'New Customers': FiUser,
+        'Returning Customers': FiUserCheck,
+        'Customer Activity': FiActivity,
+        'Customer Reviews': FiStarIcon,
+        'Team Financial Report': FiDollarSign,
+        'Team Performance': FiAward,
+        'Team Contribution': FiPieChart,
+        'Centre Comparison': FiHome,
+        'Revenue by Centre': FiBarChart2,
+        'Profit by Centre': FiTrendingUp,
+        'Attendance by Centre': FiUserCheck,
+        'Service Comparison': FiBriefcase,
+    };
+
+    const Icon = iconMap[report.name] || FiFileText;
+
+    const categoryColors = {
+        financial: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        staff: 'bg-blue-50 text-blue-700 border-blue-200',
+        service: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        customer: 'bg-purple-50 text-purple-700 border-purple-200',
+        team: 'bg-amber-50 text-amber-700 border-amber-200',
+        centre: 'bg-rose-50 text-rose-700 border-rose-200',
+    };
+
+    const categoryLabels = {
+        financial: 'Financial',
+        staff: 'Staff',
+        service: 'Service',
+        customer: 'Customer',
+        team: 'Team',
+        centre: 'Centre',
+    };
+
+    return (
+        <motion.div
+            whileHover={{ y: -2, scale: 1.01 }}
+            className="bg-white rounded-lg border border-gray-200 hover:shadow-lg transition-all duration-200 cursor-pointer p-4 relative group"
+            onClick={onClick}
+        >
+            {/* Favourite Star - Top Right */}
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavourite?.(report.id);
+                }}
+                className={`absolute top-2 right-2 p-1 rounded-full transition-colors ${isFavourite ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-400'}`}
+            >
+                <FiStarIcon className={`h-4 w-4 ${isFavourite ? 'fill-amber-500' : ''}`} />
+            </button>
+
+            <div className="flex items-start space-x-3">
+                <div className={`rounded-lg p-2.5 ${categoryColors[report.category] || 'bg-gray-100 text-gray-700'}`}>
+                    <Icon className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 text-sm truncate pr-6">{report.name}</h4>
+                    <p className="text-gray-500 text-xs mt-0.5">{report.description}</p>
+                    <div className="flex items-center mt-2 space-x-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${categoryColors[report.category] || 'bg-gray-100 text-gray-700'}`}>
+                            {categoryLabels[report.category] || report.category}
+                        </span>
+                        {report.updatedAt && (
+                            <span className="text-gray-400 text-xs">
+                                Updated {report.updatedAt}
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <FiChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-600 transition-colors mt-2" />
+            </div>
+        </motion.div>
+    );
+};
+
+// ─── Quick Report Tile ───
+const QuickReportTile = ({ label, value, icon: Icon, color, onClick }) => (
+    <motion.div
+        whileHover={{ scale: 1.02 }}
+        className="bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:shadow-md transition-all"
+        onClick={onClick}
+    >
+        <div className="flex items-center justify-between">
+            <div>
+                <p className="text-xs text-gray-500 font-medium">{label}</p>
+                <p className="text-lg font-bold text-gray-900 mt-0.5">{value}</p>
+            </div>
+            <div className={`rounded-lg ${color} p-2`}>
+                <Icon className="text-white h-4 w-4" />
+            </div>
+        </div>
+    </motion.div>
+);
+
+// ─── Scheduled Report Card ───
+const ScheduledReportCard = ({ schedule, onToggle }) => {
+    const frequencyColors = {
+        daily: 'bg-blue-50 text-blue-700 border-blue-200',
+        weekly: 'bg-purple-50 text-purple-700 border-purple-200',
+        monthly: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    };
+
+    return (
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
+            <div className="flex items-center space-x-3">
+                <div className={`rounded-lg p-2 ${frequencyColors[schedule.frequency] || 'bg-gray-100 text-gray-700'}`}>
+                    <FiMail className="h-4 w-4" />
+                </div>
+                <div>
+                    <p className="font-medium text-gray-900 text-sm">{schedule.name}</p>
+                    <p className="text-xs text-gray-500">
+                        {schedule.frequency.charAt(0).toUpperCase() + schedule.frequency.slice(1)} • {schedule.recipient}
+                    </p>
+                </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                    type="checkbox"
+                    checked={schedule.enabled}
+                    onChange={() => onToggle?.(schedule.id)}
+                    className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+        </div>
+    );
+};
+
+// ─── Report Preview Panel ───
+const ReportPreviewPanel = ({ report, onClose, onExport }) => {
+    const [activeTab, setActiveTab] = useState('preview');
+
+    // Mock data for preview
+    const previewData = {
+        revenue: '₹12,45,000',
+        expenses: '₹4,52,000',
+        profit: '₹7,93,000',
+        pending: '₹65,000',
+        walletBalances: [
+            { name: 'Cash', value: 85000 },
+            { name: 'Bank', value: 465000 },
+            { name: 'Digital', value: 210000 },
+        ],
+        topStaff: [
+            { name: 'Rajesh Kumar', revenue: 245000 },
+            { name: 'Priya Singh', revenue: 210000 },
+            { name: 'Amit Verma', revenue: 185000 },
+        ],
+        topServices: [
+            { name: 'Photocopy', revenue: 320000 },
+            { name: 'Printing', revenue: 280000 },
+            { name: 'Lamination', revenue: 150000 },
+        ],
+        monthlyTrend: [
+            { month: 'Jan', revenue: 980000, expenses: 350000 },
+            { month: 'Feb', revenue: 1020000, expenses: 380000 },
+            { month: 'Mar', revenue: 1150000, expenses: 410000 },
+            { month: 'Apr', revenue: 1080000, expenses: 390000 },
+            { month: 'May', revenue: 1200000, expenses: 430000 },
+            { month: 'Jun', revenue: 1245000, expenses: 452000 },
+        ]
+    };
+
+    const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
+    return (
+        <>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
+            />
+
+            <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col w-full max-w-4xl"
+            >
+                {/* Header */}
+                <div className="border-b border-gray-200 bg-gray-50/80">
+                    <div className="flex items-center justify-between p-4">
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={onClose}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <FiArrowLeft className="h-4 w-4 text-gray-600" />
+                            </button>
+                            <div>
+                                <h2 className="text-base font-bold text-gray-900">{report?.name}</h2>
+                                <p className="text-xs text-gray-600">{report?.description}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={() => onExport?.('pdf')}
+                                className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+                            >
+                                <FiDownload className="h-4 w-4" />
+                                <span>Export PDF</span>
+                            </button>
+                            <button
+                                onClick={() => onExport?.('excel')}
+                                className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                            >
+                                <FiFileText className="h-4 w-4" />
+                                <span>Excel</span>
+                            </button>
+                            <button
+                                onClick={() => window.print()}
+                                className="flex items-center space-x-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                            >
+                                <FiPrinter className="h-4 w-4" />
+                                <span>Print</span>
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <FiX className="h-4 w-4 text-gray-600" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="flex px-4 space-x-1">
+                        {['preview', 'data', 'charts'].map((tab) => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${activeTab === tab
+                                        ? 'border-indigo-500 text-indigo-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    {activeTab === 'preview' && (
+                        <div className="space-y-6">
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-4 gap-3">
+                                <StatCard
+                                    title="Revenue"
+                                    value={previewData.revenue}
+                                    subtitle="YTD"
+                                    icon={FiTrendingUp}
+                                    color="bg-emerald-600"
+                                />
+                                <StatCard
+                                    title="Expenses"
+                                    value={previewData.expenses}
+                                    subtitle="YTD"
+                                    icon={FiFileText}
+                                    color="bg-rose-600"
+                                />
+                                <StatCard
+                                    title="Profit"
+                                    value={previewData.profit}
+                                    subtitle="YTD"
+                                    icon={FiDollarSign}
+                                    color="bg-indigo-600"
+                                />
+                                <StatCard
+                                    title="Pending Collection"
+                                    value={previewData.pending}
+                                    subtitle="Due"
+                                    icon={FiClock}
+                                    color="bg-amber-600"
+                                />
+                            </div>
+
+                            {/* Wallet Balances */}
+                            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Balances</h3>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {previewData.walletBalances.map((w, idx) => (
+                                        <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
+                                            <p className="text-xs text-gray-500">{w.name}</p>
+                                            <p className="font-bold text-gray-900 text-sm">₹{w.value.toLocaleString()}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Charts */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Staff</h3>
+                                    <div className="space-y-2">
+                                        {previewData.topStaff.map((s, idx) => (
+                                            <div key={idx} className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-700">{s.name}</span>
+                                                <span className="text-xs font-bold text-gray-900">₹{s.revenue.toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Services</h3>
+                                    <div className="space-y-2">
+                                        {previewData.topServices.map((s, idx) => (
+                                            <div key={idx} className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-700">{s.name}</span>
+                                                <span className="text-xs font-bold text-gray-900">₹{s.revenue.toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Monthly Trend Chart */}
+                            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Monthly Revenue vs Expenses</h3>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <BarChart data={previewData.monthlyTrend}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                        <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Bar dataKey="revenue" name="Revenue" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                        <Bar dataKey="expenses" name="Expenses" fill="#EF4444" radius={[2, 2, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'data' && (
+                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {[1, 2, 3, 4, 5].map((i) => (
+                                        <tr key={i} className="hover:bg-gray-50">
+                                            <td className="px-4 py-2 text-xs text-gray-600">2026-06-{String(i).padStart(2, '0')}</td>
+                                            <td className="px-4 py-2 text-xs text-gray-900">Transaction #{i}</td>
+                                            <td className="px-4 py-2 text-xs font-medium text-right">₹{(Math.random() * 50000 + 10000).toLocaleString()}</td>
+                                            <td className="px-4 py-2 text-right">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
+                                                    Completed
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {activeTab === 'charts' && (
+                        <div className="space-y-4">
+                            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Distribution</h3>
+                                <ResponsiveContainer width="100%" height={250}>
+                                    <PieChart>
+                                        <Pie
+                                            data={previewData.walletBalances}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={50}
+                                            outerRadius={80}
+                                            paddingAngle={2}
+                                            cornerRadius={4}
+                                        >
+                                            {previewData.walletBalances.map((_, idx) => (
+                                                <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Revenue Breakdown</h3>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <BarChart data={previewData.topServices}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                        <Tooltip />
+                                        <Bar dataKey="revenue" name="Revenue" fill="#10B981" radius={[2, 2, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
+        </>
+    );
+};
+
+// ─── MAIN REPORTS SECTION ───
+const ReportsSection = ({
+    centreId,
+    isSuperAdmin = false,
+    onExport,
+    onGenerateReport,
+}) => {
+    // ─── State ───
+    const [period, setPeriod] = useState('monthly');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [selectedCentre, setSelectedCentre] = useState('all');
+    const [selectedStaff, setSelectedStaff] = useState('all');
+    const [exportFormat, setExportFormat] = useState('pdf');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedReport, setSelectedReport] = useState(null);
+    const [favourites, setFavourites] = useState([1, 2, 3]);
+    const [scheduledReports, setScheduledReports] = useState([
+        { id: 1, name: 'CEO Monthly Report', frequency: 'monthly', recipient: 'ceo@company.com', enabled: true },
+        { id: 2, name: 'Weekly Financial Report', frequency: 'weekly', recipient: 'finance@company.com', enabled: true },
+        { id: 3, name: 'Attendance Report', frequency: 'weekly', recipient: 'hr@company.com', enabled: false },
+        { id: 4, name: 'Daily Closing Report', frequency: 'daily', recipient: 'manager@company.com', enabled: true },
+    ]);
+    const [recentExports, setRecentExports] = useState([
+        { name: 'Financial Report - June.pdf', date: '2026-06-28', size: '2.4 MB' },
+        { name: 'Attendance Report.xlsx', date: '2026-06-27', size: '1.1 MB' },
+        { name: 'Profit Report.pdf', date: '2026-06-26', size: '3.2 MB' },
+        { name: 'Staff Report.xlsx', date: '2026-06-25', size: '1.8 MB' },
+    ]);
+
+    // ─── Report Data ───
+    const allReports = [
+        // Financial Reports
+        { id: 1, name: 'Executive Financial Summary', description: 'Revenue, Expenses, Profit, Wallet Balances', category: 'financial', updatedAt: 'Today' },
+        { id: 2, name: 'Profit & Loss Statement', description: 'Complete P&L', category: 'financial', updatedAt: 'Today' },
+        { id: 3, name: 'Revenue Report', description: 'Revenue by services', category: 'financial', updatedAt: 'Yesterday' },
+        { id: 4, name: 'Expense Report', description: 'Category-wise expenses', category: 'financial', updatedAt: 'Yesterday' },
+        { id: 5, name: 'Wallet Summary', description: 'Opening, Credit, Debit, Closing', category: 'financial', updatedAt: 'Today' },
+        { id: 6, name: 'Cash Flow Report', description: 'Cash movement', category: 'financial', updatedAt: 'Today' },
+        { id: 7, name: 'Ledger Report', description: 'All transactions', category: 'financial', updatedAt: 'Yesterday' },
+        { id: 8, name: 'Pending Collections', description: 'Pending customer payments', category: 'financial', updatedAt: 'Today' },
+
+        // Staff Reports
+        { id: 9, name: 'Attendance Report', description: 'Present, Absent, Late', category: 'staff', updatedAt: 'Today' },
+        { id: 10, name: 'Performance Report', description: 'Revenue & productivity', category: 'staff', updatedAt: 'Yesterday' },
+        { id: 11, name: 'Salary Report', description: 'Salary calculations', category: 'staff', updatedAt: 'Today' },
+        { id: 12, name: 'Incentive Report', description: 'Suggested incentives', category: 'staff', updatedAt: 'Yesterday' },
+        { id: 13, name: 'Review Report', description: 'Customer ratings', category: 'staff', updatedAt: 'Today' },
+        { id: 14, name: 'Leave Report', description: 'Leave history', category: 'staff', updatedAt: 'Yesterday' },
+
+        // Service Reports
+        { id: 15, name: 'Service Revenue', description: 'Revenue by service', category: 'service', updatedAt: 'Today' },
+        { id: 16, name: 'Service Profit', description: 'Profit by service', category: 'service', updatedAt: 'Yesterday' },
+        { id: 17, name: 'Pending Services', description: 'Pending applications', category: 'service', updatedAt: 'Today' },
+        { id: 18, name: 'Completed Services', description: 'Completed applications', category: 'service', updatedAt: 'Today' },
+        { id: 19, name: 'Staff-wise Services', description: 'Staff performance', category: 'service', updatedAt: 'Yesterday' },
+        { id: 20, name: 'Service Time Analysis', description: 'Average completion time', category: 'service', updatedAt: 'Today' },
+
+        // Customer Reports
+        { id: 21, name: 'Customer Summary', description: 'Customer statistics', category: 'customer', updatedAt: 'Today' },
+        { id: 22, name: 'New Customers', description: 'Newly registered', category: 'customer', updatedAt: 'Yesterday' },
+        { id: 23, name: 'Returning Customers', description: 'Repeat customers', category: 'customer', updatedAt: 'Today' },
+        { id: 24, name: 'Customer Activity', description: 'Service history', category: 'customer', updatedAt: 'Yesterday' },
+        { id: 25, name: 'Customer Reviews', description: 'Ratings', category: 'customer', updatedAt: 'Today' },
+
+        // Team Reports
+        { id: 26, name: 'Team Financial Report', description: 'Revenue & Profit', category: 'team', updatedAt: 'Today' },
+        { id: 27, name: 'Team Performance', description: 'Productivity', category: 'team', updatedAt: 'Yesterday' },
+        { id: 28, name: 'Team Contribution', description: 'Staff contribution', category: 'team', updatedAt: 'Today' },
+
+        // Centre Reports (Superadmin only)
+        { id: 29, name: 'Centre Comparison', description: 'Compare all centres', category: 'centre', updatedAt: 'Today' },
+        { id: 30, name: 'Revenue by Centre', description: 'Financial comparison', category: 'centre', updatedAt: 'Yesterday' },
+        { id: 31, name: 'Profit by Centre', description: 'Profit comparison', category: 'centre', updatedAt: 'Today' },
+        { id: 32, name: 'Attendance by Centre', description: 'Staff attendance', category: 'centre', updatedAt: 'Yesterday' },
+        { id: 33, name: 'Service Comparison', description: 'Services handled', category: 'centre', updatedAt: 'Today' },
+    ];
+
+    // ─── Filters ───
+    const filteredReports = useMemo(() => {
+        let reports = allReports;
+
+        // Filter by category (superadmin)
+        if (!isSuperAdmin) {
+            reports = reports.filter(r => r.category !== 'centre');
+        }
+
+        // Search
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            reports = reports.filter(r =>
+                r.name.toLowerCase().includes(q) ||
+                r.description.toLowerCase().includes(q) ||
+                r.category.toLowerCase().includes(q)
+            );
+        }
+
+        return reports;
+    }, [allReports, searchQuery, isSuperAdmin]);
+
+    // ─── Group by Category ───
+    const groupedReports = useMemo(() => {
+        const groups = {};
+        filteredReports.forEach(r => {
+            if (!groups[r.category]) groups[r.category] = [];
+            groups[r.category].push(r);
+        });
+        return groups;
+    }, [filteredReports]);
+
+    // ─── Favourite Reports ───
+    const favouriteReports = useMemo(() => {
+        return allReports.filter(r => favourites.includes(r.id));
+    }, [allReports, favourites]);
+
+    // ─── Handlers ───
+    const toggleFavourite = (reportId) => {
+        setFavourites(prev =>
+            prev.includes(reportId)
+                ? prev.filter(id => id !== reportId)
+                : [...prev, reportId]
+        );
+    };
+
+    const toggleScheduled = (scheduleId) => {
+        setScheduledReports(prev =>
+            prev.map(s =>
+                s.id === scheduleId ? { ...s, enabled: !s.enabled } : s
+            )
+        );
+    };
+
+    const handleGenerate = () => {
+        // Collect selected report IDs or all
+        const selectedIds = [];
+        // If there's a selected report, use it
+        if (selectedReport) {
+            selectedIds.push(selectedReport.id);
+        }
+        // Otherwise, generate all visible reports
+        // In a real app, you'd pass filters and get a batch report
+
+        if (onGenerateReport) {
+            onGenerateReport({
+                period,
+                fromDate,
+                toDate,
+                centreId: selectedCentre,
+                staffId: selectedStaff,
+                format: exportFormat,
+                reportIds: selectedIds.length ? selectedIds : filteredReports.map(r => r.id),
+            });
+        }
+
+        // Add to recent exports
+        const newExport = {
+            name: `${selectedReport?.name || 'Report'} - ${new Date().toISOString().slice(0, 10)}.${exportFormat}`,
+            date: new Date().toISOString().slice(0, 10),
+            size: `${(Math.random() * 3 + 1).toFixed(1)} MB`,
+        };
+        setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
+    };
+
+    // ─── Quick Reports Data ───
+    const quickReports = [
+        { label: "Today's Collection", value: '₹42,500', icon: FiTrendingUp, color: 'bg-emerald-600' },
+        { label: "Today's Expenses", value: '₹18,200', icon: FiFileText, color: 'bg-rose-600' },
+        { label: "Today's Profit", value: '₹24,300', icon: FiDollarSign, color: 'bg-indigo-600' },
+        { label: "Today's Attendance", value: '18/22', icon: FiUserCheck, color: 'bg-blue-600' },
+        { label: "Today's Services", value: '47', icon: FiBriefcase, color: 'bg-purple-600' },
+        { label: "Today's Pending", value: '₹65,000', icon: FiClock, color: 'bg-amber-600' },
+    ];
+
+    // ─── Category Labels ───
+    const categoryLabels = {
+        financial: { label: 'Financial Reports', icon: FiDollarSign, color: 'text-indigo-600' },
+        staff: { label: 'Staff Reports', icon: FiUsers, color: 'text-blue-600' },
+        service: { label: 'Service Reports', icon: FiBriefcase, color: 'text-emerald-600' },
+        customer: { label: 'Customer Reports', icon: FiUser, color: 'text-purple-600' },
+        team: { label: 'Team Reports', icon: FiUsers, color: 'text-amber-600' },
+        centre: { label: 'Centre Reports', icon: FiHome, color: 'text-rose-600' },
+    };
+
+    return (
+        <div className="mb-6">
+            {/* ─── HEADER ─── */}
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center">
+                        <FiFileText className="h-5 w-5 mr-2 text-indigo-600" />
+                        Reports
+                    </h2>
+                    <p className="text-gray-600 text-sm mt-1">Generate and export business reports</p>
+                </div>
+                <button
+                    onClick={handleGenerate}
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                >
+                    <FiRefreshCw className="h-4 w-4 mr-2" />
+                    Generate Selected Reports
+                </button>
+            </div>
+
+            {/* ─── GLOBAL FILTERS ─── */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center text-sm">
+                        <FiFilter className="h-4 w-4 mr-2 text-indigo-600" />
+                        Global Filters
+                    </h3>
+                    <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <span>Apply filters to all reports</span>
+                        <InfoTooltip
+                            content="These filters apply to all reports generated from this page. Set your preferred period, centre, staff, and export format."
+                        />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                    {/* Period */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Period</label>
+                        <select
+                            value={period}
+                            onChange={(e) => setPeriod(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                        >
+                            <option value="daily">Today</option>
+                            <option value="weekly">This Week</option>
+                            <option value="monthly">This Month</option>
+                            <option value="quarterly">This Quarter</option>
+                            <option value="yearly">This Year</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+
+                    {/* From Date */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">From</label>
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                            disabled={period !== 'custom'}
+                        />
+                    </div>
+
+                    {/* To Date */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">To</label>
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                            disabled={period !== 'custom'}
+                        />
+                    </div>
+
+                    {/* Centre (Superadmin only) */}
+                    {isSuperAdmin && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Centre</label>
+                            <select
+                                value={selectedCentre}
+                                onChange={(e) => setSelectedCentre(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                            >
+                                <option value="all">All Centres</option>
+                                <option value="1">Centre A</option>
+                                <option value="2">Centre B</option>
+                                <option value="3">Centre C</option>
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Staff */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Staff</label>
+                        <select
+                            value={selectedStaff}
+                            onChange={(e) => setSelectedStaff(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                        >
+                            <option value="all">All Staff</option>
+                            <option value="1">Rajesh Kumar</option>
+                            <option value="2">Priya Singh</option>
+                            <option value="3">Amit Verma</option>
+                        </select>
+                    </div>
+
+                    {/* Export Format */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Export Format</label>
+                        <select
+                            value={exportFormat}
+                            onChange={(e) => setExportFormat(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                        >
+                            <option value="pdf">PDF</option>
+                            <option value="excel">Excel</option>
+                            <option value="csv">CSV</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Search */}
+                <div className="mt-3 relative">
+                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search reports by name, description, or category..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                    />
+                </div>
+            </div>
+
+            {/* ─── QUICK REPORTS ─── */}
+            <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center text-sm">
+                        <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
+                        Quick Reports
+                    </h3>
+                    <span className="text-xs text-gray-500">One-click access to today's key metrics</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                    {quickReports.map((qr, idx) => (
+                        <QuickReportTile
+                            key={idx}
+                            label={qr.label}
+                            value={qr.value}
+                            icon={qr.icon}
+                            color={qr.color}
+                            onClick={() => {
+                                // In a real app, this would generate the specific report
+                                // For now, we'll just show a preview of the first report
+                                const report = allReports.find(r => r.category === 'financial');
+                                if (report) setSelectedReport(report);
+                            }}
+                        />
+                    ))}
+                </div>
+            </div>
+
+            {/* ─── FAVOURITE REPORTS ─── */}
+            {favouriteReports.length > 0 && (
+                <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-900 flex items-center text-sm">
+                            <FiStarIcon className="h-4 w-4 mr-2 text-amber-500 fill-amber-500" />
+                            Favourite Reports
+                        </h3>
+                        <span className="text-xs text-gray-500">One-click access to your most-used reports</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {favouriteReports.map((report) => (
+                            <ReportCard
+                                key={report.id}
+                                report={report}
+                                isFavourite={true}
+                                onToggleFavourite={toggleFavourite}
+                                onClick={() => setSelectedReport(report)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ─── CATEGORIZED REPORTS ─── */}
+            {Object.entries(groupedReports).map(([category, reports]) => {
+                const meta = categoryLabels[category];
+                if (!meta) return null;
+                const Icon = meta.icon;
+
+                return (
+                    <div key={category} className="mb-6">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold text-gray-900 flex items-center text-sm">
+                                <Icon className={`h-4 w-4 mr-2 ${meta.color}`} />
+                                {meta.label}
+                            </h3>
+                            <span className="text-xs text-gray-500">{reports.length} reports</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {reports.map((report) => (
+                                <ReportCard
+                                    key={report.id}
+                                    report={report}
+                                    isFavourite={favourites.includes(report.id)}
+                                    onToggleFavourite={toggleFavourite}
+                                    onClick={() => setSelectedReport(report)}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                );
+            })}
+
+            {/* ─── SCHEDULED REPORTS ─── */}
+            <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center text-sm">
+                        <FiClockIcon className="h-4 w-4 mr-2 text-indigo-600" />
+                        Scheduled Reports
+                    </h3>
+                    <span className="text-xs text-gray-500">Automated email delivery</span>
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {scheduledReports.map((schedule) => (
+                            <ScheduledReportCard
+                                key={schedule.id}
+                                schedule={schedule}
+                                onToggle={toggleScheduled}
+                            />
+                        ))}
+                    </div>
+                    <button className="mt-3 flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
+                        <FiPlus className="h-3 w-3 mr-1" />
+                        Add Scheduled Report
+                    </button>
+                </div>
+            </div>
+
+            {/* ─── RECENT EXPORTS ─── */}
+            <div>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900 flex items-center text-sm">
+                        <FiDownload className="h-4 w-4 mr-2 text-indigo-600" />
+                        Recent Exports
+                    </h3>
+                    <span className="text-xs text-gray-500">Last 10 exports</span>
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">File Name</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
+                                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {recentExports.map((exp, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50">
+                                    <td className="px-4 py-2 text-xs text-gray-900 font-medium">{exp.name}</td>
+                                    <td className="px-4 py-2 text-xs text-gray-600">{exp.date}</td>
+                                    <td className="px-4 py-2 text-xs text-gray-600">{exp.size}</td>
+                                    <td className="px-4 py-2 text-right">
+                                        <button className="text-indigo-600 hover:text-indigo-800 text-xs font-medium transition-colors">
+                                            Download
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* ─── REPORT PREVIEW PANEL ─── */}
+            <AnimatePresence>
+                {selectedReport && (
+                    <ReportPreviewPanel
+                        report={selectedReport}
+                        onClose={() => setSelectedReport(null)}
+                        onExport={(format) => {
+                            console.log(`Exporting ${selectedReport.name} as ${format}`);
+                            // In a real app, this would trigger the export
+                            handleGenerate();
+                        }}
+                    />
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+export default ReportsSection;

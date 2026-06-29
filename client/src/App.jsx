@@ -49,6 +49,9 @@ import axios from "axios";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 
+//Analytics Page
+import ReportsSection from './pages/ReportsSection';
+
 import CustomerRegistration from './pages/CustomerRegistration';
 import CustomerDashboard from './pages/customers/CustomerDashboard';
 import CustomerMyServices from './pages/customers/MyServices';
@@ -291,6 +294,10 @@ const App = () => {
             <Route
               path="admin/reports"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminReports /></ProtectedRoute>}
+            />
+            <Route
+              path="admin/analytics"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><ReportsSection /></ProtectedRoute>}
             />
             <Route
               path="superadmin/centremanagement"
