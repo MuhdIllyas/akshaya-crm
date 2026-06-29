@@ -383,6 +383,9 @@ export const getDashboardAnalytics = async (centreId) => {
   }
 };
 
+// ==========================================
+// REPORTS EXPORT ORCHESTRATOR
+// ==========================================
 export const getReportData = async (params) => {
   const { reportIds, targetCentreId, staffId, period, fromDate, toDate } = params;
   const client = await pool.connect();
@@ -400,37 +403,44 @@ export const getReportData = async (params) => {
   };
 
   try {
-    // We map over the requested report IDs and fetch the specific data needed.
-    // Notice how we are REUSING the fetch layers we built for the Dashboard!
+    // 1. Build the 'dates' context object exactly as V3 fetchers expect it.
+    // We treat the report's 'toDate' as 'today' for the sake of the snapshot.
+    const reportDates = {
+      today: toDate, 
+      yesterday: new Date(new Date(toDate).setDate(new Date(toDate).getDate() - 1)).toISOString().split('T')[0],
+      sevenDaysAgo: new Date(new Date(toDate).setDate(new Date(toDate).getDate() - 6)).toISOString().split('T')[0],
+      currentYear: new Date(toDate).getFullYear(),
+      currentMonthStr: toDate.substring(0, 7),
+      firstDayOfMonth: `${toDate.substring(0, 7)}-01`
+    };
+
+    // 2. Map over requested reports and reuse V3 Fetchers
     for (const id of reportIds) {
       switch (id) {
         
         // ID 1: Executive Financial Summary & ID 2: Profit & Loss
         case 1: 
         case 2: {
-          const rawFinancials = await fetchFinancialData(client, targetCentreId, toDate, new Date(toDate).getFullYear());
+          // ✅ FIXED: Using fetchFinancialAnalytics & passing reportDates
+          const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
           break;
         }
 
         // ID 9: Attendance Report
         case 9: {
-          const sevenDaysAgo = new Date(new Date(toDate).setDate(new Date(toDate).getDate() - 6)).toISOString().split('T')[0];
-          const firstDayOfMonth = `${toDate.substring(0, 7)}-01`;
-          compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, toDate, sevenDaysAgo, firstDayOfMonth);
+          // ✅ FIXED: Passing reportDates object
+          compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
           break;
         }
 
         // ID 15: Service Revenue & ID 18: Completed Services
         case 15:
         case 18: {
-          // You can create a new specialized fetcher here for detailed service lists
-          // compiledReport.data.services = await fetchDetailedServiceReport(client, targetCentreId, fromDate, toDate, staffId);
-          compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId);
+          // ✅ FIXED: Passing reportDates object
+          compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId, reportDates);
           break;
         }
-
-        // Add more cases as you build out specific report modules (customer, team, centre)
       }
     }
 
