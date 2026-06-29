@@ -61,7 +61,7 @@ router.get("/", authMiddleware(["superadmin"]), async (req, res) => {
 });
 
 // GET /api/centres/:id
-router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.get("/:id", authMiddleware(["staff" ,"admin", "superadmin"]), async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -91,7 +91,7 @@ router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
 });
 
 // GET /api/centres/:id/staff
-router.get("/:id/staff", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.get("/:id/staff", authMiddleware(["staff" , "admin", "superadmin"]), async (req, res) => {
   const { id } = req.params;
 
   try {
