@@ -32,6 +32,7 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
 
   // Fetch supervisors for reportsTo dropdown
@@ -89,10 +90,11 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      setSelectedFile(file); 
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result);
-        setFormData((prev) => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(file);
     }
@@ -112,11 +114,25 @@ const AddStaffForm = ({ onAdd, onClose, centres }) => {
 
     setLoading(true);
     try {
-      console.log("Sending staff creation request:", formData);
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/staff/add`, formData, {
+      // 1. Create a FormData object instead of JSON
+      const submitData = new FormData();
+      
+      // 2. Append all text fields
+      Object.keys(formData).forEach(key => {
+        if (key !== 'photo' && formData[key] !== null && formData[key] !== undefined) {
+          submitData.append(key, formData[key]);
+        }
+      });
+
+      // 3. Append the physical file if selected
+      if (selectedFile) {
+        submitData.append('photo', selectedFile);
+      }
+
+      console.log("Sending staff creation request");
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/staff/add`, submitData, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "Content-Type": "application/json",
         },
       });
       console.log("Staff creation response:", response.data);
