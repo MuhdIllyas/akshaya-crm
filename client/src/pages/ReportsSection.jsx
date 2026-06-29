@@ -245,68 +245,35 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
     );
 };
 
-// ─── Report Preview Panel ───
-const ReportPreviewPanel = ({ report, onClose, onExport }) => {
+// ─── Report Preview Panel (Wired to V3 Backend) ───
+const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const [activeTab, setActiveTab] = useState('preview');
-
-    // Mock data for preview
-    const previewData = {
-        revenue: '₹12,45,000',
-        expenses: '₹4,52,000',
-        profit: '₹7,93,000',
-        pending: '₹65,000',
-        walletBalances: [
-            { name: 'Cash', value: 85000 },
-            { name: 'Bank', value: 465000 },
-            { name: 'Digital', value: 210000 },
-        ],
-        topStaff: [
-            { name: 'Rajesh Kumar', revenue: 245000 },
-            { name: 'Priya Singh', revenue: 210000 },
-            { name: 'Amit Verma', revenue: 185000 },
-        ],
-        topServices: [
-            { name: 'Photocopy', revenue: 320000 },
-            { name: 'Printing', revenue: 280000 },
-            { name: 'Lamination', revenue: 150000 },
-        ],
-        monthlyTrend: [
-            { month: 'Jan', revenue: 980000, expenses: 350000 },
-            { month: 'Feb', revenue: 1020000, expenses: 380000 },
-            { month: 'Mar', revenue: 1150000, expenses: 410000 },
-            { month: 'Apr', revenue: 1080000, expenses: 390000 },
-            { month: 'May', revenue: 1200000, expenses: 430000 },
-            { month: 'Jun', revenue: 1245000, expenses: 452000 },
-        ]
-    };
-
     const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
+    // Safely extract data from the V3 Backend JSON structure
+    const financials = previewData?.data?.financials?.today || {};
+    const staffData = previewData?.data?.staff?.staff || {};
+    const monthlyTrendRaw = previewData?.data?.financials?.monthlyTrend || {};
+
+    // Transform V3 monthly arrays into Recharts format
+    const monthlyTrend = monthlyTrendRaw.revenueCollected ? 
+        monthlyTrendRaw.revenueCollected.map((rev, i) => ({
+            month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i],
+            revenue: rev,
+            expenses: monthlyTrendRaw.operatingExpenses[i] || 0
+        })).filter(m => m.revenue > 0 || m.expenses > 0) // Only show months with data
+        : [];
 
     return (
         <>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
-            />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" />
 
-            <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col w-full max-w-4xl"
-            >
-                {/* Header */}
+            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col w-full max-w-4xl">
+                {/* Header (Same as before) */}
                 <div className="border-b border-gray-200 bg-gray-50/80">
                     <div className="flex items-center justify-between p-4">
                         <div className="flex items-center space-x-2">
-                            <button
-                                onClick={onClose}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
+                            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                                 <FiArrowLeft className="h-4 w-4 text-gray-600" />
                             </button>
                             <div>
@@ -315,47 +282,21 @@ const ReportPreviewPanel = ({ report, onClose, onExport }) => {
                             </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <button
-                                onClick={() => onExport?.('pdf')}
-                                className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-                            >
-                                <FiDownload className="h-4 w-4" />
-                                <span>Export PDF</span>
+                            <button onClick={() => onExport?.('pdf', report)} className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm">
+                                <FiDownload className="h-4 w-4" /><span>Export PDF</span>
                             </button>
-                            <button
-                                onClick={() => onExport?.('excel')}
-                                className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
-                            >
-                                <FiFileText className="h-4 w-4" />
-                                <span>Excel</span>
+                            <button onClick={() => onExport?.('excel', report)} className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm">
+                                <FiFileText className="h-4 w-4" /><span>Excel</span>
                             </button>
-                            <button
-                                onClick={() => window.print()}
-                                className="flex items-center space-x-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
-                            >
-                                <FiPrinter className="h-4 w-4" />
-                                <span>Print</span>
-                            </button>
-                            <button
-                                onClick={onClose}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
+                            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                                 <FiX className="h-4 w-4 text-gray-600" />
                             </button>
                         </div>
                     </div>
 
-                    {/* Tabs */}
                     <div className="flex px-4 space-x-1">
                         {['preview', 'data', 'charts'].map((tab) => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${activeTab === tab
-                                        ? 'border-indigo-500 text-indigo-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                                    }`}
-                            >
+                            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
                             </button>
                         ))}
@@ -364,94 +305,44 @@ const ReportPreviewPanel = ({ report, onClose, onExport }) => {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
-                    {activeTab === 'preview' && (
+                    {!previewData ? (
+                        <div className="flex justify-center items-center h-full text-gray-500">Loading preview data...</div>
+                    ) : activeTab === 'preview' && (
                         <div className="space-y-6">
-                            {/* Summary Cards */}
-                            <div className="grid grid-cols-4 gap-3">
-                                <StatCard
-                                    title="Revenue"
-                                    value={previewData.revenue}
-                                    subtitle="YTD"
-                                    icon={FiTrendingUp}
-                                    color="bg-emerald-600"
-                                />
-                                <StatCard
-                                    title="Expenses"
-                                    value={previewData.expenses}
-                                    subtitle="YTD"
-                                    icon={FiFileText}
-                                    color="bg-rose-600"
-                                />
-                                <StatCard
-                                    title="Profit"
-                                    value={previewData.profit}
-                                    subtitle="YTD"
-                                    icon={FiDollarSign}
-                                    color="bg-indigo-600"
-                                />
-                                <StatCard
-                                    title="Pending Collection"
-                                    value={previewData.pending}
-                                    subtitle="Due"
-                                    icon={FiClock}
-                                    color="bg-amber-600"
-                                />
-                            </div>
+                            {/* V3 Financial Summary Cards */}
+                            {financials.revenueCollected !== undefined && (
+                                <div className="grid grid-cols-4 gap-3">
+                                    <StatCard title="Revenue Collected" value={`₹${financials.revenueCollected.toLocaleString()}`} subtitle="Selected Period" icon={FiTrendingUp} color="bg-emerald-600" />
+                                    <StatCard title="Operating Expenses" value={`₹${financials.operatingExpenses.toLocaleString()}`} subtitle="Selected Period" icon={FiFileText} color="bg-rose-600" />
+                                    <StatCard title="Net Profit" value={`₹${financials.netProfit.toLocaleString()}`} subtitle="Selected Period" icon={FiDollarSign} color="bg-indigo-600" />
+                                </div>
+                            )}
 
-                            {/* Wallet Balances */}
-                            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Balances</h3>
+                            {/* V3 Staff Summary Cards */}
+                            {staffData.total_staff !== undefined && (
                                 <div className="grid grid-cols-3 gap-3">
-                                    {previewData.walletBalances.map((w, idx) => (
-                                        <div key={idx} className="bg-white rounded-lg p-3 border border-gray-200">
-                                            <p className="text-xs text-gray-500">{w.name}</p>
-                                            <p className="font-bold text-gray-900 text-sm">₹{w.value.toLocaleString()}</p>
-                                        </div>
-                                    ))}
+                                    <StatCard title="Total Staff" value={staffData.total_staff} subtitle="Active" icon={FiUsers} color="bg-blue-600" />
+                                    <StatCard title="Present Today" value={staffData.present_today} subtitle="Clocked In" icon={FiUserCheck} color="bg-emerald-600" />
                                 </div>
-                            </div>
+                            )}
 
-                            {/* Charts */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Staff</h3>
-                                    <div className="space-y-2">
-                                        {previewData.topStaff.map((s, idx) => (
-                                            <div key={idx} className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-700">{s.name}</span>
-                                                <span className="text-xs font-bold text-gray-900">₹{s.revenue.toLocaleString()}</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                            {/* Dynamic Trend Chart */}
+                            {monthlyTrend.length > 0 && (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Revenue vs Expenses Trend</h3>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <BarChart data={monthlyTrend}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                            <Tooltip formatter={(value) => `₹${value.toLocaleString()}`} />
+                                            <Legend />
+                                            <Bar dataKey="revenue" name="Revenue Collected" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="expenses" name="Operating Expenses" fill="#EF4444" radius={[2, 2, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 </div>
-                                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Services</h3>
-                                    <div className="space-y-2">
-                                        {previewData.topServices.map((s, idx) => (
-                                            <div key={idx} className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-700">{s.name}</span>
-                                                <span className="text-xs font-bold text-gray-900">₹{s.revenue.toLocaleString()}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Monthly Trend Chart */}
-                            <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Monthly Revenue vs Expenses</h3>
-                                <ResponsiveContainer width="100%" height={200}>
-                                    <BarChart data={previewData.monthlyTrend}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                        <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="revenue" name="Revenue" fill="#6366F1" radius={[2, 2, 0, 0]} />
-                                        <Bar dataKey="expenses" name="Expenses" fill="#EF4444" radius={[2, 2, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+                            )}
                         </div>
                     )}
 
@@ -538,6 +429,8 @@ const ReportsSection = ({
     onGenerateReport,
 }) => {
     // ─── State ───
+    const [previewData, setPreviewData] = useState(null); 
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const [period, setPeriod] = useState('monthly');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
@@ -662,35 +555,75 @@ const ReportsSection = ({
         );
     };
 
-    const handleGenerate = () => {
-        // Collect selected report IDs or all
-        const selectedIds = [];
-        // If there's a selected report, use it
-        if (selectedReport) {
-            selectedIds.push(selectedReport.id);
-        }
-        // Otherwise, generate all visible reports
-        // In a real app, you'd pass filters and get a batch report
+    const handleGenerate = async (overrideFormat = null, specificReport = null) => {
+        const targetFormat = overrideFormat || exportFormat;
+        const reportToGen = specificReport || selectedReport;
+        const selectedIds = reportToGen ? [reportToGen.id] : filteredReports.map(r => r.id);
 
-        if (onGenerateReport) {
-            onGenerateReport({
-                period,
-                fromDate,
-                toDate,
-                centreId: selectedCentre,
-                staffId: selectedStaff,
-                format: exportFormat,
-                reportIds: selectedIds.length ? selectedIds : filteredReports.map(r => r.id),
-            });
-        }
-
-        // Add to recent exports
-        const newExport = {
-            name: `${selectedReport?.name || 'Report'} - ${new Date().toISOString().slice(0, 10)}.${exportFormat}`,
-            date: new Date().toISOString().slice(0, 10),
-            size: `${(Math.random() * 3 + 1).toFixed(1)} MB`,
+        const payload = {
+            period,
+            fromDate,
+            toDate,
+            centreId: selectedCentre,
+            staffId: selectedStaff,
+            format: targetFormat,
+            reportIds: selectedIds,
         };
-        setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
+
+        try {
+            if (targetFormat === 'preview') setIsPreviewLoading(true);
+
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Failed to generate report');
+
+            // 1. Handle Preview (JSON)
+            if (targetFormat === 'preview') {
+                const data = await res.json();
+                setPreviewData(data);
+                setSelectedReport(reportToGen); // Open the panel
+            } 
+            // 2. Handle File Download (Blob)
+            else {
+                const blob = await res.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                
+                // Get filename from header or fallback
+                const disposition = res.headers.get('Content-Disposition');
+                let filename = `${reportToGen?.name || 'Batch_Report'}_${new Date().toISOString().slice(0,10)}.${targetFormat}`;
+                if (disposition && disposition.includes('filename=')) {
+                    filename = disposition.split('filename=')[1].replace(/"/g, '');
+                }
+                
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+
+                // Add to recent exports UI
+                const newExport = {
+                    name: filename,
+                    date: new Date().toISOString().slice(0, 10),
+                    size: `${(blob.size / (1024 * 1024)).toFixed(2)} MB`,
+                };
+                setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
+            }
+        } catch (error) {
+            console.error("Report generation failed:", error);
+            alert("Failed to generate report. Please try again.");
+        } finally {
+            setIsPreviewLoading(false);
+        }
     };
 
     // ─── Quick Reports Data ───
@@ -895,7 +828,7 @@ const ReportsSection = ({
                                 report={report}
                                 isFavourite={true}
                                 onToggleFavourite={toggleFavourite}
-                                onClick={() => setSelectedReport(report)}
+                                onClick={() => handleGenerate('preview', report)}
                             />
                         ))}
                     </div>
@@ -924,7 +857,7 @@ const ReportsSection = ({
                                     report={report}
                                     isFavourite={favourites.includes(report.id)}
                                     onToggleFavourite={toggleFavourite}
-                                    onClick={() => setSelectedReport(report)}
+                                    onClick={() => handleGenerate('preview', report)}
                                 />
                             ))}
                         </div>
@@ -996,16 +929,13 @@ const ReportsSection = ({
             </div>
 
             {/* ─── REPORT PREVIEW PANEL ─── */}
-            <AnimatePresence>
+           <AnimatePresence>
                 {selectedReport && (
                     <ReportPreviewPanel
                         report={selectedReport}
+                        previewData={previewData}             
                         onClose={() => setSelectedReport(null)}
-                        onExport={(format) => {
-                            console.log(`Exporting ${selectedReport.name} as ${format}`);
-                            // In a real app, this would trigger the export
-                            handleGenerate();
-                        }}
+                        onExport={handleGenerate}            
                     />
                 )}
             </AnimatePresence>
