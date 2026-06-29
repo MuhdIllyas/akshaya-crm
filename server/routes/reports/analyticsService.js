@@ -98,6 +98,8 @@ const fetchServiceAnalytics = async (client, centreId, dates) => {
 
 const fetchFinancialAnalytics = async (client, centreId, dates) => {
   const [todayRev, todayOpEx, monthlyRev, monthlyOpEx] = await Promise.all([
+    
+    // ✅ 1. Updated to use date ranges (fromDate and toDate)
     client.query(`
       SELECT 
         COALESCE(SUM(se.total_charges), 0) as revenue_collected,
@@ -105,16 +107,17 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
         COALESCE(SUM(se.service_charges), 0) as gross_profit
       FROM service_entries se 
       JOIN staff s ON se.staff_id = s.id 
-      WHERE s.centre_id = $1 AND se.created_at::date = $2
-    `, [centreId, dates.today]),
+      WHERE s.centre_id = $1 AND se.created_at::date >= $2 AND se.created_at::date <= $3
+    `, [centreId, dates.fromDate, dates.toDate]),
     
+    // ✅ 2. Updated to use date ranges (fromDate and toDate)
     client.query(`
       SELECT COALESCE(SUM(amount), 0) as operating_expenses
       FROM expenses 
-      WHERE centre_id = $1 AND expense_date = $2 
+      WHERE centre_id = $1 AND expense_date >= $2 AND expense_date <= $3 
       AND status IN ('approved', 'auto_approved') 
       AND (is_reversal IS NULL OR is_reversal = FALSE)
-    `, [centreId, dates.today]),
+    `, [centreId, dates.fromDate, dates.toDate]),
     
     client.query(`
       SELECT 
@@ -432,6 +435,8 @@ export const getReportData = async (params) => {
 
     const reportDates = {
       today: toDate, 
+      fromDate: fromDate, // <--- ADD THIS LINE
+      toDate: toDate,     // <--- ADD THIS LINE
       yesterday: yesterdayObj.toISOString().split('T')[0],
       sevenDaysAgo: sevenDaysAgoObj.toISOString().split('T')[0],
       currentYear: baseDateObj.getFullYear(),
