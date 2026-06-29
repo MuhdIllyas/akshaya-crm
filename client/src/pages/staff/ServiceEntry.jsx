@@ -115,6 +115,16 @@ const ServiceEntry = () => {
   const isEditMode = Boolean(editingEntryId);
   const [staffList, setStaffList] = useState([]);
 
+  const [centreDetails, setCentreDetails] = useState({
+    name: 'Akshaya e Centre',
+    address: '',
+    district: '',
+    state: '',
+    pincode: '',
+    phone: '',
+    logo: '/logo-light.png'
+  });
+
   // --- MENTIONS LOGIC FOR INITIAL NOTE ---
   useEffect(() => {
     const loadStaffForMentions = async () => {
@@ -548,126 +558,112 @@ const ServiceEntry = () => {
     setInvoiceModalOpen(true);
   };
 
-const generateInvoicePDF = () => {
-  const doc = new jsPDF();
+  const generateInvoicePDF = () => {
+    const doc = new jsPDF();
+    const navy = '#0F172A';        
+    const white = '#FFFFFF';
 
-  // Brand colours
-  const navy = '#0F172A';        // dark sidebar navy
-  const white = '#FFFFFF';
-  const accent = '#3B82F6';      // bright blue for accents (optional)
+    // ---- HEADER BAND ----
+    doc.setFillColor(navy);
+    doc.rect(0, 0, 210, 35, 'F');   
 
-  // ---- HEADER BAND ----
-  doc.setFillColor(navy);
-  doc.rect(0, 0, 210, 35, 'F');   // full width top bar
+    // Dynamic Logo
+    try {
+      doc.addImage(centreDetails.logo, 'PNG', 10, 5, 22, 22);
+    } catch (e) {
+      doc.setTextColor(white);
+      doc.setFontSize(16);
+      doc.text(centreDetails.name, 14, 18);
+    }
 
-  // Try to add logo, if available
-  try {
-    // logo-dark should be a PNG in /public (e.g., logo-dark.png)
-    doc.addImage('/logo-light.png', 'PNG', 10, 5, 22, 22);
-  } catch (e) {
-    // fallback: centre name as text
+    // Dynamic Centre Details on the right
     doc.setTextColor(white);
-    doc.setFontSize(16);
-    doc.text('Akshaya e Centre', 14, 18);
-  }
+    doc.setFontSize(14);
+    doc.text(centreDetails.name, 120, 16);
+    doc.setFontSize(8);
+    
+    // Build address string conditionally based on what data exists
+    const addressLine = [centreDetails.address, centreDetails.district, centreDetails.state]
+      .filter(Boolean).join(', ');
+      
+    doc.text(addressLine, 120, 24);
+    
+    const pinPhoneLine = [
+      centreDetails.pincode ? `Pin - ${centreDetails.pincode}` : null,
+      centreDetails.phone
+    ].filter(Boolean).join(' | ');
+    
+    doc.text(pinPhoneLine, 120, 28);
 
-  // Centre name / address on the right
-  doc.setTextColor(white);
-  doc.setFontSize(14);
-  doc.text('Akshaya e Centre Pukayur', 120, 16);
-  doc.setFontSize(8);
-  doc.text('Olakara PO, Malappuram, Kerala ', 120, 24);
-  doc.text('Pin - 676306 | +91 8078924261', 120, 28);
+    // ---- INVOICE TITLE & CUSTOMER INFO ----
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('INVOICE', 14, 50);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 58);
+    doc.text(`Customer: ${invoiceData.customerName}`, 14, 64);
+    doc.text(`Phone: ${invoiceData.phone}`, 14, 70);
 
-  // ---- INVOICE TITLE & CUSTOMER INFO ----
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('INVOICE', 14, 50);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 14, 58);
-  doc.text(`Customer: ${invoiceData.customerName}`, 14, 64);
-  doc.text(`Phone: ${invoiceData.phone}`, 14, 70);
+    // ---------- SERVICE & STAFF ----------
+    const serviceNamesList = (formData.services || [])
+      .filter(svc => svc.category)
+      .map(svc => {
+        const catName = getCategoryName(svc.category);
+        const subName = getSubcategoryName(svc.category, svc.subcategory);
+        return subName !== 'N/A' ? `${catName} (${subName})` : catName;
+      });
 
-  // ---------- SERVICE & STAFF ----------
-  // Extract all service names from the cart
-  const serviceNamesList = (formData.services || [])
-    .filter(svc => svc.category)
-    .map(svc => {
-      const catName = getCategoryName(svc.category);
-      const subName = getSubcategoryName(svc.category, svc.subcategory);
-      return subName !== 'N/A' ? `${catName} (${subName})` : catName;
+    const serviceName = serviceNamesList.length > 0 
+      ? serviceNamesList.join(', ') 
+      : 'General Service';
+
+    const staffName = localStorage.getItem('name') || 'Staff';
+    const displayServiceName = serviceName.length > 60 ? serviceName.substring(0, 57) + '...' : serviceName;
+
+    doc.setFontSize(10);
+    doc.text(`Service: ${displayServiceName}`, 14, 78);
+    doc.text(`Served by: ${staffName}`, 14, 84);
+
+    // ---- ITEMS TABLE ----
+    const tableBody = invoiceData.items.map((item, idx) => [
+      idx + 1,
+      item.description,
+      `Rs. ${parseFloat(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+    ]);
+    const total = invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0);
+
+    autoTable(doc, {
+      startY: 92,  
+      head: [['#', 'Description', 'Amount (Rs.)']],
+      body: tableBody,
+      foot: [['', 'Total', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
+      theme: 'plain',
+      styles: { font: 'helvetica', fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: navy, textColor: white, fontStyle: 'bold' },
+      footStyles: { fillColor: '#f1f5f9', textColor: navy, fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 'auto' }, 2: { halign: 'right' } },
     });
 
-  const serviceName = serviceNamesList.length > 0 
-    ? serviceNamesList.join(', ') 
-    : 'General Service';
+    // ---- NOTES & FOOTER ----
+    let finalY = doc.lastAutoTable.finalY + 10;
 
-  const staffName = localStorage.getItem('name') || 'Staff';
+    if (invoiceData.notes) {
+      doc.setFontSize(9);
+      doc.setTextColor(80, 80, 80);
+      doc.text('Notes:', 14, finalY);
+      doc.text(invoiceData.notes, 14, finalY + 5);
+      finalY += 15;
+    }
 
-  // Truncate service name if it's too long so it doesn't run off the PDF page
-  const displayServiceName = serviceName.length > 60 ? serviceName.substring(0, 57) + '...' : serviceName;
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Thank you for your visit — ${centreDetails.name}`, 14, finalY + 4);
 
-  doc.setFontSize(10);
-  doc.text(`Service: ${displayServiceName}`, 14, 78);
-  doc.text(`Served by: ${staffName}`, 14, 84);
-  // ------------------------------------
-
-  // ---- ITEMS TABLE ----
-  const tableBody = invoiceData.items.map((item, idx) => [
-    idx + 1,
-    item.description,
-    `Rs. ${parseFloat(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-  ]);
-  const total = invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0);
-
-  autoTable(doc, {
-    startY: 92,  // moved down to make room for service & staff lines
-    head: [['#', 'Description', 'Amount (Rs.)']],
-    body: tableBody,
-    foot: [['', 'Total', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
-    theme: 'plain',
-    styles: {
-      font: 'helvetica',
-      fontSize: 10,
-      cellPadding: 4,
-    },
-    headStyles: {
-      fillColor: navy,
-      textColor: white,
-      fontStyle: 'bold',
-    },
-    footStyles: {
-      fillColor: '#f1f5f9',
-      textColor: navy,
-      fontStyle: 'bold',
-    },
-    columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 'auto' },
-      2: { halign: 'right' },
-    },
-  });
-
-  // ---- NOTES & FOOTER ----
-  let finalY = doc.lastAutoTable.finalY + 10;
-
-  if (invoiceData.notes) {
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 80);
-    doc.text('Notes:', 14, finalY);
-    doc.text(invoiceData.notes, 14, finalY + 5);
-    finalY += 15;
-  }
-
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text('Thank you for your visit — Akshaya e Centre Pukayur', 14, finalY + 4);
-
-  doc.save(`invoice_${Date.now()}.pdf`);
-  setInvoiceModalOpen(false);
-};
+    doc.save(`invoice_${Date.now()}.pdf`);
+    setInvoiceModalOpen(false);
+  };
 
   // ========== useEffect HOOKS ==========
   
@@ -715,6 +711,24 @@ const generateInvoicePDF = () => {
         } catch (err) {
           console.error('ServiceEntry.jsx: Failed to fetch today\'s service entries:', err.response?.data || err.message);
           toast.error(`Failed to fetch today\'s service entries: ${err.response?.data?.error || err.message}`);
+        }
+
+        try {
+          // Fetch dynamic centre details for invoices
+          const centreRes = await api.get(`/centres/${centreId}`);
+          if (centreRes.data) {
+            setCentreDetails({
+              name: centreRes.data.name || 'Akshaya e Centre',
+              address: centreRes.data.address || '',
+              district: centreRes.data.district || '',
+              state: centreRes.data.state || '',
+              pincode: centreRes.data.pincode || '',
+              phone: centreRes.data.phone || '',
+              logo: centreRes.data.logo || '/logo-light.png'
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to fetch centre details, falling back to defaults', err);
         }
 
         if (tokenId) {
