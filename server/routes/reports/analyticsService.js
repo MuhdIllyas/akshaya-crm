@@ -387,9 +387,18 @@ export const getDashboardAnalytics = async (centreId) => {
 // REPORTS EXPORT ORCHESTRATOR
 // ==========================================
 export const getReportData = async (params) => {
-  const { reportIds, targetCentreId, staffId, period, fromDate, toDate } = params;
+  let { reportIds, targetCentreId, staffId, period, fromDate, toDate } = params;
   const client = await pool.connect();
   
+  // ✅ FIX: Safe Date Fallback
+  // If the frontend sends an empty string or invalid date, default to today.
+  if (!toDate || isNaN(new Date(toDate).getTime())) {
+    toDate = new Date().toISOString().split('T')[0];
+  }
+  if (!fromDate || isNaN(new Date(fromDate).getTime())) {
+    fromDate = new Date().toISOString().split('T')[0];
+  }
+
   // Create a unified payload object to return
   const compiledReport = {
     metadata: {
@@ -403,13 +412,20 @@ export const getReportData = async (params) => {
   };
 
   try {
-    // 1. Build the 'dates' context object exactly as V3 fetchers expect it.
-    // We treat the report's 'toDate' as 'today' for the sake of the snapshot.
+    // 1. Build the 'dates' context object safely
+    const baseDateObj = new Date(toDate);
+    
+    const yesterdayObj = new Date(baseDateObj);
+    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    
+    const sevenDaysAgoObj = new Date(baseDateObj);
+    sevenDaysAgoObj.setDate(sevenDaysAgoObj.getDate() - 6);
+
     const reportDates = {
       today: toDate, 
-      yesterday: new Date(new Date(toDate).setDate(new Date(toDate).getDate() - 1)).toISOString().split('T')[0],
-      sevenDaysAgo: new Date(new Date(toDate).setDate(new Date(toDate).getDate() - 6)).toISOString().split('T')[0],
-      currentYear: new Date(toDate).getFullYear(),
+      yesterday: yesterdayObj.toISOString().split('T')[0],
+      sevenDaysAgo: sevenDaysAgoObj.toISOString().split('T')[0],
+      currentYear: baseDateObj.getFullYear(),
       currentMonthStr: toDate.substring(0, 7),
       firstDayOfMonth: `${toDate.substring(0, 7)}-01`
     };
@@ -421,7 +437,6 @@ export const getReportData = async (params) => {
         // ID 1: Executive Financial Summary & ID 2: Profit & Loss
         case 1: 
         case 2: {
-          // ✅ FIXED: Using fetchFinancialAnalytics & passing reportDates
           const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
           break;
@@ -429,7 +444,6 @@ export const getReportData = async (params) => {
 
         // ID 9: Attendance Report
         case 9: {
-          // ✅ FIXED: Passing reportDates object
           compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
           break;
         }
@@ -437,7 +451,6 @@ export const getReportData = async (params) => {
         // ID 15: Service Revenue & ID 18: Completed Services
         case 15:
         case 18: {
-          // ✅ FIXED: Passing reportDates object
           compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId, reportDates);
           break;
         }
