@@ -118,7 +118,6 @@ const MyProfile = () => {
   };
 
   const cancelEdit = () => {
-  // Inside cancelEdit()
     setIsEditing(false);
     setSelectedFile(null); // Clear pending uploads
     setEditForm({
