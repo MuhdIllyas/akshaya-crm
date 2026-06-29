@@ -586,7 +586,7 @@ const ServiceEntry = () => {
     const rightMargin = 196; // 210mm width - 14mm margin
 
     // ---- HEADER BAND (LIGHT THEME) ----
-    // Remove the dark background rectangle so the logo is clearly visible on white
+    // ⚠️ CRITICAL: There is no doc.rect() here. The background is pure white.
     doc.setDrawColor(226, 232, 240); // Light slate gray (#E2E8F0)
     doc.setLineWidth(0.5);
     doc.line(14, 42, rightMargin, 42); // Subtle separator line
@@ -599,13 +599,14 @@ const ServiceEntry = () => {
           : `${import.meta.env.VITE_API_URL}${centreDetails.logo}`;
         
         const base64Img = await getBase64ImageFromUrl(fullLogoUrl);
+        // Logo will now sit beautifully on the white paper
         doc.addImage(base64Img, 'PNG', 14, 10, 26, 26); 
       } else {
-        throw new Error("No logo available");
+        throw new Error("No logo available"); 
       }
     } catch (e) {
       console.warn("Could not load invoice logo:", e);
-      // Fallback: If no logo exists or it fails to load, print the text on the left in dark text
+      // Fallback: If no logo exists or it fails to load, print the text on the left
       doc.setTextColor(navy);
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
@@ -613,13 +614,13 @@ const ServiceEntry = () => {
     }
 
     // ---- DYNAMIC CENTRE DETAILS (RIGHT ALIGNED) ----
-    // Use dark text instead of white so it shows on the white background
+    // Changed text to dark navy/gray so it is visible on the white paper
     doc.setTextColor(navy);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text(centreDetails.name || 'Akshaya e Centre', rightMargin, 16, { align: 'right' });
     
-    doc.setTextColor('#475569'); // Slate gray for address to look professional
+    doc.setTextColor('#475569'); // Slate gray for address
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     
@@ -703,7 +704,7 @@ const ServiceEntry = () => {
         cellPadding: 5 
       },
       headStyles: { 
-        fillColor: navy, 
+        fillColor: navy, // Table header remains dark blue
         textColor: '#FFFFFF', 
         fontStyle: 'bold' 
       },
