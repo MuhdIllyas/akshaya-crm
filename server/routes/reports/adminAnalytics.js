@@ -1,6 +1,8 @@
+// adminAnalytics.js
 import express from "express";
 import jwt from "jsonwebtoken";
-import { getAdminDashboardData } from "./analyticsService.js";
+// Updated import based on unified engine
+import { getDashboardAnalytics } from "./analyticsService.js"; 
 
 const router = express.Router();
 
@@ -28,12 +30,9 @@ router.use(requireAdmin);
 router.get("/dashboard", async (req, res) => {
   try {
     const centreId = req.user.centre_id;
-    
-    if (!centreId) {
-      return res.status(400).json({ error: "No centre assigned to this user" });
-    }
+    if (!centreId) return res.status(400).json({ error: "No centre assigned to this user" });
 
-    const data = await getAdminDashboardData(centreId);
+    const data = await getDashboardAnalytics(centreId);
     res.json(data);
   } catch (err) {
     console.error("Admin Analytics Error:", err);
@@ -45,12 +44,9 @@ router.get("/dashboard", async (req, res) => {
 router.get("/my-centre", async (req, res) => {
   try {
     const centreId = req.user.centre_id;
-    
-    if (!centreId) {
-      return res.status(400).json({ error: "No centre assigned to this user" });
-    }
+    if (!centreId) return res.status(400).json({ error: "No centre assigned to this user" });
 
-    const data = await getAdminDashboardData(centreId);
+    const data = await getDashboardAnalytics(centreId);
     res.json(data);
   } catch (err) {
     console.error("Admin Analytics Error:", err);

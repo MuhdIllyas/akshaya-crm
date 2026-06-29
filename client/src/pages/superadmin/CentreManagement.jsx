@@ -6,6 +6,8 @@ import { FiPlus } from "react-icons/fi";
 
 const CentreManagement = () => {
   const [centres, setCentres] = useState([]);
+  const [availableCommAccounts, setAvailableCommAccounts] = useState([]);
+  const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(false);
   const [centreForm, setCentreForm] = useState({ name: "", admin_id: "" });
   const [editingCentreId, setEditingCentreId] = useState(null);
@@ -15,7 +17,22 @@ const CentreManagement = () => {
 
   useEffect(() => {
     fetchCentres();
+    fetchCommAccounts();
+    fetchAdmins();
   }, []);
+
+  const fetchAdmins = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      // Filter the staff list so only admins appear in the dropdown
+      const adminList = response.data.filter(staff => staff.role === 'admin');
+      setAdmins(adminList);
+    } catch (err) {
+      console.error("Error fetching admins:", err);
+    }
+  };
 
   const fetchCentres = async () => {
     setLoading(true);
@@ -38,6 +55,18 @@ const CentreManagement = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCommAccounts = async () => {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/communication/accounts`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      setAvailableCommAccounts(response.data);
+    } catch (err) {
+      console.error("Error fetching communication accounts:", err);
+      // We don't necessarily need a toast error here to avoid overwhelming the user if it fails
     }
   };
 
@@ -105,7 +134,11 @@ const CentreManagement = () => {
   };
 
   const handleEditCentre = (centre) => {
-    setCentreForm({ name: centre.name, admin_id: centre.admin_id || "" });
+    setCentreForm({ 
+      name: centre.name, 
+      admin_id: centre.admin_id || "",
+      communication_account_id: centre.communication_account_id || "" // 👈 ADD THIS LINE
+    });
     setEditingCentreId(centre.id);
     setShowForm(true);
     toast.info("Editing centre: " + centre.name, {
@@ -209,21 +242,30 @@ const CentreManagement = () => {
                     disabled={loading}
                   />
                 </div>
-                <div>
-                  <label htmlFor="centre-admin_id" className="block text-sm font-medium text-gray-700 mb-2">
-                    Admin ID
-                  </label>
-                  <input
-                    type="number"
-                    id="centre-admin_id"
-                    name="admin_id"
-                    value={centreForm.admin_id}
-                    onChange={(e) => setCentreForm({ ...centreForm, admin_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                    placeholder="Enter admin ID"
-                    disabled={loading}
-                  />
-                </div>
+                  <div>
+                    <label htmlFor="centre-admin_id" className="block text-sm font-medium text-gray-700 mb-2">
+                      Assign Admin
+                    </label>
+                    <select
+                      id="centre-admin_id"
+                      name="admin_id"
+                      value={centreForm.admin_id || ""}
+                      onChange={(e) => setCentreForm({ ...centreForm, admin_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                      disabled={loading}
+                    >
+                      <option value="">-- Select an Admin (Optional) --</option>
+                      {admins.map(admin => (
+                        <option key={admin.id} value={admin.id}>
+                          {admin.name} (ID: {admin.id})
+                        </option>
+                      ))}
+                      {/* Failsafe: If the assigned admin was deleted or changed roles, still show their ID */}
+                      {centreForm.admin_id && !admins.find(a => String(a.id) === String(centreForm.admin_id)) && (
+                        <option value={centreForm.admin_id}>Unknown Admin (ID: {centreForm.admin_id})</option>
+                      )}
+                    </select>
+                  </div>
               </div>
               <div className="flex justify-end pt-4">
                 <button
@@ -254,6 +296,32 @@ const CentreManagement = () => {
                     </span>
                   ) : editingCentreId ? "Update Centre" : "Create Centre"} 
                 </button>
+              </div>
+
+              {/* Communication Account Assignment */}
+              <div className="md:col-span-2 border-t border-gray-100 pt-4 mt-2">
+                <label htmlFor="communication_account_id" className="block text-sm font-medium text-gray-700 mb-2">
+                  WhatsApp Communication Mode
+                </label>
+                <select
+                  id="communication_account_id"
+                  name="communication_account_id"
+                  value={centreForm.communication_account_id || ""}
+                  onChange={(e) => setCentreForm({ ...centreForm, communication_account_id: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                  disabled={loading}
+                >
+                  <option value="">No WhatsApp (System Only)</option>
+                  {/* Map through available communication accounts fetched from the backend */}
+                  {availableCommAccounts.map(account => (
+                    <option key={account.id} value={account.id}>
+                      {account.name} ({account.phone_number})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-2">
+                  Select which WhatsApp number this centre will use to talk to customers.
+                </p>
               </div>
             </form>
           </div>

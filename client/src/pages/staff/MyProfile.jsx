@@ -15,15 +15,17 @@ const MyProfile = () => {
     phone: "",
     emergencyContact: "",
     emergencyRelationship: "",
-    photo: null,
+    photo: null, // this will just hold the existing URL if we don't change it
   });
   const [photoPreview, setPhotoPreview] = useState(null);
+  // NEW: State to hold the physical file if the user uploads a new image
+  const [selectedFile, setSelectedFile] = useState(null); 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const fileInputRef = useRef(null);
 
   const getAuthHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
-    "Content-Type": "application/json",
+    // REMOVED 'Content-Type': 'application/json' so FormData can set the boundary automatically
   });
 
   useEffect(() => {
@@ -42,9 +44,18 @@ const MyProfile = () => {
         phone: res.data.phone || "",
         emergencyContact: res.data.emergencyContact || "",
         emergencyRelationship: res.data.emergencyRelationship || "",
-        photo: null,
+        photo: res.data.photo || null,
       });
-      setPhotoPreview(res.data.photo || null);
+      
+      // NEW: Set the preview using the backend URL if it exists
+      if (res.data.photo) {
+         const photoUrl = res.data.photo.startsWith('http') || res.data.photo.startsWith('data:image') 
+           ? res.data.photo 
+           : `${import.meta.env.VITE_API_URL}${res.data.photo}`;
+         setPhotoPreview(photoUrl);
+      } else {
+         setPhotoPreview(null);
+      }
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || "Failed to load profile");
@@ -65,10 +76,14 @@ const MyProfile = () => {
         toast.error("Photo size must be less than 2MB");
         return;
       }
+      
+      // NEW: Save the actual file for submission
+      setSelectedFile(file);
+
+      // Keep the preview generation so the UI updates instantly
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result);
-        setEditForm(prev => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(file);
     }
@@ -79,17 +94,36 @@ const MyProfile = () => {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
-      const payload = {
-        name: editForm.name,
-        phone: editForm.phone,
-        emergencyContact: editForm.emergencyContact,
-        emergencyRelationship: editForm.emergencyRelationship,
-        photo: editForm.photo,
-      };
-      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/staff/me`, payload, {
+      // NEW: Use FormData instead of a standard JS object
+      const submitData = new FormData();
+      submitData.append('name', editForm.name);
+      submitData.append('phone', editForm.phone);
+      submitData.append('emergencyContact', editForm.emergencyContact);
+      submitData.append('emergencyRelationship', editForm.emergencyRelationship);
+      
+      // If a NEW file was selected, append it. 
+      // If no new file was selected, append the old URL string so it doesn't get erased.
+      if (selectedFile) {
+        submitData.append('photo', selectedFile);
+      } else if (editForm.photo) {
+        submitData.append('photo', editForm.photo); 
+      }
+
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/staff/me`, submitData, {
         headers: getAuthHeaders(),
       });
+      
       setProfile(res.data);
+      
+      // Refresh the preview URL based on the new data
+      if (res.data.photo) {
+         const photoUrl = res.data.photo.startsWith('http') || res.data.photo.startsWith('data:image') 
+           ? res.data.photo 
+           : `${import.meta.env.VITE_API_URL}${res.data.photo}`;
+         setPhotoPreview(photoUrl);
+      }
+      
+      setSelectedFile(null); // Clear the file state after success
       setIsEditing(false);
       toast.success("Profile updated successfully");
     } catch (err) {
@@ -99,14 +133,24 @@ const MyProfile = () => {
 
   const cancelEdit = () => {
     setIsEditing(false);
+    setSelectedFile(null); // Clear any unsaved file selection
     setEditForm({
       name: profile.name,
       phone: profile.phone || "",
       emergencyContact: profile.emergencyContact || "",
       emergencyRelationship: profile.emergencyRelationship || "",
-      photo: null,
+      photo: profile.photo || null,
     });
-    setPhotoPreview(profile.photo || null);
+    
+    // Reset the preview to the original backend URL
+    if (profile.photo) {
+       const photoUrl = profile.photo.startsWith('http') || profile.photo.startsWith('data:image') 
+         ? profile.photo 
+         : `${import.meta.env.VITE_API_URL}${profile.photo}`;
+       setPhotoPreview(photoUrl);
+    } else {
+       setPhotoPreview(null);
+    }
   };
 
   if (loading) {

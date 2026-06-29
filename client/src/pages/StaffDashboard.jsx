@@ -9,8 +9,9 @@ import {
   FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign, FiGlobe,
   FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiExternalLink
 } from 'react-icons/fi';
-import { getCategories, getTokens, getServiceEntries } from '/src/services/serviceService';
+import { getCategories, getTokens } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
+import { postAttendance } from '/src/services/salaryService';
 import QuickServiceModal from '@/components/QuickServiceModal';
 import api from '@/services/serviceService';
 import { socket, connectSocket } from '@/services/socket';
@@ -56,6 +57,8 @@ const StaffDashboard = () => {
   const [categories, setCategories] = useState([]);
   const [recentServiceEntries, setRecentServiceEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [todayAttendance, setTodayAttendance] = useState(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -188,43 +191,10 @@ const StaffDashboard = () => {
     }
   }, [centreId]);
 
-
-  // --- Fetch service entries (optimized) ---
-  const fetchServiceEntries = useCallback(async () => {
+  // --- Fetch Entire Workspace (Hybrid BFF) ---
+  const fetchWorkspaceInit = useCallback(async () => {
     try {
-      // Pass staffId AND a strict limit of 20 to stop massive network payloads!
-      const serviceEntriesRes = await getServiceEntries(false, staffId, 20);
-      
-      const entries = serviceEntriesRes.data || [];
-      setRecentServiceEntries(entries); 
-      return entries;
-    } catch (err) {
-      console.error('Error fetching service entries:', err);
-      return [];
-    }
-  }, [staffId]);
-
-  // --- Fetch online bookings (optimized) ---
-  const fetchOnlineBookings = useCallback(async () => {
-    try {
-      // Fetch concurrently and REMOVE the massive double-fetch of service entries
-      const [pendingRes, processingRes] = await Promise.all([
-        api.get('/customer-services', { params: { status: 'under_review' } }),
-        api.get('/customer-services', { params: { status: 'processing', staff_id: staffId } })
-      ]);
-
-      setOnlineBookings(pendingRes.data || []);
-      setProcessingBookings(processingRes.data || []);
-    } catch (err) {
-      console.error('Error fetching online bookings:', err);
-      toast.error('Failed to load online bookings');
-    }
-  }, [staffId]);
-
-  // --- Fetch performance metrics with period support ---
-  const fetchPerformance = useCallback(async () => {
-    setPerformanceLoading(true);
-    try {
+      setPerformanceLoading(true);
       const token = localStorage.getItem('token');
       let params = new URLSearchParams();
       
@@ -237,71 +207,49 @@ const StaffDashboard = () => {
       }
       
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/workspace-init?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      if (!response.ok) throw new Error('Failed to fetch performance data');
+      if (!response.ok) throw new Error('Failed to fetch workspace data');
       
       const result = await response.json();
-      const { summary, ratings } = result.data;
+      const { performance: perfData, tasks, events, recentActivity, onlinePending, onlineProcessing, todayAttendance: att } = result.data;
+
+      setTodayAttendance(att);
       
+      // 1. Set Performance
       setPerformance({
-        completionRate: summary.collection_rate || 0,
-        avgTransactionValue: summary.avg_transaction_value || 0,
-        customerSatisfaction: ratings?.avg_rating ? `${ratings.avg_rating}/5` : 'N/A',
-        totalServices: summary.total_services || 0,
-        totalCollected: summary.total_collected || 0,
-        collectionRate: summary.collection_rate || 0,
-        incentiveScore: summary.incentive_score || 0,
-        avgRating: ratings?.avg_rating || 0,
-        totalReviews: ratings?.total_reviews || 0,
+        completionRate: perfData.summary.collection_rate || 0,
+        avgTransactionValue: perfData.summary.avg_transaction_value || 0,
+        customerSatisfaction: perfData.ratings?.avg_rating ? `${perfData.ratings.avg_rating}/5` : 'N/A',
+        totalServices: perfData.summary.total_services || 0,
+        totalCollected: perfData.summary.total_collected || 0,
+        collectionRate: perfData.summary.collection_rate || 0,
+        incentiveScore: perfData.summary.incentive_score || 0,
+        avgRating: perfData.ratings?.avg_rating || 0,
+        totalReviews: perfData.ratings?.total_reviews || 0,
       });
+
+      // 2. Set Tasks & Events
+      setMyTasks(tasks || []);
+      
+      const validEvents = (events || [])
+        .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
+      setUpcomingEvents(validEvents);
+
+      // 3. Set Activities & Bookings
+      setRecentServiceEntries(recentActivity || []);
+      setOnlineBookings(onlinePending || []);
+      setProcessingBookings(onlineProcessing || []);
+
     } catch (err) {
-      console.error('Error fetching performance:', err);
-      toast.error('Failed to load performance data');
+      console.error('Error fetching workspace:', err);
+      toast.error('Failed to load workspace data');
     } finally {
       setPerformanceLoading(false);
     }
   }, [period, customDateRange]);
-
-  // --- Fetch Tasks & Events ---
-  const fetchTasksAndEvents = useCallback(async () => {
-    try {
-      const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-      const eventsUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'events');
-
-      // 1. Fetch Pending Tasks
-      const tasksRes = await api.get('/all', {
-        baseURL: tasksUrl,
-        params: { assigned_to: staffId, status: 'pending' }
-      });
-      setMyTasks(tasksRes.data || []);
-
-      // 2. Fetch Upcoming Events (Next 7 days)
-      const today = new Date();
-      const nextWeek = new Date(today);
-      nextWeek.setDate(nextWeek.getDate() + 7);
-
-      const eventsRes = await api.get('/', {
-        baseURL: eventsUrl,
-        params: { 
-          start: today.toISOString().split('T')[0], 
-          end: nextWeek.toISOString().split('T')[0] 
-        }
-      });
-      
-      // Filter out past events and sort
-      today.setHours(0,0,0,0);
-      const validEvents = (eventsRes.data || [])
-        .filter(e => new Date(e.date || e.start_datetime) >= today)
-        .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
-      
-      setUpcomingEvents(validEvents.slice(0, 10)); // Keep top 10
-    } catch (err) {
-      console.error('Error fetching tasks/events:', err);
-    }
-  }, [staffId]);
 
   // --- Auto-cycle Events Tabs ---
   useEffect(() => {
@@ -323,7 +271,7 @@ const StaffDashboard = () => {
       const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
       await api.patch(`/${taskId}/status`, { status: 'completed' }, { baseURL: tasksUrl });
       toast.success('Task completed!');
-      fetchTasksAndEvents(); // Refresh lists
+      fetchWorkspaceInit(); // 👈 And this here!
     } catch (err) {
       toast.error('Failed to complete task');
     }
@@ -361,45 +309,39 @@ const StaffDashboard = () => {
 
   // Initial data fetch
   useEffect(() => {
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
-      
-      // Fire all API requests concurrently
-      const [categoriesRes] = await Promise.all([
-        getCategories(),
-        refreshTokens(),
-        fetchServiceEntries(),
-        fetchOnlineBookings(),
-        fetchPerformance(),
-        fetchTasksAndEvents()
-      ]);
-
-      // Set state for the ones that don't handle their own state inside their functions
-      setCategories(categoriesRes.data || []);
-      
-    } catch (err) {
-      setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
-      toast.error('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  fetchData();
-  }, [staffId, centreId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance, fetchTasksAndEvents]);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
+        
+        // Load the 3 main pillars concurrently
+        await Promise.all([
+          getCategories().then(res => setCategories(res.data || [])),
+          refreshTokens(),
+          fetchWorkspaceInit()
+        ]);
+        
+      } catch (err) {
+        setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [staffId, centreId, refreshTokens, fetchWorkspaceInit]);
 
   const isMounted = useRef(false);
 
-  // Refetch performance when period changes
+  // Refetch when period changes
   useEffect(() => {
     if (isMounted.current && !loading) {
-      fetchPerformance();
+      fetchWorkspaceInit();
     } else if (!loading) {
       isMounted.current = true;
     }
-  }, [period, customDateRange, fetchPerformance, loading]);
+  }, [period, customDateRange, fetchWorkspaceInit, loading]);
 
   // --- Socket events (unchanged) ---
   useEffect(() => {
@@ -422,10 +364,8 @@ const StaffDashboard = () => {
     const onServiceEntryCreated = async (data) => {
       const entryStaffId = String(data.staff_id || '').trim();
       if (!entryStaffId || entryStaffId === String(staffId).trim()) {
-        await fetchServiceEntries();
-        await fetchOnlineBookings();
         await refreshTokens();
-        await fetchPerformance();
+        await fetchWorkspaceInit();
       }
     };
 
@@ -442,7 +382,7 @@ const StaffDashboard = () => {
       socket.off('tokenReassigned', onTokenReassigned);
       socket.off('serviceEntryCreated', onServiceEntryCreated);
     };
-  }, [centreId, staffId, refreshTokens, fetchServiceEntries, fetchOnlineBookings, fetchPerformance]);
+  }, [centreId, staffId, refreshTokens, fetchWorkspaceInit]);
 
   // --- Helper functions (unchanged) ---
   const getCategoryName = (id) => categories.find(c => c.id === id)?.name || 'N/A';
@@ -612,9 +552,41 @@ const StaffDashboard = () => {
     try {
       await api.put(`/customer-services/${bookingId}/take`);
       toast.success('Work assigned to you');
-      await fetchOnlineBookings();
+      await fetchWorkspaceInit(); // 👈 Just call this to refresh everything!
     } catch (err) {
       toast.error(err.response?.data?.error || 'Already taken by another staff');
+    }
+  };
+
+  const handleQuickPunch = async () => {
+    try {
+      setAttendanceLoading(true);
+      const isPunchOut = todayAttendance && todayAttendance.punch_in && !todayAttendance.punch_out;
+      
+      // Get exact current time formatted for Asia/Kolkata to match backend validation perfectly
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+      const formattedTime = now.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      }); // HH:mm
+      
+      // Send the exact payload the backend expects
+      await postAttendance({
+        punch_type: isPunchOut ? 'out' : 'in',
+        date: formattedDate,
+        time: formattedTime
+      });
+      
+      toast.success(`Successfully punched ${isPunchOut ? 'out' : 'in'}`);
+      await fetchWorkspaceInit(); // Instantly refresh the dashboard!
+    } catch (err) {
+      console.error('Attendance Punch Error:', err.response?.data || err.message);
+      toast.error(err.response?.data?.error || 'Failed to update attendance');
+    } finally {
+      setAttendanceLoading(false);
     }
   };
 
@@ -734,13 +706,85 @@ const StaffDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
+      <AnimatePresence>
+        {!loading && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className={`border-l-4 shadow-sm ${
+              !todayAttendance || !todayAttendance.punch_in 
+                ? 'bg-rose-50 border-rose-500' 
+                : (!todayAttendance.punch_out 
+                    ? 'bg-emerald-50 border-emerald-500' 
+                    : 'bg-amber-50 border-amber-500')
+            }`}
+          >
+            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {!todayAttendance || !todayAttendance.punch_in ? (
+                  <>
+                    <div className="p-2 bg-rose-100 rounded-full">
+                      <FiAlertCircle className="h-5 w-5 text-rose-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-rose-900">You haven't punched in yet!</h3>
+                      <p className="text-xs text-rose-700 mt-0.5">Please punch in to start tracking your hours for today.</p>
+                    </div>
+                  </>
+                ) : !todayAttendance.punch_out ? (
+                  <>
+                    <div className="p-2 bg-emerald-100 rounded-full">
+                      <FiCheckCircle className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
+                      <p className="text-xs text-emerald-700 mt-0.5">
+                        Since {new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <FiClock className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-amber-900">You are currently punched out</h3>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Punched out at {new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}. Remember to punch back in!
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleQuickPunch}
+                disabled={attendanceLoading}
+                className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
+                  !todayAttendance || !todayAttendance.punch_in 
+                    ? 'bg-rose-600 hover:bg-rose-700' 
+                    : (!todayAttendance.punch_out 
+                        ? 'bg-gray-800 hover:bg-gray-900' 
+                        : 'bg-amber-600 hover:bg-amber-700')
+                }`}
+              >
+                {attendanceLoading ? 'Processing...' : (!todayAttendance || !todayAttendance.punch_in ? 'Punch In Now' : (!todayAttendance.punch_out ? 'Punch Out' : 'Punch Back In'))}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* ========================================= */}
       
       {/* Original Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="px-6 py-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
                 <FiTrendingUp className="text-white h-6 w-6" />
               </div>
               <div>
@@ -1392,109 +1436,116 @@ const StaffDashboard = () => {
                 )}
               </div>
 
-              {/* Recent Activity */}
+              {/* Recent Activity (Compact Version) */}
               <div className="bg-white rounded-xl border border-gray-200">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                  <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
+                  <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-sm">
+                    {recentServiceEntries.length} items
+                  </span>
                 </div>
-                  <div className="p-6 overflow-y-auto max-h-[500px]">
-                    {Object.keys(groupedRecentActivities).length > 0 ? (
-                      <div className="space-y-8">
-                        {Object.entries(groupedRecentActivities).map(([date, entries]) => (
-                          <div key={date} className="relative">
-                            {/* Date Sticky Header */}
-                            <div className="flex items-center gap-3 mb-4 sticky top-0 bg-white/90 backdrop-blur-sm py-2 z-20 -mx-2 px-2">
-                              <div className="p-1.5 bg-gray-100 rounded-md">
-                                <FiCalendar className="h-3.5 w-3.5 text-gray-600" />
-                              </div>
-                              <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-                                {formatDateUI(date)}
-                              </h4>
-                              <div className="h-px bg-gray-200 flex-1 ml-2"></div>
+                <div className="p-4 overflow-y-auto max-h-[500px]">
+                  {Object.keys(groupedRecentActivities).length > 0 ? (
+                    <div className="space-y-6">
+                      {Object.entries(groupedRecentActivities).map(([date, entries]) => (
+                        <div key={date} className="relative">
+                          
+                          {/* Compact Date Sticky Header */}
+                          <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
+                            <div className="p-1 bg-gray-100 rounded text-gray-500">
+                              <FiCalendar className="h-3 w-3" />
                             </div>
+                            <h4 className="text-[10px] font-bold text-gray-800 uppercase tracking-widest">
+                              {formatDateUI(date)}
+                            </h4>
+                            <div className="h-px bg-gray-200 flex-1 ml-1"></div>
+                          </div>
 
-                            {/* Timeline Entries */}
-                            <div className="space-y-4 relative">
-                              {entries.map((entry, index) => (
-                                <div key={entry.id} className="group relative flex gap-4">
-                                  {/* Timeline Vertical Line (hides on the very last item of the day) */}
-                                  {index !== entries.length - 1 && (
-                                    <div className="absolute left-[19px] top-10 bottom-[-24px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
-                                  )}
+                          {/* Compact Timeline Entries */}
+                          <div className="space-y-2.5 relative">
+                            {entries.map((entry, index) => (
+                              <div key={entry.id} className="group relative flex gap-3">
+                                {/* Timeline Vertical Line - Centered for smaller avatar */}
+                                {index !== entries.length - 1 && (
+                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
+                                )}
+                                
+                                {/* Smaller Activity Avatar */}
+                                <div className="w-8 h-8 mt-1 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
+                                  <FiUser className="h-3.5 w-3.5 text-indigo-600" />
+                                </div>
+
+                                {/* Compact Activity Card */}
+                                <div className="flex-1 bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200 flex flex-col justify-center">
                                   
-                                  {/* Activity Avatar */}
-                                  <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
-                                    <FiUser className="h-4 w-4 text-indigo-600" />
-                                  </div>
-
-                                  {/* Activity Card */}
-                                  <div className="flex-1 bg-white border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200">
-                                    <div className="flex justify-between items-start mb-2">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-sm font-bold text-gray-900">{entry.customerName || 'Customer'}</p>
-                                        
-                                        {/* Upgraded Badges */}
-                                        <div className="flex items-center gap-1.5">
-                                          {entry.workSource === 'online' && (
-                                            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase tracking-wider border border-blue-100">
-                                              <FiGlobe className="h-3 w-3" /> Online
-                                            </span>
-                                          )}
-                                          {entry.is_edited && (
-                                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-bold uppercase tracking-wider border border-gray-200">
-                                              Edited
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
+                                  {/* Top Row: Name, Status, Time */}
+                                  <div className="flex justify-between items-center mb-1.5 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <p className="text-sm font-bold text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
-                                      {/* Time Tag */}
-                                      <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 px-2 py-1 rounded-md shrink-0 border border-gray-100">
-                                        {formatTime(entry.created_at)}
+                                      {/* Status Pill moved next to name */}
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                        entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
+                                        entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700' :
+                                        entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
+                                        'bg-gray-50 text-gray-700'
+                                      }`}>
+                                        {entry.status?.replace('-', ' ')}
                                       </span>
                                     </div>
                                     
-                                    <p className="text-xs font-medium text-gray-600 mb-3">{getCategoryName(entry.category)} service</p>
-                                    
-                                    {/* Action & Status Row */}
-                                    <div className="flex justify-between items-center pt-3 border-t border-gray-50">
-                                      <div className="flex items-center gap-2">
-                                        {/* Upgraded Status Pills */}
-                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                          entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                          entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                                          entry.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 
-                                          'bg-gray-50 text-gray-700 border border-gray-200'
-                                        }`}>
-                                          {entry.status?.replace('-', ' ')}
-                                        </span>
-                                        
-                                        {entry.tokenId && (
-                                          <span className="text-[11px] text-gray-500 font-mono font-medium pl-2 border-l border-gray-200">
-                                            {shortenTokenId(entry.tokenId)}
-                                          </span>
-                                        )}
-                                      </div>
+                                    <span className="text-[10px] font-medium text-gray-400 shrink-0">
+                                      {formatTime(entry.created_at)}
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Bottom Row: Service, Info, Actions */}
+                                  <div className="flex justify-between items-end gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="text-[11px] font-medium text-gray-600 truncate max-w-[160px]">
+                                        {getCategoryName(entry.category)}
+                                      </p>
                                       
-                                      {/* Enhanced Details Button */}
-                                      {(entry.tokenId || entry.tracking_id) && (
-                                        <button 
-                                          onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider shadow-sm transition-all shrink-0"
-                                        >
-                                          <FiBarChart2 className="h-3.5 w-3.5" /> Details
-                                        </button>
+                                      {entry.tokenId && (
+                                        <span className="text-[10px] text-gray-400 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                          {shortenTokenId(entry.tokenId)}
+                                        </span>
+                                      )}
+                                      
+                                      {entry.workSource === 'online' && (
+                                        <span className="text-[9px] text-blue-600 font-bold uppercase border border-blue-100 bg-blue-50 px-1 rounded flex items-center gap-0.5 ml-1">
+                                          <FiGlobe className="h-2 w-2" /> Online
+                                        </span>
+                                      )}
+                                      {entry.is_edited && (
+                                        <span className="text-[9px] text-gray-500 font-bold uppercase border border-gray-200 bg-gray-50 px-1 rounded ml-1">
+                                          Edited
+                                        </span>
                                       )}
                                     </div>
+                                    
+                                    {/* Action Button moved into flow */}
+                                    {(entry.tokenId || entry.tracking_id) && (
+                                      <button 
+                                        onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
+                                        className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1"
+                                      >
+                                        Details <FiChevronRight className="h-3 w-3" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                    <div className="text-center py-8 text-gray-500">No recent activity</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                      <FiActivity className="h-8 w-8 mb-2 opacity-20" />
+                      <p className="text-sm font-medium">No recent activity</p>
+                    </div>
                   )}
                 </div>
               </div>

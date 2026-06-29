@@ -1,6 +1,6 @@
 import express from "express";
 import crypto from "crypto";
-import axios from "axios";
+import { triggerNotification } from "../utils/communication/notificationEngine.js";
 import pool from "../db.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
 
@@ -38,59 +38,51 @@ export async function createReviewRequest({
       ]
     );
 
-    // Send WhatsApp Template (Libromi)
-    if (process.env.LIBROMI_ACCESS_TOKEN) {
-      const formattedPhone = customerPhone.startsWith('+91') ? customerPhone : `+91${customerPhone.replace(/^\+91/, '')}`;
+    const reviewUrl = `${process.env.FRONTEND_URL}/review/${token}`;
 
-      const reviewUrl = `${process.env.FRONTEND_URL}/review/${token}`;
-
-      await axios.post(
-        "https://wa-api.cloud/api/v1/messages",
+    // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
+    const notificationResult = await triggerNotification({
+      eventKey: 'review_request',
+      centreId: centreId,         
+      customerPhone: customerPhone,
+      
+      // 👇 Updated to include the body parameter (Centre Name) AND the URL button parameter
+      customComponents: [
         {
-          to: formattedPhone,
-          type: "template",
-          template: {
-            name: "service_feedback",
-            language: {
-              code: "en",
-              policy: "deterministic"
-            },
-            components: [
-              {
-                type: "body"
-              },
-              {
-                type: "button",
-                sub_type: "url",
-                index: "0",
-                parameters: [
-                  {
-                    type: "text",
-                    text: token
-                  }
-                ]
-              }
-            ]
-          }
+          type: "body",
+          parameters: [
+            {
+              type: "text",
+              text: centreName || "our centre" // Injects the dynamic centre name into the body
+            }
+          ]
         },
         {
-          headers: {
-            Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
-            "Content-Type": "application/json"
-          }
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [
+            {
+              type: "text",
+              text: token // Injects the token ID into the dynamic URL button
+            }
+          ]
         }
-      );
+      ]
+    });
+
+    if (!notificationResult.success) {
+      console.warn("Failed to send review request WhatsApp:", notificationResult.error || notificationResult.reason);
+    } else {
+      console.log(`✅ Review request WhatsApp sent successfully to ${customerPhone}`);
     }
 
     return { success: true, token };
 
   } catch (error) {
-  console.error("❌ WhatsApp FULL ERROR:");
-  console.error("Status:", error.response?.status);
-  console.error("Data:", error.response?.data);
-  console.error("Message:", error.message);
-  return { success: false, error };
-}
+    console.error("❌ Review Request Error:", error.message);
+    return { success: false, error };
+  }
 }
 
 /* -------------------------------------------------------

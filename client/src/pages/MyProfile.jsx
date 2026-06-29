@@ -8,6 +8,7 @@ import ChangePasswordModal from "../components/ChangePasswordModal";
 const MyProfile = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -23,7 +24,6 @@ const MyProfile = () => {
 
   const getAuthHeaders = () => ({
     Authorization: `Bearer ${localStorage.getItem("token")}`,
-    "Content-Type": "application/json",
   });
 
   useEffect(() => {
@@ -37,14 +37,24 @@ const MyProfile = () => {
         headers: getAuthHeaders(),
       });
       setProfile(res.data);
-      setEditForm({
-        name: res.data.name,
-        phone: res.data.phone || "",
-        emergencyContact: res.data.emergencyContact || "",
-        emergencyRelationship: res.data.emergencyRelationship || "",
-        photo: null,
-      });
-      setPhotoPreview(res.data.photo || null);
+      // Inside fetchProfile()
+        setEditForm({
+          name: res.data.name,
+          phone: res.data.phone || "",
+          emergencyContact: res.data.emergencyContact || "",
+          emergencyRelationship: res.data.emergencyRelationship || "",
+          photo: res.data.photo || null,
+        });
+        
+        // Prepend API URL if it's a relative path
+        if (res.data.photo) {
+          const photoUrl = res.data.photo.startsWith('http') || res.data.photo.startsWith('data:image') 
+            ? res.data.photo 
+            : `${import.meta.env.VITE_API_URL}${res.data.photo}`;
+          setPhotoPreview(photoUrl);
+        } else {
+          setPhotoPreview(null);
+        }
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || "Failed to load profile");
@@ -65,10 +75,14 @@ const MyProfile = () => {
         toast.error("Photo size must be less than 2MB");
         return;
       }
+      
+      // Save the actual file for the backend
+      setSelectedFile(file);
+
+      // Generate a temporary preview for the UI
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result);
-        setEditForm(prev => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(file);
     }
@@ -79,17 +93,23 @@ const MyProfile = () => {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
-      const payload = {
-        name: editForm.name,
-        phone: editForm.phone,
-        emergencyContact: editForm.emergencyContact,
-        emergencyRelationship: editForm.emergencyRelationship,
-        photo: editForm.photo,
-      };
-      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/staff/me`, payload, {
+      const formData = new FormData();
+      formData.append('name', editForm.name);
+      formData.append('phone', editForm.phone);
+      formData.append('emergencyContact', editForm.emergencyContact);
+      formData.append('emergencyRelationship', editForm.emergencyRelationship);
+      
+      // Append the physical file if a new one was selected
+      if (selectedFile) {
+        formData.append('photo', selectedFile);
+      }
+
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/staff/me`, formData, {
         headers: getAuthHeaders(),
       });
+      
       setProfile(res.data);
+      setSelectedFile(null); // Clear the file state
       setIsEditing(false);
       toast.success("Profile updated successfully");
     } catch (err) {
@@ -99,6 +119,7 @@ const MyProfile = () => {
 
   const cancelEdit = () => {
     setIsEditing(false);
+    setSelectedFile(null); // Clear pending uploads
     setEditForm({
       name: profile.name,
       phone: profile.phone || "",
@@ -106,7 +127,16 @@ const MyProfile = () => {
       emergencyRelationship: profile.emergencyRelationship || "",
       photo: null,
     });
-    setPhotoPreview(profile.photo || null);
+
+    // Prepend API URL if it's a relative path
+    if (profile.photo) {
+      const photoUrl = profile.photo.startsWith('http') || profile.photo.startsWith('data:image') 
+        ? profile.photo 
+        : `${import.meta.env.VITE_API_URL}${profile.photo}`;
+      setPhotoPreview(photoUrl);
+    } else {
+      setPhotoPreview(null);
+    }
   };
 
   if (loading) {

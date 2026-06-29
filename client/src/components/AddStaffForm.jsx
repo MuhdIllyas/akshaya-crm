@@ -12,7 +12,6 @@ const AddStaffForm = ({ onAdd, onClose }) => {
     phone: "",
     status: "Active",
     joinDate: new Date().toISOString().split('T')[0],
-    photo: null,
     employeeId: "",
     employmentType: "Full-time",
     reportsTo: "",
@@ -25,9 +24,12 @@ const AddStaffForm = ({ onAdd, onClose }) => {
     end_time: "17:00",
     effective_from: new Date().toISOString().split('T')[0],
     password: "", // Add password to initial state
+    centre_id: "",
   });
   
   const [photoPreview, setPhotoPreview] = useState(null);
+  // NEW: State to hold the actual file object for uploading
+  const [selectedFile, setSelectedFile] = useState(null); 
   const fileInputRef = useRef(null);
 
   const handleChange = (e) => {
@@ -38,10 +40,13 @@ const AddStaffForm = ({ onAdd, onClose }) => {
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // 1. Save the actual file object for the backend submission
+      setSelectedFile(file);
+      
+      // 2. Generate the base64 preview just for the UI
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result);
-        setFormData(prev => ({ ...prev, photo: reader.result }));
       };
       reader.readAsDataURL(file);
     }
@@ -79,20 +84,36 @@ const AddStaffForm = ({ onAdd, onClose }) => {
       }
     }
 
+    // NEW: Build the FormData object
+    const submitData = new FormData();
+    
+    // Append all text fields from formData
+    for (const key in formData) {
+      if (formData[key] !== null && formData[key] !== undefined) {
+        submitData.append(key, formData[key]);
+      }
+    }
+
     // Ensure centre_id is included for non-superadmin roles
     const centreId = localStorage.getItem("centre_id");
     if (formData.role !== "superadmin" && !formData.centre_id && centreId) {
-      setFormData(prev => ({ ...prev, centre_id: centreId }));
+      submitData.set('centre_id', centreId); // Overwrite empty value if needed
+    }
+
+    // Append the actual file object
+    if (selectedFile) {
+      submitData.append('photo', selectedFile);
     }
 
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/add`, {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
+          // CRITICAL: Do NOT set 'Content-Type': 'application/json' or 'multipart/form-data' manually.
+          // The browser will automatically set the correct boundary header when it sees FormData.
           'Authorization': `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify(formData),
+        body: submitData, // Send the FormData object, not a JSON string
       });
 
       const data = await response.json();

@@ -146,10 +146,14 @@ const StaffManagement = () => {
             >
               <div className="p-6">
                 <div className="flex items-start gap-4 mb-4">
-                  <div className="flex-shrink-0 relative">
+                  <div className="shrink-0 relative">
                     {staff.photo ? (
                       <img
-                        src={staff.photo}
+                        // Prepend the backend URL if it's a relative path. 
+                        // The startsWith checks ensure backward compatibility if you still have old Base64 strings in your DB!
+                        src={staff.photo.startsWith('http') || staff.photo.startsWith('data:image') 
+                          ? staff.photo 
+                          : `${import.meta.env.VITE_API_URL}${staff.photo}`}
                         alt={staff.name}
                         className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md"
                       />

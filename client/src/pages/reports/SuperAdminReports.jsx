@@ -47,68 +47,43 @@ const SuperAdminReports = () => {
     }
   }, [selectedCentre]);
 
-  const stats = useMemo(() => {
-    // Safely return defaults if data isn't ready
-    if (!data) {
-      return { 
-        totalRevenue: "₹0", totalProfit: "₹0", totalWalletBalance: "₹0", 
-        revenueChange: 0, averageTransaction: "₹0", totalCashInHand: "₹0" 
+    const stats = useMemo(() => {
+      // Safely return defaults if data isn't ready
+      if (!data || !data.stats) {
+        return { 
+          totalRevenue: "₹0", totalProfit: "₹0", totalWalletBalance: "₹0", 
+          revenueChange: 0, profitChange: 0, averageTransaction: "₹0", totalCashInHand: "₹0",
+          netCashFlowToday: "₹0", todayProfit: "₹0", totalCashInToday: "₹0", todayServiceCharge: "₹0",
+          pendingTransactions: "0"
+        };
+      }
+
+      // Since the V3 backend calculates everything, we just map it directly!
+      // No more complex frontend math or looping through arrays.
+      return {
+        // YTD / Core Metrics
+        totalRevenue: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`, // You may want to fetch YTD from backend later
+        totalProfit: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`, // You may want to fetch YTD from backend later
+        
+        // Wallet Metrics
+        totalWalletBalance: `₹${(data.stats.totalWalletBalance || 0).toLocaleString()}`,
+        totalCashInHand: `₹${(data.stats.cashInHand || 0).toLocaleString()}`,
+        
+        // Today's Activity
+        netCashFlowToday: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`, 
+        todayProfit: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`,
+        totalCashInToday: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`,
+        
+        // Service Ops & Activity
+        todayServiceCharge: `₹${(data.stats.todayGrossProfit || 0).toLocaleString()}`,
+        averageTransaction: `₹${(data.stats.averageOrderValue || 0).toLocaleString()}`,
+        pendingTransactions: (data.stats.pendingPayments || 0).toString(),
+        
+        // Mocking change percentages for now (you can add this to the V3 engine later)
+        revenueChange: 0,
+        profitChange: 0
       };
-    }
-
-    const currentMonth = new Date().getMonth();
-    const lastMonth = currentMonth > 0 ? currentMonth - 1 : 11;
-    
-    // Array Fallbacks to prevent crashes
-    const revenue = data.revenue || [];
-    const expenses = data.expenses || [];
-    const profit = data.profit || [];
-    const transactions = data.transactions || [];
-    const wallets = data.wallets || [];
-
-    const currentMonthRevenue = revenue[currentMonth] || 0;
-    const lastMonthRevenue = revenue[lastMonth] || 0;
-    const revenueChange = lastMonthRevenue > 0 
-      ? ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1)
-      : 0;
-
-    const currentMonthProfit = profit[currentMonth] || 0;
-    const lastMonthProfit = profit[lastMonth] || 0;
-    const profitChange = lastMonthProfit > 0 
-      ? ((currentMonthProfit - lastMonthProfit) / lastMonthProfit * 100).toFixed(1)
-      : 0;
-
-    const totalRevenue = revenue.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
-    const totalExpenses = expenses.slice(0, currentMonth + 1).reduce((a, b) => a + b, 0);
-    const totalProfit = totalRevenue - totalExpenses;
-
-    // Transaction stats
-    const totalTransactions = transactions.length;
-    const averageTransaction = totalTransactions > 0 
-      ? Math.round(transactions.reduce((a, b) => a + Number(b.amount || 0), 0) / totalTransactions)
-      : 0;
-
-    // Wallet stats
-    const totalWalletBalance = wallets.reduce((sum, w) => sum + Number(w.currentBalance || 0), 0);
-    const totalCashInHand = Number(wallets.find(w => w.name === 'Cash in Hand')?.currentBalance || 0);
-    const totalCashInToday = wallets.reduce((sum, w) => sum + Number(w.todayIn || 0), 0);
-    const totalCashOutToday = wallets.reduce((sum, w) => sum + Number(w.todayOut || 0), 0);
-    const netCashFlowToday = totalCashInToday - totalCashOutToday;
-
-    return {
-      totalRevenue: `₹${totalRevenue.toLocaleString()}`,
-      totalProfit: `₹${totalProfit.toLocaleString()}`,
-      totalWalletBalance: `₹${totalWalletBalance.toLocaleString()}`,
-      netCashFlowToday: `₹${netCashFlowToday.toLocaleString()}`,
-      revenueChange: parseFloat(revenueChange),
-      profitChange: parseFloat(profitChange),
-      todayProfit: `₹${netCashFlowToday.toLocaleString()}`,
-      totalCashInToday: `₹${totalCashInToday.toLocaleString()}`,
-      averageTransaction: `₹${averageTransaction.toLocaleString()}`,
-      totalCashInHand: `₹${totalCashInHand.toLocaleString()}`,
-      todayServiceCharge: `₹0`
-    };
-  }, [data]);
+    }, [data]);
 
   if (loading) return <div className="flex h-screen items-center justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-600" /></div>;
 
@@ -159,7 +134,17 @@ const SuperAdminReports = () => {
           <div className="flex justify-center py-12"><FiLoader className="animate-spin h-8 w-8 text-indigo-600" /></div>
         ) : (
           <>
-            {activeSection === "overview" && data && <OverviewSection data={data} stats={stats} showCharts={true} readOnly />}
+            {activeSection === "overview" && data && (
+              <OverviewSection 
+                data={data} 
+                stats={stats} 
+                showCharts={true} 
+                timePeriod={timePeriod}
+                setTimePeriod={setTimePeriod}
+                setActiveSection={setActiveSection}
+                readOnly 
+              />
+            )}
             {activeSection === "wallets" && <SuperAdminWalletsSection centreId={selectedCentre.id} />}
             {activeSection === "staff" && <SuperAdminStaffSection centreId={selectedCentre.id} />}
             {activeSection === "accounting" && <SuperAdminAccountingSection centreId={selectedCentre.id} readOnly />}

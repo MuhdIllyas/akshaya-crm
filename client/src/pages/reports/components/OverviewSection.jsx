@@ -69,7 +69,7 @@ const RevenueTrendChart = ({ data }) => {
     datasets: [
       {
         label: 'Revenue',
-        data: data.revenue,
+        data: data?.charts?.financialTrend?.revenueCollected || [],
         borderColor: 'rgb(16, 185, 129)',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         tension: 0.4,
@@ -77,7 +77,7 @@ const RevenueTrendChart = ({ data }) => {
       },
       {
         label: 'Expenses',
-        data: data.expenses,
+        data: data?.charts?.financialTrend?.operatingExpenses || [],
         borderColor: 'rgb(239, 68, 68)',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         tension: 0.4,
@@ -112,13 +112,13 @@ const RevenueTrendChart = ({ data }) => {
   );
 };
 
-// WalletBalanceChart Component
 const WalletBalanceChart = ({ wallets }) => {
+  const safeWallets = wallets || []; // Prevents the crash
   const chartData = {
-    labels: wallets.map(w => w.name),
+    labels: safeWallets.map(w => w.wallet_type || w.name), // Adapts to V3 key
     datasets: [
       {
-        data: wallets.map(w => Number(w.currentBalance || 0)),
+        data: safeWallets.map(w => Number(w.total_balance || w.currentBalance || 0)),
         backgroundColor: ['rgba(34, 197, 94, 0.8)', 'rgba(59, 130, 246, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(139, 92, 246, 0.8)', 'rgba(14, 165, 233, 0.8)'],
         borderColor: ['rgb(34, 197, 94)', 'rgb(59, 130, 246)', 'rgb(245, 158, 11)', 'rgb(139, 92, 246)', 'rgb(14, 165, 233)'],
         borderWidth: 1,
@@ -152,11 +152,11 @@ const WalletBalanceChart = ({ wallets }) => {
 const StaffPerformanceChart = ({ staffData }) => {
   const safeStaffData = staffData || [];
   const chartData = {
-    labels: safeStaffData.map(s => s.name),
+    labels: safeStaffData.map(s => s.staff_name || s.name),
     datasets: [
       {
         label: 'Revenue Collected',
-        data: safeStaffData.map(s => Number(s.revenue || 0)),
+        data: safeStaffData.map(s => Number(s.total_revenue || s.revenue || 0)),
         backgroundColor: 'rgba(99, 102, 241, 0.8)',
         borderColor: 'rgb(99, 102, 241)',
         borderWidth: 1,
@@ -201,7 +201,7 @@ const OverviewSection = ({
   setActiveSection 
 }) => {
 
-  const safeTransactions = data?.transactions || [];
+  const safeTransactions = data?.lists?.recentTransactions || [];
   
   // Extract numbers to trigger smart alerts
   const pendingCount = parseInt(stats.pendingTransactions?.replace(/,/g, '') || 0);
@@ -303,11 +303,17 @@ const OverviewSection = ({
                 </h2>
                 <div className="flex items-center space-x-2">
                   <FiCalendar className="h-4 w-4 text-gray-500" />
-                  <select
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    value={timePeriod}
-                    onChange={(e) => setTimePeriod(e.target.value)}
-                  >
+                    <select
+                      className="border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={timePeriod || 'monthly'}
+                      onChange={(e) => {
+                        if (typeof setTimePeriod === 'function') {
+                          setTimePeriod(e.target.value);
+                        } else {
+                          console.warn("setTimePeriod prop is missing in OverviewSection!");
+                        }
+                      }}
+                    >
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
                     <option value="yearly">Yearly</option>
@@ -317,9 +323,9 @@ const OverviewSection = ({
               
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <RevenueTrendChart data={data} />
-                <WalletBalanceChart wallets={data.wallets} />
+                <WalletBalanceChart wallets={data?.lists?.wallets || data?.wallets || []} />
                 <div className="xl:col-span-2">
-                  <StaffPerformanceChart staffData={data.staffPerformance} />
+                  <StaffPerformanceChart staffData={data?.lists?.topStaff || []} />
                 </div>
               </div>
             </motion.div>
@@ -351,13 +357,13 @@ const OverviewSection = ({
               {safeTransactions.slice(0, 8).map((tx, idx) => (
                 <div key={idx} className="flex items-center justify-between pb-4 border-b border-gray-50 last:border-0 last:pb-0">
                   <div className="flex items-center space-x-3">
-                    <div className={`p-2.5 rounded-xl ${tx.type === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                      {tx.type === 'credit' ? <FiArrowDownLeft className="h-4 w-4" /> : <FiArrowUpRight className="h-4 w-4" />}
+                    <div className={`p-2.5 rounded-xl ${(tx.transactionType || tx.type) === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                      {(tx.transactionType || tx.type) === 'credit' ? <FiArrowDownLeft className="h-4 w-4" /> : <FiArrowUpRight className="h-4 w-4" />}
                     </div>
                     <div>
                       <p className="text-sm font-bold text-gray-900 truncate max-w-37.5">{tx.category}</p>
                       <p className="text-xs text-gray-500 font-medium">
-                        {new Date(tx.date).toLocaleDateString()}
+                        {tx.created_at ? new Date(tx.created_at).toLocaleDateString() : 'Just now'}
                         <span className={`ml-2 ${tx.status === 'Completed' ? 'text-emerald-600' : 'text-amber-500'}`}>
                           • {tx.status}
                         </span>
@@ -365,8 +371,8 @@ const OverviewSection = ({
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-black ${tx.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {tx.type === 'credit' ? '+' : '-'}₹{Number(tx.amount).toLocaleString()}
+                    <p className={`text-sm font-black ${(tx.transactionType || tx.type) === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {(tx.transactionType || tx.type) === 'credit' ? '+' : '-'}₹{Number(tx.amount).toLocaleString()}
                     </p>
                   </div>
                 </div>

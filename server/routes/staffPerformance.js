@@ -1333,4 +1333,275 @@ router.get('/daily-log', async (req, res) => {
   }
 });
 
+/* ==============================================================
+   HYBRID BFF WORKSPACE INIT ROUTE
+   Aggregates Performance, Tasks, Events, Recent Activity & Bookings
+============================================================== */
+router.get('/workspace-init', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const staffId = req.user.id;
+    const centreId = req.user.centre_id;
+    const { period = 'month', from, to } = req.query;
+
+    // Date Filtering Logic
+    let dateFilter = '';
+    let eventDateFilter = ''; 
+
+    // Safely sanitize custom dates for direct SQL injection
+    const safeFrom = from ? from.replace(/[^0-9-]/g, '') : null;
+    const safeTo = to ? to.replace(/[^0-9-]/g, '') : null;
+
+    if (period === 'today') {
+      dateFilter = `AND se.created_at::date = CURRENT_DATE`;
+      eventDateFilter = `AND {col}::date = CURRENT_DATE`;
+    }
+    else if (period === 'week') {
+      dateFilter = `AND se.created_at >= date_trunc('week', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('week', CURRENT_DATE) AND {col}::date < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')`;
+    }
+    else if (period === 'month') {
+      dateFilter = `AND se.created_at >= date_trunc('month', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('month', CURRENT_DATE) AND {col}::date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')`;
+    }
+    else if (period === 'quarter') {
+      dateFilter = `AND se.created_at >= date_trunc('quarter', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('quarter', CURRENT_DATE) AND {col}::date < (date_trunc('quarter', CURRENT_DATE) + INTERVAL '3 months')`;
+    }
+    else if (period === 'year') {
+      dateFilter = `AND se.created_at >= date_trunc('year', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('year', CURRENT_DATE) AND {col}::date < (date_trunc('year', CURRENT_DATE) + INTERVAL '1 year')`;
+    }
+    else if (period === 'custom' && safeFrom && safeTo) {
+      dateFilter = `AND se.created_at::date BETWEEN '${safeFrom}' AND '${safeTo}'`;
+      eventDateFilter = `AND {col}::date BETWEEN '${safeFrom}' AND '${safeTo}'`;
+    }
+
+    // Helper to dynamically apply the event date filter to different table columns
+    const applyEventFilter = (colName) => {
+      if (!eventDateFilter) return '';
+      return eventDateFilter.replace(/\{col\}/g, colName);
+    };
+
+    // Fire ALL queries concurrently in PostgreSQL
+    const [
+      performanceRes,
+      ratingsRes,
+      tasksRes,
+      eventsRes,
+      recentActivityRes,
+      onlinePendingRes,
+      onlineProcessingRes,
+      deliveriesRes,
+      expiriesRes,
+      todayAttendanceRes
+    ] = await Promise.all([
+      // 1. Performance Summary
+      client.query(`
+        SELECT
+          COUNT(se.id) as total_services,
+          COALESCE(SUM(se.total_charges), 0) as total_amount,
+          COALESCE(SUM(p.received_amount), 0) as total_collected
+        FROM service_entries se
+        LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+        WHERE se.staff_id = $1 AND se.status = 'completed' ${dateFilter}
+      `, [staffId]),
+
+      // 2. Ratings
+      client.query(`
+        SELECT
+          COUNT(sr.id) as total_reviews,
+          COALESCE(AVG(sr.staff_rating), 0) as avg_rating
+        FROM service_reviews sr
+        WHERE sr.staff_id = $1 AND sr.is_submitted = true
+      `, [staffId]),
+
+      // 3. Tasks (Unfiltered so staff never lose track of old pending tasks)
+      client.query(`
+        SELECT id, title, due_date
+        FROM tasks
+        WHERE assigned_to = $1 AND status = 'pending'
+        ORDER BY due_date ASC NULLS LAST
+      `, [staffId]),
+
+      // 4. Events (Dynamically respects the dropdown period!)
+      client.query(`
+        SELECT 
+          id, title, description, date, start_datetime, 
+          CASE 
+            WHEN type ILIKE '%delivery%' OR event_type ILIKE '%delivery%' THEN 'service_delivery'
+            WHEN type ILIKE '%expiry%' OR event_type ILIKE '%expiry%' THEN 'service_expiry'
+            ELSE 'task'
+          END as source, 
+          related_service_id as tracking_id
+        FROM calendar_events
+        WHERE (visibility = 'global' OR (visibility = 'centre' AND centre_id = $1))
+          ${applyEventFilter('COALESCE(date, start_datetime::date)')}
+        ORDER BY COALESCE(date, start_datetime::date) ASC
+        LIMIT 50
+      `, [centreId]),
+
+      // 5. Recent Activity
+      client.query(`
+        SELECT
+          se.id, 
+          se.created_at, 
+          se.customer_name as "customerName", 
+          se.phone, 
+          se.status,
+          se.category_id as category, 
+          se.token_id as "tokenId",
+          se.is_edited, 
+          se.work_source as "workSource", 
+          (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) as tracking_id
+        FROM service_entries se
+        WHERE se.staff_id = $1
+        ORDER BY se.created_at DESC
+        LIMIT 20
+      `, [staffId]),
+
+      // 6. Online Bookings (Pending)
+      client.query(`
+        SELECT cs.*, c.name as customer_name, c.primary_phone as phone
+        FROM customer_services cs
+        LEFT JOIN customers c ON cs.customer_id = c.id
+        WHERE cs.status = 'under_review'
+        ORDER BY cs.applied_at DESC
+      `),
+
+      // 7. Online Bookings (Processing)
+      client.query(`
+        SELECT cs.*, c.name as customer_name, c.primary_phone as phone
+        FROM customer_services cs
+        LEFT JOIN customers c ON cs.customer_id = c.id
+        WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1
+        ORDER BY cs.taken_at DESC
+      `, [staffId]),
+
+      // 8. Deliveries (Dynamically respects the dropdown period!)
+      client.query(`
+        SELECT
+          tr.id as tracking_id,
+          tr.service_entry_id as related_service_id,
+          se.customer_name,
+          sv.name AS service_name,
+          sc.name AS subcategory_name,
+          tr.estimated_delivery as date
+        FROM service_tracking tr
+        LEFT JOIN service_entries se ON se.id = tr.service_entry_id
+        LEFT JOIN services sv ON sv.id = se.category_id
+        LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+        WHERE tr.status NOT IN ('completed', 'paid', 'delivered')
+          AND tr.assigned_to = $1
+          AND tr.estimated_delivery IS NOT NULL
+          ${applyEventFilter('tr.estimated_delivery')}
+      `, [staffId]),
+
+      // 9. Expiries (Dynamically respects the dropdown period!)
+      client.query(`
+        SELECT
+          se.id as related_service_id,
+          se.customer_name,
+          sv.name AS service_name,
+          sc.name AS subcategory_name,
+          se.expiry_date as date,
+          (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) AS tracking_id
+        FROM service_entries se
+        LEFT JOIN services sv ON sv.id = se.category_id
+        LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+        WHERE se.staff_id = $1
+          AND se.expiry_date IS NOT NULL
+          AND se.is_expiry_dismissed = FALSE
+          ${applyEventFilter('se.expiry_date')}
+      `, [staffId]),
+
+      // 10. Today's Latest Attendance Session
+      client.query(`
+        SELECT id, status, punch_in, punch_out, hours as total_hours
+        FROM attendance
+        WHERE staff_id = $1 AND date = CURRENT_DATE
+        ORDER BY id DESC
+        LIMIT 1
+      `, [staffId])
+
+    ]);
+
+    // --- FORMAT DYNAMIC EVENTS ---
+    const formattedDeliveries = deliveriesRes.rows.map(row => ({
+      id: `delivery-${row.tracking_id}`,
+      title: `${row.subcategory_name ? row.service_name + ' - ' + row.subcategory_name : row.service_name} Delivery`,
+      description: row.customer_name ? `Customer: ${row.customer_name}` : null,
+      date: row.date,
+      source: 'service_delivery',
+      related_service_id: row.related_service_id,
+      tracking_id: row.tracking_id
+    }));
+
+    const formattedExpiries = expiriesRes.rows.map(row => ({
+      id: `expiry-${row.related_service_id}`,
+      title: `${row.subcategory_name ? row.service_name + ' - ' + row.subcategory_name : row.service_name} Expiry`,
+      description: row.customer_name ? `Customer: ${row.customer_name}` : null,
+      date: row.date,
+      source: 'service_expiry',
+      related_service_id: row.related_service_id,
+      tracking_id: row.tracking_id
+    }));
+
+    const combinedEvents = [
+      ...eventsRes.rows,
+      ...formattedDeliveries,
+      ...formattedExpiries
+    ];
+
+    const summary = performanceRes.rows[0];
+    const ratings = ratingsRes.rows[0];
+
+    const totalServices = parseInt(summary.total_services) || 0;
+    const totalCollected = parseFloat(summary.total_collected) || 0;
+    const totalAmount = parseFloat(summary.total_amount) || 0;
+
+    const collectionRate = totalAmount > 0 ? Math.round((totalCollected / totalAmount) * 100) : 0;
+    const avgTransactionValue = totalServices > 0 ? Math.round(totalCollected / totalServices) : 0;
+    const avgRating = parseFloat(ratings.avg_rating) || 0;
+
+    // Basic Incentive Score Calculation
+    const incentiveScore = Math.min(100, Math.round(
+      (collectionRate * 0.5) +
+      (totalServices > 10 ? 30 : totalServices * 3) +
+      (avgRating * 4) // 5 * 4 = 20
+    ));
+
+    res.json({
+      success: true,
+      data: {
+        todayAttendance: todayAttendanceRes.rows[0] || null,
+        performance: {
+          summary: {
+            total_services: totalServices,
+            total_collected: totalCollected,
+            collection_rate: collectionRate,
+            avg_transaction_value: avgTransactionValue,
+            incentive_score: incentiveScore
+          },
+          ratings: {
+            avg_rating: avgRating.toFixed(1),
+            total_reviews: parseInt(ratings.total_reviews)
+          }
+        },
+        tasks: tasksRes.rows,
+        events: combinedEvents,
+        recentActivity: recentActivityRes.rows,
+        onlinePending: onlinePendingRes.rows,
+        onlineProcessing: onlineProcessingRes.rows
+      }
+    });
+
+  } catch (err) {
+    console.error('Workspace Init Error:', err);
+    res.status(500).json({ error: 'Failed to initialize workspace' });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
