@@ -20,7 +20,16 @@ const getDateContext = () => {
   sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 6);
   const sevenDaysAgo = sevenDaysAgoDate.toISOString().split('T')[0];
 
-  return { today, yesterday, sevenDaysAgo, currentYear, currentMonthStr, firstDayOfMonth };
+  return { 
+    today, 
+    yesterday, 
+    sevenDaysAgo, 
+    currentYear, 
+    currentMonthStr, 
+    firstDayOfMonth,
+    fromDate: today, 
+    toDate: today    
+  };
 };
 
 // ==========================================
