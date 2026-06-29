@@ -5,6 +5,8 @@ import AddStaffForm from "./AddStaffForm";
 import EditStaffForm from "/src/components/EditStaffForm";
 import { FiPlus, FiEdit, FiTrash2, FiUserPlus, FiFilter, FiRefreshCw, FiSearch, FiEye, FiUser, FiX, FiGrid, FiList, FiClock, FiMail, FiPhone, FiDollarSign, FiCalendar } from "react-icons/fi";
 
+const API_BASE = import.meta.env.VITE_API_URL;
+
 const SuperadminStaffManagement = () => {
   const [staffList, setStaffList] = useState([]);
   const [centres, setCentres] = useState([]);
@@ -444,10 +446,12 @@ const SuperadminStaffManagement = () => {
                 >
                   <div className="p-6">
                     <div className="flex items-start gap-4 mb-4">
-                      <div className="flex-shrink-0 relative">
+                      <div className="shrink-0 relative">
                         {staff.photo ? (
                           <img
-                            src={staff.photo}
+                            src={staff.photo.startsWith('http') || staff.photo.startsWith('data:image') 
+                              ? staff.photo 
+                              : `${API_BASE}${staff.photo}`}
                             alt={`${staff.name}'s profile`}
                             className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md"
                             onError={(e) => {
@@ -597,10 +601,12 @@ const SuperadminStaffManagement = () => {
                       <tr key={staff.id} className="hover:bg-gray-50 transition-colors group">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="flex-shrink-0 relative">
+                            <div className="shrink-0 relative">
                               {staff.photo ? (
                                 <img
-                                  src={staff.photo}
+                                  src={staff.photo.startsWith('http') || staff.photo.startsWith('data:image') 
+                                    ? staff.photo 
+                                    : `${API_BASE}${staff.photo}`}
                                   alt={`${staff.name}'s profile`}
                                   className="w-10 h-10 rounded-xl object-cover border-2 border-white shadow-sm"
                                   onError={(e) => {
@@ -748,10 +754,12 @@ const SuperadminStaffManagement = () => {
                   </button>
                 </div>
                 <div className="flex flex-col md:flex-row gap-8 mb-8">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     {showStaffDetails.photo ? (
                       <img
-                        src={showStaffDetails.photo}
+                        src={showStaffDetails.photo.startsWith('http') || showStaffDetails.photo.startsWith('data:image') 
+                          ? showStaffDetails.photo 
+                          : `${API_BASE}${showStaffDetails.photo}`}
                         alt={`${showStaffDetails.name}'s profile`}
                         className="w-32 h-32 rounded-2xl object-cover border-4 border-white shadow-lg"
                         onError={(e) => {
