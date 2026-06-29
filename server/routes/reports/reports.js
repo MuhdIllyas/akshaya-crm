@@ -1,7 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { getReportData } from "./analyticsService.js";
-import { buildPDF, buildExcel, buildCSV } from "../utils/exportBuilder.js"; 
+import { buildPDF, buildExcel, buildCSV } from "@/utils/exportBuilder.js";
 
 const router = express.Router();
 
