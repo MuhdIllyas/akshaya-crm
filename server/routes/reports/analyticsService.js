@@ -382,3 +382,64 @@ export const getDashboardAnalytics = async (centreId) => {
     client.release();
   }
 };
+
+export const getReportData = async (params) => {
+  const { reportIds, targetCentreId, staffId, period, fromDate, toDate } = params;
+  const client = await pool.connect();
+  
+  // Create a unified payload object to return
+  const compiledReport = {
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      period,
+      fromDate,
+      toDate,
+      centreId: targetCentreId
+    },
+    data: {}
+  };
+
+  try {
+    // We map over the requested report IDs and fetch the specific data needed.
+    // Notice how we are REUSING the fetch layers we built for the Dashboard!
+    for (const id of reportIds) {
+      switch (id) {
+        
+        // ID 1: Executive Financial Summary & ID 2: Profit & Loss
+        case 1: 
+        case 2: {
+          const rawFinancials = await fetchFinancialData(client, targetCentreId, toDate, new Date(toDate).getFullYear());
+          compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
+          break;
+        }
+
+        // ID 9: Attendance Report
+        case 9: {
+          const sevenDaysAgo = new Date(new Date(toDate).setDate(new Date(toDate).getDate() - 6)).toISOString().split('T')[0];
+          const firstDayOfMonth = `${toDate.substring(0, 7)}-01`;
+          compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, toDate, sevenDaysAgo, firstDayOfMonth);
+          break;
+        }
+
+        // ID 15: Service Revenue & ID 18: Completed Services
+        case 15:
+        case 18: {
+          // You can create a new specialized fetcher here for detailed service lists
+          // compiledReport.data.services = await fetchDetailedServiceReport(client, targetCentreId, fromDate, toDate, staffId);
+          compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId);
+          break;
+        }
+
+        // Add more cases as you build out specific report modules (customer, team, centre)
+      }
+    }
+
+    return compiledReport;
+
+  } catch (error) {
+    console.error("Analytics Service - Report Fetch Error:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
