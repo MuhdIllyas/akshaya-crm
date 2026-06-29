@@ -19,6 +19,7 @@ import autoTable from 'jspdf-autotable';
 import NotesPanel from '/src/components/notes/NotesPanel';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import axios from 'axios';
 
 const createEmptyService = () => ({
   id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
@@ -715,20 +716,27 @@ const ServiceEntry = () => {
 
         try {
           // Fetch dynamic centre details for invoices
-          const centreRes = await api.get(`/centres/${centreId}`);
-          if (centreRes.data) {
-            setCentreDetails({
-              name: centreRes.data.name || 'Akshaya e Centre',
-              address: centreRes.data.address || '',
-              district: centreRes.data.district || '',
-              state: centreRes.data.state || '',
-              pincode: centreRes.data.pincode || '',
-              phone: centreRes.data.phone || '',
-              logo: centreRes.data.logo || '/logo-light.png'
+          const centreId = localStorage.getItem('centre_id');
+          if (centreId) {
+            // FIX: Use standard axios to hit the correct /api/centres endpoint directly
+            const centreRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/${centreId}`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
+            
+            if (centreRes.data) {
+              setCentreDetails({
+                name: centreRes.data.name || 'Akshaya e Centre',
+                address: centreRes.data.address || '',
+                district: centreRes.data.district || '',
+                state: centreRes.data.state || '',
+                pincode: centreRes.data.pincode || '',
+                phone: centreRes.data.phone || '',
+                logo: centreRes.data.logo || ''
+              });
+            }
           }
         } catch (err) {
-          console.warn('Failed to fetch centre details, falling back to defaults', err);
+          console.warn('Failed to fetch centre details for invoice:', err.response?.data || err.message);
         }
 
         if (tokenId) {
