@@ -53,6 +53,25 @@ const getLatestTransactions = (transactions) => {
   return Array.from(map.values());
 };
 
+const getBase64ImageFromUrl = (imageUrl) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    // This allows fetching from your backend without CORS blocking the canvas
+    img.crossOrigin = 'Anonymous'; 
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const dataURL = canvas.toDataURL('image/png');
+      resolve(dataURL);
+    };
+    img.onerror = error => reject(error);
+    img.src = imageUrl;
+  });
+};
+
 const ServiceEntry = () => {
   const { tokenId, customerServiceId } = useParams();
   const navigate = useNavigate();
@@ -559,7 +578,8 @@ const ServiceEntry = () => {
     setInvoiceModalOpen(true);
   };
 
-  const generateInvoicePDF = () => {
+  // Note the 'async' keyword here
+  const generateInvoicePDF = async () => {
     const doc = new jsPDF();
     const navy = '#0F172A';        
     const white = '#FFFFFF';
@@ -568,33 +588,49 @@ const ServiceEntry = () => {
     doc.setFillColor(navy);
     doc.rect(0, 0, 210, 35, 'F');   
 
-    // Dynamic Logo
+    // ---- DYNAMIC LOGO HANDLING ----
     try {
-      doc.addImage(centreDetails.logo, 'PNG', 10, 5, 22, 22);
+      if (centreDetails.logo) {
+        // 1. Build the full URL (e.g., http://localhost:5000/uploads/123-logo.png)
+        const fullLogoUrl = centreDetails.logo.startsWith('http') 
+          ? centreDetails.logo 
+          : `${import.meta.env.VITE_API_URL}${centreDetails.logo}`;
+        
+        // 2. Wait for the image to convert to Base64
+        const base64Img = await getBase64ImageFromUrl(fullLogoUrl);
+        
+        // 3. Add the Base64 image to the PDF
+        doc.addImage(base64Img, 'PNG', 10, 5, 22, 22);
+      }
     } catch (e) {
+      console.warn("Could not load invoice logo:", e);
+      // Fallback: If no logo exists or it fails to load, print the text on the left
       doc.setTextColor(white);
       doc.setFontSize(16);
-      doc.text(centreDetails.name, 14, 18);
+      doc.text(centreDetails.name || 'Akshaya e Centre', 14, 20);
     }
 
-    // Dynamic Centre Details on the right
+    // ---- DYNAMIC CENTRE DETAILS ON THE RIGHT ----
     doc.setTextColor(white);
+    
     doc.setFontSize(14);
-    doc.text(centreDetails.name, 120, 16);
+    doc.text(centreDetails.name || 'Akshaya e Centre', 120, 16);
+    
     doc.setFontSize(8);
     
-    // Build address string conditionally based on what data exists
-    const addressLine = [centreDetails.address, centreDetails.district, centreDetails.state]
-      .filter(Boolean).join(', ');
-      
-    doc.text(addressLine, 120, 24);
+    const addrParts = [centreDetails.address, centreDetails.district].filter(Boolean);
+    if (addrParts.length > 0) {
+      doc.text(addrParts.join(', '), 120, 22);
+    }
     
-    const pinPhoneLine = [
-      centreDetails.pincode ? `Pin - ${centreDetails.pincode}` : null,
-      centreDetails.phone
-    ].filter(Boolean).join(' | ');
+    const stateParts = [centreDetails.state, centreDetails.pincode ? `Pin - ${centreDetails.pincode}` : null].filter(Boolean);
+    if (stateParts.length > 0) {
+      doc.text(stateParts.join(', '), 120, 26);
+    }
     
-    doc.text(pinPhoneLine, 120, 28);
+    if (centreDetails.phone) {
+      doc.text(`Phone: ${centreDetails.phone}`, 120, 30);
+    }
 
     // ---- INVOICE TITLE & CUSTOMER INFO ----
     doc.setTextColor(0, 0, 0);
