@@ -399,33 +399,59 @@ export const getDashboardAnalytics = async (centreId) => {
 // REPORTS EXPORT ORCHESTRATOR
 // ==========================================
 export const getReportData = async (params) => {
-  let { reportIds, targetCentreId, staffId, period, fromDate, toDate } = params;
+  const { reportIds, targetCentreId, staffId, period, fromDate, toDate } = params;
   const client = await pool.connect();
   
-  // ✅ FIX: Safe Date Fallback
-  // If the frontend sends an empty string or invalid date, default to today.
-  if (!toDate || isNaN(new Date(toDate).getTime())) {
-    toDate = new Date().toISOString().split('T')[0];
+  // ✅ FIX: Smart Date Calculator
+  // 1. Establish the "To" Date (Default to today if missing/invalid)
+  let end = new Date();
+  if (toDate && !isNaN(new Date(toDate).getTime())) {
+    end = new Date(toDate);
   }
-  if (!fromDate || isNaN(new Date(fromDate).getTime())) {
-    fromDate = new Date().toISOString().split('T')[0];
+  const finalToDate = end.toISOString().split('T')[0];
+
+  // 2. Establish the "From" Date based on the 'period' string
+  let start = new Date(end);
+  if (fromDate && !isNaN(new Date(fromDate).getTime())) {
+    start = new Date(fromDate);
+  } else {
+    // If no custom date was provided, calculate it using the period dropdown!
+    switch(period) {
+      case 'weekly':
+        start.setDate(end.getDate() - 6); // Last 7 days
+        break;
+      case 'monthly':
+        start.setDate(1); // 1st day of the current month
+        break;
+      case 'quarterly':
+        start.setMonth(Math.floor(end.getMonth() / 3) * 3, 1); // 1st day of current quarter
+        break;
+      case 'yearly':
+        start.setMonth(0, 1); // Jan 1st of current year
+        break;
+      case 'daily':
+      default:
+        // Keep it the same as the end date (Today)
+        break;
+    }
   }
+  const finalFromDate = start.toISOString().split('T')[0];
 
   // Create a unified payload object to return
   const compiledReport = {
     metadata: {
       generatedAt: new Date().toISOString(),
       period,
-      fromDate,
-      toDate,
+      fromDate: finalFromDate, // Use the calculated dates!
+      toDate: finalToDate,
       centreId: targetCentreId
     },
     data: {}
   };
 
   try {
-    // 1. Build the 'dates' context object safely
-    const baseDateObj = new Date(toDate);
+    // 3. Build the 'dates' context object for the V3 Fetchers
+    const baseDateObj = new Date(finalToDate);
     
     const yesterdayObj = new Date(baseDateObj);
     yesterdayObj.setDate(yesterdayObj.getDate() - 1);
@@ -434,21 +460,20 @@ export const getReportData = async (params) => {
     sevenDaysAgoObj.setDate(sevenDaysAgoObj.getDate() - 6);
 
     const reportDates = {
-      today: toDate, 
-      fromDate: fromDate, // <--- ADD THIS LINE
-      toDate: toDate,     // <--- ADD THIS LINE
+      today: finalToDate, 
+      fromDate: finalFromDate,  // <--- The V3 Engine will now use this!
+      toDate: finalToDate,      // <--- The V3 Engine will now use this!
       yesterday: yesterdayObj.toISOString().split('T')[0],
       sevenDaysAgo: sevenDaysAgoObj.toISOString().split('T')[0],
       currentYear: baseDateObj.getFullYear(),
-      currentMonthStr: toDate.substring(0, 7),
-      firstDayOfMonth: `${toDate.substring(0, 7)}-01`
+      currentMonthStr: finalToDate.substring(0, 7),
+      firstDayOfMonth: `${finalToDate.substring(0, 7)}-01`
     };
 
     // 2. Map over requested reports and reuse V3 Fetchers
     for (const id of reportIds) {
       switch (id) {
         
-        // ID 1: Executive Financial Summary & ID 2: Profit & Loss
         case 1: 
         case 2: {
           const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
@@ -456,13 +481,11 @@ export const getReportData = async (params) => {
           break;
         }
 
-        // ID 9: Attendance Report
         case 9: {
           compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
           break;
         }
 
-        // ID 15: Service Revenue & ID 18: Completed Services
         case 15:
         case 18: {
           compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId, reportDates);
