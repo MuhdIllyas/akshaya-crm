@@ -231,6 +231,35 @@ const fetchActivityAnalytics = async (client, centreId, dates) => {
   };
 };
 
+// ✅ Service Revenue Fetcher
+const fetchServiceRevenueAnalytics = async (client, centreId, dates) => {
+  const res = await client.query(`
+    SELECT 
+      se.service_name,
+      COUNT(se.id) as total_requests,
+      COALESCE(SUM(se.total_charges), 0) as revenue_collected,
+      COALESCE(SUM(se.department_charges), 0) as department_charges,
+      COALESCE(SUM(se.service_charges), 0) as gross_profit
+    FROM service_entries se 
+    JOIN staff s ON se.staff_id = s.id 
+    WHERE s.centre_id = $1 
+      AND se.created_at::date >= $2 
+      AND se.created_at::date <= $3 
+      AND se.status = 'completed'
+    GROUP BY se.service_name
+    ORDER BY revenue_collected DESC
+  `, [centreId, dates.fromDate, dates.toDate]);
+  
+  // Format numbers cleanly for the frontend/exporters
+  return res.rows.map(row => ({
+    service_name: row.service_name || 'Unnamed Service',
+    total_requests: Number(row.total_requests),
+    revenue_collected: Number(row.revenue_collected),
+    department_charges: Number(row.department_charges),
+    gross_profit: Number(row.gross_profit)
+  }));
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -538,7 +567,12 @@ export const getReportData = async (params) => {
           break;
         }
 
-        case 15:
+        // ID 3 & 15: Service Revenue Reports
+        case 3:
+        case 15: {
+          compiledReport.data.serviceRevenue = await fetchServiceRevenueAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
         case 18: {
           compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId, reportDates);
           break;

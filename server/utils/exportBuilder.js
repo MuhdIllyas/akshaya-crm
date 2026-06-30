@@ -42,6 +42,35 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 3 & 15: Service Revenue ---
+  if (reportIds.includes(3) || reportIds.includes(15)) {
+    if (data.serviceRevenue) {
+      const sheet = workbook.addWorksheet('Service Revenue');
+      
+      sheet.mergeCells('A1:E1');
+      sheet.getCell('A1').value = 'Revenue by Services';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Service Name', 'Total Requests', 'Revenue Collected', 'Dept Charges', 'Gross Profit']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.serviceRevenue.forEach(row => {
+        sheet.addRow([row.service_name, row.total_requests, row.revenue_collected, row.department_charges, row.gross_profit]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 30;
+      sheet.getColumn('C').numFmt = '₹#,##0.00';
+      sheet.getColumn('D').numFmt = '₹#,##0.00';
+      sheet.getColumn('E').numFmt = '₹#,##0.00';
+    }
+  }
+
   // --- REPORT 9: Staff Attendance ---
   if (reportIds.includes(9)) {
     if (data.staff) {
@@ -99,6 +128,18 @@ export const buildPDF = (reportData, reportIds) => {
         doc.text(`Revenue Collected: Rs. ${data.financials.today.revenueCollected}`);
         doc.text(`Operating Expenses: Rs. ${data.financials.today.operatingExpenses}`);
         doc.text(`Net Profit: Rs. ${data.financials.today.netProfit}`);
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 3 & 15: Service Revenue ---
+      if ((reportIds.includes(3) || reportIds.includes(15)) && data.serviceRevenue) {
+        doc.fontSize(14).text('Service Revenue Breakdown', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(10);
+        data.serviceRevenue.slice(0, 15).forEach(row => { // Show top 15 in PDF summary
+          doc.text(`${row.service_name}: ${row.total_requests} requests | Rev: Rs. ${row.revenue_collected} | Profit: Rs. ${row.gross_profit}`);
+        });
         doc.moveDown(2);
       }
 

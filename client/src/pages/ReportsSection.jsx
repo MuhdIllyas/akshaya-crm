@@ -255,6 +255,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const apiData = previewData?.data || {};
     const financials = apiData.financials?.today || {};
     const staffData = apiData.staff?.staff || {};
+    const serviceRevenue = apiData.serviceRevenue || {};
 
     // ✅ NEW: Smart Trend Calculator
     const periodTrendRaw = apiData.financials?.periodTrend || [];
@@ -393,13 +394,54 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </ResponsiveContainer>
                                 </div>
                             )}
+
+                            {/* Service Revenue Chart */}
+                            {serviceRevenueData.length > 0 && (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Services by Revenue</h3>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <BarChart data={serviceRevenueData.slice(0, 10)}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                            <XAxis dataKey="service_name" tick={{ fontSize: 11 }} />
+                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                            <Tooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
+                                            <Legend />
+                                            <Bar dataKey="revenue_collected" name="Revenue" fill="#10B981" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="gross_profit" name="Net Profit" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
                         </div>
                     )}
                     
                     {/* DATA TAB - LIVE RENDERING */}
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                            {monthlyTrend.length > 0 ? (
+                            
+                            {/* Service Revenue Table */}
+                            {serviceRevenueData.length > 0 ? (
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Name</th>
+                                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Requests</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Revenue Collected</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Gross Profit</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {serviceRevenueData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.service_name}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.total_requests}</td>
+                                                <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.revenue_collected.toLocaleString('en-IN')}</td>
+                                                <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">₹{row.gross_profit.toLocaleString('en-IN')}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : monthlyTrend.length > 0 ? (
                                 <table className="w-full text-sm">
                                     <thead className="bg-gray-50">
                                         <tr>
