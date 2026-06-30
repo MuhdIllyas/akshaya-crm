@@ -255,6 +255,32 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const apiData = previewData?.data || {};
     const financials = apiData.financials?.today || {};
     const staffData = apiData.staff?.staff || {};
+
+    // ✅ NEW: Smart Trend Calculator
+    const periodTrendRaw = apiData.financials?.periodTrend || [];
+    let displayTrend = [];
+
+    if (periodTrendRaw.length > 31) {
+        // If the date range is huge (e.g. Yearly), automatically group the daily data into Months!
+        const monthlyGroups = {};
+        periodTrendRaw.forEach(pt => {
+            const date = new Date(pt.label);
+            const monthKey = date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+            if (!monthlyGroups[monthKey]) monthlyGroups[monthKey] = { label: monthKey, revenue: 0, expenses: 0, profit: 0 };
+            monthlyGroups[monthKey].revenue += pt.revenueCollected;
+            monthlyGroups[monthKey].expenses += pt.operatingExpenses;
+            monthlyGroups[monthKey].profit += pt.netProfit;
+        });
+        displayTrend = Object.values(monthlyGroups);
+    } else {
+        // If the range is a month or less, show the exact Days!
+        displayTrend = periodTrendRaw.map(pt => ({
+            label: new Date(pt.label).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+            revenue: pt.revenueCollected,
+            expenses: pt.operatingExpenses,
+            profit: pt.netProfit
+        }));
+    }
     
     // Note: V3 Analytics returns 'monthly', not 'monthlyTrend'
     const monthlyTrendRaw = apiData.financials?.monthly || {}; 
@@ -384,19 +410,19 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
-                                        {monthlyTrend.map((row, idx) => {
-                                            const profit = row.revenue - row.expenses;
+                                        {displayTrend.map((row, idx) => {
                                             return (
                                                 <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.month}</td>
+                                                    {/* Change row.month to row.label */}
+                                                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.label}</td>
                                                     <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">
                                                         ₹{row.revenue.toLocaleString('en-IN')}
                                                     </td>
                                                     <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">
                                                         ₹{row.expenses.toLocaleString('en-IN')}
                                                     </td>
-                                                    <td className={`px-4 py-3 text-sm text-right font-bold ${profit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                                                        ₹{profit.toLocaleString('en-IN')}
+                                                    <td className={`px-4 py-3 text-sm text-right font-bold ${row.profit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                                        ₹{row.profit.toLocaleString('en-IN')}
                                                     </td>
                                                 </tr>
                                             );
@@ -406,13 +432,13 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <tr>
                                             <td className="px-4 py-3 text-sm font-bold text-gray-900">Total</td>
                                             <td className="px-4 py-3 text-sm font-bold text-emerald-600 text-right">
-                                                ₹{monthlyTrend.reduce((sum, r) => sum + r.revenue, 0).toLocaleString('en-IN')}
+                                                ₹{displayTrend.reduce((sum, r) => sum + r.revenue, 0).toLocaleString('en-IN')}
                                             </td>
                                             <td className="px-4 py-3 text-sm font-bold text-rose-600 text-right">
-                                                ₹{monthlyTrend.reduce((sum, r) => sum + r.expenses, 0).toLocaleString('en-IN')}
+                                                ₹{displayTrend.reduce((sum, r) => sum + r.expenses, 0).toLocaleString('en-IN')}
                                             </td>
                                             <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">
-                                                ₹{monthlyTrend.reduce((sum, r) => sum + (r.revenue - r.expenses), 0).toLocaleString('en-IN')}
+                                                ₹{displayTrend.reduce((sum, r) => sum + (r.revenue - r.expenses), 0).toLocaleString('en-IN')}
                                             </td>
                                         </tr>
                                     </tfoot>

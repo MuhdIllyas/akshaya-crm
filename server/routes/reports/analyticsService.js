@@ -97,7 +97,7 @@ const fetchServiceAnalytics = async (client, centreId, dates) => {
 };
 
 const fetchFinancialAnalytics = async (client, centreId, dates) => {
-  const [todayRev, todayOpEx, monthlyRev, monthlyOpEx] = await Promise.all([
+  const [todayRev, todayOpEx, monthlyRev, monthlyOpEx, periodRev, periodOpEx] = await Promise.all([
     
     // ✅ 1. Updated to use date ranges (fromDate and toDate)
     client.query(`
@@ -119,6 +119,7 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
       AND (is_reversal IS NULL OR is_reversal = FALSE)
     `, [centreId, dates.fromDate, dates.toDate]),
     
+    // ✅ 3. Monthly Revenue
     client.query(`
       SELECT 
         EXTRACT(MONTH FROM se.created_at) as month_num,
@@ -131,6 +132,7 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
       GROUP BY month_num
     `, [centreId, dates.currentYear]),
     
+    // ✅ 4. Monthly Operating Expenses
     client.query(`
       SELECT 
         EXTRACT(MONTH FROM expense_date) as month_num,
@@ -140,14 +142,40 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
       AND status IN ('approved', 'auto_approved') 
       AND (is_reversal IS NULL OR is_reversal = FALSE)
       GROUP BY month_num
-    `, [centreId, dates.currentYear])
+    `, [centreId, dates.currentYear]),
+
+    // ✅ 5. NEW: Dynamic Period Revenue (Grouped by Exact Date)
+    client.query(`
+      SELECT 
+        TO_CHAR(se.created_at, 'YYYY-MM-DD') as date_label,
+        COALESCE(SUM(se.total_charges), 0) as revenue_collected,
+        COALESCE(SUM(se.service_charges), 0) as gross_profit
+      FROM service_entries se 
+      JOIN staff s ON se.staff_id = s.id 
+      WHERE s.centre_id = $1 AND se.created_at::date >= $2 AND se.created_at::date <= $3 AND se.status = 'completed'
+      GROUP BY date_label
+    `, [centreId, dates.fromDate, dates.toDate]),
+    
+    // ✅ 6. NEW: Dynamic Period Expenses (Grouped by Exact Date)
+    client.query(`
+      SELECT 
+        TO_CHAR(expense_date, 'YYYY-MM-DD') as date_label,
+        COALESCE(SUM(amount), 0) as operating_expenses
+      FROM expenses 
+      WHERE centre_id = $1 AND expense_date >= $2 AND expense_date <= $3 
+      AND status IN ('approved', 'auto_approved') 
+      AND (is_reversal IS NULL OR is_reversal = FALSE)
+      GROUP BY date_label
+    `, [centreId, dates.fromDate, dates.toDate])
   ]);
 
   return {
     todayRev: todayRev.rows[0],
     todayOpEx: todayOpEx.rows[0],
     monthlyRev: monthlyRev.rows,
-    monthlyOpEx: monthlyOpEx.rows
+    monthlyOpEx: monthlyOpEx.rows,
+    periodRev: periodRev.rows,
+    periodOpEx: periodOpEx.rows
   };
 };
 
@@ -240,6 +268,30 @@ const calculateFinancialMetrics = (raw) => {
     monthly.netProfit[i] = monthly.grossProfit[i] - monthly.operatingExpenses[i];
   }
 
+  // --- NEW: Calculate Dynamic Period Trend ---
+  const periodTrendMap = {};
+  
+  if (raw.periodRev) {
+    raw.periodRev.forEach(r => {
+      periodTrendMap[r.date_label] = { label: r.date_label, revenueCollected: Number(r.revenue_collected), grossProfit: Number(r.gross_profit), operatingExpenses: 0 };
+    });
+  }
+  
+  if (raw.periodOpEx) {
+    raw.periodOpEx.forEach(r => {
+      if (!periodTrendMap[r.date_label]) {
+        periodTrendMap[r.date_label] = { label: r.date_label, revenueCollected: 0, grossProfit: 0, operatingExpenses: 0 };
+      }
+      periodTrendMap[r.date_label].operatingExpenses = Number(r.operating_expenses);
+    });
+  }
+
+  const periodTrend = Object.values(periodTrendMap).map(day => {
+    day.netProfit = day.grossProfit - day.operatingExpenses;
+    return day;
+  }).sort((a, b) => a.label.localeCompare(b.label)); 
+  return { today, monthly, periodTrend }; 
+
   return { today, monthly };
 };
 
@@ -249,16 +301,14 @@ const calculateFinancialMetrics = (raw) => {
 
 const buildFinancialSummary = (metrics) => {
   return {
-    summary: {
-      today: metrics.today
-      // Ready for: month: metrics.month, year: metrics.year
-    }, 
+    summary: { today: metrics.today }, 
     monthlyTrend: {
       revenueCollected: metrics.monthly.revenueCollected,
       grossProfit: metrics.monthly.grossProfit,
       operatingExpenses: metrics.monthly.operatingExpenses,
       netProfit: metrics.monthly.netProfit
-    }
+    },
+    periodTrend: metrics.periodTrend // <--- Add this!
   };
 };
 
