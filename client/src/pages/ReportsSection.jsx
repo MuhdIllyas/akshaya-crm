@@ -386,7 +386,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                                             <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                                             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                            <Tooltip formatter={(value) => `₹${value.toLocaleString()}`} />
+                                            <Tooltip 
+                                                isAnimationActive={false} 
+                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                            />
                                             <Legend />
                                             <Bar dataKey="revenue" name="Revenue Collected" fill="#6366F1" radius={[2, 2, 0, 0]} />
                                             <Bar dataKey="expenses" name="Operating Expenses" fill="#EF4444" radius={[2, 2, 0, 0]} />
@@ -404,7 +407,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                                             <XAxis dataKey="service_name" tick={{ fontSize: 11 }} />
                                             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                            <Tooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
+                                            <Tooltip 
+                                                isAnimationActive={false} 
+                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                            />
                                             <Legend />
                                             <Bar dataKey="revenue_collected" name="Revenue" fill="#10B981" radius={[2, 2, 0, 0]} />
                                             <Bar dataKey="gross_profit" name="Net Profit" fill="#6366F1" radius={[2, 2, 0, 0]} />
@@ -518,7 +524,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                     <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
+                                            <Tooltip 
+                                                isAnimationActive={false} 
+                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                            />
                                             <Legend />
                                         </PieChart>
                                     </ResponsiveContainer>
