@@ -259,6 +259,13 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     // Note: V3 Analytics returns 'monthly', not 'monthlyTrend'
     const monthlyTrendRaw = apiData.financials?.monthly || {}; 
 
+    // Extract and format the live wallet data for the Pie Chart
+    const rawWallets = apiData.wallets || [];
+    const walletDistribution = rawWallets.map(w => ({
+        name: w.wallet_type ? w.wallet_type.charAt(0).toUpperCase() + w.wallet_type.slice(1) : 'Unknown',
+        value: Number(w.total_balance || 0)
+    })).filter(w => w.value > 0); 
+
     // 2. TRANSFORM MONTHLY TREND FOR RECHARTS
     const monthlyTrend = monthlyTrendRaw.revenueCollected ? 
         monthlyTrendRaw.revenueCollected.map((rev, i) => ({
@@ -422,22 +429,40 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                         </div>
                     )}
 
-                    {/* CHARTS TAB - SAFE RENDERING (No .map crashes) */}
+                    {/* CHARTS TAB - LIVE RENDERING */}
                     {activeTab === 'charts' && (
                         <div className="space-y-4">
                             <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Distribution (Preview)</h3>
-                                <ResponsiveContainer width="100%" height={250}>
-                                    <PieChart>
-                                        <Pie data={fallbackWallets} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} cornerRadius={4}>
-                                            {fallbackWallets.map((_, idx) => (
-                                                <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                        <Legend />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Distribution</h3>
+                                
+                                {walletDistribution.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <PieChart>
+                                            <Pie 
+                                                data={walletDistribution} // 👈 Using real data here
+                                                dataKey="value" 
+                                                nameKey="name" 
+                                                cx="50%" cy="50%" 
+                                                innerRadius={50} outerRadius={80} 
+                                                paddingAngle={2} cornerRadius={4}
+                                            >
+                                                {walletDistribution.map((_, idx) => (
+                                                    <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
+                                            <Legend />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="p-10 text-center text-gray-500">
+                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <FiPieChart className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Wallet Data</h3>
+                                        <p className="text-xs">There are no wallet balances to display.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

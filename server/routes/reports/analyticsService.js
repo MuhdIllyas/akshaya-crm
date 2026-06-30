@@ -478,6 +478,8 @@ export const getReportData = async (params) => {
         case 2: {
           const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
+
+          compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
           break;
         }
 
