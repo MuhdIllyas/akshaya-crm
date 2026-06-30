@@ -233,31 +233,42 @@ const fetchActivityAnalytics = async (client, centreId, dates) => {
 
 // ✅ Service Revenue Fetcher
 const fetchServiceRevenueAnalytics = async (client, centreId, dates) => {
-  const res = await client.query(`
-    SELECT 
-      se.service_name,
-      COUNT(se.id) as total_requests,
-      COALESCE(SUM(se.total_charges), 0) as revenue_collected,
-      COALESCE(SUM(se.department_charges), 0) as department_charges,
-      COALESCE(SUM(se.service_charges), 0) as gross_profit
-    FROM service_entries se 
-    JOIN staff s ON se.staff_id = s.id 
-    WHERE s.centre_id = $1 
-      AND se.created_at::date >= $2 
-      AND se.created_at::date <= $3 
-      AND se.status = 'completed'
-    GROUP BY se.service_name
-    ORDER BY revenue_collected DESC
-  `, [centreId, dates.fromDate, dates.toDate]);
-  
-  // Format numbers cleanly for the frontend/exporters
-  return res.rows.map(row => ({
-    service_name: row.service_name || 'Unnamed Service',
-    total_requests: Number(row.total_requests),
-    revenue_collected: Number(row.revenue_collected),
-    department_charges: Number(row.department_charges),
-    gross_profit: Number(row.gross_profit)
-  }));
+  try {
+    const res = await client.query(`
+      SELECT 
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        COUNT(se.id) as total_requests,
+        COALESCE(SUM(se.total_charges), 0) as revenue_collected,
+        COALESCE(SUM(se.department_charges), 0) as department_charges,
+        COALESCE(SUM(se.service_charges), 0) as gross_profit
+      FROM service_entries se 
+      JOIN staff s ON se.staff_id = s.id 
+      -- 👇 Join the services table (using category_id from entries)
+      LEFT JOIN services srv ON se.category_id = srv.id 
+      -- 👇 Join the subcategories table (using subcategory_id from entries)
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id 
+      WHERE s.centre_id = $1 
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3 
+        AND se.status = 'completed'
+      GROUP BY srv.name, sub.name -- 👈 Group by both to keep them distinct
+      ORDER BY revenue_collected DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+    
+    return res.rows.map(row => ({
+      service_name: row.service_name,
+      total_requests: Number(row.total_requests),
+      revenue_collected: Number(row.revenue_collected),
+      department_charges: Number(row.department_charges),
+      gross_profit: Number(row.gross_profit)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchServiceRevenueAnalytics:", error.message);
+    throw error;
+  }
 };
 
 // ==========================================
