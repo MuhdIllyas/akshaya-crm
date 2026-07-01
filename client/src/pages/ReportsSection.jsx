@@ -258,7 +258,14 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const serviceRevenueData = apiData.serviceRevenue || [];
     const expenseData = apiData.expenseReport || [];
 
-    // ✅ NEW: Smart Trend Calculator
+    // Extract the new Expense by Wallet data
+    const expenseByWalletData = apiData.expenseByWallet || [];
+    const expenseWalletDistribution = expenseByWalletData.map(w => ({
+        name: w.wallet_name,
+        value: Number(w.amount || 0)
+    })).filter(w => w.value > 0);
+
+    // ✅ Smart Trend Calculator
     const periodTrendRaw = apiData.financials?.periodTrend || [];
     let displayTrend = [];
 
@@ -555,14 +562,45 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {/* CHARTS TAB - LIVE RENDERING */}
                     {activeTab === 'charts' && (
                         <div className="space-y-4">
+                            
+                            {/* ✅ NEW: Expenses by Wallet Chart (Only shows on the Expense Report) */}
+                            {report?.id === 4 && expenseWalletDistribution.length > 0 && (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Expenses by Source Account</h3>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <PieChart>
+                                            <Pie 
+                                                data={expenseWalletDistribution}
+                                                dataKey="value" 
+                                                nameKey="name" 
+                                                cx="50%" cy="50%" 
+                                                innerRadius={50} outerRadius={80} 
+                                                paddingAngle={2} cornerRadius={4}
+                                            >
+                                                {/* We offset the colors so it looks different from the balance chart */}
+                                                {expenseWalletDistribution.map((_, idx) => (
+                                                    <Cell key={idx} fill={COLORS[(idx + 2) % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip 
+                                                isAnimationActive={false} 
+                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                            />
+                                            <Legend />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+
+                            {/* EXISTING: Current Wallet Balances Chart */}
                             <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Wallet Distribution</h3>
+                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Current Wallet Balances</h3>
                                 
                                 {walletDistribution.length > 0 ? (
                                     <ResponsiveContainer width="100%" height={250}>
                                         <PieChart>
                                             <Pie 
-                                                data={walletDistribution} // 👈 Using real data here
+                                                data={walletDistribution}
                                                 dataKey="value" 
                                                 nameKey="name" 
                                                 cx="50%" cy="50%" 

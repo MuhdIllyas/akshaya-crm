@@ -271,7 +271,7 @@ const fetchServiceRevenueAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ NEW: Expense Category Fetcher
+// Expense Category Fetcher
 const fetchExpenseAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
@@ -297,6 +297,35 @@ const fetchExpenseAnalytics = async (client, centreId, dates) => {
   } catch (error) {
     console.error("SQL Error in fetchExpenseAnalytics:", error.message);
     throw error;
+  }
+};
+
+// Expenses grouped by Wallet
+const fetchExpenseByWalletAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        COALESCE(w.name, 'Cash / Uncategorized') as wallet_name,
+        COALESCE(SUM(e.amount), 0) as total_amount
+      FROM expenses e
+      LEFT JOIN wallets w ON e.wallet_id = w.id
+      WHERE e.centre_id = $1 
+        AND e.expense_date >= $2 
+        AND e.expense_date <= $3 
+        AND e.status IN ('approved', 'auto_approved') 
+        AND (e.is_reversal IS NULL OR e.is_reversal = FALSE)
+      GROUP BY w.name
+      ORDER BY total_amount DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+    
+    return res.rows.map(row => ({
+      wallet_name: row.wallet_name,
+      amount: Number(row.total_amount)
+    }));
+  } catch (error) {
+    // If your expenses table doesn't have a wallet_id, this catches it safely!
+    console.error("SQL Error in fetchExpenseByWalletAnalytics:", error.message);
+    return []; 
   }
 };
 
@@ -616,6 +645,12 @@ export const getReportData = async (params) => {
         // ID 4: Expense Report
         case 4: {
           compiledReport.data.expenseReport = await fetchExpenseAnalytics(client, targetCentreId, reportDates);
+          
+          // ✅ ADDED: Fetch the new Expense-by-Wallet breakdown
+          compiledReport.data.expenseByWallet = await fetchExpenseByWalletAnalytics(client, targetCentreId, reportDates);
+          
+          // ✅ ADDED: Fetch the live wallet balances so the bottom chart doesn't say "No Data"!
+          compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
           break;
         }
         case 18: {
