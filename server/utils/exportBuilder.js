@@ -125,6 +125,42 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 7: Ledger Report ---
+  if (reportIds.includes(7)) {
+    if (data.ledger) {
+      const sheet = workbook.addWorksheet('General Ledger');
+      
+      sheet.mergeCells('A1:E1');
+      sheet.getCell('A1').value = 'General Ledger Transactions';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Date & Time', 'Wallet', 'Transaction Type', 'Category', 'Amount']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.ledger.forEach(row => {
+        sheet.addRow([
+          new Date(row.date).toLocaleString('en-IN'), 
+          row.wallet, 
+          row.type.toUpperCase(), 
+          row.category, 
+          row.amount
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 22;
+      sheet.getColumn('B').width = 15;
+      sheet.getColumn('C').width = 18;
+      sheet.getColumn('D').width = 25;
+      sheet.getColumn('E').numFmt = '₹#,##0.00';
+    }
+  }
+
   // --- REPORT 9: Staff Attendance ---
   if (reportIds.includes(9)) {
     if (data.staff) {
@@ -217,6 +253,24 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(10);
         data.cashFlow.forEach(row => { 
           doc.text(`${row.date} | Inflow: Rs. ${row.inflow} | Outflow: Rs. ${row.outflow} | Net: Rs. ${row.net_flow}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 7: Ledger Report ---
+      if (reportIds.includes(7) && data.ledger) {
+        doc.fontSize(14).text('General Ledger Transactions', { underline: true });
+        doc.moveDown(0.5);
+        
+        if (data.ledger.length > 100) {
+            doc.fontSize(8).fillColor('gray').text(`(Showing first 100 of ${data.ledger.length} transactions. Export to Excel for full ledger.)`);
+        }
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.ledger.slice(0, 100).forEach(row => { 
+          const dateStr = new Date(row.date).toLocaleString('en-IN');
+          doc.text(`${dateStr} | ${row.wallet} | ${row.type.toUpperCase()} | ${row.category} | Rs. ${row.amount}`);
         });
         doc.moveDown(2);
       }

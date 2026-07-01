@@ -267,6 +267,23 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
 
     const walletSummaryData = apiData.walletSummary || [];
     const cashFlowData = apiData.cashFlow || [];
+
+    // ✅ ADD THIS: Extract Ledger Data and calculate quick summaries
+    const ledgerData = apiData.ledger || [];
+    const ledgerSummary = { credit: 0, debit: 0, count: ledgerData.length };
+    const ledgerCategories = {};
+    
+    ledgerData.forEach(tx => {
+        if (tx.type === 'credit') ledgerSummary.credit += tx.amount;
+        if (tx.type === 'debit') ledgerSummary.debit += tx.amount;
+        if (!ledgerCategories[tx.category]) ledgerCategories[tx.category] = 0;
+        ledgerCategories[tx.category] += tx.amount;
+    });
+
+    const ledgerCategoryChart = Object.entries(ledgerCategories)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10); // Top 10 volume categories
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -481,6 +498,32 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </ResponsiveContainer>
                                 </div>
                             )}
+
+                            {/* Ledger Report Preview Summary */}
+                            {report?.id === 7 && ledgerData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Transactions" value={ledgerSummary.count} subtitle="Selected Period" icon={FiActivity} color="bg-blue-600" />
+                                        <StatCard title="Total Credit (In)" value={`₹${ledgerSummary.credit.toLocaleString('en-IN')}`} subtitle="Selected Period" icon={FiTrendingUp} color="bg-emerald-600" />
+                                        <StatCard title="Total Debit (Out)" value={`₹${ledgerSummary.debit.toLocaleString('en-IN')}`} subtitle="Selected Period" icon={FiTrendingDown} color="bg-rose-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Transaction Volume by Category</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={ledgerCategoryChart}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                                <Tooltip 
+                                                    isAnimationActive={false} 
+                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                                />
+                                                <Bar dataKey="value" name="Total Volume" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -488,8 +531,49 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Cash Flow Table */}
-                            {report?.id === 6 ? (
+                            {/* ✅ NEW: Ledger Transactions Table */}
+                            {report?.id === 7 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date & Time</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Wallet</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Category</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Type</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {ledgerData.length > 0 ? (
+                                                ledgerData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-500">
+                                                            {new Date(row.date).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.wallet}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600">{row.category}</td>
+                                                        <td className="px-4 py-3 text-sm text-center">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${row.type === 'credit' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                                                {row.type.toUpperCase()}
+                                                            </span>
+                                                        </td>
+                                                        <td className={`px-4 py-3 text-sm text-right font-bold ${row.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {row.type === 'credit' ? '+' : '-'}₹{row.amount.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-8 text-center text-gray-500">
+                                                        Loading ledger data or no transactions found for this period.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 6 ? (
                                 <div className="p-0">
                                     {includesToday && (
                                         <div className="m-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start space-x-3">

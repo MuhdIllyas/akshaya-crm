@@ -405,6 +405,38 @@ const fetchCashFlowAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Ledger Fetcher (Chronological Transaction List)
+const fetchLedgerAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        wt.created_at as transaction_date,
+        w.name as wallet_name,
+        wt.type as transaction_type,
+        COALESCE(wt.category, 'Uncategorized') as category,
+        wt.amount
+      FROM wallet_transactions wt
+      JOIN wallets w ON wt.wallet_id = w.id
+      WHERE w.centre_id = $1
+        AND wt.created_at::date >= $2 
+        AND wt.created_at::date <= $3
+        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+      ORDER BY wt.created_at DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      date: new Date(row.transaction_date).toISOString(), // Keep full ISO for precise sorting
+      wallet: row.wallet_name || 'Unknown Wallet',
+      type: row.transaction_type, // 'credit' or 'debit'
+      category: row.category,
+      amount: Number(row.amount || 0)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchLedgerAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -699,7 +731,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -718,6 +750,11 @@ export const getReportData = async (params) => {
         case 1:
         case 2: {
           compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
+          break;
+        }
+        // ID 7: General Ledger Report
+        case 7: {
+          compiledReport.data.ledger = await fetchLedgerAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 9: {
