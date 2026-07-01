@@ -552,7 +552,17 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                             {new Date(row.date).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                         </td>
                                                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.wallet}</td>
-                                                        <td className="px-4 py-3 text-sm text-gray-600">{row.category}</td>
+                                                        {/* ✅ NEW: Category with Smart Reversal Badge */}
+                                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                                            <div className="flex flex-col items-start">
+                                                                <span>{row.category}</span>
+                                                                {row.isReversal && (
+                                                                    <span className="mt-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase tracking-wider">
+                                                                        Reversal Entry
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
                                                         <td className="px-4 py-3 text-sm text-center">
                                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${row.type === 'credit' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                                                                 {row.type.toUpperCase()}

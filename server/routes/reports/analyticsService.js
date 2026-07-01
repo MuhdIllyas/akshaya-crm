@@ -405,7 +405,7 @@ const fetchCashFlowAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ NEW: Ledger Fetcher (Chronological Transaction List)
+// ✅ General Ledger Fetcher (Strict Audit Trail with Reversals)
 const fetchLedgerAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
@@ -414,22 +414,24 @@ const fetchLedgerAnalytics = async (client, centreId, dates) => {
         w.name as wallet_name,
         wt.type as transaction_type,
         COALESCE(wt.category, 'Uncategorized') as category,
-        wt.amount
+        wt.amount,
+        wt.is_reversal -- 👈 We fetch this so the UI knows it's a correction!
       FROM wallet_transactions wt
       JOIN wallets w ON wt.wallet_id = w.id
       WHERE w.centre_id = $1
         AND wt.created_at::date >= $2 
         AND wt.created_at::date <= $3
-        AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+        -- ❌ REMOVED the filter so Reversals can offset original mistakes!
       ORDER BY wt.created_at DESC
     `, [centreId, dates.fromDate, dates.toDate]);
 
     return res.rows.map(row => ({
-      date: new Date(row.transaction_date).toISOString(), // Keep full ISO for precise sorting
+      date: new Date(row.transaction_date).toISOString(),
       wallet: row.wallet_name || 'Unknown Wallet',
-      type: row.transaction_type, // 'credit' or 'debit'
+      type: row.transaction_type, 
       category: row.category,
-      amount: Number(row.amount || 0)
+      amount: Number(row.amount || 0),
+      isReversal: row.is_reversal === true // 👈 Pass boolean to frontend
     }));
   } catch (error) {
     console.error("SQL Error in fetchLedgerAnalytics:", error.message);
