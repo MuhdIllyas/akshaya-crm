@@ -376,6 +376,35 @@ const fetchWalletSummaryAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Cash Flow Fetcher (Daily Inflow vs Outflow)
+const fetchCashFlowAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT
+        TO_CHAR(d.date, 'YYYY-MM-DD') as flow_date,
+        SUM(d.total_credit) AS total_in,
+        SUM(d.total_debit)  AS total_out
+      FROM wallet_daily_balances d
+      JOIN wallets w ON w.id = d.wallet_id
+      WHERE d.date >= $2 AND d.date <= $3
+        AND w.centre_id = $1
+      GROUP BY d.date
+      ORDER BY d.date ASC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      date: row.flow_date,
+      inflow: Number(row.total_in || 0),
+      outflow: Number(row.total_out || 0),
+      // Net flow is Inflow minus Outflow
+      net_flow: Number(row.total_in || 0) - Number(row.total_out || 0) 
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchCashFlowAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -670,7 +699,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -680,6 +709,10 @@ export const getReportData = async (params) => {
         case 5: {
           compiledReport.data.walletSummary = await fetchWalletSummaryAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
+          break;
+        }
+        case 6: {
+          compiledReport.data.cashFlow = await fetchCashFlowAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 1:

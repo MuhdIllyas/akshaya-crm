@@ -266,6 +266,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     })).filter(w => w.value > 0);
 
     const walletSummaryData = apiData.walletSummary || [];
+    const cashFlowData = apiData.cashFlow || [];
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -454,6 +455,32 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </ResponsiveContainer>
                                 </div>
                             )}
+
+                            {report?.id === 6 && cashFlowData.length > 0 && (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Daily Cash Flow Trend</h3>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <ComposedChart data={cashFlowData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                            <XAxis 
+                                                dataKey="date" 
+                                                tick={{ fontSize: 11 }} 
+                                                tickFormatter={(tick) => new Date(tick).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} 
+                                            />
+                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                            <Tooltip 
+                                                isAnimationActive={false} 
+                                                labelFormatter={(label) => new Date(label).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                            />
+                                            <Legend />
+                                            <Bar dataKey="inflow" name="Cash Inflow" fill="#10B981" radius={[2, 2, 0, 0]} />
+                                            <Bar dataKey="outflow" name="Cash Outflow" fill="#EF4444" radius={[2, 2, 0, 0]} />
+                                            <Line type="monotone" dataKey="net_flow" name="Net Flow" stroke="#6366F1" strokeWidth={2} dot={{ r: 3 }} />
+                                        </ComposedChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
                         </div>
                     )}
                     
@@ -461,8 +488,54 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Wallet Summary Table */}
-                            {report?.id === 5 ? (
+                            {/* ✅ NEW: Cash Flow Table */}
+                            {report?.id === 6 ? (
+                                <div className="p-0">
+                                    {includesToday && (
+                                        <div className="m-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start space-x-3">
+                                            <FiClock className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                                            <div>
+                                                <h4 className="text-sm font-medium text-blue-900">Pending End-of-Day Closing</h4>
+                                                <p className="text-xs text-blue-700 mt-1">
+                                                    This report relies on End-of-Day snapshots. Today's live transactions will be reflected here after the midnight closing schedule.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Cash Inflow (Credit)</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Cash Outflow (Debit)</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Net Flow</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {cashFlowData.length > 0 ? (
+                                                cashFlowData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                            {new Date(row.date).toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.inflow.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">₹{row.outflow.toLocaleString('en-IN')}</td>
+                                                        <td className={`px-4 py-3 text-sm text-right font-bold ${row.net_flow >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                                            ₹{row.net_flow.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="4" className="px-4 py-8 text-center text-gray-500">
+                                                        Loading cash flow data or no transactions found for this period.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 5 ? (
                                 <div className="p-0">
                                     {includesToday && (
                                         <div className="m-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start space-x-3">

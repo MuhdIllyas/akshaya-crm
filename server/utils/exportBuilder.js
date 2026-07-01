@@ -98,6 +98,33 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 6: Cash Flow ---
+  if (reportIds.includes(6)) {
+    if (data.cashFlow) {
+      const sheet = workbook.addWorksheet('Cash Flow');
+      
+      sheet.mergeCells('A1:D1');
+      sheet.getCell('A1').value = 'Daily Cash Flow Report';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Date', 'Cash Inflow (Credit)', 'Cash Outflow (Debit)', 'Net Flow']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.cashFlow.forEach(row => {
+        sheet.addRow([row.date, row.inflow, row.outflow, row.net_flow]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 15;
+      ['B', 'C', 'D'].forEach(col => sheet.getColumn(col).numFmt = '₹#,##0.00');
+    }
+  }
+
   // --- REPORT 9: Staff Attendance ---
   if (reportIds.includes(9)) {
     if (data.staff) {
@@ -178,6 +205,18 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(10);
         data.expenseReport.forEach(row => { 
           doc.text(`${row.category}: ${row.transactions} transactions | Total: Rs. ${row.amount}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 6: Cash Flow ---
+      if (reportIds.includes(6) && data.cashFlow) {
+        doc.fontSize(14).text('Daily Cash Flow Report', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(10);
+        data.cashFlow.forEach(row => { 
+          doc.text(`${row.date} | Inflow: Rs. ${row.inflow} | Outflow: Rs. ${row.outflow} | Net: Rs. ${row.net_flow}`);
         });
         doc.moveDown(2);
       }
