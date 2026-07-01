@@ -265,6 +265,12 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         value: Number(w.amount || 0)
     })).filter(w => w.value > 0);
 
+    const walletSummaryData = apiData.walletSummary || [];
+    
+    // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
+    const todayStr = new Date().toISOString().split('T')[0];
+    const includesToday = previewData?.metadata?.toDate === todayStr;
+
     // ✅ Smart Trend Calculator
     const periodTrendRaw = apiData.financials?.periodTrend || [];
     let displayTrend = [];
@@ -455,8 +461,44 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* Expense Breakdown Table */}
-                            {expenseData.length > 0 ? (
+                            {/* ✅ NEW: Wallet Summary Table */}
+                            {report?.id === 5 && walletSummaryData.length > 0 ? (
+                                <div className="p-0">
+                                    {includesToday && (
+                                        <div className="m-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start space-x-3">
+                                            <FiClock className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                                            <div>
+                                                <h4 className="text-sm font-medium text-blue-900">Pending End-of-Day Closing</h4>
+                                                <p className="text-xs text-blue-700 mt-1">
+                                                    Wallet summaries rely on End-of-Day snapshots. Today's live transactions will be reflected here after the midnight closing schedule.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Wallet Name</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Opening Balance</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Credit (In)</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Debit (Out)</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Closing Balance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {walletSummaryData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.wallet_name}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 text-right font-medium">₹{row.opening_balance.toLocaleString('en-IN')}</td>
+                                                <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.credit.toLocaleString('en-IN')}</td>
+                                                <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">₹{row.debit.toLocaleString('en-IN')}</td>
+                                                <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">₹{row.closing_balance.toLocaleString('en-IN')}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                </div>
+                            ) : expenseData.length > 0 ? (
                                 <table className="w-full text-sm">
                                     <thead className="bg-gray-50">
                                         <tr>

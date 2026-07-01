@@ -329,6 +329,50 @@ const fetchExpenseByWalletAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Wallet Summary Fetcher (Using optimized daily balances table)
+const fetchWalletSummaryAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      WITH period_summary AS (
+        SELECT
+          wallet_id,
+          MIN(date) AS first_date,
+          MAX(date) AS last_date,
+          SUM(total_credit) AS total_credit,
+          SUM(total_debit) AS total_debit
+        FROM wallet_daily_balances
+        WHERE date >= $2 AND date <= $3
+        GROUP BY wallet_id
+      )
+      SELECT
+        w.name AS wallet_name,
+        COALESCE(d_first.opening_balance, 0) AS opening_balance,
+        COALESCE(p.total_credit, 0) AS credit,
+        COALESCE(p.total_debit, 0) AS debit,
+        COALESCE(d_last.closing_balance, 0) AS closing_balance
+      FROM period_summary p
+      JOIN wallets w ON w.id = p.wallet_id
+      LEFT JOIN wallet_daily_balances d_first 
+        ON d_first.wallet_id = p.wallet_id AND d_first.date = p.first_date
+      LEFT JOIN wallet_daily_balances d_last 
+        ON d_last.wallet_id = p.wallet_id AND d_last.date = p.last_date
+      WHERE w.centre_id = $1
+      ORDER BY w.name ASC
+    `, [centreId, dates.fromDate, dates.toDate]);
+    
+    return res.rows.map(row => ({
+      wallet_name: row.wallet_name || 'Unknown Wallet',
+      opening_balance: Number(row.opening_balance),
+      credit: Number(row.credit),
+      debit: Number(row.debit),
+      closing_balance: Number(row.closing_balance)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchWalletSummaryAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
