@@ -267,10 +267,11 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         periodTrendRaw.forEach(pt => {
             const date = new Date(pt.label);
             const monthKey = date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-            if (!monthlyGroups[monthKey]) monthlyGroups[monthKey] = { label: monthKey, revenue: 0, expenses: 0, profit: 0 };
+            if (!monthlyGroups[monthKey]) monthlyGroups[monthKey] = { label: monthKey, revenue: 0, expenses: 0, profit: 0, grossProfit: 0 }; // 👈 Added grossProfit
             monthlyGroups[monthKey].revenue += pt.revenueCollected;
             monthlyGroups[monthKey].expenses += pt.operatingExpenses;
             monthlyGroups[monthKey].profit += pt.netProfit;
+            monthlyGroups[monthKey].grossProfit += (pt.grossProfit || 0); // 👈 Added grossProfit
         });
         displayTrend = Object.values(monthlyGroups);
     } else {
@@ -279,7 +280,8 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             label: new Date(pt.label).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
             revenue: pt.revenueCollected,
             expenses: pt.operatingExpenses,
-            profit: pt.netProfit
+            profit: pt.netProfit,
+            grossProfit: pt.grossProfit || 0 // 👈 Added grossProfit
         }));
     }
     
@@ -447,51 +449,58 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         ))}
                                     </tbody>
                                 </table>
-                            ) : monthlyTrend.length > 0 ? (
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Month</th>
-                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue Collected</th>
-                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Operating Expenses</th>
-                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Net Profit</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {displayTrend.map((row, idx) => {
-                                            return (
-                                                <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                                    {/* Change row.month to row.label */}
-                                                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.label}</td>
-                                                    <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">
-                                                        ₹{row.revenue.toLocaleString('en-IN')}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">
-                                                        ₹{row.expenses.toLocaleString('en-IN')}
-                                                    </td>
-                                                    <td className={`px-4 py-3 text-sm text-right font-bold ${row.profit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                                                        ₹{row.profit.toLocaleString('en-IN')}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                    <tfoot className="bg-gray-50 border-t border-gray-200">
-                                        <tr>
-                                            <td className="px-4 py-3 text-sm font-bold text-gray-900">Total</td>
-                                            <td className="px-4 py-3 text-sm font-bold text-emerald-600 text-right">
-                                                ₹{displayTrend.reduce((sum, r) => sum + r.revenue, 0).toLocaleString('en-IN')}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm font-bold text-rose-600 text-right">
-                                                ₹{displayTrend.reduce((sum, r) => sum + r.expenses, 0).toLocaleString('en-IN')}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">
-                                                ₹{displayTrend.reduce((sum, r) => sum + (r.revenue - r.expenses), 0).toLocaleString('en-IN')}
-                                            </td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            ) : (
+                                ) : displayTrend.length > 0 ? (
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue Collected</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Gross Profit</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Operating Expenses</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Net Profit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {displayTrend.map((row, idx) => {
+                                                return (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.label}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right font-medium">
+                                                            ₹{row.revenue.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">
+                                                            ₹{(row.grossProfit || 0).toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">
+                                                            ₹{row.expenses.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className={`px-4 py-3 text-sm text-right font-bold ${row.profit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                                            ₹{row.profit.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot className="bg-gray-50 border-t border-gray-200">
+                                            <tr>
+                                                <td className="px-4 py-3 text-sm font-bold text-gray-900">Total</td>
+                                                <td className="px-4 py-3 text-sm font-bold text-gray-600 text-right">
+                                                    ₹{displayTrend.reduce((sum, r) => sum + r.revenue, 0).toLocaleString('en-IN')}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm font-bold text-emerald-600 text-right">
+                                                    ₹{displayTrend.reduce((sum, r) => sum + (r.grossProfit || 0), 0).toLocaleString('en-IN')}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm font-bold text-rose-600 text-right">
+                                                    ₹{displayTrend.reduce((sum, r) => sum + r.expenses, 0).toLocaleString('en-IN')}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">
+                                                    {/* 👇 This is the exact fix for your buggy Net Profit total! */}
+                                                    ₹{displayTrend.reduce((sum, r) => sum + r.profit, 0).toLocaleString('en-IN')}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                ) : (
                                 <div className="p-12 text-center">
                                     <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                         <FiDatabase className="h-5 w-5 text-gray-400" />
