@@ -462,7 +462,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
                             {/* ✅ NEW: Wallet Summary Table */}
-                            {report?.id === 5 && walletSummaryData.length > 0 ? (
+                            {report?.id === 5 ? (
                                 <div className="p-0">
                                     {includesToday && (
                                         <div className="m-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start space-x-3">

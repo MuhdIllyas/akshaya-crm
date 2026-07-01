@@ -329,7 +329,7 @@ const fetchExpenseByWalletAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ Wallet Summary Fetcher (Using optimized daily balances table)
+// ✅ Wallet Summary Fetcher 
 const fetchWalletSummaryAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
@@ -346,12 +346,15 @@ const fetchWalletSummaryAnalytics = async (client, centreId, dates) => {
       )
       SELECT
         w.name AS wallet_name,
-        COALESCE(d_first.opening_balance, 0) AS opening_balance,
+        -- If no snapshots exist for the period, fallback to current live balance
+        COALESCE(d_first.opening_balance, w.balance) AS opening_balance,
         COALESCE(p.total_credit, 0) AS credit,
         COALESCE(p.total_debit, 0) AS debit,
-        COALESCE(d_last.closing_balance, 0) AS closing_balance
-      FROM period_summary p
-      JOIN wallets w ON w.id = p.wallet_id
+        COALESCE(d_last.closing_balance, w.balance) AS closing_balance
+      
+      -- 👇 THE FIX: Start with Wallets, then LEFT JOIN everything else!
+      FROM wallets w
+      LEFT JOIN period_summary p ON w.id = p.wallet_id
       LEFT JOIN wallet_daily_balances d_first 
         ON d_first.wallet_id = p.wallet_id AND d_first.date = p.first_date
       LEFT JOIN wallet_daily_balances d_last 
