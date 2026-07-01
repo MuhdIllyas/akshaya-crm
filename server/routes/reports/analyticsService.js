@@ -271,6 +271,35 @@ const fetchServiceRevenueAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Expense Category Fetcher
+const fetchExpenseAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        COALESCE(category, 'Uncategorized') as expense_category,
+        COUNT(id) as total_transactions,
+        COALESCE(SUM(amount), 0) as total_amount
+      FROM expenses 
+      WHERE centre_id = $1 
+        AND expense_date >= $2 
+        AND expense_date <= $3 
+        AND status IN ('approved', 'auto_approved') 
+        AND (is_reversal IS NULL OR is_reversal = FALSE)
+      GROUP BY category
+      ORDER BY total_amount DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+    
+    return res.rows.map(row => ({
+      category: row.expense_category,
+      transactions: Number(row.total_transactions),
+      amount: Number(row.total_amount)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchExpenseAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -582,6 +611,11 @@ export const getReportData = async (params) => {
         case 3:
         case 15: {
           compiledReport.data.serviceRevenue = await fetchServiceRevenueAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 4: Expense Report
+        case 4: {
+          compiledReport.data.expenseReport = await fetchExpenseAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 18: {

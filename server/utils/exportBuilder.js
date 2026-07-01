@@ -71,6 +71,33 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 4: Expense Report ---
+  if (reportIds.includes(4)) {
+    if (data.expenseReport) {
+      const sheet = workbook.addWorksheet('Expense Breakdown');
+      
+      sheet.mergeCells('A1:C1');
+      sheet.getCell('A1').value = 'Category-wise Expenses';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Expense Category', 'Total Transactions', 'Total Amount']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.expenseReport.forEach(row => {
+        sheet.addRow([row.category, row.transactions, row.amount]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 30;
+      sheet.getColumn('C').numFmt = '₹#,##0.00';
+    }
+  }
+
   // --- REPORT 9: Staff Attendance ---
   if (reportIds.includes(9)) {
     if (data.staff) {
@@ -139,6 +166,18 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(10);
         data.serviceRevenue.slice(0, 15).forEach(row => { // Show top 15 in PDF summary
           doc.text(`${row.service_name}: ${row.total_requests} requests | Rev: Rs. ${row.revenue_collected} | Profit: Rs. ${row.gross_profit}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 4: Expense Report ---
+      if (reportIds.includes(4) && data.expenseReport) {
+        doc.fontSize(14).text('Expense Breakdown by Category', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(10);
+        data.expenseReport.forEach(row => { 
+          doc.text(`${row.category}: ${row.transactions} transactions | Total: Rs. ${row.amount}`);
         });
         doc.moveDown(2);
       }

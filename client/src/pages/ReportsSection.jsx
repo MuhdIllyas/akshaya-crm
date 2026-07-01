@@ -256,6 +256,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const financials = apiData.financials?.today || {};
     const staffData = apiData.staff?.staff || {};
     const serviceRevenueData = apiData.serviceRevenue || [];
+    const expenseData = apiData.expenseReport || [];
 
     // ✅ NEW: Smart Trend Calculator
     const periodTrendRaw = apiData.financials?.periodTrend || [];
