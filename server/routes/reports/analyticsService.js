@@ -329,7 +329,7 @@ const fetchExpenseByWalletAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ Wallet Summary Fetcher 
+// ✅ Wallet Summary Fetcher
 const fetchWalletSummaryAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
@@ -345,30 +345,30 @@ const fetchWalletSummaryAnalytics = async (client, centreId, dates) => {
         GROUP BY wallet_id
       )
       SELECT
+        w.id AS wallet_id,
         w.name AS wallet_name,
-        -- If no snapshots exist for the period, fallback to current live balance
-        COALESCE(d_first.opening_balance, w.balance) AS opening_balance,
-        COALESCE(p.total_credit, 0) AS credit,
-        COALESCE(p.total_debit, 0) AS debit,
-        COALESCE(d_last.closing_balance, w.balance) AS closing_balance
-      
-      -- 👇 THE FIX: Start with Wallets, then LEFT JOIN everything else!
-      FROM wallets w
-      LEFT JOIN period_summary p ON w.id = p.wallet_id
-      LEFT JOIN wallet_daily_balances d_first 
+        w.wallet_type,
+        d_first.opening_balance AS opening_balance,
+        p.total_credit,
+        p.total_debit,
+        d_last.closing_balance AS closing_balance
+      FROM period_summary p
+      JOIN wallets w ON w.id = p.wallet_id
+      JOIN wallet_daily_balances d_first 
         ON d_first.wallet_id = p.wallet_id AND d_first.date = p.first_date
-      LEFT JOIN wallet_daily_balances d_last 
+      JOIN wallet_daily_balances d_last 
         ON d_last.wallet_id = p.wallet_id AND d_last.date = p.last_date
       WHERE w.centre_id = $1
       ORDER BY w.name ASC
     `, [centreId, dates.fromDate, dates.toDate]);
     
+    // Map the database rows to the keys the React frontend expects
     return res.rows.map(row => ({
       wallet_name: row.wallet_name || 'Unknown Wallet',
-      opening_balance: Number(row.opening_balance),
-      credit: Number(row.credit),
-      debit: Number(row.debit),
-      closing_balance: Number(row.closing_balance)
+      opening_balance: Number(row.opening_balance || 0),
+      credit: Number(row.total_credit || 0), // 👈 Mapped exactly to your DB column
+      debit: Number(row.total_debit || 0),   // 👈 Mapped exactly to your DB column
+      closing_balance: Number(row.closing_balance || 0)
     }));
   } catch (error) {
     console.error("SQL Error in fetchWalletSummaryAnalytics:", error.message);
