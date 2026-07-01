@@ -3,7 +3,7 @@ import pool from '../db.js';
 import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
 import axios from 'axios';
-import { logActivity } from "../utils/activityLogger.js"; // Add this import
+import { logActivity } from "../utils/activityLogger.js"; 
 
 import { createReviewRequest } from './reviews.js';
 import { triggerNotification } from '../utils/communication/notificationEngine.js';
