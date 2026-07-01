@@ -421,6 +421,26 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </ResponsiveContainer>
                                 </div>
                             )}
+
+                            {/* Expense Category Chart */}
+                            {expenseData.length > 0 && (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Expenses by Category</h3>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <BarChart data={expenseData} layout="vertical" margin={{ left: 20 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                            <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                            <YAxis type="category" dataKey="category" tick={{ fontSize: 11 }} width={100} />
+                                            <Tooltip 
+                                                isAnimationActive={false} 
+                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                            />
+                                            <Legend />
+                                            <Bar dataKey="amount" name="Total Spent" fill="#EF4444" radius={[0, 4, 4, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
                         </div>
                     )}
                     
@@ -428,8 +448,27 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* Service Revenue Table */}
-                            {serviceRevenueData.length > 0 ? (
+                            {/* Expense Breakdown Table */}
+                            {expenseData.length > 0 ? (
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expense Category</th>
+                                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Transactions</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Spent</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {expenseData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.category}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.transactions}</td>
+                                                <td className="px-4 py-3 text-sm text-rose-600 text-right font-bold">₹{row.amount.toLocaleString('en-IN')}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : serviceRevenueData.length > 0 ? (
                                 <table className="w-full text-sm">
                                     <thead className="bg-gray-50">
                                         <tr>
