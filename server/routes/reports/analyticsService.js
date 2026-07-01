@@ -666,42 +666,47 @@ export const getReportData = async (params) => {
     };
 
     // 2. Map over requested reports and reuse V3 Fetchers
-    for (const id of reportIds) {
-      switch (id) {
-        
-        case 1: 
-        case 2: {
-          const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
-          compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
+    let hasFetchedFinancials = false;
 
+    for (const id of reportIds) {
+      // Always fetch base financials so the top cards render
+      if ([1, 2, 3, 4, 5, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+        const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
+        compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
+        hasFetchedFinancials = true;
+      }
+
+      switch (id) {
+        case 5: {
+          compiledReport.data.walletSummary = await fetchWalletSummaryAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
           break;
         }
-
+        case 1:
+        case 2: {
+          compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
+          break;
+        }
         case 9: {
           compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
           break;
         }
-
-        // ID 3 & 15: Service Revenue Reports
         case 3:
         case 15: {
           compiledReport.data.serviceRevenue = await fetchServiceRevenueAnalytics(client, targetCentreId, reportDates);
           break;
         }
-        // ID 4: Expense Report
         case 4: {
           compiledReport.data.expenseReport = await fetchExpenseAnalytics(client, targetCentreId, reportDates);
-          
-          // ✅ ADDED: Fetch the new Expense-by-Wallet breakdown
           compiledReport.data.expenseByWallet = await fetchExpenseByWalletAnalytics(client, targetCentreId, reportDates);
-          
-          // ✅ ADDED: Fetch the live wallet balances so the bottom chart doesn't say "No Data"!
           compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
           break;
         }
         case 18: {
           compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        default: {
           break;
         }
       }
