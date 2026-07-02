@@ -481,6 +481,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         { name: 'New Customers', value: custStats.new, fill: '#F59E0B' }    // Amber
     ].filter(d => d.value > 0);
     
+    // ✅ ADD THIS: Extract Returning Customers Data
+    const repeatCustomerData = apiData.repeatCustomers || [];
+    const repeatStats = { 
+        totalVips: repeatCustomerData.length,
+        totalLTV: 0,
+        mostFrequent: repeatCustomerData.length > 0 ? repeatCustomerData[0] : null
+    };
+    
+    repeatCustomerData.forEach(c => {
+        repeatStats.totalLTV += c.lifetime_spent;
+    });
+
+    const avgLTV = repeatStats.totalVips > 0 ? Math.round(repeatStats.totalLTV / repeatStats.totalVips) : 0;
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1048,6 +1062,29 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Returning Customers Preview Summary */}
+                            {report?.id === 22 && repeatCustomerData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Repeat Customers" value={repeatStats.totalVips} subtitle="Visited in this period" icon={FiRefreshCw} color="bg-emerald-600" />
+                                        <StatCard title="Avg Lifetime Value (LTV)" value={`₹${avgLTV.toLocaleString('en-IN')}`} subtitle="Per returning customer" icon={FiTrendingUp} color="bg-indigo-600" />
+                                        <StatCard title="Most Loyal VIP" value={repeatStats.mostFrequent?.customer_name || '-'} subtitle={`${repeatStats.mostFrequent?.lifetime_visits || 0} lifetime visits`} icon={FiAward} color="bg-amber-500" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 VIP Customers (By Lifetime Visits)</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={repeatCustomerData.slice(0, 10)}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="customer_name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 10 ? val.substring(0, 10) + '..' : val} />
+                                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                                                <Tooltip isAnimationActive={false} />
+                                                <Bar dataKey="lifetime_visits" name="Lifetime Visits" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -1055,8 +1092,66 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Customer Summary Table */}
-                            {report?.id === 21 ? (
+                            {/* ✅ NEW: Returning Customers Table */}
+                            {report?.id === 22 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer Information</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Lifetime Visits</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Lifetime Spent (LTV)</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">First Visit</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Latest Visit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {repeatCustomerData.length > 0 ? (
+                                                repeatCustomerData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex items-center">
+                                                                {idx < 3 && <FiAward className={`h-4 w-4 mr-2 ${idx === 0 ? 'text-amber-500' : idx === 1 ? 'text-gray-400' : 'text-amber-700'}`} />}
+                                                                <div>
+                                                                    <p className="text-sm font-bold text-gray-900">
+                                                                        {row.customer_name}
+                                                                        {row.is_registered && <span className="ml-2 text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded uppercase tracking-wider">Reg</span>}
+                                                                    </p>
+                                                                    <p className="text-xs text-gray-500 font-mono">{row.phone}</p>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className="inline-flex items-center justify-center bg-emerald-100 text-emerald-800 w-8 h-8 rounded-full font-bold text-sm">
+                                                                {row.lifetime_visits}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                            ₹{row.lifetime_spent.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-500 text-right">
+                                                            {new Date(row.first_visit).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium text-right bg-gray-50/50">
+                                                            {new Date(row.latest_visit).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiRefreshCw className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Repeat Customers</h3>
+                                                        <p className="text-xs text-gray-500">No returning customers were found for the selected period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 21 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

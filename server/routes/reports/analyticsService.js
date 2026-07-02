@@ -1100,6 +1100,61 @@ const fetchCustomerSummaryAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
+const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      -- Step 1: Find anyone who visited during the selected date range
+      WITH period_customers AS (
+        SELECT DISTINCT se.phone
+        FROM service_entries se
+        JOIN staff st ON se.staff_id = st.id
+        WHERE st.centre_id = $1
+          AND se.created_at::date >= $2
+          AND se.created_at::date <= $3
+          AND se.phone IS NOT NULL AND se.phone != ''
+      ),
+      -- Step 2: Calculate their complete lifetime stats up to the end date
+      lifetime_stats AS (
+        SELECT 
+          se.phone,
+          MAX(COALESCE(se.customer_name, 'Anonymous')) as customer_name,
+          COUNT(se.id) as lifetime_visits,
+          COALESCE(SUM(se.total_charges), 0) as lifetime_spent,
+          MIN(se.created_at) as first_visit,
+          MAX(se.created_at) as latest_visit
+        FROM service_entries se
+        JOIN staff st ON se.staff_id = st.id
+        WHERE st.centre_id = $1
+          AND se.phone IN (SELECT phone FROM period_customers)
+          AND se.created_at::date <= $3
+        GROUP BY se.phone
+      )
+      -- Step 3: Only keep those with > 1 visit (The true Repeat Customers)
+      SELECT 
+        ls.*,
+        CASE WHEN c.id IS NOT NULL THEN true ELSE false END as is_registered
+      FROM lifetime_stats ls
+      LEFT JOIN customers c ON ls.phone = c.primary_phone
+      WHERE ls.lifetime_visits > 1
+      ORDER BY ls.lifetime_visits DESC, ls.lifetime_spent DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      phone: row.phone,
+      customer_name: row.customer_name,
+      lifetime_visits: Number(row.lifetime_visits),
+      lifetime_spent: Number(row.lifetime_spent),
+      first_visit: new Date(row.first_visit).toISOString(),
+      latest_visit: new Date(row.latest_visit).toISOString(),
+      is_registered: row.is_registered === true
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchRepeatCustomersAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -1394,7 +1449,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1492,6 +1547,10 @@ export const getReportData = async (params) => {
         // ID 21: Customer Summary Report
         case 21: {
           compiledReport.data.customerSummary = await fetchCustomerSummaryAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 22: {
+          compiledReport.data.repeatCustomers = await fetchRepeatCustomersAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {

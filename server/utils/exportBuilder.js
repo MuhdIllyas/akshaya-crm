@@ -588,6 +588,44 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 22: Returning Customers ---
+  if (reportIds.includes(22)) {
+    if (data.repeatCustomers) {
+      const sheet = workbook.addWorksheet('Loyal Customers');
+      
+      sheet.mergeCells('A1:G1');
+      sheet.getCell('A1').value = 'Returning Customers & Lifetime Value';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Customer Name', 'Phone Number', 'Profile Type', 'Lifetime Visits', 'Lifetime Spent', 'First Visit', 'Latest Visit']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.repeatCustomers.forEach(row => {
+        sheet.addRow([
+          row.customer_name, 
+          row.phone,
+          row.is_registered ? 'Portal Registered' : 'Walk-in',
+          row.lifetime_visits,
+          row.lifetime_spent,
+          new Date(row.first_visit).toLocaleDateString('en-IN'),
+          new Date(row.latest_visit).toLocaleDateString('en-IN')
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('B').width = 15;
+      sheet.getColumn('E').numFmt = '₹#,##0.00';
+      sheet.getColumn('F').width = 15;
+      sheet.getColumn('G').width = 15;
+    }
+  }
+
   // --- REPORT 21: Customer Summary ---
   if (reportIds.includes(21)) {
     if (data.customerSummary) {
@@ -897,6 +935,20 @@ export const buildPDF = (reportData, reportIds) => {
           const type = row.is_registered ? '(Registered)' : '(Walk-in)';
           const visit = row.is_returning ? '[Returning]' : '[New]';
           doc.text(`${row.customer_name} ${type} ${visit} | Phone: ${row.phone} | Services: ${row.total_services} | Spent: Rs. ${row.total_spent}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 22: Returning Customers ---
+      if (reportIds.includes(22) && data.repeatCustomers) {
+        doc.fontSize(14).text('Returning Customers (Loyalty & LTV)', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.repeatCustomers.forEach(row => { 
+          const first = new Date(row.first_visit).toLocaleDateString('en-IN');
+          const latest = new Date(row.latest_visit).toLocaleDateString('en-IN');
+          doc.text(`${row.customer_name} (${row.phone}) | Visits: ${row.lifetime_visits} | Spent: Rs. ${row.lifetime_spent} | Active: ${first} to ${latest}`);
         });
         doc.moveDown(2);
       }
