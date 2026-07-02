@@ -4,9 +4,6 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-// Add Framer Motion imports
-import { motion } from "framer-motion";
-
 // Array of services for the animation
 const servicesList = [
   "What We Offer",
@@ -20,90 +17,6 @@ const servicesList = [
   "Citizen-Friendly Digital Support"
 ];
 
-// NEW: Animated Brand Logo Component
-const AnimatedBrandLogo = () => {
-  return (
-    <motion.div
-      className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 overflow-hidden"
-      initial={{ opacity: 0, scale: 0.85 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ 
-        type: "spring", 
-        stiffness: 200, 
-        damping: 15, // Creates the final tiny bounce
-        delay: 0.2
-      }}
-    >
-      <svg 
-        viewBox="0 0 100 100" 
-        className="h-20 w-20 object-contain drop-shadow-sm"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {/* 1. The 'A' Outline draws from left to right */}
-        <motion.path 
-          d="M 45,10 L 20,75 M 55,10 L 80,75 M 45,10 L 55,10" 
-          fill="none" 
-          stroke="#172a45" 
-          strokeWidth="10" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: 1 }}
-          transition={{ duration: 0.7, ease: "easeInOut", delay: 0.1 }}
-        />
-
-        {/* 2. The Person fades in and arm lifts slightly */}
-        <motion.g
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut", delay: 0.5 }}
-        >
-          {/* Head */}
-          <circle cx="50" cy="40" r="10" fill="#172a45" />
-          {/* Body */}
-          <path d="M 38,75 C 38,55 62,55 62,75 Z" fill="#172a45" />
-          
-          {/* Arm lifts slightly */}
-          <motion.path 
-            d="M 52,60 C 65,50 75,35 80,30" 
-            fill="none" 
-            stroke="#172a45" 
-            strokeWidth="8" 
-            strokeLinecap="round"
-            initial={{ y: 5, opacity: 0.6 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.3, ease: "easeOut", delay: 0.7 }}
-          />
-        </motion.g>
-
-        {/* 3. The Teal Hand slides up from the bottom */}
-        <motion.path 
-          d="M 15,85 C 30,65 70,65 90,80 C 95,85 88,90 82,85 C 70,75 50,75 35,80 C 20,83 10,90 15,85 Z" 
-          fill="#11a891"
-          initial={{ y: 25, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut", delay: 0.3 }}
-        />
-
-        {/* 4. The Teal Star Pops in with a gentle sparkle */}
-        <motion.path 
-          d="M 85,20 Q 85,35 100,35 Q 85,35 85,50 Q 85,35 70,35 Q 85,35 85,20 Z" 
-          fill="#11a891"
-          initial={{ scale: 0, opacity: 0, rotate: -45 }}
-          animate={{ scale: 1, opacity: 1, rotate: 0 }}
-          transition={{ 
-            duration: 0.4, 
-            delay: 1.0, 
-            type: "spring", 
-            stiffness: 400, 
-            damping: 12
-          }}
-        />
-      </svg>
-    </motion.div>
-  );
-};
-
 const Login = () => {
   const [user, setUser] = useState({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -115,12 +28,13 @@ const Login = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [otpTimer, setOtpTimer] = useState(0);
   
+  // State for the animated text index
   const [serviceIndex, setServiceIndex] = useState(0);
   
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Handle the text animation
+  // Handle the text animation cycle (changes every 3 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
       setServiceIndex((prevIndex) => (prevIndex + 1) % servicesList.length);
@@ -128,7 +42,7 @@ const Login = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle session expired toast
+  // Handle session expired toast from ProtectedRoute redirect
   useEffect(() => {
     if (location.state?.reason === "session_expired") {
       toast.error("Session expired, please log in again", {
@@ -147,7 +61,7 @@ const Login = () => {
     }
   }, [location.state]);
 
-  // Load remembered username
+  // Load remembered username (with delay to avoid mount collision)
   useEffect(() => {
     const savedUsername = localStorage.getItem("remembered_username");
     const savedRememberMe = localStorage.getItem("remember_me") === "true";
@@ -318,10 +232,13 @@ const Login = () => {
           
           <div className="z-10">
             <div className="flex flex-col items-center mb-12">
-              
-              {/* UPDATED: Animated Brand Logo inserted here */}
-              <AnimatedBrandLogo />
-              
+              <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 hover:shadow-[0_10px_40px_-10px_rgba(26,172,147,0.4)] transition-all duration-300">
+                <img 
+                  src="/logo-light.png" 
+                  alt="Akshaya Sahayi Logo" 
+                  className="h-20 w-20 object-contain drop-shadow-sm" 
+                />
+              </div>
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-navy-600 mb-2">Akshaya Sahayi</h1>
                 <p className="text-navy-600 mb-2">Your Trusted Digital Service Companion</p>
@@ -592,6 +509,7 @@ const Login = () => {
         .focus\\:ring-navy-500:focus { --tw-ring-color: #1e3a5f; }
         .border-navy-500 { border-color: #1e3a5f; }
         
+        /* New Animation Keyframes */
         @keyframes fadeSlide {
           0% { opacity: 0; transform: translateY(10px); }
           15% { opacity: 1; transform: translateY(0); }
