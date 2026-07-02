@@ -309,7 +309,7 @@ const fetchServiceProfitAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ Pending Services Fetcher (Uses service_tracking for Operational Status)
+// ✅ Pending Services Fetcher (Filters out 'completed', 'paid', and 'delivered')
 const fetchPendingServicesAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
@@ -323,25 +323,21 @@ const fetchPendingServicesAnalytics = async (client, centreId, dates) => {
           ELSE COALESCE(srv.name, 'Uncategorized Service')
         END as service_name,
         st.name as assigned_staff,
-        strak.status -- 👈 Pulling operational status from the tracking table!
+        strak.status
       FROM service_entries se
-      
-      -- 👇 Join the tracking table using the entry ID
       JOIN service_tracking strak ON strak.service_entry_id = se.id 
-      
       JOIN staff st ON se.staff_id = st.id
       LEFT JOIN services srv ON se.category_id = srv.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
       WHERE st.centre_id = $1 
-        -- 👇 Filter based on OPERATIONAL tracking status, not payment status!
-        AND LOWER(strak.status) != 'completed'
+        -- 👇 CRITICAL FIX: Exclude ALL terminal statuses so finished bills drop off the list!
+        AND LOWER(strak.status) NOT IN ('completed', 'paid', 'delivered')
         AND se.created_at::date >= $2 
         AND se.created_at::date <= $3
       ORDER BY se.created_at ASC 
     `, [centreId, dates.fromDate, dates.toDate]);
 
     return res.rows.map(row => {
-      // Calculate how many days this has been pending
       const applied = new Date(row.application_date);
       const today = new Date();
       const daysPending = Math.floor((today - applied) / (1000 * 60 * 60 * 24));
