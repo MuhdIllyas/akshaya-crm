@@ -461,6 +461,25 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         name: r.service_name,
         avg_days: Number((r.avg_hours / 24).toFixed(1))
     }));
+
+    // ✅ Extract Customer Summary Data
+    const customerSummaryData = apiData.customerSummary || [];
+    const custStats = { total: customerSummaryData.length, registered: 0, walkIn: 0, returning: 0, new: 0 };
+    
+    customerSummaryData.forEach(c => {
+        if (c.is_registered) custStats.registered++; else custStats.walkIn++;
+        if (c.is_returning) custStats.returning++; else custStats.new++;
+    });
+
+    const registeredChart = [
+        { name: 'Portal Registered', value: custStats.registered, fill: '#6366F1' }, // Indigo
+        { name: 'Walk-ins', value: custStats.walkIn, fill: '#94A3B8' }               // Slate
+    ].filter(d => d.value > 0);
+
+    const returningChart = [
+        { name: 'Returning', value: custStats.returning, fill: '#10B981' }, // Emerald
+        { name: 'New Customers', value: custStats.new, fill: '#F59E0B' }    // Amber
+    ].filter(d => d.value > 0);
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -992,6 +1011,43 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Customer Summary Preview */}
+                            {report?.id === 21 && customerSummaryData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Unique Customers" value={custStats.total} subtitle="Serviced in Period" icon={FiUsers} color="bg-blue-600" />
+                                        <StatCard title="New Customers" value={custStats.new} subtitle="First time visits" icon={FiUserPlus} color="bg-emerald-600" />
+                                        <StatCard title="Returning Customers" value={custStats.returning} subtitle="Loyal clients" icon={FiRefreshCw} color="bg-indigo-600" />
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Acquisition (New vs Returning)</h3>
+                                            <ResponsiveContainer width="100%" height={200}>
+                                                <PieChart>
+                                                    <Pie data={returningChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
+                                                        {returningChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
+                                                    </Pie>
+                                                    <Tooltip isAnimationActive={false} />
+                                                    <Legend />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Profile Type (Registered vs Walk-in)</h3>
+                                            <ResponsiveContainer width="100%" height={200}>
+                                                <PieChart>
+                                                    <Pie data={registeredChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
+                                                        {registeredChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
+                                                    </Pie>
+                                                    <Tooltip isAnimationActive={false} />
+                                                    <Legend />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -999,8 +1055,64 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Service Time Analysis Table */}
-                            {report?.id === 20 ? (
+                            {/* ✅ NEW: Customer Summary Table */}
+                            {report?.id === 21 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer Details</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Profile Type</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Visit Type</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services Count</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Spent</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {customerSummaryData.length > 0 ? (
+                                                customerSummaryData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-bold text-gray-900">{row.customer_name}</p>
+                                                            <p className="text-xs text-gray-500 font-mono">{row.phone}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                                                row.is_registered ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-600'
+                                                            }`}>
+                                                                {row.is_registered ? 'Registered' : 'Walk-in'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                                                row.is_returning ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                                            }`}>
+                                                                {row.is_returning ? 'Returning' : 'New'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center font-medium">
+                                                            {row.total_services}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-bold">
+                                                            ₹{row.total_spent.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiUsers className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Customers Found</h3>
+                                                        <p className="text-xs text-gray-500">No customers requested services during this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 20 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

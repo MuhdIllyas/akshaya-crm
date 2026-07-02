@@ -588,6 +588,43 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 21: Customer Summary ---
+  if (reportIds.includes(21)) {
+    if (data.customerSummary) {
+      const sheet = workbook.addWorksheet('Customer Summary');
+      
+      sheet.mergeCells('A1:F1');
+      sheet.getCell('A1').value = 'Customer Activity & Statistics';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Customer Name', 'Phone Number', 'Profile Type', 'Visit Type', 'Services Count', 'Total Spent']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.customerSummary.forEach(row => {
+        sheet.addRow([
+          row.customer_name, 
+          row.phone,
+          row.is_registered ? 'Portal Registered' : 'Walk-in',
+          row.is_returning ? 'Returning' : 'New',
+          row.total_services,
+          row.total_spent
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('B').width = 15;
+      sheet.getColumn('C').width = 20;
+      sheet.getColumn('D').width = 15;
+      sheet.getColumn('F').numFmt = '₹#,##0.00';
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -846,6 +883,20 @@ export const buildPDF = (reportData, reportIds) => {
         data.serviceTimeReport.forEach(row => { 
           const avgDays = (row.avg_hours / 24).toFixed(1);
           doc.text(`${row.service_name} | Qty: ${row.total_requests} | Avg Time: ${avgDays} Days (${row.avg_hours} Hrs)`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 21: Customer Summary ---
+      if (reportIds.includes(21) && data.customerSummary) {
+        doc.fontSize(14).text('Customer Activity Summary', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.customerSummary.forEach(row => { 
+          const type = row.is_registered ? '(Registered)' : '(Walk-in)';
+          const visit = row.is_returning ? '[Returning]' : '[New]';
+          doc.text(`${row.customer_name} ${type} ${visit} | Phone: ${row.phone} | Services: ${row.total_services} | Spent: Rs. ${row.total_spent}`);
         });
         doc.moveDown(2);
       }

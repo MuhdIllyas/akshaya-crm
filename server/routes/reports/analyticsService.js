@@ -1046,6 +1046,60 @@ const fetchServiceTimeAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Customer Summary Fetcher (Handles both Walk-ins and Registered)
+const fetchCustomerSummaryAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      WITH customer_activity AS (
+        SELECT 
+          se.phone,
+          -- We use MAX to grab the latest name they used
+          MAX(COALESCE(se.customer_name, 'Anonymous')) as customer_name,
+          COUNT(se.id) as total_services,
+          COALESCE(SUM(se.total_charges), 0) as total_spent,
+          MAX(se.created_at) as last_visit,
+          
+          -- 👇 Smart logic: Did they have any services BEFORE the selected date range?
+          EXISTS (
+            SELECT 1 FROM service_entries se2 
+            JOIN staff st2 ON se2.staff_id = st2.id
+            WHERE se2.phone = se.phone 
+              AND st2.centre_id = $1 
+              AND se2.created_at::date < $2
+          ) as is_returning
+          
+        FROM service_entries se
+        JOIN staff st ON se.staff_id = st.id
+        WHERE st.centre_id = $1 
+          AND se.created_at::date >= $2 
+          AND se.created_at::date <= $3
+          AND se.phone IS NOT NULL AND se.phone != '' -- We need a phone to identify them
+        GROUP BY se.phone
+      )
+      SELECT 
+        ca.*,
+        -- 👇 Smart logic: Do they have an official account in the customers table?
+        CASE WHEN c.id IS NOT NULL THEN true ELSE false END as is_registered
+      FROM customer_activity ca
+      LEFT JOIN customers c ON ca.phone = c.primary_phone
+      ORDER BY ca.total_spent DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      phone: row.phone,
+      customer_name: row.customer_name,
+      total_services: Number(row.total_services),
+      total_spent: Number(row.total_spent),
+      last_visit: new Date(row.last_visit).toISOString(),
+      is_returning: row.is_returning === true,
+      is_registered: row.is_registered === true
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchCustomerSummaryAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -1340,7 +1394,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1433,6 +1487,11 @@ export const getReportData = async (params) => {
         }
         case 20: {
           compiledReport.data.serviceTimeReport = await fetchServiceTimeAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 21: Customer Summary Report
+        case 21: {
+          compiledReport.data.customerSummary = await fetchCustomerSummaryAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {
