@@ -1192,6 +1192,56 @@ const fetchCustomerActivityAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Customer Feedback Fetcher (Report ID 25)
+const fetchCustomerFeedbackAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        sr.submitted_at,
+        COALESCE(sr.customer_name, se.customer_name, 'Anonymous') as customer_name,
+        COALESCE(sr.customer_phone, se.phone) as customer_phone,
+        
+        -- Smart mapping for exact Service Name
+        COALESCE(
+          CASE 
+            WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+            ELSE srv.name
+          END,
+          direct_srv.name,
+          'General Service'
+        ) as service_name,
+        
+        st.name as staff_name,
+        sr.service_rating,
+        sr.review_text
+      FROM service_reviews sr
+      LEFT JOIN staff st ON sr.staff_id = st.id
+      LEFT JOIN service_entries se ON sr.tracking_id = se.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN services direct_srv ON sr.service_id = direct_srv.id
+      WHERE sr.centre_id = $1 
+        AND sr.is_submitted = true
+        AND sr.submitted_at::date >= $2 
+        AND sr.submitted_at::date <= $3
+      ORDER BY sr.submitted_at DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      date: new Date(row.submitted_at).toISOString(),
+      customer_name: row.customer_name,
+      phone: row.customer_phone || 'N/A',
+      service_name: row.service_name,
+      staff_name: row.staff_name || 'Unassigned',
+      service_rating: Number(row.service_rating || 0),
+      review_text: row.review_text || ''
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchCustomerFeedbackAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1555,7 +1605,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1667,6 +1717,10 @@ export const getReportData = async (params) => {
         }
         case 24: {
           compiledReport.data.customerActivity = await fetchCustomerActivityAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 25: {
+          compiledReport.data.customerFeedback = await fetchCustomerFeedbackAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {

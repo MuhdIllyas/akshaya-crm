@@ -736,6 +736,42 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 25: Customer Reviews ---
+  if (reportIds.includes(25)) {
+    if (data.customerFeedback) {
+      const sheet = workbook.addWorksheet('Customer Ratings');
+      
+      sheet.mergeCells('A1:F1');
+      sheet.getCell('A1').value = 'Customer Reviews & Ratings';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Date', 'Customer Name', 'Phone', 'Service Evaluated', 'Rating (Stars)', 'Customer Feedback']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.customerFeedback.forEach(row => {
+        sheet.addRow([
+          new Date(row.date).toLocaleDateString('en-IN'), 
+          row.customer_name,
+          row.phone,
+          row.service_name,
+          row.service_rating,
+          row.review_text
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 15;
+      sheet.getColumn('B').width = 25;
+      sheet.getColumn('D').width = 30;
+      sheet.getColumn('F').width = 50; 
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -1048,6 +1084,20 @@ export const buildPDF = (reportData, reportIds) => {
         data.customerActivity.forEach(row => { 
           const dateStr = new Date(row.date).toLocaleString('en-IN');
           doc.text(`[${dateStr}] ${row.customer_name} (${row.phone}) | ${row.service_name} | Status: ${row.status.toUpperCase()} | Rs. ${row.amount}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 25: Customer Reviews ---
+      if (reportIds.includes(25) && data.customerFeedback) {
+        doc.fontSize(14).text('Customer Reviews & Ratings', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.customerFeedback.forEach(row => { 
+          const dateStr = new Date(row.date).toLocaleDateString('en-IN');
+          doc.text(`[${dateStr}] ${row.customer_name}: ${row.service_rating} Stars - "${row.review_text}"`);
+          doc.moveDown(0.5);
         });
         doc.moveDown(2);
       }

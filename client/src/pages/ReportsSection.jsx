@@ -513,6 +513,27 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         .map(key => ({ date: key, volume: timelineMap[key] }))
         .reverse();
 
+    // ✅ Extract Customer Feedback Data
+    const feedbackData = apiData.customerFeedback || [];
+    const feedbackStats = { total: feedbackData.length, sumStars: 0, fiveStar: 0 };
+    const distMap = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+    
+    feedbackData.forEach(r => {
+        feedbackStats.sumStars += r.service_rating;
+        if (r.service_rating === 5) feedbackStats.fiveStar++;
+        if (distMap[r.service_rating] !== undefined) distMap[r.service_rating]++;
+    });
+
+    const avgCentreRating = feedbackStats.total > 0 ? (feedbackStats.sumStars / feedbackStats.total).toFixed(1) : 0;
+
+    const feedbackChartData = [
+        { stars: '5 Stars', count: distMap[5], fill: '#10B981' }, // Emerald
+        { stars: '4 Stars', count: distMap[4], fill: '#34D399' },
+        { stars: '3 Stars', count: distMap[3], fill: '#FBBF24' }, // Amber
+        { stars: '2 Stars', count: distMap[2], fill: '#F87171' }, // Rose
+        { stars: '1 Star',  count: distMap[1], fill: '#EF4444' }
+    ];    
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1157,6 +1178,33 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Customer Feedback Preview Summary */}
+                            {report?.id === 25 && feedbackData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Overall Centre Rating" value={`${avgCentreRating} / 5`} subtitle={`From ${feedbackStats.total} reviews`} icon={FiStar} color="bg-amber-500" />
+                                        <StatCard title="5-Star Reviews" value={feedbackStats.fiveStar} subtitle="Perfect scores" icon={FiAward} color="bg-emerald-600" />
+                                        <StatCard title="Total Feedback" value={feedbackStats.total} subtitle="Submitted by customers" icon={FiFileText} color="bg-blue-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Satisfaction Distribution</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={feedbackChartData} layout="vertical" margin={{ left: 30 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                                <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                                                <YAxis type="category" dataKey="stars" tick={{ fontSize: 11 }} width={60} />
+                                                <Tooltip isAnimationActive={false} />
+                                                <Bar dataKey="count" name="Number of Reviews" radius={[0, 4, 4, 0]}>
+                                                    {feedbackChartData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -1164,8 +1212,53 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Customer Activity Table */}
-                            {report?.id === 24 ? (
+                                {report?.id === 25 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Evaluated</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Rating</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Written Feedback</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {feedbackData.length > 0 ? (
+                                                feedbackData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-bold text-gray-900">{row.customer_name}</p>
+                                                            <p className="text-[10px] text-gray-500">{new Date(row.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm text-gray-800 max-w-[200px] truncate" title={row.service_name}>{row.service_name}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <div className="flex items-center justify-center text-amber-500 font-bold text-sm">
+                                                                {row.service_rating} <FiStarIcon className="ml-1 h-3 w-3 fill-amber-500" />
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-700 italic max-w-md break-words">
+                                                            {row.review_text ? `"${row.review_text}"` : <span className="text-gray-400 not-italic text-xs">No comment provided</span>}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="4" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiStarIcon className="h-5 w-5 text-amber-500 fill-amber-500" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Reviews Found</h3>
+                                                        <p className="text-xs text-gray-500">No customers submitted ratings during this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 24 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">
