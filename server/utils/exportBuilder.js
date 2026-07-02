@@ -326,7 +326,7 @@ export const buildExcel = async (reportData, reportIds) => {
         sheet.addRow([
           row.staff_name, 
           row.services_completed, 
-          row.service_charge_earned, // 👈 SWAPPED THIS
+          row.service_charge_earned, 
           row.avg_staff_rating > 0 ? `${row.avg_staff_rating} Stars` : 'No Rating', 
           row.incentive_score, 
           row.suggested_bonus
@@ -374,7 +374,7 @@ export const buildExcel = async (reportData, reportIds) => {
       sheet.getColumn('A').width = 15;
       sheet.getColumn('B').width = 20;
       sheet.getColumn('D').width = 25;
-      sheet.getColumn('H').width = 40; // Wide column for comments
+      sheet.getColumn('H').width = 40; 
     }
   }
 
@@ -411,7 +411,7 @@ export const buildExcel = async (reportData, reportIds) => {
       
       // Formatting
       sheet.getColumn('B').width = 20;
-      sheet.getColumn('I').width = 40; // Wide column for the reason
+      sheet.getColumn('I').width = 40; 
     }
   }
 
@@ -588,44 +588,6 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
-  // --- REPORT 22: Returning Customers ---
-  if (reportIds.includes(22)) {
-    if (data.repeatCustomers) {
-      const sheet = workbook.addWorksheet('Loyal Customers');
-      
-      sheet.mergeCells('A1:G1');
-      sheet.getCell('A1').value = 'Returning Customers & Lifetime Value';
-      sheet.getCell('A1').font = { size: 16, bold: true };
-      
-      sheet.getCell('A3').value = 'Period:';
-      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
-
-      // Headers
-      const headerRow = sheet.addRow(['Customer Name', 'Phone Number', 'Profile Type', 'Lifetime Visits', 'Lifetime Spent', 'First Visit', 'Latest Visit']);
-      headerRow.font = { bold: true };
-      
-      // Data
-      data.repeatCustomers.forEach(row => {
-        sheet.addRow([
-          row.customer_name, 
-          row.phone,
-          row.is_registered ? 'Portal Registered' : 'Walk-in',
-          row.lifetime_visits,
-          row.lifetime_spent,
-          new Date(row.first_visit).toLocaleDateString('en-IN'),
-          new Date(row.latest_visit).toLocaleDateString('en-IN')
-        ]);
-      });
-      
-      // Formatting
-      sheet.getColumn('A').width = 25;
-      sheet.getColumn('B').width = 15;
-      sheet.getColumn('E').numFmt = '₹#,##0.00';
-      sheet.getColumn('F').width = 15;
-      sheet.getColumn('G').width = 15;
-    }
-  }
-
   // --- REPORT 21: Customer Summary ---
   if (reportIds.includes(21)) {
     if (data.customerSummary) {
@@ -660,6 +622,79 @@ export const buildExcel = async (reportData, reportIds) => {
       sheet.getColumn('C').width = 20;
       sheet.getColumn('D').width = 15;
       sheet.getColumn('F').numFmt = '₹#,##0.00';
+    }
+  }
+
+  // --- REPORT 22: ✅ NEW CUSTOMERS ---
+  if (reportIds.includes(22)) {
+    if (data.newCustomers) {
+      const sheet = workbook.addWorksheet('New Customers');
+      
+      sheet.mergeCells('A1:E1');
+      sheet.getCell('A1').value = 'New Customers Acquired';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Customer Name', 'Phone Number', 'Profile Type', 'First Visit Date', 'Initial Spent']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.newCustomers.forEach(row => {
+        sheet.addRow([
+          row.customer_name, 
+          row.phone,
+          row.is_registered ? 'Portal Registered' : 'Walk-in',
+          new Date(row.first_visit).toLocaleDateString('en-IN'),
+          row.total_spent
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('B').width = 15;
+      sheet.getColumn('C').width = 20;
+      sheet.getColumn('E').numFmt = '₹#,##0.00';
+    }
+  }
+
+  // --- REPORT 23: ✅ RETURNING CUSTOMERS (Shifted from 22) ---
+  if (reportIds.includes(23)) {
+    if (data.repeatCustomers) {
+      const sheet = workbook.addWorksheet('Loyal Customers');
+      
+      sheet.mergeCells('A1:G1');
+      sheet.getCell('A1').value = 'Returning Customers & Lifetime Value';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Customer Name', 'Phone Number', 'Profile Type', 'Lifetime Visits', 'Lifetime Spent', 'First Visit', 'Latest Visit']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.repeatCustomers.forEach(row => {
+        sheet.addRow([
+          row.customer_name, 
+          row.phone,
+          row.is_registered ? 'Portal Registered' : 'Walk-in',
+          row.lifetime_visits,
+          row.lifetime_spent,
+          new Date(row.first_visit).toLocaleDateString('en-IN'),
+          new Date(row.latest_visit).toLocaleDateString('en-IN')
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('B').width = 15;
+      sheet.getColumn('E').numFmt = '₹#,##0.00';
+      sheet.getColumn('F').width = 15;
+      sheet.getColumn('G').width = 15;
     }
   }
 
@@ -710,7 +745,7 @@ export const buildPDF = (reportData, reportIds) => {
         doc.moveDown(1);
         
         doc.fontSize(10);
-        data.serviceRevenue.slice(0, 15).forEach(row => { // Show top 15 in PDF summary
+        data.serviceRevenue.slice(0, 15).forEach(row => { 
           doc.text(`${row.service_name}: ${row.total_requests} requests | Rev: Rs. ${row.revenue_collected} | Profit: Rs. ${row.gross_profit}`);
         });
         doc.moveDown(2);
@@ -824,7 +859,6 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.incentiveReport.forEach(row => { 
-          // 👈 SWAPPED 'Collected' for 'Profit: Rs. row.service_charge_earned'
           doc.text(`${row.staff_name} | Score: ${row.incentive_score}/100 | Profit: Rs. ${row.service_charge_earned} | Suggested Bonus: Rs. ${row.suggested_bonus}`);
         });
         doc.moveDown(2);
@@ -939,8 +973,22 @@ export const buildPDF = (reportData, reportIds) => {
         doc.moveDown(2);
       }
 
-      // --- REPORT 22: Returning Customers ---
-      if (reportIds.includes(22) && data.repeatCustomers) {
+      // --- REPORT 22: ✅ NEW CUSTOMERS ---
+      if (reportIds.includes(22) && data.newCustomers) {
+        doc.fontSize(14).text('New Customers Acquired', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.newCustomers.forEach(row => { 
+          const first = new Date(row.first_visit).toLocaleDateString('en-IN');
+          const type = row.is_registered ? '(Registered)' : '(Walk-in)';
+          doc.text(`${row.customer_name} ${type} | Phone: ${row.phone} | First Visit: ${first} | Spent: Rs. ${row.total_spent}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 23: ✅ RETURNING CUSTOMERS (Shifted from 22) ---
+      if (reportIds.includes(23) && data.repeatCustomers) {
         doc.fontSize(14).text('Returning Customers (Loyalty & LTV)', { underline: true });
         doc.moveDown(1);
         
