@@ -1100,6 +1100,52 @@ const fetchCustomerSummaryAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: New Customers Fetcher (Report ID 22)
+const fetchNewCustomersAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      WITH customer_first_visits AS (
+        SELECT 
+          RIGHT(REGEXP_REPLACE(se.phone, '[^0-9]', '', 'g'), 10) as norm_phone,
+          MAX(COALESCE(se.customer_name, 'Anonymous')) as customer_name,
+          MIN(se.created_at) as first_visit_date,
+          COUNT(se.id) as total_services,
+          COALESCE(SUM(se.total_charges), 0) as total_spent
+        FROM service_entries se
+        JOIN staff st ON se.staff_id = st.id
+        WHERE se.phone IS NOT NULL AND TRIM(se.phone) != ''
+          AND st.centre_id = $1
+          AND se.created_at::date <= $3
+        GROUP BY RIGHT(REGEXP_REPLACE(se.phone, '[^0-9]', '', 'g'), 10)
+      )
+      SELECT 
+        fv.norm_phone as phone,
+        fv.customer_name,
+        fv.first_visit_date,
+        fv.total_services,
+        fv.total_spent,
+        CASE WHEN c.id IS NOT NULL THEN true ELSE false END as is_registered
+      FROM customer_first_visits fv
+      LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.primary_phone, '[^0-9]', '', 'g'), 10) = fv.norm_phone
+      -- 👇 A customer is "New" if their absolute first visit falls in the selected dates!
+      WHERE fv.first_visit_date::date >= $2
+      ORDER BY fv.first_visit_date DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      phone: row.phone,
+      customer_name: row.customer_name,
+      first_visit: new Date(row.first_visit_date).toISOString(),
+      total_services: Number(row.total_services),
+      total_spent: Number(row.total_spent),
+      is_registered: row.is_registered === true
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchNewCustomersAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1463,7 +1509,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1563,7 +1609,13 @@ export const getReportData = async (params) => {
           compiledReport.data.customerSummary = await fetchCustomerSummaryAnalytics(client, targetCentreId, reportDates);
           break;
         }
+        // ID 22: New Customers
         case 22: {
+          compiledReport.data.newCustomers = await fetchNewCustomersAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 23: Returning Customers (Shifted from 22)
+        case 23: {
           compiledReport.data.repeatCustomers = await fetchRepeatCustomersAnalytics(client, targetCentreId, reportDates);
           break;
         }
