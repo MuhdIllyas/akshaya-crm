@@ -274,7 +274,7 @@ const Login = () => {
           
           <div className="z-10 mt-8">
             <p className="text-navy-800 mb-2 text-sm text-center">© 2026 Muhammed Illyas. All rights reserved.</p>
-            <p className="text-navy-800 mb-2 text-sm text-center mt-1">Akshaya e Centre Pukayur</p>
+            <p className="text-navy-800 mb-2 text-sm text-center mt-1">Designed & Developed with ❤️ by Muhammed Illyas.</p>
           </div>
         </div>
 
