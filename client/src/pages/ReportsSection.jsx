@@ -316,6 +316,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const topPerformer = performanceData.length > 0 ? performanceData[0] : null;
     const totalTeamServices = performanceData.reduce((sum, r) => sum + r.total_services, 0);
     const activeContributors = performanceData.filter(r => r.total_services > 0).length;
+
+    // ✅ Extract Salary Data and calculate total payroll
+    const salaryData = apiData.salaryReport || [];
+    const salarySummary = { 
+        totalPayroll: 0, 
+        totalDeductions: 0, 
+        pendingPayouts: 0 
+    };
+    
+    salaryData.forEach(s => {
+        salarySummary.totalPayroll += s.net_salary;
+        salarySummary.totalDeductions += s.deductions;
+        if (s.status === 'pending') salarySummary.pendingPayouts++;
+    });
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -616,6 +630,31 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {report?.id === 11 && salaryData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Net Payroll" value={`₹${salarySummary.totalPayroll.toLocaleString('en-IN')}`} subtitle="For Selected Months" icon={FiDollarSign} color="bg-indigo-600" />
+                                        <StatCard title="Pending Payouts" value={salarySummary.pendingPayouts} subtitle="Awaiting 'Send' Status" icon={FiClock} color="bg-amber-500" />
+                                        <StatCard title="Total Deductions" value={`₹${salarySummary.totalDeductions.toLocaleString('en-IN')}`} subtitle="Recovered / Withheld" icon={FiTrendingDown} color="bg-rose-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Net Salary Distribution</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={salaryData.slice(0, 15)} layout="vertical" margin={{ left: 30 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                                <YAxis type="category" dataKey="staff_name" tick={{ fontSize: 11 }} width={100} />
+                                                <Tooltip 
+                                                    isAnimationActive={false} 
+                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                                />
+                                                <Bar dataKey="net_salary" name="Net Salary" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -623,8 +662,67 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Staff Performance Table */}
-                            {report?.id === 10 ? (
+                            {/* ✅ NEW: Salary Payroll Table */}
+                            {report?.id === 11 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Month</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Attendance</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Basic + Allowances</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Deductions</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Net Salary</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {salaryData.length > 0 ? (
+                                                salaryData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-bold">{row.month}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                            {row.staff_name}
+                                                            <div className="text-[10px] text-gray-400 capitalize font-normal mt-0.5">{row.role}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">
+                                                            {row.present_days} / {row.working_days}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right">
+                                                            <div>₹{row.basic.toLocaleString('en-IN')} Basic</div>
+                                                            <div className="text-xs text-gray-400">+ ₹{row.total_allowances.toLocaleString('en-IN')} Allw</div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">
+                                                            - ₹{row.deductions.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                            ₹{row.net_salary.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
+                                                                row.status === 'sent' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                                            }`}>
+                                                                {row.status.toUpperCase()}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="7" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiDollarSign className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Salary Records</h3>
+                                                        <p className="text-xs text-gray-500">No salaries were generated for the selected months.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 10 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50">

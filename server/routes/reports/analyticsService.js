@@ -569,6 +569,54 @@ const fetchPerformanceAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Salary Report Fetcher (Payroll Calculations)
+const fetchSalaryAnalytics = async (client, centreId, dates) => {
+  try {
+    console.log(`[API] Fetching Salaries for Centre ${centreId} from ${dates.fromDate} to ${dates.toDate}`);
+    
+    const res = await client.query(`
+      SELECT 
+        s.id,
+        st.name as staff_name,
+        COALESCE(st.role, 'staff') as role,
+        s.month,
+        s.basic,
+        s.hra,
+        s.ta,
+        s.other_allowances,
+        s.deductions,
+        s.net_salary,
+        s.status,
+        s.working_days,
+        s.present_days
+      FROM salaries s
+      JOIN staff st ON s.staff_id = st.id
+      WHERE st.centre_id = $1 
+        -- 👇 Smartly match the YYYY-MM strings based on the selected date range
+        AND s.month >= TO_CHAR($2::date, 'YYYY-MM')
+        AND s.month <= TO_CHAR($3::date, 'YYYY-MM')
+      ORDER BY s.month DESC, s.net_salary DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      staff_name: row.staff_name,
+      role: row.role,
+      month: row.month,
+      basic: Number(row.basic || 0),
+      // Group all allowances together for cleaner reporting
+      total_allowances: Number(row.hra || 0) + Number(row.ta || 0) + Number(row.other_allowances || 0),
+      deductions: Number(row.deductions || 0),
+      net_salary: Number(row.net_salary || 0),
+      status: row.status.toLowerCase(), // 'pending' or 'sent'
+      working_days: Number(row.working_days || 0),
+      present_days: Number(row.present_days || 0)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchSalaryAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -863,7 +911,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -904,6 +952,11 @@ export const getReportData = async (params) => {
         case 10: {
           compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.performanceReport = await fetchPerformanceAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 11: Salary Report
+        case 11: {
+          compiledReport.data.salaryReport = await fetchSalaryAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 3:

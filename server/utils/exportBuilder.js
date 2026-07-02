@@ -269,6 +269,42 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 11: Salary Report ---
+  if (reportIds.includes(11)) {
+    if (data.salaryReport) {
+      const sheet = workbook.addWorksheet('Payroll Summary');
+      
+      sheet.mergeCells('A1:G1');
+      sheet.getCell('A1').value = 'Staff Payroll Summary';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Month', 'Staff Name', 'Attendance', 'Basic Pay', 'Allowances', 'Deductions', 'Net Salary', 'Status']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.salaryReport.forEach(row => {
+        sheet.addRow([
+          row.month, 
+          row.staff_name, 
+          `${row.present_days}/${row.working_days} Days`, 
+          row.basic, 
+          row.total_allowances, 
+          row.deductions, 
+          row.net_salary,
+          row.status.toUpperCase()
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('B').width = 25;
+      ['D', 'E', 'F', 'G'].forEach(col => sheet.getColumn(col).numFmt = '₹#,##0.00');
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -407,6 +443,18 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(9).fillColor('black');
         data.performanceReport.forEach(row => { 
           doc.text(`${row.staff_name} (${row.role}) | Services: ${row.total_services} | Revenue: Rs. ${row.total_revenue} | Profit: Rs. ${row.gross_profit}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 11: Salary Report ---
+      if (reportIds.includes(11) && data.salaryReport) {
+        doc.fontSize(14).text('Staff Payroll Summary', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.salaryReport.forEach(row => { 
+          doc.text(`[${row.month}] ${row.staff_name} | Net: Rs. ${row.net_salary} | Status: ${row.status.toUpperCase()}`);
         });
         doc.moveDown(2);
       }
