@@ -696,7 +696,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                             <tr>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
                                                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services</th>
-                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount Collected</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Service Charge (Profit)</th>
                                                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Avg Rating</th>
                                                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">KPI Score</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Suggested Bonus</th>
@@ -708,7 +708,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                     <tr key={idx} className="hover:bg-gray-50 transition-colors">
                                                         <td className="px-4 py-3 text-sm text-gray-900 font-bold">{row.staff_name}</td>
                                                         <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.services_completed}</td>
-                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right font-medium">₹{row.collected_amount.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.service_charge_earned.toLocaleString('en-IN')}</td>
                                                         <td className="px-4 py-3 text-sm text-gray-600 text-center">
                                                             {row.avg_staff_rating > 0 ? (
                                                                 <span className="flex items-center justify-center text-amber-500 font-bold">

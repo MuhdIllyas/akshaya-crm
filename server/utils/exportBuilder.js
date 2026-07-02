@@ -318,7 +318,7 @@ export const buildExcel = async (reportData, reportIds) => {
       sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
 
       // Headers
-      const headerRow = sheet.addRow(['Staff Name', 'Services', 'Amount Collected', 'Avg Rating', 'KPI Score (out of 100)', 'Suggested Bonus']);
+      const headerRow = sheet.addRow(['Staff Name', 'Services', 'Service Charge (Profit)', 'Avg Rating', 'KPI Score (out of 100)', 'Suggested Bonus']);
       headerRow.font = { bold: true };
       
       // Data
@@ -326,7 +326,7 @@ export const buildExcel = async (reportData, reportIds) => {
         sheet.addRow([
           row.staff_name, 
           row.services_completed, 
-          row.collected_amount, 
+          row.service_charge_earned, // 👈 SWAPPED THIS
           row.avg_staff_rating > 0 ? `${row.avg_staff_rating} Stars` : 'No Rating', 
           row.incentive_score, 
           row.suggested_bonus
@@ -501,7 +501,8 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.incentiveReport.forEach(row => { 
-          doc.text(`${row.staff_name} | Score: ${row.incentive_score}/100 | Collected: Rs. ${row.collected_amount} | Suggested Bonus: Rs. ${row.suggested_bonus}`);
+          // 👈 SWAPPED 'Collected' for 'Profit: Rs. row.service_charge_earned'
+          doc.text(`${row.staff_name} | Score: ${row.incentive_score}/100 | Profit: Rs. ${row.service_charge_earned} | Suggested Bonus: Rs. ${row.suggested_bonus}`);
         });
         doc.moveDown(2);
       }

@@ -695,12 +695,13 @@ const fetchIncentiveAnalytics = async (client, centreId, dates) => {
         staff_name: row.staff_name,
         services_completed: Number(row.services_completed),
         collected_amount: Number(row.collected_amount),
+        service_charge_earned: profit, // 👈 ADD THIS LINE!
         total_reviews: Number(row.total_reviews),
         avg_staff_rating: Number(row.avg_staff_rating),
         incentive_score: score,
         suggested_bonus: suggestedBonus
       };
-    }).filter(r => r.services_completed > 0); // Only show staff who did work
+    }).filter(r => r.services_completed > 0);
   } catch (error) {
     console.error("SQL Error in fetchIncentiveAnalytics:", error.message);
     throw error;
