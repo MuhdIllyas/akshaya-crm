@@ -439,6 +439,57 @@ const fetchLedgerAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Pending Collections Fetcher (Customer Balances)
+const fetchPendingCollectionsAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        se.created_at,
+        se.customer_name,
+        se.phone,
+        se.token_id,
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        se.total_charges,
+        COALESCE(p.paid_amount, 0) as paid_amount,
+        (se.total_charges - COALESCE(p.paid_amount, 0)) as balance_due
+      FROM service_entries se
+      JOIN staff s ON se.staff_id = s.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      -- 👇 Calculate how much has been paid towards this specific service
+      LEFT JOIN (
+        SELECT service_entry_id, SUM(amount) as paid_amount 
+        FROM payments 
+        WHERE status = 'received' AND (is_reversal IS NULL OR is_reversal = FALSE)
+        GROUP BY service_entry_id
+      ) p ON p.service_entry_id = se.id
+      WHERE s.centre_id = $1 
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3
+        -- 👇 Only show entries where they still owe money
+        AND (se.total_charges - COALESCE(p.paid_amount, 0)) > 0
+      ORDER BY balance_due DESC, se.created_at DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      date: new Date(row.created_at).toISOString(),
+      customer_name: row.customer_name || 'Walk-in Customer',
+      phone: row.phone || 'N/A',
+      token_id: row.token_id || '-',
+      service_name: row.service_name,
+      total_charges: Number(row.total_charges || 0),
+      paid_amount: Number(row.paid_amount || 0),
+      balance_due: Number(row.balance_due || 0)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchPendingCollectionsAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -733,7 +784,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -757,6 +808,11 @@ export const getReportData = async (params) => {
         // ID 7: General Ledger Report
         case 7: {
           compiledReport.data.ledger = await fetchLedgerAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 8: Pending Collections
+        case 8: {
+          compiledReport.data.pendingCollections = await fetchPendingCollectionsAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 9: {

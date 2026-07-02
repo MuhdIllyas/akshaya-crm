@@ -284,6 +284,12 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 10); // Top 10 volume categories
+
+    const pendingCollectionsData = apiData.pendingCollections || [];
+    const pendingSummary = { 
+        totalDue: pendingCollectionsData.reduce((sum, r) => sum + r.balance_due, 0), 
+        count: pendingCollectionsData.length 
+    };
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -524,6 +530,31 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Pending Collections Preview Summary */}
+                            {report?.id === 8 && pendingCollectionsData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Total Outstanding" value={`₹${pendingSummary.totalDue.toLocaleString('en-IN')}`} subtitle="From Selected Period" icon={FiClock} color="bg-amber-600" />
+                                        <StatCard title="Pending Customers" value={pendingSummary.count} subtitle="With Unpaid Balances" icon={FiUsers} color="bg-rose-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 Highest Pending Balances</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={pendingCollectionsData.slice(0, 10)} layout="vertical" margin={{ left: 30 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v}`} />
+                                                <YAxis type="category" dataKey="customer_name" tick={{ fontSize: 11 }} width={100} />
+                                                <Tooltip 
+                                                    isAnimationActive={false} 
+                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                                />
+                                                <Bar dataKey="balance_due" name="Balance Due" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -531,8 +562,50 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Ledger Transactions Table */}
-                            {report?.id === 7 ? (
+                            {/* ✅ NEW: Pending Collections Table */}
+                            {report?.id === 8 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Contact</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Charges</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Balance Due</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {pendingCollectionsData.length > 0 ? (
+                                                pendingCollectionsData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                            {row.customer_name}
+                                                            <div className="text-[10px] text-gray-400 font-normal mt-0.5">Token: {row.token_id}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600">{row.phone}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600">{row.service_name}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-500 text-right">₹{row.total_charges.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-amber-600 text-right font-bold">
+                                                            ₹{row.balance_due.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiCheckCircle className="h-5 w-5 text-emerald-500" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Pending Collections!</h3>
+                                                        <p className="text-xs text-gray-500">All services in this period have been fully paid.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 7 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50">

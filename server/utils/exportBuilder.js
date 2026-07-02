@@ -161,6 +161,44 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 8: Pending Collections ---
+  if (reportIds.includes(8)) {
+    if (data.pendingCollections) {
+      const sheet = workbook.addWorksheet('Pending Collections');
+      
+      sheet.mergeCells('A1:F1');
+      sheet.getCell('A1').value = 'Pending Customer Payments';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Date', 'Customer Name', 'Phone', 'Service', 'Total Charges', 'Balance Due']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.pendingCollections.forEach(row => {
+        sheet.addRow([
+          new Date(row.date).toLocaleDateString('en-IN'), 
+          row.customer_name, 
+          row.phone, 
+          row.service_name, 
+          row.total_charges, 
+          row.balance_due
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 15;
+      sheet.getColumn('B').width = 25;
+      sheet.getColumn('C').width = 15;
+      sheet.getColumn('D').width = 30;
+      sheet.getColumn('E').numFmt = '₹#,##0.00';
+      sheet.getColumn('F').numFmt = '₹#,##0.00';
+    }
+  }
+
   // --- REPORT 9: Staff Attendance ---
   if (reportIds.includes(9)) {
     if (data.staff) {
@@ -271,6 +309,23 @@ export const buildPDF = (reportData, reportIds) => {
         data.ledger.slice(0, 100).forEach(row => { 
           const dateStr = new Date(row.date).toLocaleString('en-IN');
           doc.text(`${dateStr} | ${row.wallet} | ${row.type.toUpperCase()} | ${row.category} | Rs. ${row.amount}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 8: Pending Collections ---
+      if (reportIds.includes(8) && data.pendingCollections) {
+        doc.fontSize(14).text('Pending Customer Payments', { underline: true });
+        doc.moveDown(0.5);
+        
+        if (data.pendingCollections.length > 100) {
+            doc.fontSize(8).fillColor('gray').text(`(Showing top 100 highest balances. Export to Excel for full list.)`);
+        }
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.pendingCollections.slice(0, 100).forEach(row => { 
+          doc.text(`${row.customer_name} (${row.phone}) | ${row.service_name} | Due: Rs. ${row.balance_due}`);
         });
         doc.moveDown(2);
       }
