@@ -232,7 +232,7 @@ const Login = () => {
           
           <div className="z-10">
             <div className="flex flex-col items-center mb-12">
-              <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 hover:shadow-[0_15px_50px_-10px_rgba(23,42,69,0.5)] transition-all duration-300">
+              <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 hover:shadow-[0_10px_40px_-10px_rgba(26,172,147,0.4)] transition-all duration-300">
                 <img 
                   src="/logo-light.png" 
                   alt="Akshaya Sahayi Logo" 
