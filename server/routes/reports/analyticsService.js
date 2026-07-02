@@ -490,6 +490,41 @@ const fetchPendingCollectionsAnalytics = async (client, centreId, dates) => {
   }
 };
 
+const fetchDetailedAttendanceAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        a.date,
+        s.name as staff_name,
+        COALESCE(s.role, 'staff') as role,
+        a.status, 
+        a.punch_in,   -- 👈 Fixed column name based on salary.js
+        a.punch_out,  -- 👈 Fixed column name based on salary.js
+        COALESCE(a.late_minutes, 0) as late_minutes
+      FROM attendance a
+      JOIN staff s ON a.staff_id = s.id
+      WHERE s.centre_id = $1
+        AND a.date >= $2 
+        AND a.date <= $3
+      ORDER BY a.date DESC, s.name ASC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    // We map punch_in/punch_out to check_in/check_out so the React UI doesn't need to change!
+    return res.rows.map(row => ({
+      date: new Date(row.date).toISOString().split('T')[0],
+      staff_name: row.staff_name,
+      role: row.role,
+      status: row.status ? row.status.toLowerCase() : 'unknown',
+      check_in: row.punch_in ? row.punch_in.substring(0, 5) : '-', 
+      check_out: row.punch_out ? row.punch_out.substring(0, 5) : '-',
+      late_minutes: Number(row.late_minutes)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchDetailedAttendanceAnalytics:", error.message);
+    throw error; 
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -816,7 +851,10 @@ export const getReportData = async (params) => {
           break;
         }
         case 9: {
+          // High-level stats for the Top Cards
           compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
+          // Detailed list for the Table & Charts
+          compiledReport.data.attendanceReport = await fetchDetailedAttendanceAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 3:

@@ -290,6 +290,26 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         totalDue: pendingCollectionsData.reduce((sum, r) => sum + r.balance_due, 0), 
         count: pendingCollectionsData.length 
     };
+
+    // ✅ Extract Attendance Data and calculate distribution
+    const attendanceData = apiData.attendanceReport || [];
+    const attendanceSummary = { present: 0, absent: 0, late: 0, half_day: 0 };
+    
+    attendanceData.forEach(record => {
+        if (attendanceSummary[record.status] !== undefined) {
+            attendanceSummary[record.status]++;
+        } else {
+            attendanceSummary[record.status] = 1; // Catch anything else
+        }
+        // Also count as "Late" if they were present but late
+        if (record.late_minutes > 0) attendanceSummary.late++;
+    });
+
+    const attendancePieData = [
+        { name: 'Present', value: attendanceSummary.present },
+        { name: 'Absent', value: attendanceSummary.absent },
+        { name: 'Half Day', value: attendanceSummary.half_day || 0 }
+    ].filter(d => d.value > 0);
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -562,8 +582,58 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Pending Collections Table */}
-                            {report?.id === 8 ? (
+                            {/* ✅ NEW: Attendance Table */}
+                            {report?.id === 9 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check In</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check Out</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Late (Mins)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {attendanceData.length > 0 ? (
+                                                attendanceData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                            {new Date(row.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                                            {row.staff_name}
+                                                            <span className="ml-2 text-[10px] text-gray-400 capitalize">({row.role})</span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                                                                row.status === 'present' ? 'bg-emerald-100 text-emerald-800' : 
+                                                                row.status === 'absent' ? 'bg-rose-100 text-rose-800' : 
+                                                                'bg-amber-100 text-amber-800'
+                                                            }`}>
+                                                                {row.status.toUpperCase()}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.check_in}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.check_out}</td>
+                                                        <td className={`px-4 py-3 text-sm text-right font-medium ${row.late_minutes > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                                            {row.late_minutes > 0 ? `${row.late_minutes}m` : '-'}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
+                                                        No attendance records found for this period.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 8 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50">
@@ -871,6 +941,42 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                             <Legend />
                                         </PieChart>
                                     </ResponsiveContainer>
+                                </div>
+                            )}
+
+                            {/* Attendance Distribution Chart */}
+                            {report?.id === 9 && attendancePieData.length > 0 && (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Overall Attendance Distribution</h3>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <PieChart>
+                                            <Pie 
+                                                data={attendancePieData}
+                                                dataKey="value" 
+                                                nameKey="name" 
+                                                cx="50%" cy="50%" 
+                                                innerRadius={50} outerRadius={80} 
+                                                paddingAngle={2} cornerRadius={4}
+                                            >
+                                                {/* Present: Emerald, Absent: Rose, Half Day: Amber */}
+                                                {attendancePieData.map((entry, idx) => (
+                                                    <Cell key={idx} fill={
+                                                        entry.name === 'Present' ? '#10B981' : 
+                                                        entry.name === 'Absent' ? '#EF4444' : 
+                                                        '#F59E0B'
+                                                    } />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip isAnimationActive={false} />
+                                            <Legend />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    <div className="mt-4 pt-4 border-t border-gray-100 flex justify-around text-center">
+                                        <div>
+                                            <p className="text-xs text-gray-500">Total Late Instances</p>
+                                            <p className="text-lg font-bold text-amber-600">{attendanceSummary.late}</p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 

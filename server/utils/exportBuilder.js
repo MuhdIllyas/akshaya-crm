@@ -199,22 +199,38 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
-  // --- REPORT 9: Staff Attendance ---
+  // --- REPORT 9: Attendance Report ---
   if (reportIds.includes(9)) {
-    if (data.staff) {
+    if (data.attendanceReport) {
       const sheet = workbook.addWorksheet('Staff Attendance');
       
-      sheet.addRow(['Staff Attendance Report']);
-      sheet.getCell('A1').font = { size: 14, bold: true };
-      sheet.addRow([]); // Blank row
+      sheet.mergeCells('A1:F1');
+      sheet.getCell('A1').value = 'Staff Attendance Log';
+      sheet.getCell('A1').font = { size: 16, bold: true };
       
-      sheet.addRow(['Metric', 'Value']);
-      sheet.getRow(3).font = { bold: true };
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Date', 'Staff Name', 'Status', 'Check-In', 'Check-Out', 'Late (Mins)']);
+      headerRow.font = { bold: true };
       
-      sheet.addRow(['Total Staff', data.staff.staff.total_staff]);
-      sheet.addRow(['Present Today', data.staff.staff.present_today]);
+      // Data
+      data.attendanceReport.forEach(row => {
+        sheet.addRow([
+          new Date(row.date).toLocaleDateString('en-IN'), 
+          row.staff_name, 
+          row.status.toUpperCase(), 
+          row.check_in, 
+          row.check_out, 
+          row.late_minutes
+        ]);
+      });
       
-      sheet.getColumn('A').width = 20;
+      // Formatting
+      sheet.getColumn('A').width = 15;
+      sheet.getColumn('B').width = 25;
+      sheet.getColumn('C').width = 15;
     }
   }
 
@@ -331,13 +347,20 @@ export const buildPDF = (reportData, reportIds) => {
       }
 
       // --- REPORT 9: Staff Attendance ---
-      if (reportIds.includes(9) && data.staff) {
-        doc.fontSize(14).text('Staff Overview', { underline: true });
+      if (reportIds.includes(9) && data.attendanceReport) {
+        doc.fontSize(14).text('Staff Attendance Log', { underline: true });
         doc.moveDown(0.5);
         
-        doc.fontSize(12);
-        doc.text(`Total Staff: ${data.staff.staff.total_staff}`);
-        doc.text(`Present Today: ${data.staff.staff.present_today}`);
+        if (data.attendanceReport.length > 100) {
+            doc.fontSize(8).fillColor('gray').text(`(Showing top 100 records. Export to Excel for full attendance log.)`);
+        }
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.attendanceReport.slice(0, 100).forEach(row => { 
+          const dateStr = new Date(row.date).toLocaleDateString('en-IN');
+          doc.text(`${dateStr} | ${row.staff_name} | ${row.status.toUpperCase()} | In: ${row.check_in} | Late: ${row.late_minutes}m`);
+        });
         doc.moveDown(2);
       }
 
