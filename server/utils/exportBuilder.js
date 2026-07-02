@@ -340,6 +340,44 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 13: Review Report ---
+  if (reportIds.includes(13)) {
+    if (data.reviewReport) {
+      const sheet = workbook.addWorksheet('Customer Reviews');
+      
+      sheet.mergeCells('A1:G1');
+      sheet.getCell('A1').value = 'Customer Reviews & Feedback';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Date', 'Customer Name', 'Phone', 'Service', 'Staff Handled', 'Service Rating', 'Staff Rating', 'Comments']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.reviewReport.forEach(row => {
+        sheet.addRow([
+          new Date(row.date).toLocaleDateString('en-IN'), 
+          row.customer_name, 
+          row.phone,
+          row.service_name,
+          row.staff_name,
+          row.service_rating,
+          row.staff_rating || 'N/A',
+          row.review_text
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 15;
+      sheet.getColumn('B').width = 20;
+      sheet.getColumn('D').width = 25;
+      sheet.getColumn('H').width = 40; // Wide column for comments
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -503,6 +541,19 @@ export const buildPDF = (reportData, reportIds) => {
         data.incentiveReport.forEach(row => { 
           // 👈 SWAPPED 'Collected' for 'Profit: Rs. row.service_charge_earned'
           doc.text(`${row.staff_name} | Score: ${row.incentive_score}/100 | Profit: Rs. ${row.service_charge_earned} | Suggested Bonus: Rs. ${row.suggested_bonus}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 13: Review Report ---
+      if (reportIds.includes(13) && data.reviewReport) {
+        doc.fontSize(14).text('Customer Reviews & Feedback', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.reviewReport.forEach(row => { 
+          doc.text(`[${new Date(row.date).toLocaleDateString('en-IN')}] ${row.customer_name}: ${row.service_rating} Stars - "${row.review_text}" (Staff: ${row.staff_name})`);
+          doc.moveDown(0.5);
         });
         doc.moveDown(2);
       }

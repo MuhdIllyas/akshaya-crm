@@ -708,6 +708,45 @@ const fetchIncentiveAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Review Report Fetcher (Customer Feedback)
+const fetchReviewAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        sr.submitted_at,
+        COALESCE(sr.customer_name, 'Anonymous') as customer_name,
+        sr.customer_phone,
+        s.name as service_name,
+        st.name as staff_name,
+        sr.service_rating,
+        sr.staff_rating,
+        sr.review_text
+      FROM service_reviews sr
+      LEFT JOIN services s ON sr.service_id = s.id
+      LEFT JOIN staff st ON sr.staff_id = st.id
+      WHERE sr.centre_id = $1 
+        AND sr.is_submitted = true
+        AND sr.submitted_at::date >= $2 
+        AND sr.submitted_at::date <= $3
+      ORDER BY sr.submitted_at DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      date: new Date(row.submitted_at).toISOString(),
+      customer_name: row.customer_name,
+      phone: row.customer_phone || 'N/A',
+      service_name: row.service_name || 'General Service',
+      staff_name: row.staff_name || 'Unassigned',
+      service_rating: Number(row.service_rating || 0),
+      staff_rating: Number(row.staff_rating || 0),
+      review_text: row.review_text || ''
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchReviewAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -1002,7 +1041,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1052,6 +1091,11 @@ export const getReportData = async (params) => {
         }
         case 12: {
           compiledReport.data.incentiveReport = await fetchIncentiveAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 13: Review Report
+        case 13: {
+          compiledReport.data.reviewReport = await fetchReviewAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 3:

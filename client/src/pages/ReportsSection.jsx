@@ -328,6 +328,36 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     // ✅ Extract Incentive Data
     const incentiveData = apiData.incentiveReport || [];
     const totalSuggestedBonus = incentiveData.reduce((sum, r) => sum + r.suggested_bonus, 0);
+
+    // ✅ Extract Review Data and calculate averages/distribution
+    const reviewData = apiData.reviewReport || [];
+    let totalServiceStars = 0, totalStaffStars = 0, ratedStaffCount = 0;
+    const ratingDist = { 5:0, 4:0, 3:0, 2:0, 1:0 };
+
+    reviewData.forEach(r => {
+        totalServiceStars += r.service_rating;
+        if (r.staff_rating > 0) {
+            totalStaffStars += r.staff_rating;
+            ratedStaffCount++;
+        }
+        if (r.service_rating >= 1 && r.service_rating <= 5) {
+            ratingDist[r.service_rating]++;
+        }
+    });
+
+    const reviewSummary = {
+        count: reviewData.length,
+        avgService: reviewData.length > 0 ? (totalServiceStars / reviewData.length).toFixed(1) : 0,
+        avgStaff: ratedStaffCount > 0 ? (totalStaffStars / ratedStaffCount).toFixed(1) : 0
+    };
+
+    const reviewChartData = [
+        { stars: '5 Stars', count: ratingDist[5], fill: '#10B981' }, // Emerald
+        { stars: '4 Stars', count: ratingDist[4], fill: '#34D399' },
+        { stars: '3 Stars', count: ratingDist[3], fill: '#FBBF24' }, // Amber
+        { stars: '2 Stars', count: ratingDist[2], fill: '#F87171' }, // Rose
+        { stars: '1 Star',  count: ratingDist[1], fill: '#EF4444' },
+    ];
     
     salaryData.forEach(s => {
         salarySummary.totalPayroll += s.net_salary;
@@ -681,6 +711,33 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Review Report Preview Summary */}
+                            {report?.id === 13 && reviewData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Reviews" value={reviewSummary.count} subtitle="In Selected Period" icon={FiFileText} color="bg-blue-600" />
+                                        <StatCard title="Avg Service Rating" value={`${reviewSummary.avgService} / 5`} subtitle="Overall Satisfaction" icon={FiStar} color="bg-amber-500" />
+                                        <StatCard title="Avg Staff Rating" value={`${reviewSummary.avgStaff} / 5`} subtitle="Staff Performance" icon={FiUsers} color="bg-indigo-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Service Rating Distribution</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={reviewChartData} layout="vertical" margin={{ left: 30 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                                <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                                                <YAxis type="category" dataKey="stars" tick={{ fontSize: 11 }} width={60} />
+                                                <Tooltip isAnimationActive={false} />
+                                                <Bar dataKey="count" name="Number of Reviews" radius={[0, 4, 4, 0]}>
+                                                    {reviewChartData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -688,8 +745,62 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Incentive / KPI Table */}
-                            {report?.id === 12 ? (
+                            {/* ✅ NEW: Customer Reviews Table */}
+                            {report?.id === 13 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-32">Date</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-48">Customer Info</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-48">Service & Staff</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-32">Ratings</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Feedback Comments</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {reviewData.length > 0 ? (
+                                                reviewData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-xs text-gray-500">
+                                                            {new Date(row.date).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-bold text-gray-900">{row.customer_name}</p>
+                                                            <p className="text-xs text-gray-500">{row.phone}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-medium text-gray-900 truncate max-w-[180px]">{row.service_name}</p>
+                                                            <p className="text-xs text-gray-500">by {row.staff_name}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <div className="flex items-center justify-center text-amber-500 font-bold text-sm">
+                                                                {row.service_rating} <FiStarIcon className="ml-1 h-3 w-3 fill-amber-500" />
+                                                            </div>
+                                                            {row.staff_rating > 0 && (
+                                                                <div className="text-[10px] text-gray-400 mt-0.5">Staff: {row.staff_rating} ⭐</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-700 italic">
+                                                            "{row.review_text}"
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiStarIcon className="h-5 w-5 text-amber-500 fill-amber-500" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Reviews Yet</h3>
+                                                        <p className="text-xs text-gray-500">No customers submitted reviews during the selected period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 12 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">
