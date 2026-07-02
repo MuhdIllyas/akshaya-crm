@@ -391,6 +391,28 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     serviceProfitData.forEach(s => {
         profitSummary.totalProfit += s.gross_profit;
     });
+
+    // ✅ ADD THIS: Extract Pending Services Data
+    const pendingServicesData = apiData.pendingServices || [];
+    const pendingServicesSummary = { pending: 0, in_progress: 0, rejected: 0, totalDays: 0 };
+    
+    pendingServicesData.forEach(s => {
+        if (s.status === 'pending') pendingServicesSummary.pending++;
+        else if (s.status === 'in_progress') pendingServicesSummary.in_progress++;
+        else pendingServicesSummary.rejected++;
+        
+        pendingServicesSummary.totalDays += s.days_pending;
+    });
+
+    const avgDaysPending = pendingServicesData.length > 0 
+        ? Math.round(pendingServicesSummary.totalDays / pendingServicesData.length) 
+        : 0;
+
+    const pendingChartData = [
+        { name: 'Not Started', value: pendingServicesSummary.pending, fill: '#F59E0B' },   // Amber
+        { name: 'In Progress', value: pendingServicesSummary.in_progress, fill: '#6366F1' }, // Indigo
+        { name: 'Rejected/Delayed', value: pendingServicesSummary.rejected, fill: '#EF4444' } // Rose
+    ].filter(d => d.value > 0);
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -824,6 +846,40 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Pending Services Preview Summary */}
+                            {report?.id === 17 && pendingServicesData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Backlog" value={pendingServicesData.length} subtitle="Active Applications" icon={FiBriefcase} color="bg-rose-600" />
+                                        <StatCard title="In Progress" value={pendingSummary.in_progress} subtitle="Currently being worked on" icon={FiActivity} color="bg-indigo-600" />
+                                        <StatCard title="Avg Time in Queue" value={`${avgDaysPending} Days`} subtitle="Across all pending items" icon={FiClock} color="bg-amber-500" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex flex-col md:flex-row items-center">
+                                        <div className="w-full md:w-1/2">
+                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Pipeline Status</h3>
+                                            <ResponsiveContainer width="100%" height={250}>
+                                                <PieChart>
+                                                    <Pie 
+                                                        data={pendingChartData}
+                                                        dataKey="value" 
+                                                        nameKey="name" 
+                                                        cx="50%" cy="50%" 
+                                                        innerRadius={50} outerRadius={80} 
+                                                        paddingAngle={2} cornerRadius={4}
+                                                    >
+                                                        {pendingChartData.map((entry, idx) => (
+                                                            <Cell key={idx} fill={entry.fill} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip isAnimationActive={false} />
+                                                    <Legend />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -831,8 +887,64 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Service Profit Table */}
-                            {report?.id === 16 ? (
+                            {/* ✅ NEW: Pending Services Table */}
+                            {report?.id === 17 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Applied On</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer Info</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Request</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Age (Days)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {pendingServicesData.length > 0 ? (
+                                                pendingServicesData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                                            {new Date(row.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-bold text-gray-900">{row.customer_name}</p>
+                                                            <p className="text-[10px] text-gray-500">{row.phone} • TKN: {row.token_id}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-medium text-gray-900 max-w-[200px] truncate" title={row.service_name}>{row.service_name}</p>
+                                                            <p className="text-xs text-gray-500">Assigned: {row.assigned_staff}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                                                row.status === 'in_progress' ? 'bg-indigo-100 text-indigo-800' :
+                                                                row.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                                                            }`}>
+                                                                {row.status.replace('_', ' ')}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className={`text-sm font-bold ${row.days_pending > 14 ? 'text-rose-600' : row.days_pending > 7 ? 'text-amber-500' : 'text-gray-900'}`}>
+                                                                {row.days_pending} Days
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiCheckCircle className="h-5 w-5 text-emerald-500" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">Queue is Empty!</h3>
+                                                        <p className="text-xs text-gray-500">There are no pending applications for this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 16 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

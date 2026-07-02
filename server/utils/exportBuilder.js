@@ -448,6 +448,43 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 17: Pending Services ---
+  if (reportIds.includes(17)) {
+    if (data.pendingServices) {
+      const sheet = workbook.addWorksheet('Pending Applications');
+      
+      sheet.mergeCells('A1:G1');
+      sheet.getCell('A1').value = 'Pending Service Applications';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Applied Date', 'Token', 'Customer Name', 'Contact', 'Service', 'Assigned Staff', 'Status', 'Days Pending']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.pendingServices.forEach(row => {
+        sheet.addRow([
+          new Date(row.date).toLocaleDateString('en-IN'), 
+          row.token_id,
+          row.customer_name, 
+          row.phone,
+          row.service_name,
+          row.assigned_staff,
+          row.status.toUpperCase(),
+          row.days_pending
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('C').width = 20;
+      sheet.getColumn('E').width = 30;
+      sheet.getColumn('F').width = 20;
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -650,6 +687,18 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(9).fillColor('black');
         data.serviceProfit.forEach(row => { 
           doc.text(`${row.service_name} | Qty: ${row.total_requests} | Revenue: Rs. ${row.revenue_collected} | Profit: Rs. ${row.gross_profit}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 17: Pending Services ---
+      if (reportIds.includes(17) && data.pendingServices) {
+        doc.fontSize(14).text('Pending Service Applications', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.pendingServices.forEach(row => { 
+          doc.text(`[${new Date(row.date).toLocaleDateString('en-IN')}] ${row.customer_name} | ${row.service_name} | Pending: ${row.days_pending} Days | Staff: ${row.assigned_staff}`);
         });
         doc.moveDown(2);
       }

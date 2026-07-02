@@ -309,6 +309,57 @@ const fetchServiceProfitAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Pending Services Fetcher (Operational Bottlenecks)
+const fetchPendingServicesAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        se.created_at as application_date,
+        se.token_id,
+        COALESCE(se.customer_name, 'Anonymous') as customer_name,
+        se.phone,
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        st.name as assigned_staff,
+        se.status
+      FROM service_entries se
+      JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      WHERE st.centre_id = $1 
+        -- 👇 Exclude completed services to only show the backlog
+        AND se.status != 'completed'
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3
+      -- 👇 Sort by Oldest First so the most delayed items are at the top!
+      ORDER BY se.created_at ASC 
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => {
+      // Calculate how many days this has been pending
+      const applied = new Date(row.application_date);
+      const today = new Date();
+      const daysPending = Math.floor((today - applied) / (1000 * 60 * 60 * 24));
+
+      return {
+        date: applied.toISOString(),
+        token_id: row.token_id || '-',
+        customer_name: row.customer_name,
+        phone: row.phone || 'N/A',
+        service_name: row.service_name,
+        assigned_staff: row.assigned_staff || 'Unassigned',
+        status: row.status ? row.status.toLowerCase() : 'unknown',
+        days_pending: daysPending
+      };
+    });
+  } catch (error) {
+    console.error("SQL Error in fetchPendingServicesAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // Expense Category Fetcher
 const fetchExpenseAnalytics = async (client, centreId, dates) => {
   try {
@@ -1218,6 +1269,10 @@ export const getReportData = async (params) => {
           compiledReport.data.expenseReport = await fetchExpenseAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.expenseByWallet = await fetchExpenseByWalletAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.wallets = await fetchWalletAnalytics(client, targetCentreId);
+          break;
+        }
+        case 17: {
+          compiledReport.data.pendingServices = await fetchPendingServicesAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 18: {
