@@ -545,6 +545,36 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         if (index === 0) teamStats.topTeam = t; // Since SQL sorted by Net Profit DESC
     });
 
+    // ✅ Extract Team Performance Data
+    const teamPerfData = apiData.teamPerformance || [];
+    
+    let highestVolumeTeam = null;
+    let highestRatedTeam = null;
+    let fastestTeam = null;
+
+    if (teamPerfData.length > 0) {
+        // Find top volume
+        highestVolumeTeam = [...teamPerfData].sort((a, b) => b.total_services - a.total_services)[0];
+        // Find highest rated (must have ratings)
+        const ratedTeams = teamPerfData.filter(t => t.avg_rating > 0);
+        if (ratedTeams.length > 0) {
+            highestRatedTeam = [...ratedTeams].sort((a, b) => b.avg_rating - a.avg_rating)[0];
+        }
+        // Find fastest (must have handled services)
+        const activeTeams = teamPerfData.filter(t => t.total_services > 0);
+        if (activeTeams.length > 0) {
+            fastestTeam = [...activeTeams].sort((a, b) => a.avg_tat_hours - b.avg_tat_hours)[0];
+        }
+    }
+
+    // Helper to format hours cleanly in the UI
+    const formatHoursToText = (hours) => {
+        if (hours === 0) return '-';
+        if (hours < 1) return '< 1 Hr';
+        if (hours < 24) return `${hours.toFixed(1)} Hrs`;
+        return `${(hours / 24).toFixed(1)} Days`;
+    };
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1241,6 +1271,26 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Team Performance Preview Summary */}
+                            {report?.id === 27 && teamPerfData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Highest Volume Team" value={highestVolumeTeam?.team_name || '-'} subtitle={`${highestVolumeTeam?.total_services || 0} services completed`} icon={FiActivity} color="bg-indigo-600" />
+                                        <StatCard title="Highest Rated Team" value={highestRatedTeam?.team_name || '-'} subtitle={highestRatedTeam ? `${highestRatedTeam.avg_rating} / 5 Stars` : 'No ratings yet'} icon={FiStar} color="bg-amber-500" />
+                                        <StatCard title="Fastest Turnaround" value={fastestTeam?.team_name || '-'} subtitle={fastestTeam ? `Averages ${formatHoursToText(fastestTeam.avg_tat_hours)}` : '-'} icon={FiClock} color="bg-emerald-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex items-center space-x-3">
+                                        <div className="p-2 bg-indigo-50 rounded-lg">
+                                            <FiUsers className="h-5 w-5 text-indigo-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 text-sm">Team Productivity Leaderboard</h3>
+                                            <p className="text-xs text-gray-500">Switch to the Data tab to view the complete operational breakdown for every active team.</p>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -1248,8 +1298,65 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Team Financials Table */}
-                            {report?.id === 26 ? (
+                            {/* ✅ Team Performance Table */}
+                            {report?.id === 27 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Team Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Active Members</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services Completed</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Avg Turnaround Time</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Avg Rating</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {teamPerfData.length > 0 ? (
+                                                teamPerfData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm font-bold text-gray-900">
+                                                            {row.team_name}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                                                {row.active_members} Users
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className="text-sm font-bold text-indigo-600">
+                                                                {row.total_services}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right text-sm font-medium text-gray-700">
+                                                            {formatHoursToText(row.avg_tat_hours)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            {row.avg_rating > 0 ? (
+                                                                <div className="flex items-center justify-end text-amber-500 font-bold text-sm">
+                                                                    {row.avg_rating} <FiStarIcon className="ml-1 h-3 w-3 fill-amber-500" />
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400">No Ratings</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiBriefcase className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Team Data Found</h3>
+                                                        <p className="text-xs text-gray-500">No teams generated productivity metrics during this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 26 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

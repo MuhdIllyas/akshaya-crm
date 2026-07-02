@@ -1307,6 +1307,76 @@ const fetchTeamFinancialAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Team Performance & Productivity Fetcher (Report ID 27)
+const fetchTeamPerformanceAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      WITH team_capacity AS (
+        -- Step 1: Count active members per team
+        SELECT team_id, COUNT(staff_id) AS active_members
+        FROM team_members
+        WHERE is_active = true
+        GROUP BY team_id
+      ),
+      team_services AS (
+        -- Step 2: Calculate Volume and Turnaround Time (TAT) in hours
+        SELECT 
+          t.id AS team_id,
+          COUNT(DISTINCT se.id) AS total_services,
+          ROUND(AVG(GREATEST(0, EXTRACT(EPOCH FROM (strak.updated_at - se.created_at)) / 3600))::numeric, 1) AS avg_tat_hours
+        FROM teams t
+        JOIN team_members tm ON t.id = tm.team_id
+        JOIN service_entries se ON tm.staff_id = se.staff_id
+        JOIN service_tracking strak ON se.id = strak.service_entry_id
+        WHERE t.centre_id = $1
+          AND se.created_at::date >= $2
+          AND se.created_at::date <= $3
+          AND LOWER(strak.status) IN ('completed', 'paid', 'delivered')
+        GROUP BY t.id
+      ),
+      team_ratings AS (
+        -- Step 3: Calculate Average Customer Rating from Reviews
+        SELECT 
+          t.id AS team_id,
+          ROUND(AVG(sr.service_rating)::numeric, 1) AS avg_rating
+        FROM teams t
+        JOIN team_members tm ON t.id = tm.team_id
+        JOIN service_reviews sr ON tm.staff_id = sr.staff_id
+        WHERE t.centre_id = $1
+          AND sr.submitted_at::date >= $2
+          AND sr.submitted_at::date <= $3
+        GROUP BY t.id
+      )
+      -- Step 4: Combine it all into a master scoreboard
+      SELECT 
+        t.name AS team_name,
+        COALESCE(tc.active_members, 0) AS active_members,
+        COALESCE(ts.total_services, 0) AS total_services,
+        COALESCE(ts.avg_tat_hours, 0) AS avg_tat_hours,
+        COALESCE(tr.avg_rating, 0) AS avg_rating
+      FROM teams t
+      LEFT JOIN team_capacity tc ON t.id = tc.team_id
+      LEFT JOIN team_services ts ON t.id = ts.team_id
+      LEFT JOIN team_ratings tr ON t.id = tr.team_id
+      WHERE t.centre_id = $1
+        -- Only show teams that exist and have members or activity
+        AND (tc.active_members > 0 OR ts.total_services > 0)
+      ORDER BY ts.total_services DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      team_name: row.team_name,
+      active_members: Number(row.active_members),
+      total_services: Number(row.total_services),
+      avg_tat_hours: Number(row.avg_tat_hours),
+      avg_rating: Number(row.avg_rating)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchTeamPerformanceAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1670,7 +1740,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1790,6 +1860,10 @@ export const getReportData = async (params) => {
         }
         case 26: {
           compiledReport.data.teamFinancials = await fetchTeamFinancialAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 27: {
+          compiledReport.data.teamPerformance = await fetchTeamPerformanceAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {

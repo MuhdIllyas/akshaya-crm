@@ -806,6 +806,41 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 27: Team Performance / Productivity ---
+  if (reportIds.includes(27)) {
+    if (data.teamPerformance) {
+      const sheet = workbook.addWorksheet('Team Productivity');
+      
+      sheet.mergeCells('A1:E1');
+      sheet.getCell('A1').value = 'Team Performance & Productivity';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Team Name', 'Active Members', 'Services Completed', 'Avg Turnaround (Hrs)', 'Avg Customer Rating']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.teamPerformance.forEach(row => {
+        sheet.addRow([
+          row.team_name, 
+          row.active_members,
+          row.total_services,
+          row.avg_tat_hours,
+          row.avg_rating > 0 ? `${row.avg_rating} Stars` : 'No Ratings'
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('C').width = 20;
+      sheet.getColumn('D').width = 25;
+      sheet.getColumn('E').width = 20;
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -1144,6 +1179,19 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(9).fillColor('black');
         data.teamFinancials.forEach(row => { 
           doc.text(`${row.team_name} | Services: ${row.total_services} | Rev: Rs. ${row.total_revenue} | Exp: Rs. ${row.total_expenses} | Net: Rs. ${row.net_profit}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 27: Team Performance / Productivity ---
+      if (reportIds.includes(27) && data.teamPerformance) {
+        doc.fontSize(14).text('Team Performance & Productivity', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.teamPerformance.forEach(row => { 
+          const ratingStr = row.avg_rating > 0 ? `${row.avg_rating} Stars` : 'No Ratings';
+          doc.text(`${row.team_name} (${row.active_members} Members) | Services: ${row.total_services} | Avg Time: ${row.avg_tat_hours} Hrs | Rating: ${ratingStr}`);
         });
         doc.moveDown(2);
       }
