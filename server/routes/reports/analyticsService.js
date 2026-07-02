@@ -805,7 +805,6 @@ const fetchReviewAnalytics = async (client, centreId, dates) => {
         COALESCE(sr.customer_name, se.customer_name, 'Anonymous') as customer_name,
         COALESCE(sr.customer_phone, se.phone) as customer_phone,
         
-        -- 👇 Smart mapping: Get exact Category + Subcategory from the original entry!
         COALESCE(
           CASE 
             WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
@@ -822,14 +821,13 @@ const fetchReviewAnalytics = async (client, centreId, dates) => {
       FROM service_reviews sr
       LEFT JOIN staff st ON sr.staff_id = st.id
       
-      -- 👇 Join the original service entry via tracking_id
-      LEFT JOIN service_entries se ON sr.tracking_id = se.id
+      -- 👇 THE FIX: Route through the tracking table first!
+      LEFT JOIN service_tracking strak ON sr.tracking_id = strak.id
+      LEFT JOIN service_entries se ON strak.service_entry_id = se.id
+      
       LEFT JOIN services srv ON se.category_id = srv.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
-      
-      -- 👇 Fallback in case it's a direct review without an entry
       LEFT JOIN services direct_srv ON sr.service_id = direct_srv.id
-      
       WHERE sr.centre_id = $1 
         AND sr.is_submitted = true
         AND sr.submitted_at::date >= $2 
@@ -841,7 +839,7 @@ const fetchReviewAnalytics = async (client, centreId, dates) => {
       date: new Date(row.submitted_at).toISOString(),
       customer_name: row.customer_name,
       phone: row.customer_phone || 'N/A',
-      service_name: row.service_name, // 👈 Now pulls the perfectly formatted name!
+      service_name: row.service_name,
       staff_name: row.staff_name || 'Unassigned',
       service_rating: Number(row.service_rating || 0),
       staff_rating: Number(row.staff_rating || 0),
@@ -1201,7 +1199,6 @@ const fetchCustomerFeedbackAnalytics = async (client, centreId, dates) => {
         COALESCE(sr.customer_name, se.customer_name, 'Anonymous') as customer_name,
         COALESCE(sr.customer_phone, se.phone) as customer_phone,
         
-        -- Smart mapping for exact Service Name
         COALESCE(
           CASE 
             WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
@@ -1216,7 +1213,11 @@ const fetchCustomerFeedbackAnalytics = async (client, centreId, dates) => {
         sr.review_text
       FROM service_reviews sr
       LEFT JOIN staff st ON sr.staff_id = st.id
-      LEFT JOIN service_entries se ON sr.tracking_id = se.id
+      
+      -- 👇 THE FIX: Route through the tracking table first!
+      LEFT JOIN service_tracking strak ON sr.tracking_id = strak.id
+      LEFT JOIN service_entries se ON strak.service_entry_id = se.id
+      
       LEFT JOIN services srv ON se.category_id = srv.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
       LEFT JOIN services direct_srv ON sr.service_id = direct_srv.id
