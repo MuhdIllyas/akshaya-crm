@@ -534,6 +534,17 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         { stars: '1 Star',  count: distMap[1], fill: '#EF4444' }
     ];    
 
+    // ✅ Extract Team Financial Data
+    const teamFinData = apiData.teamFinancials || [];
+    const teamStats = { totalRev: 0, totalExp: 0, totalNet: 0, topTeam: null };
+    
+    teamFinData.forEach((t, index) => {
+        teamStats.totalRev += t.total_revenue;
+        teamStats.totalExp += t.total_expenses;
+        teamStats.totalNet += t.net_profit;
+        if (index === 0) teamStats.topTeam = t; // Since SQL sorted by Net Profit DESC
+    });
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1205,6 +1216,31 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Team Financials Preview Summary */}
+                            {report?.id === 26 && teamFinData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Team Gross Profit" value={`₹${teamStats.totalRev.toLocaleString('en-IN')}`} subtitle="Across all active teams" icon={FiTrendingUp} color="bg-emerald-600" />
+                                        <StatCard title="Team Overhead Expenses" value={`₹${teamStats.totalExp.toLocaleString('en-IN')}`} subtitle="Directly mapped team costs" icon={FiTrendingDown} color="bg-rose-600" />
+                                        <StatCard title="Most Profitable Team" value={teamStats.topTeam?.team_name || '-'} subtitle={`₹${(teamStats.topTeam?.net_profit || 0).toLocaleString('en-IN')} Net Profit`} icon={FiAward} color="bg-indigo-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Team Performance (Gross Profit vs Overhead)</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={teamFinData}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="team_name" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                                <Tooltip isAnimationActive={false} formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
+                                                <Legend />
+                                                <Bar dataKey="gross_profit" name="Gross Service Profit" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="total_expenses" name="Team Expenses" fill="#F87171" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -1212,7 +1248,62 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                                {report?.id === 25 ? (
+                            {/* ✅ NEW: Team Financials Table */}
+                            {report?.id === 26 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Team Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services Handled</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Revenue</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Gross Profit</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-rose-600">Expenses</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-indigo-600">Net Profit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {teamFinData.length > 0 ? (
+                                                teamFinData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm font-bold text-gray-900">
+                                                            <div className="flex items-center">
+                                                                {idx === 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" />}
+                                                                {row.team_name}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center font-medium">
+                                                            {row.total_services}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right">
+                                                            ₹{row.total_revenue.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">
+                                                            ₹{row.gross_profit.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">
+                                                            - ₹{row.total_expenses.toLocaleString('en-IN')}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold bg-indigo-50/30">
+                                                            ₹{row.net_profit.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="6" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiUsers className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Team Financials</h3>
+                                                        <p className="text-xs text-gray-500">No services or expenses were mapped to a team during this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 25 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

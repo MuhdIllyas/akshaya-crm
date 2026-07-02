@@ -1243,6 +1243,70 @@ const fetchCustomerFeedbackAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Team Financials Fetcher (Report ID 26)
+const fetchTeamFinancialAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      WITH team_service_stats AS (
+        SELECT 
+          t.id AS team_id,
+          COUNT(DISTINCT se.id) AS total_services,
+          COALESCE(SUM(se.total_charges), 0) AS total_revenue,
+          COALESCE(SUM(se.service_charges), 0) AS gross_service_profit
+        FROM teams t
+        -- 👇 Connect the team to its members, and the members to their completed services
+        JOIN team_members tm ON t.id = tm.team_id
+        JOIN service_entries se ON tm.staff_id = se.staff_id
+        WHERE t.centre_id = $1
+          AND tm.is_active = true
+          AND se.created_at::date >= $2
+          AND se.created_at::date <= $3
+          AND se.status = 'completed'
+        GROUP BY t.id
+      ),
+      team_expense_stats AS (
+        SELECT 
+          team_id,
+          COALESCE(SUM(amount), 0) AS total_expenses
+        FROM expenses
+        WHERE centre_id = $1
+          AND date::date >= $2
+          AND date::date <= $3
+          AND team_id IS NOT NULL
+        GROUP BY team_id
+      )
+      SELECT 
+        t.id,
+        t.name as team_name,
+        COALESCE(tss.total_services, 0) AS total_services,
+        COALESCE(tss.total_revenue, 0) AS total_revenue,
+        COALESCE(tss.gross_service_profit, 0) AS gross_service_profit,
+        COALESCE(tes.total_expenses, 0) AS total_expenses,
+        -- 👇 Calculate the True Net Profit of the Team!
+        (COALESCE(tss.gross_service_profit, 0) - COALESCE(tes.total_expenses, 0)) AS net_team_profit
+      FROM teams t
+      LEFT JOIN team_service_stats tss ON t.id = tss.team_id
+      LEFT JOIN team_expense_stats tes ON t.id = tes.team_id
+      WHERE t.centre_id = $1
+        -- Only show teams that actually had financial activity in this period
+        AND (tss.total_services > 0 OR tes.total_expenses > 0)
+      ORDER BY net_team_profit DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      team_name: row.team_name,
+      total_services: Number(row.total_services),
+      total_revenue: Number(row.total_revenue),
+      gross_profit: Number(row.gross_service_profit),
+      total_expenses: Number(row.total_expenses),
+      net_profit: Number(row.net_team_profit)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchTeamFinancialAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1606,7 +1670,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1722,6 +1786,10 @@ export const getReportData = async (params) => {
         }
         case 25: {
           compiledReport.data.customerFeedback = await fetchCustomerFeedbackAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 26: {
+          compiledReport.data.teamFinancials = await fetchTeamFinancialAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {
