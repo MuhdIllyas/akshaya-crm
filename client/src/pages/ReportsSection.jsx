@@ -432,6 +432,9 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 10); // Top 10 completed volume
+
+    // ✅ Extract Staff-wise Services Data
+    const staffWiseServicesData = apiData.staffWiseServices || [];
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -921,6 +924,23 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Staff-wise Services Preview Summary */}
+                            {report?.id === 19 && staffWiseServicesData.length > 0 && (
+                                <>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <div className="flex items-center space-x-3 mb-4">
+                                            <div className="p-2 bg-indigo-50 rounded-lg">
+                                                <FiUsers className="h-5 w-5 text-indigo-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-semibold text-gray-900 text-sm">Staff Specialization Overview</h3>
+                                                <p className="text-xs text-gray-500">Switch to the Data tab for a detailed breakdown of services performed by each staff member.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -928,8 +948,88 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Completed Services Table */}
-                            {report?.id === 18 ? (
+                            {/* ✅ NEW: Staff-wise Services Grouped Table */}
+                            {report?.id === 19 ? (
+                                <div className="p-0">
+                                    {(() => {
+                                        // Mathematically group the data by Staff Name
+                                        const groupedByStaff = {};
+                                        staffWiseServicesData.forEach(row => {
+                                            if (!groupedByStaff[row.staff_name]) {
+                                                groupedByStaff[row.staff_name] = { totalServices: 0, totalProfit: 0, rows: [] };
+                                            }
+                                            groupedByStaff[row.staff_name].rows.push(row);
+                                            groupedByStaff[row.staff_name].totalServices += row.total_requests;
+                                            groupedByStaff[row.staff_name].totalProfit += row.gross_profit;
+                                        });
+
+                                        return (
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Handled</th>
+                                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Volume</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Revenue Collected</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Gross Profit</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {Object.keys(groupedByStaff).length > 0 ? (
+                                                        Object.entries(groupedByStaff).map(([staffName, data], groupIdx) => (
+                                                            <React.Fragment key={groupIdx}>
+                                                                
+                                                                {/* 🟦 BEAUTIFUL STAFF BANNER ROW */}
+                                                                <tr className="bg-indigo-50/60 border-t border-indigo-100">
+                                                                    <td colSpan="4" className="px-4 py-2 text-sm font-bold text-indigo-900">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center">
+                                                                                <FiUser className="mr-2 h-4 w-4 text-indigo-500" />
+                                                                                {staffName}
+                                                                            </div>
+                                                                            <div className="flex items-center space-x-4">
+                                                                                <span className="text-[11px] font-bold text-indigo-600 bg-indigo-100/80 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                                                    {data.totalServices} Total Services
+                                                                                </span>
+                                                                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                                                    ₹{data.totalProfit.toLocaleString('en-IN')} Profit
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+
+                                                                {/* 🗂️ SERVICE ROWS UNDERNEATH THE BANNER */}
+                                                                {data.rows.map((row, idx) => (
+                                                                    <tr key={`${groupIdx}-${idx}`} className="hover:bg-gray-50 transition-colors">
+                                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium pl-8">
+                                                                            {row.service_name}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.total_requests}</td>
+                                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right font-medium">₹{row.revenue_collected.toLocaleString('en-IN')}</td>
+                                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                                            ₹{row.gross_profit.toLocaleString('en-IN')}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </React.Fragment>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan="4" className="px-4 py-12 text-center">
+                                                                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                                    <FiBriefcase className="h-5 w-5 text-gray-400" />
+                                                                </div>
+                                                                <h3 className="text-sm font-medium text-gray-900 mb-1">No Services Found</h3>
+                                                                <p className="text-xs text-gray-500">No services were completed by the selected staff in this period.</p>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        );
+                                    })()}
+                                </div>
+                            ) : report?.id === 18 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

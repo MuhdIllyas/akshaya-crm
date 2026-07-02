@@ -952,6 +952,57 @@ const fetchCompletedServicesAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Staff-wise Services Fetcher (Service Breakdown per Employee)
+const fetchStaffWiseServicesAnalytics = async (client, centreId, dates, selectedStaffId) => {
+  try {
+    let staffFilter = '';
+    const params = [centreId, dates.fromDate, dates.toDate];
+    
+    // If a specific staff member was selected in the UI dropdown, filter by them!
+    if (selectedStaffId && selectedStaffId !== 'all') {
+      params.push(selectedStaffId);
+      staffFilter = `AND st.id = $4`;
+    }
+
+    const res = await client.query(`
+      SELECT 
+        st.name as staff_name,
+        COALESCE(st.role, 'staff') as role,
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        COUNT(se.id) as total_requests,
+        COALESCE(SUM(se.total_charges), 0) as revenue_collected,
+        COALESCE(SUM(se.service_charges), 0) as gross_profit
+      FROM service_entries se
+      JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      WHERE st.centre_id = $1 
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3
+        AND se.status = 'completed'
+        ${staffFilter}
+      GROUP BY st.id, st.name, st.role, srv.name, sub.name
+      -- 👇 Sort by Staff Name alphabetically, then by their highest volume services
+      ORDER BY st.name ASC, total_requests DESC
+    `, params);
+
+    return res.rows.map(row => ({
+      staff_name: row.staff_name,
+      role: row.role,
+      service_name: row.service_name,
+      total_requests: Number(row.total_requests),
+      revenue_collected: Number(row.revenue_collected),
+      gross_profit: Number(row.gross_profit)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchStaffWiseServicesAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -1246,7 +1297,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1331,6 +1382,10 @@ export const getReportData = async (params) => {
         case 18: {
           compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId, reportDates);
           compiledReport.data.completedServicesReport = await fetchCompletedServicesAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 19: {
+          compiledReport.data.staffWiseServices = await fetchStaffWiseServicesAnalytics(client, targetCentreId, reportDates, staffId);
           break;
         }
         default: {

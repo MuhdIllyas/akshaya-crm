@@ -521,6 +521,40 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 19: Staff-wise Services ---
+  if (reportIds.includes(19)) {
+    if (data.staffWiseServices) {
+      const sheet = workbook.addWorksheet('Staff Service Breakdown');
+      
+      sheet.mergeCells('A1:E1');
+      sheet.getCell('A1').value = 'Staff-wise Services Breakdown';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Staff Name', 'Service Handled', 'Volume (Requests)', 'Revenue Collected', 'Gross Profit']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.staffWiseServices.forEach(row => {
+        sheet.addRow([
+          row.staff_name, 
+          row.service_name,
+          row.total_requests,
+          row.revenue_collected,
+          row.gross_profit
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('B').width = 35;
+      ['D', 'E'].forEach(col => sheet.getColumn(col).numFmt = '₹#,##0.00');
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -747,6 +781,25 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(9).fillColor('black');
         data.completedServicesReport.forEach(row => { 
           doc.text(`[${new Date(row.completion_date).toLocaleDateString('en-IN')}] ${row.customer_name} | ${row.service_name} | TAT: ${row.days_taken} Days | Staff: ${row.assigned_staff}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 19: Staff-wise Services ---
+      if (reportIds.includes(19) && data.staffWiseServices) {
+        doc.fontSize(14).text('Staff Service Breakdown', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        let currentStaff = '';
+        data.staffWiseServices.forEach(row => { 
+          if (currentStaff !== row.staff_name) {
+             doc.moveDown(0.5);
+             doc.font('Helvetica-Bold').text(`-- ${row.staff_name} --`);
+             doc.font('Helvetica');
+             currentStaff = row.staff_name;
+          }
+          doc.text(`   ${row.service_name} | Qty: ${row.total_requests} | Profit: Rs. ${row.gross_profit}`);
         });
         doc.moveDown(2);
       }
