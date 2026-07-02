@@ -708,22 +708,40 @@ const fetchIncentiveAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ NEW: Review Report Fetcher (Customer Feedback)
+// ✅ Review Report Fetcher (Smart Service Name Mapping)
 const fetchReviewAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
       SELECT 
         sr.submitted_at,
-        COALESCE(sr.customer_name, 'Anonymous') as customer_name,
-        sr.customer_phone,
-        s.name as service_name,
+        COALESCE(sr.customer_name, se.customer_name, 'Anonymous') as customer_name,
+        COALESCE(sr.customer_phone, se.phone) as customer_phone,
+        
+        -- 👇 Smart mapping: Get exact Category + Subcategory from the original entry!
+        COALESCE(
+          CASE 
+            WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+            ELSE srv.name
+          END,
+          direct_srv.name,
+          'General Service'
+        ) as service_name,
+        
         st.name as staff_name,
         sr.service_rating,
         sr.staff_rating,
         sr.review_text
       FROM service_reviews sr
-      LEFT JOIN services s ON sr.service_id = s.id
       LEFT JOIN staff st ON sr.staff_id = st.id
+      
+      -- 👇 Join the original service entry via tracking_id
+      LEFT JOIN service_entries se ON sr.tracking_id = se.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      
+      -- 👇 Fallback in case it's a direct review without an entry
+      LEFT JOIN services direct_srv ON sr.service_id = direct_srv.id
+      
       WHERE sr.centre_id = $1 
         AND sr.is_submitted = true
         AND sr.submitted_at::date >= $2 
@@ -735,7 +753,7 @@ const fetchReviewAnalytics = async (client, centreId, dates) => {
       date: new Date(row.submitted_at).toISOString(),
       customer_name: row.customer_name,
       phone: row.customer_phone || 'N/A',
-      service_name: row.service_name || 'General Service',
+      service_name: row.service_name, // 👈 Now pulls the perfectly formatted name!
       staff_name: row.staff_name || 'Unassigned',
       service_rating: Number(row.service_rating || 0),
       staff_rating: Number(row.staff_rating || 0),
