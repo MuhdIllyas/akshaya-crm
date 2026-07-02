@@ -309,7 +309,7 @@ const fetchServiceProfitAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ Pending Services Fetcher (Operational Bottlenecks)
+// ✅ Pending Services Fetcher (Uses service_tracking for Operational Status)
 const fetchPendingServicesAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
@@ -323,17 +323,20 @@ const fetchPendingServicesAnalytics = async (client, centreId, dates) => {
           ELSE COALESCE(srv.name, 'Uncategorized Service')
         END as service_name,
         st.name as assigned_staff,
-        se.status
+        strak.status -- 👈 Pulling operational status from the tracking table!
       FROM service_entries se
+      
+      -- 👇 Join the tracking table using the entry ID
+      JOIN service_tracking strak ON strak.service_entry_id = se.id 
+      
       JOIN staff st ON se.staff_id = st.id
       LEFT JOIN services srv ON se.category_id = srv.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
       WHERE st.centre_id = $1 
-        -- 👇 Exclude completed services to only show the backlog
-        AND se.status != 'completed'
+        -- 👇 Filter based on OPERATIONAL tracking status, not payment status!
+        AND LOWER(strak.status) != 'completed'
         AND se.created_at::date >= $2 
         AND se.created_at::date <= $3
-      -- 👇 Sort by Oldest First so the most delayed items are at the top!
       ORDER BY se.created_at ASC 
     `, [centreId, dates.fromDate, dates.toDate]);
 
