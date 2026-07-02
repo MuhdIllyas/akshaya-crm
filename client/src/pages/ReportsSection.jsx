@@ -1027,62 +1027,84 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             )}
 
                             {/* Customer Summary Preview */}
-                            {report?.id === 21 && customerSummaryData.length > 0 && (
+                            {report?.id === 21 && (
                                 <>
                                     <div className="grid grid-cols-3 gap-3">
                                         <StatCard title="Total Unique Customers" value={custStats.total} subtitle="Serviced in Period" icon={FiUsers} color="bg-blue-600" />
                                         <StatCard title="New Customers" value={custStats.new} subtitle="First time visits" icon={FiUserPlus} color="bg-emerald-600" />
                                         <StatCard title="Returning Customers" value={custStats.returning} subtitle="Loyal clients" icon={FiRefreshCw} color="bg-indigo-600" />
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                                        <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Acquisition (New vs Returning)</h3>
-                                            <ResponsiveContainer width="100%" height={200}>
-                                                <PieChart>
-                                                    <Pie data={returningChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
-                                                        {returningChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
-                                                    </Pie>
-                                                    <Tooltip isAnimationActive={false} />
-                                                    <Legend />
-                                                </PieChart>
-                                            </ResponsiveContainer>
+                                    
+                                    {customerSummaryData.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                                            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Acquisition (New vs Returning)</h3>
+                                                <ResponsiveContainer width="100%" height={200}>
+                                                    <PieChart>
+                                                        <Pie data={returningChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
+                                                            {returningChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
+                                                        </Pie>
+                                                        <Tooltip isAnimationActive={false} />
+                                                        <Legend />
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Profile Type (Registered vs Walk-in)</h3>
+                                                <ResponsiveContainer width="100%" height={200}>
+                                                    <PieChart>
+                                                        <Pie data={registeredChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
+                                                            {registeredChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
+                                                        </Pie>
+                                                        <Tooltip isAnimationActive={false} />
+                                                        <Legend />
+                                                    </PieChart>
+                                                </ResponsiveContainer>
+                                            </div>
                                         </div>
-                                        <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Profile Type (Registered vs Walk-in)</h3>
-                                            <ResponsiveContainer width="100%" height={200}>
-                                                <PieChart>
-                                                    <Pie data={registeredChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
-                                                        {registeredChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
-                                                    </Pie>
-                                                    <Tooltip isAnimationActive={false} />
-                                                    <Legend />
-                                                </PieChart>
-                                            </ResponsiveContainer>
+                                    ) : (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-12 mt-6 text-center">
+                                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <FiUsers className="h-5 w-5 text-gray-400" />
+                                            </div>
+                                            <h3 className="text-sm font-medium text-gray-900 mb-1">No Customer Data</h3>
+                                            <p className="text-xs text-gray-500">No services were recorded during this period.</p>
                                         </div>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
                             {/* Returning Customers Preview Summary */}
-                            {report?.id === 22 && repeatCustomerData.length > 0 && (
+                            {report?.id === 22 && (
                                 <>
                                     <div className="grid grid-cols-3 gap-3">
                                         <StatCard title="Total Repeat Customers" value={repeatStats.totalVips} subtitle="Visited in this period" icon={FiRefreshCw} color="bg-emerald-600" />
                                         <StatCard title="Avg Lifetime Value (LTV)" value={`₹${avgLTV.toLocaleString('en-IN')}`} subtitle="Per returning customer" icon={FiTrendingUp} color="bg-indigo-600" />
                                         <StatCard title="Most Loyal VIP" value={repeatStats.mostFrequent?.customer_name || '-'} subtitle={`${repeatStats.mostFrequent?.lifetime_visits || 0} lifetime visits`} icon={FiAward} color="bg-amber-500" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 VIP Customers (By Lifetime Visits)</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={repeatCustomerData.slice(0, 10)}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="customer_name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 10 ? val.substring(0, 10) + '..' : val} />
-                                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                                                <Tooltip isAnimationActive={false} />
-                                                <Bar dataKey="lifetime_visits" name="Lifetime Visits" fill="#10B981" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
+                                    
+                                    {repeatCustomerData.length > 0 ? (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 VIP Customers (By Lifetime Visits)</h3>
+                                            <ResponsiveContainer width="100%" height={250}>
+                                                <BarChart data={repeatCustomerData.slice(0, 10)}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                    <XAxis dataKey="customer_name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 10 ? val.substring(0, 10) + '..' : val} />
+                                                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                                                    <Tooltip isAnimationActive={false} />
+                                                    <Bar dataKey="lifetime_visits" name="Lifetime Visits" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-12 mt-6 text-center">
+                                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <FiRefreshCw className="h-5 w-5 text-gray-400" />
+                                            </div>
+                                            <h3 className="text-sm font-medium text-gray-900 mb-1">No Repeat Customers Yet</h3>
+                                            <p className="text-xs text-gray-500">To appear on this report, a phone number must have at least 2 completed services in the system.</p>
+                                        </div>
+                                    )}
                                 </>
                             )}
                         </div>
