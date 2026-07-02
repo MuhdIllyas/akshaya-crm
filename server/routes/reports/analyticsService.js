@@ -1243,7 +1243,7 @@ const fetchCustomerFeedbackAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ NEW: Team Financials Fetcher (Report ID 26)
+// ✅ Team Financials Fetcher (Report ID 26)
 const fetchTeamFinancialAnalytics = async (client, centreId, dates) => {
   try {
     const res = await client.query(`
@@ -1254,7 +1254,6 @@ const fetchTeamFinancialAnalytics = async (client, centreId, dates) => {
           COALESCE(SUM(se.total_charges), 0) AS total_revenue,
           COALESCE(SUM(se.service_charges), 0) AS gross_service_profit
         FROM teams t
-        -- 👇 Connect the team to its members, and the members to their completed services
         JOIN team_members tm ON t.id = tm.team_id
         JOIN service_entries se ON tm.staff_id = se.staff_id
         WHERE t.centre_id = $1
@@ -1270,9 +1269,12 @@ const fetchTeamFinancialAnalytics = async (client, centreId, dates) => {
           COALESCE(SUM(amount), 0) AS total_expenses
         FROM expenses
         WHERE centre_id = $1
-          AND date::date >= $2
-          AND date::date <= $3
+          -- 👇 THE FIX: Using your exact schema column 'expense_date'
+          AND expense_date >= $2
+          AND expense_date <= $3
           AND team_id IS NOT NULL
+          -- (Optional) If you only want approved expenses to count against profit:
+          -- AND status = 'approved'
         GROUP BY team_id
       )
       SELECT 
@@ -1282,13 +1284,11 @@ const fetchTeamFinancialAnalytics = async (client, centreId, dates) => {
         COALESCE(tss.total_revenue, 0) AS total_revenue,
         COALESCE(tss.gross_service_profit, 0) AS gross_service_profit,
         COALESCE(tes.total_expenses, 0) AS total_expenses,
-        -- 👇 Calculate the True Net Profit of the Team!
         (COALESCE(tss.gross_service_profit, 0) - COALESCE(tes.total_expenses, 0)) AS net_team_profit
       FROM teams t
       LEFT JOIN team_service_stats tss ON t.id = tss.team_id
       LEFT JOIN team_expense_stats tes ON t.id = tes.team_id
       WHERE t.centre_id = $1
-        -- Only show teams that actually had financial activity in this period
         AND (tss.total_services > 0 OR tes.total_expenses > 0)
       ORDER BY net_team_profit DESC
     `, [centreId, dates.fromDate, dates.toDate]);
