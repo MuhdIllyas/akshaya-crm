@@ -585,57 +585,87 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             {/* ✅ NEW: Attendance Table */}
                             {report?.id === 9 ? (
                                 <div className="p-0">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-gray-50">
-                                            <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check In</th>
-                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check Out</th>
-                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Late (Mins)</th>
-                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Hours</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200">
-                                            {attendanceData.length > 0 ? (
-                                                attendanceData.map((row, idx) => (
-                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
-                                                            {new Date(row.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm text-gray-600">
-                                                            {row.staff_name}
-                                                            <span className="ml-2 text-[10px] text-gray-400 capitalize">({row.role})</span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm">
-                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
-                                                                row.status === 'present' ? 'bg-emerald-100 text-emerald-800' : 
-                                                                row.status === 'absent' ? 'bg-rose-100 text-rose-800' : 
-                                                                'bg-amber-100 text-amber-800'
-                                                            }`}>
-                                                                {row.status.toUpperCase()}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.check_in}</td>
-                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.check_out}</td>
-                                                        <td className={`px-4 py-3 text-sm text-right font-medium ${row.late_minutes > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                                                            {row.late_minutes > 0 ? `${row.late_minutes}m` : '-'}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
-                                                            {row.total_hours > 0 ? `${row.total_hours} hrs` : '-'}
-                                                        </td>
+                                    {/* 1. Mathematically group the data by Date before rendering */}
+                                    {(() => {
+                                        const groupedAttendance = {};
+                                        attendanceData.forEach(row => {
+                                            if (!groupedAttendance[row.date]) groupedAttendance[row.date] = [];
+                                            groupedAttendance[row.date].push(row);
+                                        });
+
+                                        return (
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check In</th>
+                                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check Out</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Late (Mins)</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Hours</th>
                                                     </tr>
-                                                ))
-                                            ) : (
-                                                <tr>
-                                                    <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
-                                                        No attendance records found for this period.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {Object.keys(groupedAttendance).length > 0 ? (
+                                                        Object.entries(groupedAttendance).map(([dateStr, records], groupIdx) => (
+                                                            <React.Fragment key={groupIdx}>
+                                                                
+                                                                {/* 🟦 BEAUTIFUL DATE BANNER ROW */}
+                                                                <tr className="bg-indigo-50/60 border-t border-indigo-100">
+                                                                    <td colSpan="6" className="px-4 py-2 text-sm font-bold text-indigo-900">
+                                                                        <div className="flex items-center">
+                                                                            <FiCalendarIcon className="mr-2 h-4 w-4 text-indigo-500" />
+                                                                            {new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                                                            <span className="ml-3 text-[10px] font-bold text-indigo-600 bg-indigo-100/80 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                                                {records.length} Staff Logged
+                                                                            </span>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+
+                                                                {/* 🧑‍🤝‍🧑 STAFF ROWS UNDERNEATH THE BANNER */}
+                                                                {records.map((row, idx) => (
+                                                                    <tr key={`${groupIdx}-${idx}`} className="hover:bg-gray-50 transition-colors">
+                                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium pl-6">
+                                                                            {row.staff_name}
+                                                                            <span className="ml-2 text-[10px] text-gray-400 capitalize font-normal">({row.role})</span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-sm">
+                                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
+                                                                                row.status === 'present' ? 'bg-emerald-100 text-emerald-800' : 
+                                                                                row.status === 'absent' ? 'bg-rose-100 text-rose-800' : 
+                                                                                'bg-amber-100 text-amber-800'
+                                                                            }`}>
+                                                                                {row.status.toUpperCase()}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.check_in}</td>
+                                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.check_out}</td>
+                                                                        <td className={`px-4 py-3 text-sm text-right font-medium ${row.late_minutes > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                                                            {row.late_minutes > 0 ? `${row.late_minutes}m` : '-'}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                                            {row.total_hours > 0 ? `${row.total_hours} hrs` : '-'}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </React.Fragment>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan="6" className="px-4 py-12 text-center">
+                                                                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                                    <FiUsers className="h-5 w-5 text-gray-400" />
+                                                                </div>
+                                                                <h3 className="text-sm font-medium text-gray-900 mb-1">No Attendance Records</h3>
+                                                                <p className="text-xs text-gray-500">No staff punched in during the selected period.</p>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        );
+                                    })()}
                                 </div>
                             ) : report?.id === 8 ? (
                                 <div className="p-0">
