@@ -497,21 +497,24 @@ const fetchDetailedAttendanceAnalytics = async (client, centreId, dates) => {
     const res = await client.query(`
       SELECT 
         a.date,
+        s.id as staff_id,
         s.name as staff_name,
         COALESCE(s.role, 'staff') as role,
-        a.status, 
-        a.punch_in,
-        a.punch_out,
-        COALESCE(a.late_minutes, 0) as late_minutes
+        MAX(a.status) as status, 
+        MIN(a.punch_in) as punch_in,   
+        MAX(a.punch_out) as punch_out, 
+        MAX(COALESCE(a.late_minutes, 0)) as late_minutes,
+        SUM(COALESCE(a.hours, 0)) as total_hours 
       FROM attendance a
       JOIN staff s ON a.staff_id = s.id
       WHERE s.centre_id = $1
         AND a.date::date >= $2 
         AND a.date::date <= $3
+      GROUP BY a.date, s.id, s.name, s.role 
       ORDER BY a.date DESC, s.name ASC
     `, [centreId, dates.fromDate, dates.toDate]);
 
-    console.log(`[API] Found ${res.rows.length} Attendance records in DB.`);
+    console.log(`[API] Found ${res.rows.length} Aggregated Attendance records in DB.`);
 
     return res.rows.map(row => ({
       date: new Date(row.date).toISOString().split('T')[0],
@@ -520,7 +523,8 @@ const fetchDetailedAttendanceAnalytics = async (client, centreId, dates) => {
       status: row.status ? row.status.toLowerCase() : 'unknown',
       check_in: row.punch_in ? row.punch_in.substring(0, 5) : '-', 
       check_out: row.punch_out ? row.punch_out.substring(0, 5) : '-',
-      late_minutes: Number(row.late_minutes)
+      late_minutes: Number(row.late_minutes),
+      total_hours: Number(row.total_hours).toFixed(2) 
     }));
   } catch (error) {
     console.error("SQL Error in fetchDetailedAttendanceAnalytics:", error.message);

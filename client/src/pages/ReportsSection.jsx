@@ -594,6 +594,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check In</th>
                                                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Check Out</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Late (Mins)</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Hours</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
@@ -620,6 +621,9 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                         <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.check_out}</td>
                                                         <td className={`px-4 py-3 text-sm text-right font-medium ${row.late_minutes > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
                                                             {row.late_minutes > 0 ? `${row.late_minutes}m` : '-'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                            {row.total_hours > 0 ? `${row.total_hours} hrs` : '-'}
                                                         </td>
                                                     </tr>
                                                 ))
