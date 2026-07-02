@@ -234,6 +234,41 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 10: Staff Performance ---
+  if (reportIds.includes(10)) {
+    if (data.performanceReport) {
+      const sheet = workbook.addWorksheet('Staff Performance');
+      
+      sheet.mergeCells('A1:E1');
+      sheet.getCell('A1').value = 'Staff Productivity & Revenue';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Staff Name', 'Role', 'Services Completed', 'Total Revenue', 'Gross Profit']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.performanceReport.forEach(row => {
+        sheet.addRow([
+          row.staff_name, 
+          row.role.toUpperCase(), 
+          row.total_services, 
+          row.total_revenue, 
+          row.gross_profit
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('B').width = 15;
+      sheet.getColumn('D').numFmt = '₹#,##0.00';
+      sheet.getColumn('E').numFmt = '₹#,##0.00';
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -360,6 +395,18 @@ export const buildPDF = (reportData, reportIds) => {
         data.attendanceReport.slice(0, 100).forEach(row => { 
           const dateStr = new Date(row.date).toLocaleDateString('en-IN');
           doc.text(`${dateStr} | ${row.staff_name} | ${row.status.toUpperCase()} | In: ${row.check_in} | Late: ${row.late_minutes}m`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 10: Staff Performance ---
+      if (reportIds.includes(10) && data.performanceReport) {
+        doc.fontSize(14).text('Staff Productivity & Revenue', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.performanceReport.forEach(row => { 
+          doc.text(`${row.staff_name} (${row.role}) | Services: ${row.total_services} | Revenue: Rs. ${row.total_revenue} | Profit: Rs. ${row.gross_profit}`);
         });
         doc.moveDown(2);
       }

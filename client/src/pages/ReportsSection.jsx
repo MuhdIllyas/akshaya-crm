@@ -310,6 +310,12 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         { name: 'Absent', value: attendanceSummary.absent },
         { name: 'Half Day', value: attendanceSummary.half_day || 0 }
     ].filter(d => d.value > 0);
+
+    // ✅ Extract Performance Data and calculate leaderboard stats
+    const performanceData = apiData.performanceReport || [];
+    const topPerformer = performanceData.length > 0 ? performanceData[0] : null;
+    const totalTeamServices = performanceData.reduce((sum, r) => sum + r.total_services, 0);
+    const activeContributors = performanceData.filter(r => r.total_services > 0).length;
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -575,6 +581,41 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Performance Report Preview Summary */}
+                            {report?.id === 10 && performanceData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {/* Golden Top Performer Card */}
+                                        <StatCard 
+                                            title="Top Performer" 
+                                            value={topPerformer?.staff_name || '-'} 
+                                            subtitle={`₹${(topPerformer?.total_revenue || 0).toLocaleString('en-IN')} Generated`} 
+                                            icon={FiAward} 
+                                            color="bg-amber-500" 
+                                        />
+                                        <StatCard title="Team Services" value={totalTeamServices} subtitle="Successfully Completed" icon={FiCheckCircle} color="bg-emerald-600" />
+                                        <StatCard title="Active Contributors" value={activeContributors} subtitle="Staff Generated Revenue" icon={FiUsers} color="bg-blue-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Revenue by Staff Member</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={performanceData.filter(d => d.total_revenue > 0)}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="staff_name" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                                <Tooltip 
+                                                    isAnimationActive={false} 
+                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                                />
+                                                <Legend />
+                                                <Bar dataKey="total_revenue" name="Total Revenue" fill="#10B981" radius={[2, 2, 0, 0]} />
+                                                <Bar dataKey="gross_profit" name="Gross Profit" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -582,8 +623,50 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Attendance Table */}
-                            {report?.id === 9 ? (
+                            {/* ✅ NEW: Staff Performance Table */}
+                            {report?.id === 10 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services Completed</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Revenue</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Gross Profit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {performanceData.length > 0 ? (
+                                                performanceData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                            <div className="flex items-center">
+                                                                {/* Optional: Add a little trophy to #1! */}
+                                                                {idx === 0 && row.total_services > 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" />}
+                                                                {row.staff_name}
+                                                                <span className="ml-2 text-[10px] text-gray-400 capitalize font-normal">({row.role})</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.total_services}</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.total_revenue.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">₹{row.gross_profit.toLocaleString('en-IN')}</td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="4" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiUsers className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Productivity Data</h3>
+                                                        <p className="text-xs text-gray-500">No services were completed by staff in this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 9 ? (
                                 <div className="p-0">
                                     {/* 1. Mathematically group the data by Date before rendering */}
                                     {(() => {

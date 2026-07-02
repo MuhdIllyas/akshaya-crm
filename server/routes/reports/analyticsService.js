@@ -532,6 +532,43 @@ const fetchDetailedAttendanceAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Staff Performance Fetcher (Revenue & Productivity)
+const fetchPerformanceAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        s.id as staff_id,
+        s.name as staff_name,
+        COALESCE(s.role, 'staff') as role,
+        COUNT(se.id) as total_services,
+        COALESCE(SUM(se.total_charges), 0) as total_revenue,
+        COALESCE(SUM(se.service_charges), 0) as gross_profit
+      FROM staff s
+      -- 👇 Join services completed within the date range
+      LEFT JOIN service_entries se ON s.id = se.staff_id 
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3
+        AND se.status = 'completed'
+      WHERE s.centre_id = $1 
+        -- 👇 Include Active staff OR anyone who happened to complete a service
+        AND (s.status = 'Active' OR se.id IS NOT NULL)
+      GROUP BY s.id, s.name, s.role
+      ORDER BY total_revenue DESC, total_services DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      staff_name: row.staff_name,
+      role: row.role,
+      total_services: Number(row.total_services),
+      total_revenue: Number(row.total_revenue),
+      gross_profit: Number(row.gross_profit)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchPerformanceAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -826,7 +863,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -862,6 +899,11 @@ export const getReportData = async (params) => {
           compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
           // Detailed list for the Table & Charts
           compiledReport.data.attendanceReport = await fetchDetailedAttendanceAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 10: {
+          compiledReport.data.staff = await fetchStaffAnalytics(client, targetCentreId, reportDates);
+          compiledReport.data.performanceReport = await fetchPerformanceAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 3:
