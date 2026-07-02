@@ -1003,6 +1003,49 @@ const fetchStaffWiseServicesAnalytics = async (client, centreId, dates, selected
   }
 };
 
+// ✅ Service Time Fetcher (Average Turnaround Time Calculation)
+const fetchServiceTimeAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        COUNT(se.id) as total_requests,
+        
+        -- 👇 Calculates exact time difference in HOURS
+        ROUND(AVG(GREATEST(0, EXTRACT(EPOCH FROM (strak.updated_at - se.created_at)) / 3600))::numeric, 1) as avg_hours,
+        ROUND(MIN(GREATEST(0, EXTRACT(EPOCH FROM (strak.updated_at - se.created_at)) / 3600))::numeric, 1) as min_hours,
+        ROUND(MAX(GREATEST(0, EXTRACT(EPOCH FROM (strak.updated_at - se.created_at)) / 3600))::numeric, 1) as max_hours
+        
+      FROM service_entries se
+      JOIN service_tracking strak ON strak.service_entry_id = se.id 
+      JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      WHERE st.centre_id = $1 
+        -- Only calculate time for services that actually finished!
+        AND LOWER(strak.status) IN ('completed', 'paid', 'delivered')
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3
+      GROUP BY srv.name, sub.name
+      ORDER BY avg_hours DESC -- Sort by slowest services first
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      service_name: row.service_name,
+      total_requests: Number(row.total_requests),
+      avg_hours: Number(row.avg_hours),
+      min_hours: Number(row.min_hours),
+      max_hours: Number(row.max_hours)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchServiceTimeAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -1297,7 +1340,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1386,6 +1429,10 @@ export const getReportData = async (params) => {
         }
         case 19: {
           compiledReport.data.staffWiseServices = await fetchStaffWiseServicesAnalytics(client, targetCentreId, reportDates, staffId);
+          break;
+        }
+        case 20: {
+          compiledReport.data.serviceTimeReport = await fetchServiceTimeAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {

@@ -435,6 +435,32 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
 
     // ✅ Extract Staff-wise Services Data
     const staffWiseServicesData = apiData.staffWiseServices || [];
+
+    // ✅ Extract Service Time Data
+    const serviceTimeData = apiData.serviceTimeReport || [];
+    
+    // Smart Time Formatter
+    const formatDuration = (hours) => {
+        if (hours < 1) return '< 1 Hr';
+        if (hours < 24) return `${hours.toFixed(1)} Hrs`;
+        return `${(hours / 24).toFixed(1)} Days`;
+    };
+
+    // Calculate overall averages
+    let totalServiceHours = 0, totalServiceVolume = 0;
+    serviceTimeData.forEach(r => {
+        totalServiceHours += (r.avg_hours * r.total_requests);
+        totalServiceVolume += r.total_requests;
+    });
+    
+    const overallAvgHours = totalServiceVolume > 0 ? (totalServiceHours / totalServiceVolume) : 0;
+    const slowestService = serviceTimeData.length > 0 ? serviceTimeData[0] : null; // Already sorted DESC by backend
+    
+    // Convert to days for the Bar Chart so it scales nicely
+    const timeChartData = serviceTimeData.slice(0, 10).map(r => ({
+        name: r.service_name,
+        avg_days: Number((r.avg_hours / 24).toFixed(1))
+    }));
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -941,6 +967,31 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Service Time Analysis Preview Summary */}
+                            {report?.id === 20 && serviceTimeData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Overall Avg Turnaround" value={formatDuration(overallAvgHours)} subtitle={`Across ${totalServiceVolume} completed services`} icon={FiClock} color="bg-indigo-600" />
+                                        <StatCard title="Slowest Service Type" value={slowestService?.service_name || '-'} subtitle={`Averages ${formatDuration(slowestService?.avg_hours || 0)}`} icon={FiTrendingUp} color="bg-rose-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Longest Running Services (Average Days)</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={timeChartData}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} />
+                                                <YAxis tick={{ fontSize: 11 }} />
+                                                <Tooltip 
+                                                    isAnimationActive={false} 
+                                                    formatter={(value) => `${value} Days`} 
+                                                />
+                                                <Bar dataKey="avg_days" name="Average Time (Days)" fill="#F59E0B" radius={[2, 2, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -948,8 +999,53 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Staff-wise Services Grouped Table */}
-                            {report?.id === 19 ? (
+                            {/* ✅ NEW: Service Time Analysis Table */}
+                            {report?.id === 20 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Category</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Total Completed</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Fastest Time</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-rose-600">Slowest Time</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-indigo-600">Average Turnaround</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {serviceTimeData.length > 0 ? (
+                                                serviceTimeData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                            {row.service_name}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.total_requests}</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">
+                                                            {formatDuration(row.min_hours)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">
+                                                            {formatDuration(row.max_hours)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold bg-indigo-50/30">
+                                                            {formatDuration(row.avg_hours)}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiClock className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Completed Services</h3>
+                                                        <p className="text-xs text-gray-500">There is no data to analyze turnaround times for this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 19 ? (
                                 <div className="p-0">
                                     {(() => {
                                         // Mathematically group the data by Staff Name

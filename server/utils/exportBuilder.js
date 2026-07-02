@@ -555,6 +555,39 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 20: Service Time Analysis ---
+  if (reportIds.includes(20)) {
+    if (data.serviceTimeReport) {
+      const sheet = workbook.addWorksheet('Service Time Analysis');
+      
+      sheet.mergeCells('A1:F1');
+      sheet.getCell('A1').value = 'Service Turnaround Time (TAT) Analysis';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Service Name', 'Total Completed', 'Fastest Time (Hrs)', 'Slowest Time (Hrs)', 'Average Time (Hrs)', 'Average Time (Days)']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.serviceTimeReport.forEach(row => {
+        sheet.addRow([
+          row.service_name, 
+          row.total_requests,
+          row.min_hours,
+          row.max_hours,
+          row.avg_hours,
+          (row.avg_hours / 24).toFixed(1)
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 35;
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -800,6 +833,19 @@ export const buildPDF = (reportData, reportIds) => {
              currentStaff = row.staff_name;
           }
           doc.text(`   ${row.service_name} | Qty: ${row.total_requests} | Profit: Rs. ${row.gross_profit}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 20: Service Time Analysis ---
+      if (reportIds.includes(20) && data.serviceTimeReport) {
+        doc.fontSize(14).text('Service Turnaround Time Analysis', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.serviceTimeReport.forEach(row => { 
+          const avgDays = (row.avg_hours / 24).toFixed(1);
+          doc.text(`${row.service_name} | Qty: ${row.total_requests} | Avg Time: ${avgDays} Days (${row.avg_hours} Hrs)`);
         });
         doc.moveDown(2);
       }
