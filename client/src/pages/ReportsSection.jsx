@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
     CartesianGrid, LineChart, Line, PieChart, Pie, Cell,
-    Legend, ComposedChart
+    Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
 
 // ─── StatCard Component (matching existing design) ───
@@ -245,10 +245,36 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
     );
 };
 
+// ─── Custom Chart Components ───
+const CHART_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'];
+
+const CustomTooltip = ({ active, payload, label, formatter, labelFormatter }) => {
+    if (active && payload && payload.length) {
+        const displayLabel = labelFormatter ? labelFormatter(label) : label;
+        return (
+            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs min-w-[140px]">
+                <p className="font-medium text-gray-700 mb-1">{displayLabel}</p>
+                {payload.map((entry, index) => (
+                    <div key={index} className="flex items-center justify-between gap-4 py-0.5">
+                        <span style={{ color: entry.color }} className="font-medium">{entry.name}:</span>
+                        <span className="font-bold text-gray-900">
+                            {formatter ? formatter(entry.value, entry) : entry.value}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+    return null;
+};
+
+const formatCurrency = (value) => `₹${value.toLocaleString('en-IN')}`;
+const formatDays = (value) => `${value} ${value === 1 ? 'Day' : 'Days'}`;
+
 // ─── Report Preview Panel (Wired to V3 Backend) ───
 const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const [activeTab, setActiveTab] = useState('preview');
-    const COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+    const COLORS = CHART_COLORS;
 
     // 1. SAFELY EXTRACT API DATA 
     // We default everything to empty objects/arrays so React never crashes
@@ -647,6 +673,48 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         { name: 'Printing', revenue: 280000 },
     ];
 
+    // ─── Modern Chart Helpers ───
+    const renderChartCard = (title, children, icon = FiBarChart2) => (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4">
+            <div className="flex items-center space-x-2 mb-3">
+                <div className="p-1.5 bg-indigo-50 rounded-lg">
+                    <icon className="h-4 w-4 text-indigo-600" />
+                </div>
+                <h3 className="font-semibold text-gray-800 text-sm">{title}</h3>
+            </div>
+            <div className="w-full h-64">
+                {children}
+            </div>
+        </div>
+    );
+
+    const renderGradient = (id, color) => (
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.9} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.1} />
+        </linearGradient>
+    );
+
+    const CustomTooltipComponent = ({ active, payload, label, formatter, labelFormatter }) => {
+        if (active && payload && payload.length) {
+            const displayLabel = labelFormatter ? labelFormatter(label) : label;
+            return (
+                <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs min-w-[140px]">
+                    <p className="font-medium text-gray-700 mb-1">{displayLabel}</p>
+                    {payload.map((entry, index) => (
+                        <div key={index} className="flex items-center justify-between gap-4 py-0.5">
+                            <span style={{ color: entry.color }} className="font-medium">{entry.name}:</span>
+                            <span className="font-bold text-gray-900">
+                                {formatter ? formatter(entry.value, entry) : entry.value}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
         <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" />
@@ -711,91 +779,76 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             )}
 
                             {/* Dynamic Trend Chart */}
-                            {monthlyTrend.length > 0 && (
-                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Revenue vs Expenses Trend</h3>
-                                    <ResponsiveContainer width="100%" height={250}>
-                                        <BarChart data={monthlyTrend}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                            <Tooltip 
-                                                isAnimationActive={false} 
-                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                            />
-                                            <Legend />
-                                            <Bar dataKey="revenue" name="Revenue Collected" fill="#6366F1" radius={[2, 2, 0, 0]} />
-                                            <Bar dataKey="expenses" name="Operating Expenses" fill="#EF4444" radius={[2, 2, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
+                            {monthlyTrend.length > 0 && renderChartCard('Revenue vs Expenses Trend', 
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={monthlyTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                        <defs>
+                                            {renderGradient('revenueGrad', '#6366F1')}
+                                            {renderGradient('expenseGrad', '#EF4444')}
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                        <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                        <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                        <Bar dataKey="revenue" name="Revenue Collected" fill="url(#revenueGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                        <Bar dataKey="expenses" name="Operating Expenses" fill="url(#expenseGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             )}
 
                             {/* Service Revenue Chart */}
-                            {serviceRevenueData.length > 0 && (
-                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Services by Revenue</h3>
-                                    <ResponsiveContainer width="100%" height={250}>
-                                        <BarChart data={serviceRevenueData.slice(0, 10)}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                            <XAxis dataKey="service_name" tick={{ fontSize: 11 }} />
-                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                            <Tooltip 
-                                                isAnimationActive={false} 
-                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                            />
-                                            <Legend />
-                                            <Bar dataKey="revenue_collected" name="Revenue" fill="#10B981" radius={[2, 2, 0, 0]} />
-                                            <Bar dataKey="gross_profit" name="Net Profit" fill="#6366F1" radius={[2, 2, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
+                            {serviceRevenueData.length > 0 && renderChartCard('Top Services by Revenue',
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={serviceRevenueData.slice(0, 10)} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                        <defs>
+                                            {renderGradient('revGrad', '#10B981')}
+                                            {renderGradient('profitGrad', '#6366F1')}
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                        <XAxis dataKey="service_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                        <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                        <Bar dataKey="revenue_collected" name="Revenue" fill="url(#revGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                        <Bar dataKey="gross_profit" name="Net Profit" fill="url(#profitGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             )}
 
                             {/* Expense Category Chart */}
-                            {expenseData.length > 0 && (
-                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Expenses by Category</h3>
-                                    <ResponsiveContainer width="100%" height={250}>
-                                        <BarChart data={expenseData} layout="vertical" margin={{ left: 20 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                                            <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                            <YAxis type="category" dataKey="category" tick={{ fontSize: 11 }} width={100} />
-                                            <Tooltip 
-                                                isAnimationActive={false} 
-                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                            />
-                                            <Legend />
-                                            <Bar dataKey="amount" name="Total Spent" fill="#EF4444" radius={[0, 4, 4, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
+                            {expenseData.length > 0 && renderChartCard('Expenses by Category',
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={expenseData} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                                        <defs>
+                                            {renderGradient('expCatGrad', '#EF4444')}
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                        <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                        <YAxis type="category" dataKey="category" tick={{ fontSize: 11, fill: '#6B7280' }} width={100} axisLine={false} tickLine={false} />
+                                        <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                        <Bar dataKey="amount" name="Total Spent" fill="url(#expCatGrad)" radius={[0, 4, 4, 0]} animationDuration={800} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             )}
 
-                            {report?.id === 6 && cashFlowData.length > 0 && (
-                                <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Daily Cash Flow Trend</h3>
-                                    <ResponsiveContainer width="100%" height={250}>
-                                        <ComposedChart data={cashFlowData}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                            <XAxis 
-                                                dataKey="date" 
-                                                tick={{ fontSize: 11 }} 
-                                                tickFormatter={(tick) => new Date(tick).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} 
-                                            />
-                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                            <Tooltip 
-                                                isAnimationActive={false} 
-                                                labelFormatter={(label) => new Date(label).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                            />
-                                            <Legend />
-                                            <Bar dataKey="inflow" name="Cash Inflow" fill="#10B981" radius={[2, 2, 0, 0]} />
-                                            <Bar dataKey="outflow" name="Cash Outflow" fill="#EF4444" radius={[2, 2, 0, 0]} />
-                                            <Line type="monotone" dataKey="net_flow" name="Net Flow" stroke="#6366F1" strokeWidth={2} dot={{ r: 3 }} />
-                                        </ComposedChart>
-                                    </ResponsiveContainer>
-                                </div>
+                            {report?.id === 6 && cashFlowData.length > 0 && renderChartCard('Daily Cash Flow Trend',
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={cashFlowData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                        <defs>
+                                            {renderGradient('inflowGrad', '#10B981')}
+                                            {renderGradient('outflowGrad', '#EF4444')}
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                        <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(tick) => new Date(tick).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                        <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} labelFormatter={(label) => new Date(label).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} />} />
+                                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                        <Bar dataKey="inflow" name="Cash Inflow" fill="url(#inflowGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                        <Bar dataKey="outflow" name="Cash Outflow" fill="url(#outflowGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                        <Line type="monotone" dataKey="net_flow" name="Net Flow" stroke="#6366F1" strokeWidth={3} dot={{ r: 4, fill: '#6366F1' }} activeDot={{ r: 6 }} />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
                             )}
 
                             {/* Ledger Report Preview Summary */}
@@ -806,21 +859,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Total Credit (In)" value={`₹${ledgerSummary.credit.toLocaleString('en-IN')}`} subtitle="Selected Period" icon={FiTrendingUp} color="bg-emerald-600" />
                                         <StatCard title="Total Debit (Out)" value={`₹${ledgerSummary.debit.toLocaleString('en-IN')}`} subtitle="Selected Period" icon={FiTrendingDown} color="bg-rose-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Transaction Volume by Category</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={ledgerCategoryChart}>
+                                    {renderChartCard('Transaction Volume by Category',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={ledgerCategoryChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('ledgerGrad', '#6366F1')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                                <Tooltip 
-                                                    isAnimationActive={false} 
-                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                                />
-                                                <Bar dataKey="value" name="Total Volume" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Bar dataKey="value" name="Total Volume" fill="url(#ledgerGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -831,21 +883,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Total Outstanding" value={`₹${pendingSummary.totalDue.toLocaleString('en-IN')}`} subtitle="From Selected Period" icon={FiClock} color="bg-amber-600" />
                                         <StatCard title="Pending Customers" value={pendingSummary.count} subtitle="With Unpaid Balances" icon={FiUsers} color="bg-rose-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 Highest Pending Balances</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={pendingCollectionsData.slice(0, 10)} layout="vertical" margin={{ left: 30 }}>
+                                    {renderChartCard('Top 10 Highest Pending Balances',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={pendingCollectionsData.slice(0, 10)} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('pendingGrad', '#F59E0B')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                                                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v}`} />
-                                                <YAxis type="category" dataKey="customer_name" tick={{ fontSize: 11 }} width={100} />
-                                                <Tooltip 
-                                                    isAnimationActive={false} 
-                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                                />
-                                                <Bar dataKey="balance_due" name="Balance Due" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v}`} axisLine={false} tickLine={false} />
+                                                <YAxis type="category" dataKey="customer_name" tick={{ fontSize: 11, fill: '#6B7280' }} width={100} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Bar dataKey="balance_due" name="Balance Due" fill="url(#pendingGrad)" radius={[0, 4, 4, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -864,23 +915,23 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Team Services" value={totalTeamServices} subtitle="Successfully Completed" icon={FiCheckCircle} color="bg-emerald-600" />
                                         <StatCard title="Active Contributors" value={activeContributors} subtitle="Staff Generated Revenue" icon={FiUsers} color="bg-blue-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Revenue by Staff Member</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={performanceData.filter(d => d.total_revenue > 0)}>
+                                    {renderChartCard('Revenue by Staff Member',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={performanceData.filter(d => d.total_revenue > 0)} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('staffRevGrad', '#10B981')}
+                                                    {renderGradient('staffProfitGrad', '#6366F1')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="staff_name" tick={{ fontSize: 11 }} />
-                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                                <Tooltip 
-                                                    isAnimationActive={false} 
-                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                                />
-                                                <Legend />
-                                                <Bar dataKey="total_revenue" name="Total Revenue" fill="#10B981" radius={[2, 2, 0, 0]} />
-                                                <Bar dataKey="gross_profit" name="Gross Profit" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                                <XAxis dataKey="staff_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                                <Bar dataKey="total_revenue" name="Total Revenue" fill="url(#staffRevGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                                <Bar dataKey="gross_profit" name="Gross Profit" fill="url(#staffProfitGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -891,21 +942,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Pending Payouts" value={salarySummary.pendingPayouts} subtitle="Awaiting 'Send' Status" icon={FiClock} color="bg-amber-500" />
                                         <StatCard title="Total Deductions" value={`₹${salarySummary.totalDeductions.toLocaleString('en-IN')}`} subtitle="Recovered / Withheld" icon={FiTrendingDown} color="bg-rose-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Net Salary Distribution</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={salaryData.slice(0, 15)} layout="vertical" margin={{ left: 30 }}>
+                                    {renderChartCard('Net Salary Distribution',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={salaryData.slice(0, 15)} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('salaryGrad', '#6366F1')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                                                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                                <YAxis type="category" dataKey="staff_name" tick={{ fontSize: 11 }} width={100} />
-                                                <Tooltip 
-                                                    isAnimationActive={false} 
-                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                                />
-                                                <Bar dataKey="net_salary" name="Net Salary" fill="#6366F1" radius={[0, 4, 4, 0]} />
+                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <YAxis type="category" dataKey="staff_name" tick={{ fontSize: 11, fill: '#6B7280' }} width={100} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Bar dataKey="net_salary" name="Net Salary" fill="url(#salaryGrad)" radius={[0, 4, 4, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -916,18 +966,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Total Suggested Bonuses" value={`₹${totalSuggestedBonus.toLocaleString('en-IN')}`} subtitle="If 100% approved" icon={FiStar} color="bg-amber-500" />
                                         <StatCard title="Highest KPI Score" value={`${incentiveData[0]?.incentive_score || 0}/100`} subtitle={`Achieved by ${incentiveData[0]?.staff_name}`} icon={FiAward} color="bg-indigo-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Staff KPI Scores (Performance & Efficiency)</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={incentiveData}>
+                                    {renderChartCard('Staff KPI Scores (Performance & Efficiency)',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={incentiveData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('kpiGrad', '#F59E0B')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="staff_name" tick={{ fontSize: 11 }} />
-                                                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                                                <Tooltip isAnimationActive={false} />
-                                                <Bar dataKey="incentive_score" name="KPI Score (out of 100)" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                                                <XAxis dataKey="staff_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Bar dataKey="incentive_score" name="KPI Score (out of 100)" fill="url(#kpiGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -939,22 +991,21 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Avg Service Rating" value={`${reviewSummary.avgService} / 5`} subtitle="Overall Satisfaction" icon={FiStar} color="bg-amber-500" />
                                         <StatCard title="Avg Staff Rating" value={`${reviewSummary.avgStaff} / 5`} subtitle="Staff Performance" icon={FiUsers} color="bg-indigo-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Service Rating Distribution</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={reviewChartData} layout="vertical" margin={{ left: 30 }}>
+                                    {renderChartCard('Service Rating Distribution',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={reviewChartData} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                                                <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                                                <YAxis type="category" dataKey="stars" tick={{ fontSize: 11 }} width={60} />
-                                                <Tooltip isAnimationActive={false} />
-                                                <Bar dataKey="count" name="Number of Reviews" radius={[0, 4, 4, 0]}>
+                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                <YAxis type="category" dataKey="stars" tick={{ fontSize: 11, fill: '#6B7280' }} width={60} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Bar dataKey="count" name="Number of Reviews" radius={[0, 4, 4, 0]} animationDuration={800}>
                                                     {reviewChartData.map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={entry.fill} />
                                                     ))}
                                                 </Bar>
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -966,29 +1017,27 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Pending Approvals" value={leaveSummary.pending} subtitle="Action Required" icon={FiClock} color="bg-amber-500" />
                                         <StatCard title="Approved Leaves" value={leaveSummary.approved} subtitle="Authorized Absences" icon={FiCheckCircle} color="bg-emerald-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex flex-col md:flex-row items-center">
-                                        <div className="w-full md:w-1/2">
-                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Leave Approval Status</h3>
-                                            <ResponsiveContainer width="100%" height={250}>
-                                                <PieChart>
-                                                    <Pie 
-                                                        data={leaveStatusChart}
-                                                        dataKey="value" 
-                                                        nameKey="name" 
-                                                        cx="50%" cy="50%" 
-                                                        innerRadius={50} outerRadius={80} 
-                                                        paddingAngle={2} cornerRadius={4}
-                                                    >
-                                                        {leaveStatusChart.map((entry, idx) => (
-                                                            <Cell key={idx} fill={entry.fill} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip isAnimationActive={false} />
-                                                    <Legend />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </div>
+                                    {renderChartCard('Leave Approval Status',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie 
+                                                    data={leaveStatusChart}
+                                                    dataKey="value" 
+                                                    nameKey="name" 
+                                                    cx="50%" cy="50%" 
+                                                    innerRadius={50} outerRadius={80} 
+                                                    paddingAngle={2} cornerRadius={4}
+                                                    animationDuration={800}
+                                                >
+                                                    {leaveStatusChart.map((entry, idx) => (
+                                                        <Cell key={idx} fill={entry.fill} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    )}
                                 </>
                             )}
 
@@ -999,21 +1048,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Total Service Profit" value={`₹${profitSummary.totalProfit.toLocaleString('en-IN')}`} subtitle="Across all completed services" icon={FiTrendingUp} color="bg-indigo-600" />
                                         <StatCard title="Most Profitable Service" value={profitSummary.mostProfitable?.service_name || '-'} subtitle={`Generated ₹${(profitSummary.mostProfitable?.gross_profit || 0).toLocaleString('en-IN')}`} icon={FiAward} color="bg-emerald-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 Most Profitable Services</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={serviceProfitData.slice(0, 10)}>
+                                    {renderChartCard('Top 10 Most Profitable Services',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={serviceProfitData.slice(0, 10)} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('serviceProfitGrad', '#6366F1')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="service_name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} />
-                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                                <Tooltip 
-                                                    isAnimationActive={false} 
-                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                                />
-                                                <Bar dataKey="gross_profit" name="Gross Profit" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                                <XAxis dataKey="service_name" tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Bar dataKey="gross_profit" name="Gross Profit" fill="url(#serviceProfitGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -1025,29 +1073,27 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="In Progress" value={pendingSummary.in_progress} subtitle="Currently being worked on" icon={FiActivity} color="bg-indigo-600" />
                                         <StatCard title="Avg Time in Queue" value={`${avgDaysPending} Days`} subtitle="Across all pending items" icon={FiClock} color="bg-amber-500" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex flex-col md:flex-row items-center">
-                                        <div className="w-full md:w-1/2">
-                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Pipeline Status</h3>
-                                            <ResponsiveContainer width="100%" height={250}>
-                                                <PieChart>
-                                                    <Pie 
-                                                        data={pendingChartData}
-                                                        dataKey="value" 
-                                                        nameKey="name" 
-                                                        cx="50%" cy="50%" 
-                                                        innerRadius={50} outerRadius={80} 
-                                                        paddingAngle={2} cornerRadius={4}
-                                                    >
-                                                        {pendingChartData.map((entry, idx) => (
-                                                            <Cell key={idx} fill={entry.fill} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip isAnimationActive={false} />
-                                                    <Legend />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </div>
+                                    {renderChartCard('Pipeline Status',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie 
+                                                    data={pendingChartData}
+                                                    dataKey="value" 
+                                                    nameKey="name" 
+                                                    cx="50%" cy="50%" 
+                                                    innerRadius={50} outerRadius={80} 
+                                                    paddingAngle={2} cornerRadius={4}
+                                                    animationDuration={800}
+                                                >
+                                                    {pendingChartData.map((entry, idx) => (
+                                                        <Cell key={idx} fill={entry.fill} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    )}
                                 </>
                             )}
                             
@@ -1058,36 +1104,36 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Total Completed" value={completedSummary.total} subtitle="Services finished in period" icon={FiCheckCircle} color="bg-emerald-600" />
                                         <StatCard title="Avg Turnaround Time" value={`${completedSummary.avgDays} Days`} subtitle="From application to completion" icon={FiClock} color="bg-indigo-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Completed Services</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={completedChartData} layout="vertical" margin={{ left: 30 }}>
+                                    {renderChartCard('Top Completed Services',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={completedChartData} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('completedGrad', '#10B981')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                                                <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} tickFormatter={(val) => val.length > 20 ? val.substring(0, 20) + '...' : val} />
-                                                <Tooltip isAnimationActive={false} />
-                                                <Bar dataKey="value" name="Services Completed" fill="#10B981" radius={[0, 4, 4, 0]} />
+                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} width={120} tickFormatter={(val) => val.length > 20 ? val.substring(0, 20) + '...' : val} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Bar dataKey="value" name="Services Completed" fill="url(#completedGrad)" radius={[0, 4, 4, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
                             {/* Staff-wise Services Preview Summary */}
                             {report?.id === 19 && staffWiseServicesData.length > 0 && (
-                                <>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <div className="flex items-center space-x-3 mb-4">
-                                            <div className="p-2 bg-indigo-50 rounded-lg">
-                                                <FiUsers className="h-5 w-5 text-indigo-600" />
-                                            </div>
-                                            <div>
-                                                <h3 className="font-semibold text-gray-900 text-sm">Staff Specialization Overview</h3>
-                                                <p className="text-xs text-gray-500">Switch to the Data tab for a detailed breakdown of services performed by each staff member.</p>
-                                            </div>
+                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                                    <div className="flex items-center space-x-3 mb-4">
+                                        <div className="p-2 bg-indigo-50 rounded-lg">
+                                            <FiUsers className="h-5 w-5 text-indigo-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 text-sm">Staff Specialization Overview</h3>
+                                            <p className="text-xs text-gray-500">Switch to the Data tab for a detailed breakdown of services performed by each staff member.</p>
                                         </div>
                                     </div>
-                                </>
+                                </div>
                             )}
 
                             {/* Service Time Analysis Preview Summary */}
@@ -1097,21 +1143,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Overall Avg Turnaround" value={formatDuration(overallAvgHours)} subtitle={`Across ${totalServiceVolume} completed services`} icon={FiClock} color="bg-indigo-600" />
                                         <StatCard title="Slowest Service Type" value={slowestService?.service_name || '-'} subtitle={`Averages ${formatDuration(slowestService?.avg_hours || 0)}`} icon={FiTrendingUp} color="bg-rose-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Longest Running Services (Average Days)</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={timeChartData}>
+                                    {renderChartCard('Longest Running Services (Average Days)',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={timeChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('timeGrad', '#F59E0B')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} />
-                                                <YAxis tick={{ fontSize: 11 }} />
-                                                <Tooltip 
-                                                    isAnimationActive={false} 
-                                                    formatter={(value) => `${value} Days`} 
-                                                />
-                                                <Bar dataKey="avg_days" name="Average Time (Days)" fill="#F59E0B" radius={[2, 2, 0, 0]} />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatDays} />} />
+                                                <Bar dataKey="avg_days" name="Average Time (Days)" fill="url(#timeGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -1126,30 +1171,28 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     
                                     {customerSummaryData.length > 0 ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                                            <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Acquisition (New vs Returning)</h3>
-                                                <ResponsiveContainer width="100%" height={200}>
+                                            {renderChartCard('Customer Acquisition (New vs Returning)',
+                                                <ResponsiveContainer width="100%" height="100%">
                                                     <PieChart>
-                                                        <Pie data={returningChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
+                                                        <Pie data={returningChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} cornerRadius={4} animationDuration={800}>
                                                             {returningChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
                                                         </Pie>
-                                                        <Tooltip isAnimationActive={false} />
-                                                        <Legend />
+                                                        <Tooltip content={<CustomTooltipComponent />} />
+                                                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
-                                            </div>
-                                            <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Profile Type (Registered vs Walk-in)</h3>
-                                                <ResponsiveContainer width="100%" height={200}>
+                                            )}
+                                            {renderChartCard('Profile Type (Registered vs Walk-in)',
+                                                <ResponsiveContainer width="100%" height="100%">
                                                     <PieChart>
-                                                        <Pie data={registeredChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} cornerRadius={4}>
+                                                        <Pie data={registeredChart} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} cornerRadius={4} animationDuration={800}>
                                                             {registeredChart.map((entry, idx) => <Cell key={idx} fill={entry.fill} />)}
                                                         </Pie>
-                                                        <Tooltip isAnimationActive={false} />
-                                                        <Legend />
+                                                        <Tooltip content={<CustomTooltipComponent />} />
+                                                        <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                                                     </PieChart>
                                                 </ResponsiveContainer>
-                                            </div>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-lg border border-gray-200 p-12 mt-6 text-center">
@@ -1165,12 +1208,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
 
                             {/* New Customers Preview Summary */}
                             {report?.id === 22 && (
-                                <>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <StatCard title="Total New Customers" value={newCustomerData.length} subtitle="Acquired in Period" icon={FiUserPlus} color="bg-emerald-600" />
-                                        <StatCard title="Total Initial Revenue" value={`₹${newCustomerData.reduce((sum, c) => sum + c.total_spent, 0).toLocaleString('en-IN')}`} subtitle="Generated by new clients" icon={FiDollarSign} color="bg-indigo-600" />
-                                    </div>
-                                </>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <StatCard title="Total New Customers" value={newCustomerData.length} subtitle="Acquired in Period" icon={FiUserPlus} color="bg-emerald-600" />
+                                    <StatCard title="Total Initial Revenue" value={`₹${newCustomerData.reduce((sum, c) => sum + c.total_spent, 0).toLocaleString('en-IN')}`} subtitle="Generated by new clients" icon={FiDollarSign} color="bg-indigo-600" />
+                                </div>
                             )}
 
                             {/* Returning Customers Preview Summary */}
@@ -1183,18 +1224,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                     
                                     {repeatCustomerData.length > 0 ? (
-                                        <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 VIP Customers (By Lifetime Visits)</h3>
-                                            <ResponsiveContainer width="100%" height={250}>
-                                                <BarChart data={repeatCustomerData.slice(0, 10)}>
+                                        renderChartCard('Top 10 VIP Customers (By Lifetime Visits)',
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={repeatCustomerData.slice(0, 10)} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                    <defs>
+                                                        {renderGradient('vipGrad', '#10B981')}
+                                                    </defs>
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                    <XAxis dataKey="customer_name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 10 ? val.substring(0, 10) + '..' : val} />
-                                                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                                                    <Tooltip isAnimationActive={false} />
-                                                    <Bar dataKey="lifetime_visits" name="Lifetime Visits" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                                    <XAxis dataKey="customer_name" tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(val) => val.length > 10 ? val.substring(0, 10) + '..' : val} axisLine={false} tickLine={false} />
+                                                    <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                    <Tooltip content={<CustomTooltipComponent />} />
+                                                    <Bar dataKey="lifetime_visits" name="Lifetime Visits" fill="url(#vipGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                                 </BarChart>
                                             </ResponsiveContainer>
-                                        </div>
+                                        )
                                     ) : (
                                         <div className="bg-white rounded-lg border border-gray-200 p-12 mt-6 text-center">
                                             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -1214,18 +1257,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Unique Customers" value={new Set(activityData.map(a => a.phone)).size} subtitle="Distinct individuals" icon={FiUsers} color="bg-emerald-600" />
                                         <StatCard title="Total Value Generated" value={`₹${activityData.reduce((sum, a) => sum + a.amount, 0).toLocaleString('en-IN')}`} subtitle="Across all logged activity" icon={FiDollarSign} color="bg-amber-500" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Footfall Timeline</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <LineChart data={activityTimelineChart}>
+                                    {renderChartCard('Customer Footfall Timeline',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={activityTimelineChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('activityGrad', '#6366F1')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                                                <Tooltip isAnimationActive={false} />
-                                                <Line type="monotone" dataKey="volume" name="Services Requested" stroke="#6366F1" strokeWidth={3} dot={{ r: 4, fill: '#6366F1' }} activeDot={{ r: 6 }} />
+                                                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Line type="monotone" dataKey="volume" name="Services Requested" stroke="#6366F1" strokeWidth={3} dot={{ r: 4, fill: '#6366F1' }} activeDot={{ r: 6 }} animationDuration={800} />
                                             </LineChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -1237,22 +1282,21 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="5-Star Reviews" value={feedbackStats.fiveStar} subtitle="Perfect scores" icon={FiAward} color="bg-emerald-600" />
                                         <StatCard title="Total Feedback" value={feedbackStats.total} subtitle="Submitted by customers" icon={FiFileText} color="bg-blue-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Satisfaction Distribution</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={feedbackChartData} layout="vertical" margin={{ left: 30 }}>
+                                    {renderChartCard('Customer Satisfaction Distribution',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={feedbackChartData} layout="vertical" margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                                                <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                                                <YAxis type="category" dataKey="stars" tick={{ fontSize: 11 }} width={60} />
-                                                <Tooltip isAnimationActive={false} />
-                                                <Bar dataKey="count" name="Number of Reviews" radius={[0, 4, 4, 0]}>
+                                                <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                                <YAxis type="category" dataKey="stars" tick={{ fontSize: 11, fill: '#6B7280' }} width={60} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Bar dataKey="count" name="Number of Reviews" radius={[0, 4, 4, 0]} animationDuration={800}>
                                                     {feedbackChartData.map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={entry.fill} />
                                                     ))}
                                                 </Bar>
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -1264,20 +1308,23 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Team Overhead Expenses" value={`₹${teamStats.totalExp.toLocaleString('en-IN')}`} subtitle="Directly mapped team costs" icon={FiTrendingDown} color="bg-rose-600" />
                                         <StatCard title="Most Profitable Team" value={teamStats.topTeam?.team_name || '-'} subtitle={`₹${(teamStats.topTeam?.net_profit || 0).toLocaleString('en-IN')} Net Profit`} icon={FiAward} color="bg-indigo-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Team Performance (Gross Profit vs Overhead)</h3>
-                                        <ResponsiveContainer width="100%" height={250}>
-                                            <BarChart data={teamFinData}>
+                                    {renderChartCard('Team Performance (Gross Profit vs Overhead)',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={teamFinData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('teamProfitGrad', '#10B981')}
+                                                    {renderGradient('teamExpGrad', '#F87171')}
+                                                </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                                <XAxis dataKey="team_name" tick={{ fontSize: 11 }} />
-                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                                                <Tooltip isAnimationActive={false} formatter={(value) => `₹${value.toLocaleString('en-IN')}`} />
-                                                <Legend />
-                                                <Bar dataKey="gross_profit" name="Gross Service Profit" fill="#10B981" radius={[4, 4, 0, 0]} />
-                                                <Bar dataKey="total_expenses" name="Team Expenses" fill="#F87171" radius={[4, 4, 0, 0]} />
+                                                <XAxis dataKey="team_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                                <Bar dataKey="gross_profit" name="Gross Service Profit" fill="url(#teamProfitGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                                <Bar dataKey="total_expenses" name="Team Expenses" fill="url(#teamExpGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                             </BarChart>
                                         </ResponsiveContainer>
-                                    </div>
+                                    )}
                                 </>
                             )}
 
@@ -1289,7 +1336,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Highest Rated Team" value={highestRatedTeam?.team_name || '-'} subtitle={highestRatedTeam ? `${highestRatedTeam.avg_rating} / 5 Stars` : 'No ratings yet'} icon={FiStar} color="bg-amber-500" />
                                         <StatCard title="Fastest Turnaround" value={fastestTeam?.team_name || '-'} subtitle={fastestTeam ? `Averages ${formatHoursToText(fastestTeam.avg_tat_hours)}` : '-'} icon={FiClock} color="bg-emerald-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex items-center space-x-3">
+                                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center space-x-3">
                                         <div className="p-2 bg-indigo-50 rounded-lg">
                                             <FiUsers className="h-5 w-5 text-indigo-600" />
                                         </div>
@@ -1308,7 +1355,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                         <StatCard title="Top Overall Contributor" value={topOverallContributor?.staff_name || '-'} subtitle={`Generated ₹${(topOverallContributor?.gross_profit || 0).toLocaleString('en-IN')} in profit`} icon={FiAward} color="bg-amber-500" />
                                         <StatCard title="Total Assigned Members" value={teamContribData.length} subtitle="Staff members mapped to teams" icon={FiUsers} color="bg-indigo-600" />
                                     </div>
-                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex items-center space-x-3">
+                                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center space-x-3">
                                         <div className="p-2 bg-emerald-50 rounded-lg">
                                             <FiBriefcase className="h-5 w-5 text-emerald-600" />
                                         </div>
@@ -2713,15 +2760,20 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                         </div>
                     )}
 
-                    {/* CHARTS TAB - LIVE RENDERING */}
+                    {/* CHARTS TAB - LIVE RENDERING with Modern Design */}
                     {activeTab === 'charts' && (
                         <div className="space-y-4">
                             
                             {/* ✅ NEW: Expenses by Wallet Chart (Only shows on the Expense Report) */}
                             {report?.id === 4 && expenseWalletDistribution.length > 0 && (
-                                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Expenses by Source Account</h3>
-                                    <ResponsiveContainer width="100%" height={250}>
+                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4">
+                                    <div className="flex items-center space-x-2 mb-3">
+                                        <div className="p-1.5 bg-indigo-50 rounded-lg">
+                                            <FiPieChart className="h-4 w-4 text-indigo-600" />
+                                        </div>
+                                        <h3 className="font-semibold text-gray-800 text-sm">Expenses by Source Account</h3>
+                                    </div>
+                                    <ResponsiveContainer width="100%" height={280}>
                                         <PieChart>
                                             <Pie 
                                                 data={expenseWalletDistribution}
@@ -2730,17 +2782,14 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                 cx="50%" cy="50%" 
                                                 innerRadius={50} outerRadius={80} 
                                                 paddingAngle={2} cornerRadius={4}
+                                                animationDuration={800}
                                             >
-                                                {/* We offset the colors so it looks different from the balance chart */}
                                                 {expenseWalletDistribution.map((_, idx) => (
-                                                    <Cell key={idx} fill={COLORS[(idx + 2) % COLORS.length]} />
+                                                    <Cell key={idx} fill={CHART_COLORS[(idx + 2) % CHART_COLORS.length]} stroke="#fff" strokeWidth={2} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip 
-                                                isAnimationActive={false} 
-                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                            />
-                                            <Legend />
+                                            <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                            <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -2748,9 +2797,14 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
 
                             {/* Attendance Distribution Chart */}
                             {report?.id === 9 && attendancePieData.length > 0 && (
-                                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                    <h3 className="font-semibold text-gray-900 text-sm mb-3">Overall Attendance Distribution</h3>
-                                    <ResponsiveContainer width="100%" height={250}>
+                                <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4">
+                                    <div className="flex items-center space-x-2 mb-3">
+                                        <div className="p-1.5 bg-indigo-50 rounded-lg">
+                                            <FiPieChart className="h-4 w-4 text-indigo-600" />
+                                        </div>
+                                        <h3 className="font-semibold text-gray-800 text-sm">Overall Attendance Distribution</h3>
+                                    </div>
+                                    <ResponsiveContainer width="100%" height={280}>
                                         <PieChart>
                                             <Pie 
                                                 data={attendancePieData}
@@ -2759,18 +2813,18 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                 cx="50%" cy="50%" 
                                                 innerRadius={50} outerRadius={80} 
                                                 paddingAngle={2} cornerRadius={4}
+                                                animationDuration={800}
                                             >
-                                                {/* Present: Emerald, Absent: Rose, Half Day: Amber */}
                                                 {attendancePieData.map((entry, idx) => (
                                                     <Cell key={idx} fill={
                                                         entry.name === 'Present' ? '#10B981' : 
                                                         entry.name === 'Absent' ? '#EF4444' : 
                                                         '#F59E0B'
-                                                    } />
+                                                    } stroke="#fff" strokeWidth={2} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip isAnimationActive={false} />
-                                            <Legend />
+                                            <Tooltip content={<CustomTooltipComponent />} />
+                                            <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                     <div className="mt-4 pt-4 border-t border-gray-100 flex justify-around text-center">
@@ -2783,11 +2837,16 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             )}
 
                             {/* EXISTING: Current Wallet Balances Chart */}
-                            <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-3">Current Wallet Balances</h3>
+                            <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4">
+                                <div className="flex items-center space-x-2 mb-3">
+                                    <div className="p-1.5 bg-indigo-50 rounded-lg">
+                                        <FiPieChart className="h-4 w-4 text-indigo-600" />
+                                    </div>
+                                    <h3 className="font-semibold text-gray-800 text-sm">Current Wallet Balances</h3>
+                                </div>
                                 
                                 {walletDistribution.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={250}>
+                                    <ResponsiveContainer width="100%" height={280}>
                                         <PieChart>
                                             <Pie 
                                                 data={walletDistribution}
@@ -2796,16 +2855,14 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                 cx="50%" cy="50%" 
                                                 innerRadius={50} outerRadius={80} 
                                                 paddingAngle={2} cornerRadius={4}
+                                                animationDuration={800}
                                             >
                                                 {walletDistribution.map((_, idx) => (
-                                                    <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                                                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} stroke="#fff" strokeWidth={2} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip 
-                                                isAnimationActive={false} 
-                                                formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
-                                            />
-                                            <Legend />
+                                            <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                            <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 ) : (
