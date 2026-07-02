@@ -1103,42 +1103,56 @@ const fetchCustomerSummaryAnalytics = async (client, centreId, dates) => {
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
+    console.log(`[API] Fetching Repeat Customers for Centre ${centreId} from ${dates.fromDate} to ${dates.toDate}`);
+
     const res = await client.query(`
-      -- Step 1: Find anyone who visited during the selected date range
-      WITH period_customers AS (
-        SELECT DISTINCT se.phone
+      -- Step 1: Clean and standardize all phone numbers to exactly 10 digits!
+      WITH normalized_entries AS (
+        SELECT 
+          se.id,
+          se.created_at,
+          se.total_charges,
+          COALESCE(se.customer_name, 'Anonymous') as customer_name,
+          -- 👇 Strips all spaces, +91, hyphens, and grabs just the core 10 digits
+          RIGHT(REGEXP_REPLACE(se.phone, '[^0-9]', '', 'g'), 10) as norm_phone,
+          st.centre_id
         FROM service_entries se
         JOIN staff st ON se.staff_id = st.id
-        WHERE st.centre_id = $1
-          AND se.created_at::date >= $2
+        WHERE se.phone IS NOT NULL AND TRIM(se.phone) != ''
+          AND st.centre_id = $1
           AND se.created_at::date <= $3
-          AND se.phone IS NOT NULL AND se.phone != ''
       ),
-      -- Step 2: Calculate their complete lifetime stats up to the end date
+      -- Step 2: Find anyone who visited during the selected date range
+      period_customers AS (
+        SELECT DISTINCT norm_phone
+        FROM normalized_entries
+        WHERE created_at::date >= $2
+      ),
+      -- Step 3: Calculate their complete lifetime stats
       lifetime_stats AS (
         SELECT 
-          se.phone,
-          MAX(COALESCE(se.customer_name, 'Anonymous')) as customer_name,
-          COUNT(se.id) as lifetime_visits,
-          COALESCE(SUM(se.total_charges), 0) as lifetime_spent,
-          MIN(se.created_at) as first_visit,
-          MAX(se.created_at) as latest_visit
-        FROM service_entries se
-        JOIN staff st ON se.staff_id = st.id
-        WHERE st.centre_id = $1
-          AND se.phone IN (SELECT phone FROM period_customers)
-          AND se.created_at::date <= $3
-        GROUP BY se.phone
+          norm_phone as phone,
+          MAX(customer_name) as customer_name,
+          COUNT(id) as lifetime_visits,
+          COALESCE(SUM(total_charges), 0) as lifetime_spent,
+          MIN(created_at) as first_visit,
+          MAX(created_at) as latest_visit
+        FROM normalized_entries
+        WHERE norm_phone IN (SELECT norm_phone FROM period_customers)
+        GROUP BY norm_phone
       )
-      -- Step 3: Only keep those with > 1 visit (The true Repeat Customers)
+      -- Step 4: Keep only those with > 1 service entry
       SELECT 
         ls.*,
         CASE WHEN c.id IS NOT NULL THEN true ELSE false END as is_registered
       FROM lifetime_stats ls
-      LEFT JOIN customers c ON ls.phone = c.primary_phone
+      -- 👇 Make sure we also normalize the Customer table phone numbers for the join!
+      LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.primary_phone, '[^0-9]', '', 'g'), 10) = ls.phone
       WHERE ls.lifetime_visits > 1
       ORDER BY ls.lifetime_visits DESC, ls.lifetime_spent DESC
     `, [centreId, dates.fromDate, dates.toDate]);
+
+    console.log(`[API] Found ${res.rows.length} Repeat Customers.`);
 
     return res.rows.map(row => ({
       phone: row.phone,
