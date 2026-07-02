@@ -415,6 +415,39 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 16: Service Profit ---
+  if (reportIds.includes(16)) {
+    if (data.serviceProfit) {
+      const sheet = workbook.addWorksheet('Service Profitability');
+      
+      sheet.mergeCells('A1:E1');
+      sheet.getCell('A1').value = 'Service Profitability Analysis';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Service Name', 'Total Requests', 'Total Revenue', 'Govt/Dept Charges', 'Gross Profit']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.serviceProfit.forEach(row => {
+        sheet.addRow([
+          row.service_name, 
+          row.total_requests, 
+          row.revenue_collected, 
+          row.department_charges, 
+          row.gross_profit
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 35;
+      ['C', 'D', 'E'].forEach(col => sheet.getColumn(col).numFmt = '₹#,##0.00');
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -605,6 +638,18 @@ export const buildPDF = (reportData, reportIds) => {
           const from = new Date(row.from_date).toLocaleDateString('en-IN');
           const to = new Date(row.to_date).toLocaleDateString('en-IN');
           doc.text(`${row.staff_name} | ${row.leave_type} (${row.days_taken} Days: ${from} to ${to}) | Status: ${row.status.toUpperCase()}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 16: Service Profit ---
+      if (reportIds.includes(16) && data.serviceProfit) {
+        doc.fontSize(14).text('Service Profitability Analysis', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.serviceProfit.forEach(row => { 
+          doc.text(`${row.service_name} | Qty: ${row.total_requests} | Revenue: Rs. ${row.revenue_collected} | Profit: Rs. ${row.gross_profit}`);
         });
         doc.moveDown(2);
       }

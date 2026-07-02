@@ -379,6 +379,18 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         { name: 'Pending', value: leaveSummary.pending, fill: '#F59E0B' },   // Amber
         { name: 'Rejected', value: leaveSummary.rejected, fill: '#EF4444' }  // Rose
     ].filter(d => d.value > 0);
+
+    // ✅ Extract Service Profit Data
+    const serviceProfitData = apiData.serviceProfit || [];
+    const profitSummary = { 
+        totalProfit: 0, 
+        totalServices: serviceProfitData.length,
+        mostProfitable: serviceProfitData.length > 0 ? serviceProfitData[0] : null
+    };
+    
+    serviceProfitData.forEach(s => {
+        profitSummary.totalProfit += s.gross_profit;
+    });
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -787,6 +799,31 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Service Profit Preview Summary */}
+                            {report?.id === 16 && serviceProfitData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Total Service Profit" value={`₹${profitSummary.totalProfit.toLocaleString('en-IN')}`} subtitle="Across all completed services" icon={FiTrendingUp} color="bg-indigo-600" />
+                                        <StatCard title="Most Profitable Service" value={profitSummary.mostProfitable?.service_name || '-'} subtitle={`Generated ₹${(profitSummary.mostProfitable?.gross_profit || 0).toLocaleString('en-IN')}`} icon={FiAward} color="bg-emerald-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top 10 Most Profitable Services</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={serviceProfitData.slice(0, 10)}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="service_name" tick={{ fontSize: 11 }} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} />
+                                                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v / 1000}k`} />
+                                                <Tooltip 
+                                                    isAnimationActive={false} 
+                                                    formatter={(value) => `₹${value.toLocaleString('en-IN')}`} 
+                                                />
+                                                <Bar dataKey="gross_profit" name="Gross Profit" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -794,8 +831,52 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Leave History Table */}
-                            {report?.id === 14 ? (
+                            {/* ✅ NEW: Service Profit Table */}
+                            {report?.id === 16 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Requests</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Revenue Collected</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Govt/Dept Charges</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Gross Profit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {serviceProfitData.length > 0 ? (
+                                                serviceProfitData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                                                            <div className="flex items-center">
+                                                                {idx === 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" />}
+                                                                {row.service_name}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.total_requests}</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right">₹{row.revenue_collected.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right">- ₹{row.department_charges.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold bg-indigo-50/30">
+                                                            ₹{row.gross_profit.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiBriefcase className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Services Completed</h3>
+                                                        <p className="text-xs text-gray-500">No profitable services were recorded in this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 14 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

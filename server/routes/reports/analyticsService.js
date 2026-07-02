@@ -271,6 +271,44 @@ const fetchServiceRevenueAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Service Profit Fetcher (Ranked by Margins)
+const fetchServiceProfitAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        COUNT(se.id) as total_requests,
+        COALESCE(SUM(se.total_charges), 0) as revenue_collected,
+        COALESCE(SUM(se.department_charges), 0) as department_charges,
+        COALESCE(SUM(se.service_charges), 0) as gross_profit
+      FROM service_entries se 
+      JOIN staff s ON se.staff_id = s.id 
+      LEFT JOIN services srv ON se.category_id = srv.id 
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id 
+      WHERE s.centre_id = $1 
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3 
+        AND se.status = 'completed'
+      GROUP BY srv.name, sub.name
+      ORDER BY gross_profit DESC -- 👈 The crucial difference: Sorted by Margin!
+    `, [centreId, dates.fromDate, dates.toDate]);
+    
+    return res.rows.map(row => ({
+      service_name: row.service_name,
+      total_requests: Number(row.total_requests),
+      revenue_collected: Number(row.revenue_collected),
+      department_charges: Number(row.department_charges),
+      gross_profit: Number(row.gross_profit)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchServiceProfitAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // Expense Category Fetcher
 const fetchExpenseAnalytics = async (client, centreId, dates) => {
   try {
@@ -1170,6 +1208,10 @@ export const getReportData = async (params) => {
         case 3:
         case 15: {
           compiledReport.data.serviceRevenue = await fetchServiceRevenueAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 16: {
+          compiledReport.data.serviceProfit = await fetchServiceProfitAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 4: {
