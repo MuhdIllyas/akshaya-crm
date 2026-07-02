@@ -765,6 +765,52 @@ const fetchReviewAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Leave Report Fetcher (Staff Leave History)
+const fetchLeaveAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        l.applied_date,
+        s.name as staff_name,
+        COALESCE(s.role, 'staff') as role,
+        l.type as leave_type,
+        l.from_date,
+        l.to_date,
+        l.reason,
+        l.status
+      FROM leaves l
+      JOIN staff s ON l.staff_id = s.id
+      WHERE s.centre_id = $1
+        -- 👇 Overlap Logic: Leave starts before Period Ends, AND ends after Period Starts
+        AND l.from_date <= $3::date 
+        AND l.to_date >= $2::date
+      ORDER BY l.from_date DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => {
+      // Calculate the number of days taken
+      const start = new Date(row.from_date);
+      const end = new Date(row.to_date);
+      const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+      return {
+        applied_date: new Date(row.applied_date).toISOString(),
+        staff_name: row.staff_name,
+        role: row.role,
+        leave_type: row.leave_type || 'General',
+        from_date: start.toISOString(),
+        to_date: end.toISOString(),
+        days_taken: days > 0 ? days : 1,
+        reason: row.reason || 'No reason provided',
+        status: row.status.toLowerCase()
+      };
+    });
+  } catch (error) {
+    console.error("SQL Error in fetchLeaveAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -1059,7 +1105,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1114,6 +1160,11 @@ export const getReportData = async (params) => {
         // ID 13: Review Report
         case 13: {
           compiledReport.data.reviewReport = await fetchReviewAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 14: Leave Report
+        case 14: {
+          compiledReport.data.leaveReport = await fetchLeaveAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 3:

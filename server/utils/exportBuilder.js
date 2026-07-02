@@ -378,6 +378,43 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 14: Leave Report ---
+  if (reportIds.includes(14)) {
+    if (data.leaveReport) {
+      const sheet = workbook.addWorksheet('Leave History');
+      
+      sheet.mergeCells('A1:H1');
+      sheet.getCell('A1').value = 'Staff Leave Applications';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Applied On', 'Staff Name', 'Role', 'Leave Type', 'From Date', 'To Date', 'Days', 'Status', 'Reason']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.leaveReport.forEach(row => {
+        sheet.addRow([
+          new Date(row.applied_date).toLocaleDateString('en-IN'), 
+          row.staff_name, 
+          row.role.toUpperCase(),
+          row.leave_type,
+          new Date(row.from_date).toLocaleDateString('en-IN'),
+          new Date(row.to_date).toLocaleDateString('en-IN'),
+          row.days_taken,
+          row.status.toUpperCase(),
+          row.reason
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('B').width = 20;
+      sheet.getColumn('I').width = 40; // Wide column for the reason
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -554,6 +591,20 @@ export const buildPDF = (reportData, reportIds) => {
         data.reviewReport.forEach(row => { 
           doc.text(`[${new Date(row.date).toLocaleDateString('en-IN')}] ${row.customer_name}: ${row.service_rating} Stars - "${row.review_text}" (Staff: ${row.staff_name})`);
           doc.moveDown(0.5);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 14: Leave Report ---
+      if (reportIds.includes(14) && data.leaveReport) {
+        doc.fontSize(14).text('Staff Leave Applications', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.leaveReport.forEach(row => { 
+          const from = new Date(row.from_date).toLocaleDateString('en-IN');
+          const to = new Date(row.to_date).toLocaleDateString('en-IN');
+          doc.text(`${row.staff_name} | ${row.leave_type} (${row.days_taken} Days: ${from} to ${to}) | Status: ${row.status.toUpperCase()}`);
         });
         doc.moveDown(2);
       }

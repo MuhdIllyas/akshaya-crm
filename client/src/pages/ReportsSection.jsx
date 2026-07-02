@@ -329,6 +329,12 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const incentiveData = apiData.incentiveReport || [];
     const totalSuggestedBonus = incentiveData.reduce((sum, r) => sum + r.suggested_bonus, 0);
 
+        salaryData.forEach(s => {
+        salarySummary.totalPayroll += s.net_salary;
+        salarySummary.totalDeductions += s.deductions;
+        if (s.status === 'pending') salarySummary.pendingPayouts++;
+    });
+
     // ✅ Extract Review Data and calculate averages/distribution
     const reviewData = apiData.reviewReport || [];
     let totalServiceStars = 0, totalStaffStars = 0, ratedStaffCount = 0;
@@ -358,12 +364,21 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         { stars: '2 Stars', count: ratingDist[2], fill: '#F87171' }, // Rose
         { stars: '1 Star',  count: ratingDist[1], fill: '#EF4444' },
     ];
+
+    // ✅ ADD THIS: Extract Leave Data and calculate distribution
+    const leaveData = apiData.leaveReport || [];
+    const leaveSummary = { total_days: 0, pending: 0, approved: 0, rejected: 0 };
     
-    salaryData.forEach(s => {
-        salarySummary.totalPayroll += s.net_salary;
-        salarySummary.totalDeductions += s.deductions;
-        if (s.status === 'pending') salarySummary.pendingPayouts++;
+    leaveData.forEach(l => {
+        leaveSummary.total_days += l.days_taken;
+        if (leaveSummary[l.status] !== undefined) leaveSummary[l.status]++;
     });
+
+    const leaveStatusChart = [
+        { name: 'Approved', value: leaveSummary.approved, fill: '#10B981' }, // Emerald
+        { name: 'Pending', value: leaveSummary.pending, fill: '#F59E0B' },   // Amber
+        { name: 'Rejected', value: leaveSummary.rejected, fill: '#EF4444' }  // Rose
+    ].filter(d => d.value > 0);
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -738,6 +753,40 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Leave Report Preview Summary */}
+                            {report?.id === 14 && leaveData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Leave Days" value={leaveSummary.total_days} subtitle="Requested in Period" icon={FiCalendarIcon} color="bg-indigo-600" />
+                                        <StatCard title="Pending Approvals" value={leaveSummary.pending} subtitle="Action Required" icon={FiClock} color="bg-amber-500" />
+                                        <StatCard title="Approved Leaves" value={leaveSummary.approved} subtitle="Authorized Absences" icon={FiCheckCircle} color="bg-emerald-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex flex-col md:flex-row items-center">
+                                        <div className="w-full md:w-1/2">
+                                            <h3 className="font-semibold text-gray-900 text-sm mb-3">Leave Approval Status</h3>
+                                            <ResponsiveContainer width="100%" height={250}>
+                                                <PieChart>
+                                                    <Pie 
+                                                        data={leaveStatusChart}
+                                                        dataKey="value" 
+                                                        nameKey="name" 
+                                                        cx="50%" cy="50%" 
+                                                        innerRadius={50} outerRadius={80} 
+                                                        paddingAngle={2} cornerRadius={4}
+                                                    >
+                                                        {leaveStatusChart.map((entry, idx) => (
+                                                            <Cell key={idx} fill={entry.fill} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip isAnimationActive={false} />
+                                                    <Legend />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -745,8 +794,68 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Customer Reviews Table */}
-                            {report?.id === 13 ? (
+                            {/* ✅ NEW: Leave History Table */}
+                            {report?.id === 14 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Leave Details</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Duration</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {leaveData.length > 0 ? (
+                                                leaveData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-bold text-gray-900">{row.staff_name}</p>
+                                                            <p className="text-[10px] text-gray-500 capitalize">{row.role}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex items-center mb-1">
+                                                                <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mr-2">
+                                                                    {row.leave_type}
+                                                                </span>
+                                                                <span className="text-xs text-gray-400">Applied: {new Date(row.applied_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-600 max-w-xs truncate" title={row.reason}>"{row.reason}"</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-medium text-gray-900">
+                                                                {new Date(row.from_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })} 
+                                                                {row.days_taken > 1 && ` to ${new Date(row.to_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">{row.days_taken} {row.days_taken === 1 ? 'Day' : 'Days'}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold tracking-wider ${
+                                                                row.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                                                                row.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
+                                                                'bg-amber-100 text-amber-800'
+                                                            }`}>
+                                                                {row.status.toUpperCase()}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="4" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiCalendarIcon className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Leave Applications</h3>
+                                                        <p className="text-xs text-gray-500">No staff took or applied for leave during the selected period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 13 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">
