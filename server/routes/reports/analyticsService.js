@@ -899,6 +899,59 @@ const fetchLeaveAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Completed Services Fetcher (Tracks Turnaround Time)
+const fetchCompletedServicesAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        se.created_at as application_date,
+        strak.updated_at as completion_date,
+        se.token_id,
+        COALESCE(se.customer_name, 'Anonymous') as customer_name,
+        se.phone,
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        st.name as assigned_staff,
+        strak.status
+      FROM service_entries se
+      JOIN service_tracking strak ON strak.service_entry_id = se.id 
+      JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      WHERE st.centre_id = $1 
+        -- 👇 Look ONLY for terminal operational statuses!
+        AND LOWER(strak.status) IN ('completed', 'paid', 'delivered')
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3
+      ORDER BY strak.updated_at DESC, se.created_at DESC 
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => {
+      // Calculate Turnaround Time (TAT) in days
+      const applied = new Date(row.application_date);
+      const completed = row.completion_date ? new Date(row.completion_date) : new Date();
+      const daysTaken = Math.max(0, Math.ceil((completed - applied) / (1000 * 60 * 60 * 24)));
+
+      return {
+        application_date: applied.toISOString(),
+        completion_date: completed.toISOString(),
+        token_id: row.token_id || '-',
+        customer_name: row.customer_name,
+        phone: row.phone || 'N/A',
+        service_name: row.service_name,
+        assigned_staff: row.assigned_staff || 'Unassigned',
+        status: row.status ? row.status.toLowerCase() : 'completed',
+        days_taken: daysTaken
+      };
+    });
+  } catch (error) {
+    console.error("SQL Error in fetchCompletedServicesAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -1274,8 +1327,10 @@ export const getReportData = async (params) => {
           compiledReport.data.pendingServices = await fetchPendingServicesAnalytics(client, targetCentreId, reportDates);
           break;
         }
+        // ID 18: Completed Services Report
         case 18: {
           compiledReport.data.serviceOps = await fetchServiceAnalytics(client, targetCentreId, reportDates);
+          compiledReport.data.completedServicesReport = await fetchCompletedServicesAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {

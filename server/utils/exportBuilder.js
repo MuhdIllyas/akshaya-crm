@@ -485,6 +485,42 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 18: Completed Services ---
+  if (reportIds.includes(18)) {
+    if (data.completedServicesReport) {
+      const sheet = workbook.addWorksheet('Completed Applications');
+      
+      sheet.mergeCells('A1:G1');
+      sheet.getCell('A1').value = 'Completed Service Applications';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Applied Date', 'Completed Date', 'Customer Name', 'Service', 'Staff Handled', 'Final Status', 'Turnaround (Days)']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.completedServicesReport.forEach(row => {
+        sheet.addRow([
+          new Date(row.application_date).toLocaleDateString('en-IN'), 
+          new Date(row.completion_date).toLocaleDateString('en-IN'), 
+          row.customer_name, 
+          row.service_name,
+          row.assigned_staff,
+          row.status.toUpperCase(),
+          row.days_taken
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('C').width = 25;
+      sheet.getColumn('D').width = 30;
+      sheet.getColumn('E').width = 20;
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -699,6 +735,18 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(9).fillColor('black');
         data.pendingServices.forEach(row => { 
           doc.text(`[${new Date(row.date).toLocaleDateString('en-IN')}] ${row.customer_name} | ${row.service_name} | Pending: ${row.days_pending} Days | Staff: ${row.assigned_staff}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 18: Completed Services ---
+      if (reportIds.includes(18) && data.completedServicesReport) {
+        doc.fontSize(14).text('Completed Service Applications', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.completedServicesReport.forEach(row => { 
+          doc.text(`[${new Date(row.completion_date).toLocaleDateString('en-IN')}] ${row.customer_name} | ${row.service_name} | TAT: ${row.days_taken} Days | Staff: ${row.assigned_staff}`);
         });
         doc.moveDown(2);
       }

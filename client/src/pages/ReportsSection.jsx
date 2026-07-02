@@ -413,6 +413,25 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         { name: 'In Progress', value: pendingServicesSummary.in_progress, fill: '#6366F1' }, // Indigo
         { name: 'Rejected/Delayed', value: pendingServicesSummary.rejected, fill: '#EF4444' } // Rose
     ].filter(d => d.value > 0);
+
+    // ✅ Extract Completed Services Data
+    const completedServicesData = apiData.completedServicesReport || [];
+    const completedSummary = {
+        total: completedServicesData.length,
+        avgDays: completedServicesData.length > 0 
+            ? Math.round(completedServicesData.reduce((sum, r) => sum + r.days_taken, 0) / completedServicesData.length)
+            : 0
+    };
+    
+    const completedByCategory = {};
+    completedServicesData.forEach(r => {
+        completedByCategory[r.service_name] = (completedByCategory[r.service_name] || 0) + 1;
+    });
+    
+    const completedChartData = Object.entries(completedByCategory)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10); // Top 10 completed volume
     
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
@@ -880,6 +899,28 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+                            
+                            {/* Completed Services Preview Summary */}
+                            {report?.id === 18 && completedServicesData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Total Completed" value={completedSummary.total} subtitle="Services finished in period" icon={FiCheckCircle} color="bg-emerald-600" />
+                                        <StatCard title="Avg Turnaround Time" value={`${completedSummary.avgDays} Days`} subtitle="From application to completion" icon={FiClock} color="bg-indigo-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Top Completed Services</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={completedChartData} layout="vertical" margin={{ left: 30 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                                <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                                                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} tickFormatter={(val) => val.length > 20 ? val.substring(0, 20) + '...' : val} />
+                                                <Tooltip isAnimationActive={false} />
+                                                <Bar dataKey="value" name="Services Completed" fill="#10B981" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -887,8 +928,62 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Pending Services Table */}
-                            {report?.id === 17 ? (
+                            {/* ✅ NEW: Completed Services Table */}
+                            {report?.id === 18 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer & Token</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Handled</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Timeline</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">TAT (Days)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {completedServicesData.length > 0 ? (
+                                                completedServicesData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-bold text-gray-900">{row.customer_name}</p>
+                                                            <p className="text-[10px] text-gray-500">{row.phone} • TKN: {row.token_id}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-medium text-gray-900 max-w-[200px] truncate" title={row.service_name}>{row.service_name}</p>
+                                                            <p className="text-xs text-gray-500">By: {row.assigned_staff}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                                                                {row.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-[11px] text-gray-500">Applied: {new Date(row.application_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</p>
+                                                            <p className="text-xs font-medium text-indigo-600">Finished: {new Date(row.completion_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className="text-sm font-bold text-gray-900">
+                                                                {row.days_taken} {row.days_taken === 1 ? 'Day' : 'Days'}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiCheckCircle className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Completed Services</h3>
+                                                        <p className="text-xs text-gray-500">No applications reached completion during the selected period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 17 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">
