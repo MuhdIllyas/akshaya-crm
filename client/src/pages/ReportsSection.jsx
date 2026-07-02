@@ -4,7 +4,7 @@ import {
     FiTrendingUp, FiDollarSign, FiPieChart, FiUsers, FiUser,
     FiBriefcase, FiStar, FiClock, FiCheckCircle, FiX,
     FiArrowLeft, FiPrinter, FiEye, FiRefreshCw, FiPlus,
-    FiChevronRight, FiClock as FiClockIcon, FiMail,
+    FiChevronRight, FiClock as FiClockIcon, FiMail, FiUserPlus,
     FiBarChart2, FiActivity, FiAward, FiHome, FiCreditCard,
     FiSmartphone, FiUserCheck, FiBook, FiDatabase, FiSettings,
     FiStar as FiStarIcon, FiTrendingDown, FiCalendar as FiCalendarIcon
