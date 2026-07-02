@@ -617,6 +617,96 @@ const fetchSalaryAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Incentive Report Fetcher (Staff KPI & Bonus Calculator)
+const fetchIncentiveAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      WITH service_agg AS (
+        SELECT
+          se.staff_id,
+          COUNT(se.id) AS services_completed,
+          COUNT(DISTINCT se.created_at::date) AS active_days,
+          SUM(se.total_charges) AS expected_amount,
+          SUM(se.service_charges) AS service_charge_earned,
+          ROUND(SUM(se.total_charges)::numeric / NULLIF(COUNT(DISTINCT se.created_at::date), 0), 2) AS revenue_per_day,
+          MAX(ROUND(SUM(se.total_charges)::numeric / NULLIF(COUNT(DISTINCT se.created_at::date), 0), 2)) OVER () AS max_revenue_per_day
+        FROM service_entries se
+        WHERE se.created_at::date >= $2 AND se.created_at::date <= $3
+        GROUP BY se.staff_id
+      ),
+      payment_agg AS (
+        SELECT
+          se.staff_id,
+          SUM(p.amount) FILTER (WHERE p.status = 'received') AS collected_amount
+        FROM payments p
+        JOIN service_entries se ON se.id = p.service_entry_id
+        WHERE p.created_at::date >= $2 AND p.created_at::date <= $3
+          AND COALESCE(p.is_reversal, FALSE) = FALSE
+          AND NOT EXISTS (
+            SELECT 1 FROM wallet_transactions wt 
+            WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+          )
+        GROUP BY se.staff_id
+      ),
+      review_agg AS (
+        SELECT
+          sr.staff_id,
+          COUNT(sr.id) AS total_reviews,
+          ROUND(AVG(sr.staff_rating)::numeric, 2) AS avg_staff_rating
+        FROM service_reviews sr
+        WHERE sr.is_submitted = true AND sr.staff_rating IS NOT NULL
+        GROUP BY sr.staff_id
+      )
+      SELECT
+        s.id AS staff_id,
+        s.name AS staff_name,
+        COALESCE(sa.services_completed, 0) AS services_completed,
+        COALESCE(sa.active_days, 0) AS active_days,
+        COALESCE(sa.service_charge_earned, 0) AS service_charge_earned,
+        COALESCE(pa.collected_amount, 0) AS collected_amount,
+        COALESCE(ra.total_reviews, 0) AS total_reviews,
+        COALESCE(ra.avg_staff_rating, 0) AS avg_staff_rating,
+        -- Calculate Incentive Score (0 to 100) exactly as in staffReports.js
+        ROUND(
+          (
+            (COALESCE(pa.collected_amount, 0) / NULLIF(sa.expected_amount, 0)) * 50
+            +
+            (sa.revenue_per_day / NULLIF(sa.max_revenue_per_day, 0)) * 30
+            +
+            (sa.active_days / NULLIF(($3::date - $2::date + 1), 0)) * 20
+          )::numeric, 0
+        ) AS incentive_score
+      FROM staff s
+      LEFT JOIN service_agg sa ON sa.staff_id = s.id
+      LEFT JOIN payment_agg pa ON pa.staff_id = s.id
+      LEFT JOIN review_agg ra ON ra.staff_id = s.id
+      WHERE s.role = 'staff' AND s.centre_id = $1
+      ORDER BY incentive_score DESC NULLS LAST
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => {
+      const score = Number(row.incentive_score || 0);
+      const profit = Number(row.service_charge_earned || 0);
+      
+      // Dynamic Suggestion: 10% of their generated profit, scaled by their KPI score!
+      const suggestedBonus = Math.round(profit * 0.10 * (score / 100));
+
+      return {
+        staff_name: row.staff_name,
+        services_completed: Number(row.services_completed),
+        collected_amount: Number(row.collected_amount),
+        total_reviews: Number(row.total_reviews),
+        avg_staff_rating: Number(row.avg_staff_rating),
+        incentive_score: score,
+        suggested_bonus: suggestedBonus
+      };
+    }).filter(r => r.services_completed > 0); // Only show staff who did work
+  } catch (error) {
+    console.error("SQL Error in fetchIncentiveAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ==========================================
 // LAYER 2: CALCULATE LAYER (FINANCIAL MATH)
 // ==========================================
@@ -911,7 +1001,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -957,6 +1047,10 @@ export const getReportData = async (params) => {
         // ID 11: Salary Report
         case 11: {
           compiledReport.data.salaryReport = await fetchSalaryAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 12: {
+          compiledReport.data.incentiveReport = await fetchIncentiveAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 3:

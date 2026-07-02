@@ -305,6 +305,41 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 12: Incentive Report ---
+  if (reportIds.includes(12)) {
+    if (data.incentiveReport) {
+      const sheet = workbook.addWorksheet('Incentive Planner');
+      
+      sheet.mergeCells('A1:F1');
+      sheet.getCell('A1').value = 'Staff KPI & Incentive Suggestions';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Staff Name', 'Services', 'Amount Collected', 'Avg Rating', 'KPI Score (out of 100)', 'Suggested Bonus']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.incentiveReport.forEach(row => {
+        sheet.addRow([
+          row.staff_name, 
+          row.services_completed, 
+          row.collected_amount, 
+          row.avg_staff_rating > 0 ? `${row.avg_staff_rating} Stars` : 'No Rating', 
+          row.incentive_score, 
+          row.suggested_bonus
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 25;
+      sheet.getColumn('C').numFmt = '₹#,##0.00';
+      sheet.getColumn('F').numFmt = '₹#,##0.00';
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -455,6 +490,18 @@ export const buildPDF = (reportData, reportIds) => {
         doc.fontSize(9).fillColor('black');
         data.salaryReport.forEach(row => { 
           doc.text(`[${row.month}] ${row.staff_name} | Net: Rs. ${row.net_salary} | Status: ${row.status.toUpperCase()}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 12: Incentive Report ---
+      if (reportIds.includes(12) && data.incentiveReport) {
+        doc.fontSize(14).text('Staff KPI & Incentive Planner', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.incentiveReport.forEach(row => { 
+          doc.text(`${row.staff_name} | Score: ${row.incentive_score}/100 | Collected: Rs. ${row.collected_amount} | Suggested Bonus: Rs. ${row.suggested_bonus}`);
         });
         doc.moveDown(2);
       }

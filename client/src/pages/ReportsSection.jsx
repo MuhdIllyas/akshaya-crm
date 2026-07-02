@@ -324,6 +324,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         totalDeductions: 0, 
         pendingPayouts: 0 
     };
+
+    // ✅ Extract Incentive Data
+    const incentiveData = apiData.incentiveReport || [];
+    const totalSuggestedBonus = incentiveData.reduce((sum, r) => sum + r.suggested_bonus, 0);
     
     salaryData.forEach(s => {
         salarySummary.totalPayroll += s.net_salary;
@@ -655,6 +659,28 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Incentive Report Preview Summary */}
+                            {report?.id === 12 && incentiveData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Total Suggested Bonuses" value={`₹${totalSuggestedBonus.toLocaleString('en-IN')}`} subtitle="If 100% approved" icon={FiStar} color="bg-amber-500" />
+                                        <StatCard title="Highest KPI Score" value={`${incentiveData[0]?.incentive_score || 0}/100`} subtitle={`Achieved by ${incentiveData[0]?.staff_name}`} icon={FiAward} color="bg-indigo-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Staff KPI Scores (Performance & Efficiency)</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <BarChart data={incentiveData}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="staff_name" tick={{ fontSize: 11 }} />
+                                                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                                                <Tooltip isAnimationActive={false} />
+                                                <Bar dataKey="incentive_score" name="KPI Score (out of 100)" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -662,8 +688,62 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Salary Payroll Table */}
-                            {report?.id === 11 ? (
+                            {/* ✅ NEW: Incentive / KPI Table */}
+                            {report?.id === 12 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount Collected</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Avg Rating</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">KPI Score</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Suggested Bonus</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {incentiveData.length > 0 ? (
+                                                incentiveData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm text-gray-900 font-bold">{row.staff_name}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.services_completed}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right font-medium">₹{row.collected_amount.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">
+                                                            {row.avg_staff_rating > 0 ? (
+                                                                <span className="flex items-center justify-center text-amber-500 font-bold">
+                                                                    {row.avg_staff_rating} <FiStarIcon className="ml-1 h-3 w-3 fill-amber-500" />
+                                                                </span>
+                                                            ) : <span className="text-gray-400 text-xs">No Ratings</span>}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center justify-center w-10 h-6 rounded text-xs font-bold ${
+                                                                row.incentive_score >= 80 ? 'bg-emerald-100 text-emerald-800' :
+                                                                row.incentive_score >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                                                            }`}>
+                                                                {row.incentive_score}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                            ₹{row.suggested_bonus.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="6" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiStar className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Incentive Data</h3>
+                                                        <p className="text-xs text-gray-500">Staff must complete services and collect payments to generate KPI scores.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 11 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">
