@@ -841,6 +841,41 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 28: Team Contribution ---
+  if (reportIds.includes(28)) {
+    if (data.teamContribution) {
+      const sheet = workbook.addWorksheet('Team Contribution Breakdown');
+      
+      sheet.mergeCells('A1:F1');
+      sheet.getCell('A1').value = 'Team Contribution & Staff Breakdown';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Team Name', 'Staff Name', 'Role', 'Services Completed', 'Revenue Contributed', 'Profit Contributed']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.teamContribution.forEach(row => {
+        sheet.addRow([
+          row.team_name, 
+          row.staff_name,
+          row.role.toUpperCase(),
+          row.services_completed,
+          row.revenue_generated,
+          row.gross_profit
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 20;
+      sheet.getColumn('B').width = 25;
+      ['E', 'F'].forEach(col => sheet.getColumn(col).numFmt = '₹#,##0.00');
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -1192,6 +1227,25 @@ export const buildPDF = (reportData, reportIds) => {
         data.teamPerformance.forEach(row => { 
           const ratingStr = row.avg_rating > 0 ? `${row.avg_rating} Stars` : 'No Ratings';
           doc.text(`${row.team_name} (${row.active_members} Members) | Services: ${row.total_services} | Avg Time: ${row.avg_tat_hours} Hrs | Rating: ${ratingStr}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 28: Team Contribution ---
+      if (reportIds.includes(28) && data.teamContribution) {
+        doc.fontSize(14).text('Team Contribution Breakdown', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        let currentTeam = '';
+        data.teamContribution.forEach(row => { 
+          if (currentTeam !== row.team_name) {
+             doc.moveDown(0.5);
+             doc.font('Helvetica-Bold').text(`-- ${row.team_name.toUpperCase()} --`);
+             doc.font('Helvetica');
+             currentTeam = row.team_name;
+          }
+          doc.text(`   ${row.staff_name} (${row.role}) | Services: ${row.services_completed} | Rev: Rs. ${row.revenue_generated} | Profit: Rs. ${row.gross_profit}`);
         });
         doc.moveDown(2);
       }

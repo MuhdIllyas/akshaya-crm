@@ -575,6 +575,15 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         return `${(hours / 24).toFixed(1)} Days`;
     };
 
+    // ✅ Extract Team Contribution Data
+    const teamContribData = apiData.teamContribution || [];
+    let topOverallContributor = null;
+    
+    if (teamContribData.length > 0) {
+        // Find the absolute highest earner across all teams
+        topOverallContributor = [...teamContribData].sort((a, b) => b.gross_profit - a.gross_profit)[0];
+    }
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1291,6 +1300,25 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Team Contribution Preview Summary */}
+                            {report?.id === 28 && teamContribData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Top Overall Contributor" value={topOverallContributor?.staff_name || '-'} subtitle={`Generated ₹${(topOverallContributor?.gross_profit || 0).toLocaleString('en-IN')} in profit`} icon={FiAward} color="bg-amber-500" />
+                                        <StatCard title="Total Assigned Members" value={teamContribData.length} subtitle="Staff members mapped to teams" icon={FiUsers} color="bg-indigo-600" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6 flex items-center space-x-3">
+                                        <div className="p-2 bg-emerald-50 rounded-lg">
+                                            <FiBriefcase className="h-5 w-5 text-emerald-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-gray-900 text-sm">Staff Contribution Ledger</h3>
+                                            <p className="text-xs text-gray-500">Switch to the Data tab to view exactly how much revenue and profit each individual member brought to their team.</p>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -1298,8 +1326,98 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ Team Performance Table */}
-                            {report?.id === 27 ? (
+                            {/* ✅ NEW: Team Contribution Table */}
+                            {report?.id === 28 ? (
+                                <div className="p-0">
+                                    {(() => {
+                                        // Mathematically group the data by Team Name
+                                        const groupedByTeam = {};
+                                        teamContribData.forEach(row => {
+                                            if (!groupedByTeam[row.team_name]) {
+                                                groupedByTeam[row.team_name] = { totalServices: 0, totalProfit: 0, members: [] };
+                                            }
+                                            groupedByTeam[row.team_name].members.push(row);
+                                            groupedByTeam[row.team_name].totalServices += row.services_completed;
+                                            groupedByTeam[row.team_name].totalProfit += row.gross_profit;
+                                        });
+
+                                        return (
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Member</th>
+                                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services Handled</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Revenue Contributed</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Profit Contributed</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {Object.keys(groupedByTeam).length > 0 ? (
+                                                        Object.entries(groupedByTeam).map(([teamName, data], groupIdx) => (
+                                                            <React.Fragment key={groupIdx}>
+                                                                
+                                                                {/* 🟦 BEAUTIFUL TEAM BANNER ROW */}
+                                                                <tr className="bg-indigo-50/60 border-t border-indigo-100">
+                                                                    <td colSpan="4" className="px-4 py-2 text-sm font-bold text-indigo-900">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center uppercase tracking-wider">
+                                                                                <FiBriefcase className="mr-2 h-4 w-4 text-indigo-500" />
+                                                                                {teamName}
+                                                                            </div>
+                                                                            <div className="flex items-center space-x-4">
+                                                                                <span className="text-[11px] font-bold text-indigo-600 bg-indigo-100/80 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                                                    {data.totalServices} Total Services
+                                                                                </span>
+                                                                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                                                    ₹{data.totalProfit.toLocaleString('en-IN')} Team Profit
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+
+                                                                {/* 🗂️ STAFF ROWS UNDERNEATH THE BANNER */}
+                                                                {data.members.map((row, idx) => (
+                                                                    <tr key={`${groupIdx}-${idx}`} className="hover:bg-gray-50 transition-colors">
+                                                                        <td className="px-4 py-3 pl-8">
+                                                                            <div className="flex items-center">
+                                                                                {idx === 0 && row.gross_profit > 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" title="Top Earner for this Team!" />}
+                                                                                <div>
+                                                                                    <p className="text-sm font-bold text-gray-900">{row.staff_name}</p>
+                                                                                    <p className="text-[10px] text-gray-500 capitalize">{row.role}</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center font-medium">
+                                                                            {row.services_completed}
+                                                                        </td>
+                                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right">
+                                                                            ₹{row.revenue_generated.toLocaleString('en-IN')}
+                                                                        </td>
+                                                                        <td className={`px-4 py-3 text-sm text-right font-bold ${row.gross_profit === 0 ? 'text-gray-400' : 'text-indigo-600'}`}>
+                                                                            ₹{row.gross_profit.toLocaleString('en-IN')}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </React.Fragment>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan="4" className="px-4 py-12 text-center">
+                                                                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                                    <FiUsers className="h-5 w-5 text-gray-400" />
+                                                                </div>
+                                                                <h3 className="text-sm font-medium text-gray-900 mb-1">No Staff Data Found</h3>
+                                                                <p className="text-xs text-gray-500">No active staff members are mapped to teams.</p>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        );
+                                    })()}
+                                </div>
+                            ) : report?.id === 27 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

@@ -1377,6 +1377,46 @@ const fetchTeamPerformanceAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Team Contribution Fetcher (Report ID 28)
+const fetchTeamContributionAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        t.name AS team_name,
+        st.name AS staff_name,
+        COALESCE(st.role, 'staff') AS role,
+        COUNT(se.id) AS services_completed,
+        COALESCE(SUM(se.total_charges), 0) AS revenue_generated,
+        COALESCE(SUM(se.service_charges), 0) AS gross_profit
+      FROM teams t
+      JOIN team_members tm ON t.id = tm.team_id
+      JOIN staff st ON tm.staff_id = st.id
+      -- 👇 LEFT JOIN ensures staff with 0 completed services still appear on the report!
+      LEFT JOIN service_entries se ON st.id = se.staff_id 
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3 
+        AND se.status = 'completed'
+      WHERE t.centre_id = $1
+        AND tm.is_active = true
+      GROUP BY t.id, t.name, st.id, st.name, st.role
+      -- Sort alphabetically by team, then rank staff by how much profit they made!
+      ORDER BY t.name ASC, gross_profit DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      team_name: row.team_name,
+      staff_name: row.staff_name,
+      role: row.role,
+      services_completed: Number(row.services_completed),
+      revenue_generated: Number(row.revenue_generated),
+      gross_profit: Number(row.gross_profit)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchTeamContributionAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1740,7 +1780,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1864,6 +1904,11 @@ export const getReportData = async (params) => {
         }
         case 27: {
           compiledReport.data.teamPerformance = await fetchTeamPerformanceAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        // ID 28: Team Contribution
+        case 28: {
+          compiledReport.data.teamContribution = await fetchTeamContributionAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {
