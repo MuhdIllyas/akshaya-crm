@@ -698,6 +698,44 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
+  // --- REPORT 24: Customer Activity ---
+  if (reportIds.includes(24)) {
+    if (data.customerActivity) {
+      const sheet = workbook.addWorksheet('Service History Log');
+      
+      sheet.mergeCells('A1:G1');
+      sheet.getCell('A1').value = 'Customer Activity & Service History';
+      sheet.getCell('A1').font = { size: 16, bold: true };
+      
+      sheet.getCell('A3').value = 'Period:';
+      sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
+
+      // Headers
+      const headerRow = sheet.addRow(['Date & Time', 'Token', 'Customer Name', 'Phone Number', 'Service Requested', 'Assigned Staff', 'Status', 'Amount']);
+      headerRow.font = { bold: true };
+      
+      // Data
+      data.customerActivity.forEach(row => {
+        sheet.addRow([
+          new Date(row.date).toLocaleString('en-IN'), 
+          row.token_id,
+          row.customer_name,
+          row.phone,
+          row.service_name,
+          row.staff_name,
+          row.status.toUpperCase(),
+          row.amount
+        ]);
+      });
+      
+      // Formatting
+      sheet.getColumn('A').width = 22;
+      sheet.getColumn('C').width = 25;
+      sheet.getColumn('E').width = 30;
+      sheet.getColumn('H').numFmt = '₹#,##0.00';
+    }
+  }
+
   // Generate Buffer
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -997,6 +1035,19 @@ export const buildPDF = (reportData, reportIds) => {
           const first = new Date(row.first_visit).toLocaleDateString('en-IN');
           const latest = new Date(row.latest_visit).toLocaleDateString('en-IN');
           doc.text(`${row.customer_name} (${row.phone}) | Visits: ${row.lifetime_visits} | Spent: Rs. ${row.lifetime_spent} | Active: ${first} to ${latest}`);
+        });
+        doc.moveDown(2);
+      }
+
+      // --- REPORT 24: Customer Activity ---
+      if (reportIds.includes(24) && data.customerActivity) {
+        doc.fontSize(14).text('Customer Activity & Service History', { underline: true });
+        doc.moveDown(1);
+        
+        doc.fontSize(9).fillColor('black');
+        data.customerActivity.forEach(row => { 
+          const dateStr = new Date(row.date).toLocaleString('en-IN');
+          doc.text(`[${dateStr}] ${row.customer_name} (${row.phone}) | ${row.service_name} | Status: ${row.status.toUpperCase()} | Rs. ${row.amount}`);
         });
         doc.moveDown(2);
       }

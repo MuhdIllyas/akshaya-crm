@@ -498,6 +498,21 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     // ✅ Extract New Customers Data
     const newCustomerData = apiData.newCustomers || [];
 
+    // ✅ Extract Customer Activity Data
+    const activityData = apiData.customerActivity || [];
+    
+    // Generate an Activity Timeline (Services per day)
+    const timelineMap = {};
+    activityData.forEach(r => {
+        const dStr = new Date(r.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        timelineMap[dStr] = (timelineMap[dStr] || 0) + 1;
+    });
+    
+    // Convert to array and reverse it so the chart reads left-to-right chronologically
+    const activityTimelineChart = Object.keys(timelineMap)
+        .map(key => ({ date: key, volume: timelineMap[key] }))
+        .reverse();
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1120,6 +1135,28 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     )}
                                 </>
                             )}
+                            {/* Customer Activity Preview Summary */}
+                            {report?.id === 24 && activityData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Interactions" value={activityData.length} subtitle="Services logged in period" icon={FiActivity} color="bg-indigo-600" />
+                                        <StatCard title="Unique Customers" value={new Set(activityData.map(a => a.phone)).size} subtitle="Distinct individuals" icon={FiUsers} color="bg-emerald-600" />
+                                        <StatCard title="Total Value Generated" value={`₹${activityData.reduce((sum, a) => sum + a.amount, 0).toLocaleString('en-IN')}`} subtitle="Across all logged activity" icon={FiDollarSign} color="bg-amber-500" />
+                                    </div>
+                                    <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-3">Customer Footfall Timeline</h3>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <LineChart data={activityTimelineChart}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                                                <Tooltip isAnimationActive={false} />
+                                                <Line type="monotone" dataKey="volume" name="Services Requested" stroke="#6366F1" strokeWidth={3} dot={{ r: 4, fill: '#6366F1' }} activeDot={{ r: 6 }} />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     
@@ -1127,8 +1164,70 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Returning Customers Table */}
-                            {report?.id === 23 ? (
+                            {/* ✅ NEW: Customer Activity Table */}
+                            {report?.id === 24 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date & Time</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Handled</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {activityData.length > 0 ? (
+                                                activityData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm font-bold text-gray-900">
+                                                                {new Date(row.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            </p>
+                                                            <p className="text-[10px] text-gray-500 font-mono">
+                                                                {new Date(row.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex items-center">
+                                                                <p className="text-sm font-medium text-gray-900">{row.customer_name}</p>
+                                                                {row.is_registered && <span className="ml-2 text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded uppercase tracking-wider">Reg</span>}
+                                                            </div>
+                                                            <p className="text-[10px] text-gray-500">{row.phone} • TKN: {row.token_id}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="text-sm text-gray-800 max-w-[200px] truncate" title={row.service_name}>{row.service_name}</p>
+                                                            <p className="text-[10px] text-gray-400">By: {row.staff_name}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                                                row.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                                                row.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800'
+                                                            }`}>
+                                                                {row.status.replace('_', ' ')}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                            ₹{row.amount.toLocaleString('en-IN')}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiActivity className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Activity Found</h3>
+                                                        <p className="text-xs text-gray-500">No customer interactions were logged during this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 23 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

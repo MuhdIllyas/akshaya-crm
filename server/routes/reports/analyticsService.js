@@ -1146,6 +1146,52 @@ const fetchNewCustomersAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ NEW: Customer Activity Fetcher (Report ID 24)
+const fetchCustomerActivityAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        se.created_at as service_date,
+        se.token_id,
+        COALESCE(se.customer_name, 'Anonymous') as customer_name,
+        RIGHT(REGEXP_REPLACE(se.phone, '[^0-9]', '', 'g'), 10) as phone,
+        CASE 
+          WHEN sub.name IS NOT NULL THEN srv.name || ' - ' || sub.name
+          ELSE COALESCE(srv.name, 'Uncategorized Service')
+        END as service_name,
+        st.name as staff_name,
+        se.status,
+        COALESCE(se.total_charges, 0) as total_charges,
+        CASE WHEN c.id IS NOT NULL THEN true ELSE false END as is_registered
+      FROM service_entries se
+      JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      -- 👇 Map to the customers table to check if they have a portal account
+      LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.primary_phone, '[^0-9]', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(se.phone, '[^0-9]', '', 'g'), 10)
+      WHERE st.centre_id = $1 
+        AND se.created_at::date >= $2 
+        AND se.created_at::date <= $3
+      ORDER BY se.created_at DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      date: new Date(row.service_date).toISOString(),
+      token_id: row.token_id || '-',
+      customer_name: row.customer_name,
+      phone: row.phone || 'N/A',
+      service_name: row.service_name,
+      staff_name: row.staff_name || 'Unassigned',
+      status: row.status ? row.status.toLowerCase() : 'unknown',
+      amount: Number(row.total_charges),
+      is_registered: row.is_registered === true
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchCustomerActivityAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1509,7 +1555,7 @@ export const getReportData = async (params) => {
 
     for (const id of reportIds) {
       // Always fetch base financials so the top cards render
-      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].includes(id) && !hasFetchedFinancials) {
+      if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
         compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
         hasFetchedFinancials = true;
@@ -1617,6 +1663,10 @@ export const getReportData = async (params) => {
         // ID 23: Returning Customers (Shifted from 22)
         case 23: {
           compiledReport.data.repeatCustomers = await fetchRepeatCustomersAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 24: {
+          compiledReport.data.customerActivity = await fetchCustomerActivityAnalytics(client, targetCentreId, reportDates);
           break;
         }
         default: {
