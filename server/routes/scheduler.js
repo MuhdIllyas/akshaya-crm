@@ -123,9 +123,17 @@ const checkAndRunSchedules = async () => {
                 yest.setDate(yest.getDate() - 1);
                 const yesterdayStr = yest.toISOString().split('T')[0];
 
-                // Fetch Data & Build PDF
-                const data = await getReportData(schedule.centre_id || 'all', { fromDate: yesterdayStr, toDate: yesterdayStr }, schedule.report_ids, 'all', client);
-                const pdfBuffer = await buildPDF(data, schedule.report_ids);
+                // Ensure report_ids is ALWAYS a standard JavaScript array
+                let parsedReportIds = schedule.report_ids;
+
+                // If PostgreSQL returned it as a string formatted like "{1,2}", parse it into an array
+                if (typeof parsedReportIds === 'string') {
+                    parsedReportIds = parsedReportIds.replace(/[{}]/g, '').split(',').map(Number);
+                }
+
+                const data = await getReportData(schedule.centre_id || 'all', { fromDate: yesterdayStr, toDate: yesterdayStr }, parsedReportIds, 'all', client);
+
+                const pdfBuffer = await buildPDF(data, parsedReportIds);
 
                 // Send via Resend/Email Service
                 const fileName = `${schedule.name.replace(/\s+/g, '_')}_${yesterdayStr}.pdf`;
