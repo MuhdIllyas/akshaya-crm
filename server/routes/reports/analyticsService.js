@@ -1926,3 +1926,69 @@ export const getReportData = async (params) => {
     client.release();
   }
 };
+
+// ==========================================
+// QUICK DASHBOARD METRICS (Today's Live Data)
+// ==========================================
+export const getQuickMetrics = async (targetCentreId) => {
+  const dates = getDateContext();
+  const client = await pool.connect();
+  
+  // Smart filters for Superadmin "All Centres" vs "Specific Centre"
+  const isAll = !targetCentreId || targetCentreId === 'all';
+  const params1 = [dates.today]; 
+  const params2 = [dates.today, targetCentreId]; 
+  const paramsC = [targetCentreId]; 
+
+  try {
+    const [finRes, staffTotRes, staffPresRes, srvRes, pendRes] = await Promise.all([
+      // 1 & 2. Collection & Expenses
+      client.query(`
+        SELECT 
+          (SELECT COALESCE(SUM(se.total_charges), 0) FROM service_entries se JOIN staff s ON se.staff_id = s.id WHERE se.created_at::date = $1 ${!isAll ? 'AND s.centre_id = $2' : ''}) as collection,
+          (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE expense_date = $1 AND status IN ('approved', 'auto_approved') AND (is_reversal IS NULL OR is_reversal = FALSE) ${!isAll ? 'AND centre_id = $2' : ''}) as expenses
+      `, isAll ? params1 : params2),
+      
+      // 3. Total Active Staff
+      client.query(`SELECT COUNT(*) as total FROM staff s WHERE s.status = 'Active' ${!isAll ? 'AND s.centre_id = $1' : ''}`, isAll ? [] : paramsC),
+      
+      // 4. Present Staff Today
+      client.query(`SELECT COUNT(*) as present FROM attendance a JOIN staff s ON a.staff_id = s.id WHERE a.date = $1 AND a.status IN ('present', 'half_day') ${!isAll ? 'AND s.centre_id = $2' : ''}`, isAll ? params1 : params2),
+      
+      // 5. Services Created Today
+      client.query(`SELECT COUNT(*) as count FROM service_entries se JOIN staff s ON se.staff_id = s.id WHERE se.created_at::date = $1 ${!isAll ? 'AND s.centre_id = $2' : ''}`, isAll ? params1 : params2),
+      
+      // 6. Overall Pending Collection
+      client.query(`
+        SELECT COALESCE(SUM(se.total_charges - COALESCE(p.paid_amount, 0)), 0) as total_pending
+        FROM service_entries se
+        JOIN staff s ON se.staff_id = s.id
+        LEFT JOIN (
+          SELECT service_entry_id, SUM(amount) as paid_amount 
+          FROM payments 
+          WHERE status = 'received' AND (is_reversal IS NULL OR is_reversal = FALSE)
+          GROUP BY service_entry_id
+        ) p ON p.service_entry_id = se.id
+        WHERE se.status != 'completed' ${!isAll ? 'AND s.centre_id = $1' : ''}
+      `, isAll ? [] : paramsC)
+    ]);
+
+    const collection = Number(finRes.rows[0].collection);
+    const expenses = Number(finRes.rows[0].expenses);
+
+    return {
+      collection,
+      expenses,
+      profit: collection - expenses,
+      attendancePresent: Number(staffPresRes.rows[0].present),
+      attendanceTotal: Number(staffTotRes.rows[0].total),
+      servicesCount: Number(srvRes.rows[0].count),
+      pendingAmount: Number(pendRes.rows[0].total_pending)
+    };
+  } catch (error) {
+    console.error("Quick Metrics DB Error:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};

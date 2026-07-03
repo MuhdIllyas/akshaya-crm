@@ -2,6 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { getReportData } from "./analyticsService.js";
 import { buildPDF, buildExcel, buildCSV } from '../../utils/exportBuilder.js';
+import { getReportData, getQuickMetrics } from './analyticsService.js';
 
 const router = express.Router();
 
@@ -20,6 +21,16 @@ const authenticateToken = (req, res, next) => {
 };
 
 router.use(authenticateToken);
+
+// GET /api/reports/quick-metrics
+router.get('/quick-metrics', async (req, res) => {
+    try {
+        const data = await getQuickMetrics(req.query.centre_id);
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch quick metrics' });
+    }
+});
 
 /**
  * POST /api/reports/generate

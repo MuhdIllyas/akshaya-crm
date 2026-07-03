@@ -2920,6 +2920,34 @@ const ReportsSection = ({
     const [selectedReport, setSelectedReport] = useState(null);
     const [favourites, setFavourites] = useState([1, 2, 3]);
     const [scheduledReports, setScheduledReports] = useState([]);
+
+    // 👇 STATE & FETCH LOGIC FOR QUICK CARDS 👇
+    const [quickMetrics, setQuickMetrics] = useState({
+        collection: 0, expenses: 0, profit: 0, 
+        attendancePresent: 0, attendanceTotal: 0, 
+        servicesCount: 0, pendingAmount: 0, isLoading: true
+    });
+
+    useEffect(() => {
+        const fetchQuickMetrics = async () => {
+            setQuickMetrics(prev => ({ ...prev, isLoading: true }));
+            try {
+                // Fetches metrics and reacts if the Superadmin changes the centre filter!
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=${selectedCentre}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setQuickMetrics({ ...data, isLoading: false });
+                }
+            } catch (error) {
+                console.error("Failed to fetch quick metrics:", error);
+                setQuickMetrics(prev => ({ ...prev, isLoading: false }));
+            }
+        };
+
+        fetchQuickMetrics();
+    }, [selectedCentre]);
     
     const fetchSchedules = async () => {
         try {
@@ -3155,14 +3183,38 @@ const ReportsSection = ({
         }
     };
 
-    // ─── Quick Reports Data ───
+    // ─── Quick Reports Data (DYNAMIC) ───
     const quickReports = [
-        { label: "Today's Collection", value: '₹42,500', icon: FiTrendingUp, color: 'bg-emerald-600' },
-        { label: "Today's Expenses", value: '₹18,200', icon: FiFileText, color: 'bg-rose-600' },
-        { label: "Today's Profit", value: '₹24,300', icon: FiDollarSign, color: 'bg-indigo-600' },
-        { label: "Today's Attendance", value: '18/22', icon: FiUserCheck, color: 'bg-blue-600' },
-        { label: "Today's Services", value: '47', icon: FiBriefcase, color: 'bg-purple-600' },
-        { label: "Today's Pending", value: '₹65,000', icon: FiClock, color: 'bg-amber-600' },
+        { 
+            label: "Today's Collection", 
+            value: quickMetrics.isLoading ? '...' : `₹${quickMetrics.collection.toLocaleString('en-IN')}`, 
+            icon: FiTrendingUp, color: 'bg-emerald-600' 
+        },
+        { 
+            label: "Today's Expenses", 
+            value: quickMetrics.isLoading ? '...' : `₹${quickMetrics.expenses.toLocaleString('en-IN')}`, 
+            icon: FiFileText, color: 'bg-rose-600' 
+        },
+        { 
+            label: "Today's Profit", 
+            value: quickMetrics.isLoading ? '...' : `₹${quickMetrics.profit.toLocaleString('en-IN')}`, 
+            icon: FiDollarSign, color: 'bg-indigo-600' 
+        },
+        { 
+            label: "Today's Attendance", 
+            value: quickMetrics.isLoading ? '...' : `${quickMetrics.attendancePresent}/${quickMetrics.attendanceTotal}`, 
+            icon: FiUserCheck, color: 'bg-blue-600' 
+        },
+        { 
+            label: "Today's Services", 
+            value: quickMetrics.isLoading ? '...' : quickMetrics.servicesCount, 
+            icon: FiBriefcase, color: 'bg-purple-600' 
+        },
+        { 
+            label: "Overall Pending", 
+            value: quickMetrics.isLoading ? '...' : `₹${quickMetrics.pendingAmount.toLocaleString('en-IN')}`, 
+            icon: FiClock, color: 'bg-amber-600' 
+        },
     ];
 
     // ─── Category Labels ───
