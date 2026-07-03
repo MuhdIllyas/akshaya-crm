@@ -16,7 +16,7 @@ import {
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
 import { toPng } from 'html-to-image';
-import { jspdf } from 'jspdf';
+import { jsPDF } from "jspdf";
 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
@@ -312,7 +312,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             });
 
             // Set up the PDF
-            const pdf = new jspdf('p', 'mm', 'a4');
+            const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
             
             // Get the image properties to maintain the exact aspect ratio
