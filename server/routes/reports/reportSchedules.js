@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
                     SELECT array_agg(s.email)
                     FROM staff s
                     WHERE s.role = ANY(rs.recipient_roles) 
-                    AND s.is_active = true
+                    AND s.status = 'Active'
                     -- If schedule belongs to a centre, only email that centre's admins
                     AND (rs.centre_id IS NULL OR s.centre_id = rs.centre_id)
                 ) as resolved_emails
