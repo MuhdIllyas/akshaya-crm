@@ -171,7 +171,8 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/superadmin/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/superadmin/settings", label: "Settings", icon: SettingsIcon },
-      { path: "/dashboard/superadmin/reports", label: "Reports", icon: ReportsIcon }
+      { path: "/dashboard/superadmin/reports", label: "Reports", icon: ReportsIcon },
+      { path: "/dashboard/admin/analytics", label: "Analytics", icon: AnalyticsIcon }
     ],
     
     admin: [
