@@ -15,7 +15,6 @@ import {
     CartesianGrid, LineChart, Line, PieChart, Pie, Cell,
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
-import * as htmlToImage from 'html-to-image';
 import { toPng } from 'html-to-image';
 import { jspdf } from 'jspdf';
 
@@ -313,7 +312,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             });
 
             // Set up the PDF
-            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdf = new jspdf('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
             
             // Get the image properties to maintain the exact aspect ratio
