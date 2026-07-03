@@ -212,6 +212,7 @@ const QuickReportTile = ({ label, value, icon: Icon, color, onClick }) => (
 );
 
 // ─── Scheduled Report Card ───
+// ─── Scheduled Report Card ───
 const ScheduledReportCard = ({ schedule, onToggle }) => {
     const frequencyColors = {
         daily: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -219,20 +220,36 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
         monthly: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     };
 
+    // Safely format the emails array
+    const emails = schedule.resolved_emails || [];
+    let displayEmails = 'No active users found';
+    if (emails.length > 0) {
+        // If there are more than 2 emails, show the first 2 and say "+X more"
+        displayEmails = emails.length > 2 
+            ? `${emails.slice(0, 2).join(', ')} +${emails.length - 2} more`
+            : emails.join(', ');
+    }
+
     return (
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
-            <div className="flex items-center space-x-3">
-                <div className={`rounded-lg p-2 ${frequencyColors[schedule.frequency] || 'bg-gray-100 text-gray-700'}`}>
+            <div className="flex items-center space-x-3 overflow-hidden">
+                <div className={`rounded-lg p-2 shrink-0 ${frequencyColors[schedule.frequency] || 'bg-gray-100 text-gray-700'}`}>
                     <FiMail className="h-4 w-4" />
                 </div>
-                <div>
-                    <p className="font-medium text-gray-900 text-sm">{schedule.name}</p>
-                    <p className="text-xs text-gray-500">
-                        {schedule.frequency} • To: {schedule.recipient_roles?.join(', ')}
+                <div className="min-w-0">
+                    <p className="font-medium text-gray-900 text-sm truncate">{schedule.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">
+                        {schedule.frequency} • {schedule.recipient_roles?.join(', ')}
                     </p>
+                    {/* 👇 The new exact Email ID display 👇 */}
+                    <div className="flex items-center mt-1 text-[10px] text-gray-400 font-mono" title={emails.join(', ')}>
+                        <FiUserCheck className="mr-1 h-3 w-3 shrink-0" />
+                        <span className="truncate">{displayEmails}</span>
+                    </div>
                 </div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+            
+            <label className="relative inline-flex items-center cursor-pointer ml-3 shrink-0">
                 <input
                     type="checkbox"
                     checked={schedule.is_active}

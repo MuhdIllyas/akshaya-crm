@@ -26,9 +26,21 @@ router.use(authenticateToken);
 router.get('/', async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT * FROM report_schedules 
-            ORDER BY created_at DESC
+            SELECT 
+                rs.*,
+                (
+                    -- 👇 This subquery fetches the exact emails of the users in those roles
+                    SELECT array_agg(s.email)
+                    FROM staff s
+                    WHERE s.role = ANY(rs.recipient_roles) 
+                    AND s.is_active = true
+                    -- If schedule belongs to a centre, only email that centre's admins
+                    AND (rs.centre_id IS NULL OR s.centre_id = rs.centre_id)
+                ) as resolved_emails
+            FROM report_schedules rs 
+            ORDER BY rs.created_at DESC
         `);
+        
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching schedules:', error);
