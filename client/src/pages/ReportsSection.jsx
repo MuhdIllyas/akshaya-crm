@@ -3608,7 +3608,31 @@ const ReportsSection = () => {
     const [exportFormat, setExportFormat] = useState('pdf');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedReport, setSelectedReport] = useState(null);
-    const [favourites, setFavourites] = useState([1, 2, 3]);
+
+    const [favourites, setFavourites] = useState([]);
+
+    // 2. Fetch the user's real favourites when the page loads
+    useEffect(() => {
+        const isAuthorized = storedRole === 'admin' || storedRole === 'superadmin';
+        
+        if (isAuthorized) {
+            const fetchFavourites = async () => {
+                try {
+                    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/favourites`, {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setFavourites(data || []);
+                    }
+                } catch (error) {
+                    console.error("Failed to fetch favourites:", error);
+                }
+            };
+            fetchFavourites();
+        }
+    }, [storedRole]);
+
     const [scheduledReports, setScheduledReports] = useState([]);
     const [centresList, setCentresList] = useState([]);
 
@@ -3817,13 +3841,34 @@ const ReportsSection = () => {
         return allReports.filter(r => favourites.includes(r.id));
     }, [allReports, favourites]);
 
-    // ─── Handlers ───
-    const toggleFavourite = (reportId) => {
-        setFavourites(prev =>
-            prev.includes(reportId)
-                ? prev.filter(id => id !== reportId)
-                : [...prev, reportId]
+    const toggleFavourite = async (reportId) => {
+        const isAuthorized = storedRole === 'admin' || storedRole === 'superadmin';
+        if (!isAuthorized) return; // Ignore clicks from regular staff
+
+        // 1. Optimistic UI Update: Instantly flip the star in the UI
+        setFavourites(prev => 
+            prev.includes(reportId) ? prev.filter(id => id !== reportId) : [...prev, reportId]
         );
+
+        // 2. Save it to the database silently
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/favourites/toggle`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}` 
+                },
+                body: JSON.stringify({ reportId })
+            });
+
+            if (!res.ok) throw new Error("Failed to save favourite");
+        } catch (error) {
+            console.error("Error saving favourite:", error);
+            // Revert on fail so the UI doesn't lie to the user
+            setFavourites(prev => 
+                prev.includes(reportId) ? prev.filter(id => id !== reportId) : [...prev, reportId]
+            );
+        }
     };
 
     const toggleScheduled = async (scheduleId) => {

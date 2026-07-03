@@ -21,6 +21,10 @@ const authenticateToken = (req, res, next) => {
 
 router.use(authenticateToken);
 
+/**
+ * GET /api/reports/quick-metrics - favourites - /toggle
+ * Handles requests from ReportsSection.jsx
+ */
 router.get('/quick-metrics', authenticateToken, async (req, res) => {
     const userRole = req.user.role;           // e.g., 'admin' or 'superadmin'
     const userCentreId = req.user.centre_id;  // The centre the logged-in user belongs to
@@ -37,6 +41,46 @@ router.get('/quick-metrics', authenticateToken, async (req, res) => {
         res.json(data);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch quick metrics' });
+    }
+});
+
+// GET /api/reports/favourites
+router.get('/favourites', authenticateToken, async (req, res) => {
+    // Only allow Admin or Superadmin
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+        return res.status(403).json({ error: "Access denied" });
+    }
+    
+    try {
+        const result = await pool.query('SELECT favourite_report_ids FROM staff WHERE id = $1', [req.user.id]);
+        res.json(result.rows[0]?.favourite_report_ids || []);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch favourites' });
+    }
+});
+
+// POST /api/reports/favourites/toggle
+router.post('/favourites/toggle', authenticateToken, async (req, res) => {
+    // Only allow Admin or Superadmin
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+        return res.status(403).json({ error: "Access denied" });
+    }
+
+    const { reportId } = req.body;
+    try {
+        const result = await pool.query('SELECT favourite_report_ids FROM staff WHERE id = $1', [req.user.id]);
+        let favs = result.rows[0]?.favourite_report_ids || [];
+
+        if (favs.includes(reportId)) {
+            favs = favs.filter(id => id !== reportId);
+        } else {
+            favs.push(reportId);
+        }
+
+        await pool.query('UPDATE staff SET favourite_report_ids = $1 WHERE id = $2', [favs, req.user.id]);
+        res.json(favs);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update' });
     }
 });
 
