@@ -21,10 +21,19 @@ const authenticateToken = (req, res, next) => {
 
 router.use(authenticateToken);
 
-// GET /api/reports/quick-metrics
-router.get('/quick-metrics', async (req, res) => {
+router.get('/quick-metrics', authenticateToken, async (req, res) => {
+    const userRole = req.user.role;           // e.g., 'admin' or 'superadmin'
+    const userCentreId = req.user.centre_id;  // The centre the logged-in user belongs to
+    
+    let requestedCentreId = req.query.centre_id;
+
+    // 🛡️ SECURITY OVERRIDE: 
+    if (userRole !== 'superadmin') {
+        requestedCentreId = userCentreId;
+    }
+
     try {
-        const data = await getQuickMetrics(req.query.centre_id);
+        const data = await getQuickMetrics(requestedCentreId);
         res.json(data);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch quick metrics' });
