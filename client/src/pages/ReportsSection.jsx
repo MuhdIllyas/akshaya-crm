@@ -2949,6 +2949,30 @@ const ReportsSection = () => {
         }
     }, [isSuper]);
 
+    // 👇 State and Fetch logic for Staff Dropdown 👇
+    const [staffList, setStaffList] = useState([]);
+
+    useEffect(() => {
+        const fetchStaff = async () => {
+            try {
+                // If 'all' is selected, send 'all'. Otherwise, send the specific centre ID.
+                // This perfectly matches the route you used in SuperAdminAccountingSection!
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/all?centreId=${selectedCentre}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setStaffList(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch staff:", error);
+            }
+        };
+
+        // Fetch staff immediately, and re-fetch anytime the selectedCentre changes
+        fetchStaff();
+    }, [selectedCentre]);
+
         // 👇 STATE & FETCH LOGIC FOR QUICK CARDS 👇
     const [quickMetrics, setQuickMetrics] = useState({
         collection: 0, expenses: 0, profit: 0, 
@@ -3340,13 +3364,19 @@ const ReportsSection = () => {
                             <label className="block text-xs font-medium text-gray-700 mb-1">Centre</label>
                             <select
                                 value={selectedCentre}
-                                onChange={(e) => setSelectedCentre(e.target.value)}
+                                onChange={(e) => {
+                                    setSelectedCentre(e.target.value);
+                                    setSelectedStaff('all'); 
+                                }}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
                             >
                                 <option value="all">All Centres</option>
-                                <option value="1">Centre A</option>
-                                <option value="2">Centre B</option>
-                                <option value="3">Centre C</option>
+                                {/* 👇 Maps over your real database centres 👇 */}
+                                {centresList.map(c => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                     )}
@@ -3360,9 +3390,12 @@ const ReportsSection = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
                         >
                             <option value="all">All Staff</option>
-                            <option value="1">Rajesh Kumar</option>
-                            <option value="2">Priya Singh</option>
-                            <option value="3">Amit Verma</option>
+                            {/* 👇 Maps over the real staff for the selected centre 👇 */}
+                            {staffList.map(staffMember => (
+                                <option key={staffMember.id} value={staffMember.id}>
+                                    {staffMember.name} {staffMember.role ? `(${staffMember.role})` : ''}
+                                </option>
+                            ))}
                         </select>
                     </div>
 
@@ -3630,30 +3663,68 @@ const ReportsSection = () => {
                                     />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Send To (Roles)</label>
-                                <div className="flex flex-wrap gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                                    {['superadmin', 'admin', 'staff'].map(role => (
-                                        <label key={role} className="flex items-center space-x-2 text-sm cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                className="rounded text-indigo-600 focus:ring-indigo-500"
-                                                checked={scheduleForm.recipient_roles.includes(role)}
-                                                onChange={(e) => {
-                                                    if(e.target.checked) {
-                                                        setScheduleForm({...scheduleForm, recipient_roles: [...scheduleForm.recipient_roles, role]});
-                                                    } else {
-                                                        setScheduleForm({...scheduleForm, recipient_roles: scheduleForm.recipient_roles.filter(r => r !== role)});
-                                                    }
-                                                }}
-                                            />
-                                            <span className="text-gray-700 capitalize">{role}</span>
-                                        </label>
-                                    ))}
+                            {/* Smart Delivery Selection */}
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <label className="block text-sm font-bold text-gray-900 mb-3">Delivery Method</label>
+                                
+                                {/* The Toggle */}
+                                <div className="flex space-x-4 mb-4">
+                                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                                        <input 
+                                            type="radio" 
+                                            className="text-indigo-600 focus:ring-indigo-500"
+                                            checked={scheduleForm.send_to_mode === 'specific'}
+                                            onChange={() => setScheduleForm({...scheduleForm, send_to_mode: 'specific', recipient_roles: []})}
+                                        />
+                                        <span className="font-medium text-gray-700">Specific Emails</span>
+                                    </label>
+                                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                                        <input 
+                                            type="radio" 
+                                            className="text-indigo-600 focus:ring-indigo-500"
+                                            checked={scheduleForm.send_to_mode === 'roles'}
+                                            onChange={() => setScheduleForm({...scheduleForm, send_to_mode: 'roles', specific_emails: ''})}
+                                        />
+                                        <span className="font-medium text-gray-700">Broadcast to Roles</span>
+                                    </label>
                                 </div>
-                                <p className="text-[10px] text-gray-500 mt-1">
-                                    The system will automatically email all active users who have these roles.
-                                </p>
+
+                                {/* Dynamic Input: Specific Emails */}
+                                {scheduleForm.send_to_mode === 'specific' && (
+                                    <div>
+                                        <input 
+                                            type="text" 
+                                            placeholder="admin@akshaya.com, staff@akshaya.com"
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                            value={scheduleForm.specific_emails}
+                                            onChange={(e) => setScheduleForm({...scheduleForm, specific_emails: e.target.value})}
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">Separate multiple emails with commas.</p>
+                                    </div>
+                                )}
+
+                                {/* Dynamic Input: Broadcast Roles */}
+                                {scheduleForm.send_to_mode === 'roles' && (
+                                    <div>
+                                        <div className="flex flex-wrap gap-4">
+                                            {['superadmin', 'admin', 'manager', 'staff'].map(role => (
+                                                <label key={role} className="flex items-center space-x-2 text-sm cursor-pointer">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                        checked={scheduleForm.recipient_roles.includes(role)}
+                                                        onChange={(e) => {
+                                                            if(e.target.checked) setScheduleForm({...scheduleForm, recipient_roles: [...scheduleForm.recipient_roles, role]});
+                                                            else setScheduleForm({...scheduleForm, recipient_roles: scheduleForm.recipient_roles.filter(r => r !== role)});
+                                                        }}
+                                                    />
+                                                    <span className="text-gray-700 capitalize">{role}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <p className="text-[10px] text-amber-600 mt-1 font-medium">⚠️ Warning: This will send the report to every active user with these roles.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
