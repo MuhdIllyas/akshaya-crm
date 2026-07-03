@@ -126,27 +126,34 @@ const checkAndRunSchedules = async () => {
                 // 👇 BULLETPROOF ARRAY PARSER 👇
                 let parsedReportIds = schedule.report_ids;
 
-                // 1. If it's NULL or undefined in the database, make it an empty array
                 if (!parsedReportIds) {
                     parsedReportIds = [];
-                } 
-                // 2. If Postgres returned it as a string "{1,2}", parse it
-                else if (typeof parsedReportIds === 'string') {
-                    parsedReportIds = parsedReportIds.replace(/[{}]/g, '').split(',').filter(Boolean).map(Number);
-                } 
-                // 3. If it's a single number instead of an array, wrap it
-                else if (!Array.isArray(parsedReportIds)) {
+                } else if (typeof parsedReportIds === 'string') {
+                    try {
+                        parsedReportIds = JSON.parse(parsedReportIds);
+                    } catch (e) {
+                        parsedReportIds = parsedReportIds.replace(/[{}[\]"]/g, '').split(',').filter(Boolean).map(Number);
+                    }
+                } else if (!Array.isArray(parsedReportIds)) {
                     parsedReportIds = [parsedReportIds];
                 }
 
-                // 4. Safety Check: If no reports were selected for this schedule, skip it!
                 if (parsedReportIds.length === 0) {
-                    console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No reports selected in this schedule.`);
+                    console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No reports selected.`);
                     continue; 
                 }
 
-                const data = await getReportData(schedule.centre_id || 'all', { fromDate: yesterdayStr, toDate: yesterdayStr }, parsedReportIds, 'all', client);
+                // 👇 FETCH DATA WITH THE CORRECT OBJECT STRUCTURE 👇
+                const data = await getReportData({
+                    targetCentreId: schedule.centre_id || 'all',
+                    fromDate: yesterdayStr,
+                    toDate: yesterdayStr,
+                    period: 'daily',
+                    staffId: 'all',
+                    reportIds: parsedReportIds
+                });
 
+                // Build the PDF
                 const pdfBuffer = await buildPDF(data, parsedReportIds);
 
                 // Send via Resend/Email Service
