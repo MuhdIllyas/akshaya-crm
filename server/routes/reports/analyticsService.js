@@ -1608,6 +1608,81 @@ const fetchProfitByCentreAnalytics = async (client, dates) => {
   }
 };
 
+// ✅ Attendance by Centre Fetcher (Report ID 32)
+const fetchAttendanceByCentreAnalytics = async (client, dates) => {
+  try {
+    const res = await client.query(`
+      WITH staff_counts AS (
+        SELECT centre_id, COUNT(id) as total_staff 
+        FROM staff WHERE status = 'Active' 
+        GROUP BY centre_id
+      ),
+      att_stats AS (
+        SELECT 
+          s.centre_id,
+          COUNT(a.id) FILTER (WHERE a.status IN ('present', 'half_day')) as present_days,
+          COUNT(a.id) FILTER (WHERE a.status = 'absent') as absent_days,
+          SUM(COALESCE(a.late_minutes, 0)) as total_late_mins
+        FROM attendance a
+        JOIN staff s ON a.staff_id = s.id
+        WHERE a.date >= $1 AND a.date <= $2
+        GROUP BY s.centre_id
+      )
+      SELECT 
+        c.name as centre_name,
+        COALESCE(sc.total_staff, 0) as total_staff,
+        COALESCE(ast.present_days, 0) as present_days,
+        COALESCE(ast.absent_days, 0) as absent_days,
+        COALESCE(ast.total_late_mins, 0) as late_mins
+      FROM centres c
+      LEFT JOIN staff_counts sc ON c.id = sc.centre_id
+      LEFT JOIN att_stats ast ON c.id = ast.centre_id
+      ORDER BY present_days DESC
+    `, [dates.fromDate, dates.toDate]);
+
+    return res.rows.map(r => ({
+      centre_name: r.centre_name,
+      total_staff: Number(r.total_staff),
+      present_days: Number(r.present_days),
+      absent_days: Number(r.absent_days),
+      late_mins: Number(r.late_mins)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchAttendanceByCentreAnalytics:", error.message);
+    throw error;
+  }
+};
+
+// ✅ Service Comparison Fetcher (Report ID 33)
+const fetchServiceComparisonAnalytics = async (client, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        c.name as centre_name,
+        COALESCE(srv.name, 'Uncategorized') as service_category,
+        COUNT(se.id) as volume,
+        COALESCE(SUM(se.total_charges), 0) as revenue
+      FROM service_entries se
+      JOIN staff st ON se.staff_id = st.id
+      JOIN centres c ON st.centre_id = c.id
+      LEFT JOIN services srv ON se.category_id = srv.id
+      WHERE se.created_at::date >= $1 AND se.created_at::date <= $2 AND se.status = 'completed'
+      GROUP BY c.name, srv.name
+      ORDER BY c.name, volume DESC
+    `, [dates.fromDate, dates.toDate]);
+
+    return res.rows.map(r => ({
+      centre_name: r.centre_name,
+      service_category: r.service_category,
+      volume: Number(r.volume),
+      revenue: Number(r.revenue)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchServiceComparisonAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -2112,6 +2187,14 @@ export const getReportData = async (params) => {
         }
         case 31: {
           compiledReport.data.profitByCentre = await fetchProfitByCentreAnalytics(client, reportDates);
+          break;
+        }
+        case 32: {
+          compiledReport.data.attendanceByCentre = await fetchAttendanceByCentreAnalytics(client, reportDates);
+          break;
+        }
+        case 33: {
+          compiledReport.data.serviceComparison = await fetchServiceComparisonAnalytics(client, reportDates);
           break;
         }
         default: {

@@ -681,6 +681,35 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const profitTrendChartData = Object.values(profitTrendMap);
     const activeProfitCentres = Array.from(profitCentresSet);
 
+    // 👇 THE ATTENDANCE & SERVICE COMPARISON EXTRACTION 👇
+    // 1. Attendance by Centre (ID 32)
+    const attByCentreData = apiData.attendanceByCentre || [];
+    let topAttendanceCentre = null;
+    let mostLateCentre = null;
+
+    if (attByCentreData.length > 0) {
+        topAttendanceCentre = [...attByCentreData].sort((a, b) => b.present_days - a.present_days)[0];
+        mostLateCentre = [...attByCentreData].sort((a, b) => b.late_mins - a.late_mins)[0];
+    }
+
+    // 2. Service Comparison (ID 33)
+    const svcCompareDataRaw = apiData.serviceComparison || [];
+    
+    // We need to pivot the data to build a Stacked Bar Chart for Recharts
+    const svcPivotMap = {};
+    const svcCategories = new Set();
+    
+    svcCompareDataRaw.forEach(row => {
+        if (!svcPivotMap[row.centre_name]) svcPivotMap[row.centre_name] = { centre_name: row.centre_name, total_volume: 0 };
+        svcPivotMap[row.centre_name][row.service_category] = row.volume;
+        svcPivotMap[row.centre_name].total_volume += row.volume;
+        svcCategories.add(row.service_category);
+    });
+    
+    const svcCompareChartData = Object.values(svcPivotMap).sort((a, b) => b.total_volume - a.total_volume);
+    const activeSvcCategories = Array.from(svcCategories);
+    const topVolumeCompareCentre = svcCompareChartData.length > 0 ? svcCompareChartData[0] : null;
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1541,6 +1570,58 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                 </>
                             )}
 
+                            {/* Attendance by Centre Preview Summary */}
+                            {report?.id === 32 && attByCentreData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Highest Attendance Logged" value={topAttendanceCentre?.centre_name || '-'} subtitle={`${topAttendanceCentre?.present_days || 0} Total Present Days`} icon={FiUserCheck} color="bg-emerald-600" />
+                                        <StatCard title="Most Late Minutes" value={mostLateCentre?.centre_name || '-'} subtitle={`${mostLateCentre?.late_mins || 0} Minutes Total`} icon={FiClock} color="bg-rose-600" />
+                                    </div>
+                                    {renderChartCard('Centre Attendance Profile (Present vs Absent Days)',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={attByCentreData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('attPresentGrad', '#10B981')}
+                                                    {renderGradient('attAbsentGrad', '#EF4444')}
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="centre_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                                <Bar dataKey="present_days" name="Total Present Days" fill="url(#attPresentGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                                <Bar dataKey="absent_days" name="Total Absent Days" fill="url(#attAbsentGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Service Comparison Preview Summary */}
+                            {report?.id === 33 && svcCompareChartData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <StatCard title="Highest Volume Centre" value={topVolumeCompareCentre?.centre_name || '-'} subtitle={`${topVolumeCompareCentre?.total_volume || 0} Total Services`} icon={FiBriefcase} color="bg-indigo-600" />
+                                        <StatCard title="Unique Service Categories" value={activeSvcCategories.length} subtitle="Handled across the network" icon={FiPieChart} color="bg-amber-500" />
+                                    </div>
+                                    {renderChartCard('Service Distribution Matrix (Stacked Category Volume)',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={svcCompareChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="centre_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                                {/* Stack the bars using the generated category list! */}
+                                                {activeSvcCategories.map((cat, idx) => (
+                                                    <Bar key={idx} dataKey={cat} name={cat} stackId="a" fill={CHART_COLORS[idx % CHART_COLORS.length]} animationDuration={800} />
+                                                ))}
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </>
+                            )}
+
                         </div>
                     )}
                     
@@ -1548,8 +1629,72 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* 👇 NEW: Profit by Centre Table 👇 */}
-                            {report?.id === 31 ? (
+                            {/* 👇 NEW: Service Comparison Table (ID 33) 👇 */}
+                            {report?.id === 33 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Centre Name</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Service Category</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Volume Processed</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Revenue Generated</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {svcCompareDataRaw.length > 0 ? (
+                                                svcCompareDataRaw.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm font-bold text-gray-900">{row.centre_name}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600">{row.service_category}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center font-medium">{row.volume}</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.revenue.toLocaleString('en-IN')}</td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="4" className="px-4 py-12 text-center text-gray-500">No service data found across centres for this period.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            
+                            ) : report?.id === 32 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Centre Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Active Staff Roster</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase text-emerald-600">Total Present Days</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase text-rose-600">Total Absent Days</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-amber-600">Total Late Minutes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {attByCentreData.length > 0 ? (
+                                                attByCentreData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm font-bold text-gray-900">{row.centre_name}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center">{row.total_staff} Employees</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-center font-bold">{row.present_days}</td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-center font-bold">{row.absent_days}</td>
+                                                        <td className={`px-4 py-3 text-sm text-right font-medium ${row.late_mins > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                                            {row.late_mins > 0 ? `${row.late_mins} Mins` : '-'}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center text-gray-500">No attendance data found across centres for this period.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                            ) : report?.id === 31 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">
