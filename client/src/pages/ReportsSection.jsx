@@ -3546,7 +3546,7 @@ const ReportsSection = ({
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Send To (Roles)</label>
                                 <div className="flex flex-wrap gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                                    {['superadmin', 'admin', 'manager', 'staff'].map(role => (
+                                    {['superadmin', 'admin', 'staff'].map(role => (
                                         <label key={role} className="flex items-center space-x-2 text-sm cursor-pointer">
                                             <input 
                                                 type="checkbox" 
