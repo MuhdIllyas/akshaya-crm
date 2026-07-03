@@ -2908,12 +2908,26 @@ const ReportsSection = ({
         { id: 3, name: 'Attendance Report', frequency: 'weekly', recipient: 'hr@company.com', enabled: false },
         { id: 4, name: 'Daily Closing Report', frequency: 'daily', recipient: 'manager@company.com', enabled: true },
     ]);
-    const [recentExports, setRecentExports] = useState([
-        { name: 'Financial Report - June.pdf', date: '2026-06-28', size: '2.4 MB' },
-        { name: 'Attendance Report.xlsx', date: '2026-06-27', size: '1.1 MB' },
-        { name: 'Profit Report.pdf', date: '2026-06-26', size: '3.2 MB' },
-        { name: 'Staff Report.xlsx', date: '2026-06-25', size: '1.8 MB' },
-    ]);
+
+    // 👇 ADD THESE NEW LINES HERE 👇
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+    const [scheduleForm, setScheduleForm] = useState({
+        name: '',
+        report_ids: [],
+        frequency: 'daily',
+        run_time: '08:00',
+        recipient_roles: ['admin', 'superadmin']
+    });
+
+    const SCHEDULABLE_REPORTS = [
+        { id: 1, name: "Financial Summary" },
+        { id: 2, name: "Profit & Loss" },
+        { id: 17, name: "Pending Services" },
+        { id: 18, name: "Completed Services" },
+        { id: 21, name: "Customer Summary" },
+        { id: 26, name: "Team Financials" },
+        { id: 27, name: "Team Productivity" }
+    ];
 
     // ─── Report Data ───
     const allReports = [
@@ -3346,7 +3360,10 @@ const ReportsSection = ({
                             />
                         ))}
                     </div>
-                    <button className="mt-3 flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
+                    <button 
+                        onClick={() => setIsScheduleModalOpen(true)}
+                        className="mt-3 flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
+                    >
                         <FiPlus className="h-3 w-3 mr-1" />
                         Add Scheduled Report
                     </button>
@@ -3401,6 +3418,132 @@ const ReportsSection = ({
                     />
                 )}
             </AnimatePresence>
+            {/* ─── REPORT PREVIEW PANEL ─── */}
+           <AnimatePresence>
+                {selectedReport && (
+                    <ReportPreviewPanel
+                        report={selectedReport}
+                        previewData={previewData}             
+                        onClose={() => setSelectedReport(null)}
+                        onExport={handleGenerate}            
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* 👇 ADD THIS ENTIRE MODAL BLOCK HERE 👇 */}
+            {/* ─── SCHEDULE CREATION MODAL ─── */}
+            {isScheduleModalOpen && (
+                <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+                    >
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-900">Create Automated Report</h3>
+                            <button onClick={() => setIsScheduleModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <FiX className="h-5 w-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            {/* Schedule Name */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Schedule Name</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="e.g., Morning Financial Summary"
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    value={scheduleForm.name}
+                                    onChange={(e) => setScheduleForm({...scheduleForm, name: e.target.value})}
+                                />
+                            </div>
+
+                            {/* Reports Selection */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Select Reports to Include (PDF)</label>
+                                <div className="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200 h-40 overflow-y-auto">
+                                    {SCHEDULABLE_REPORTS.map(rep => (
+                                        <label key={rep.id} className="flex items-center space-x-2 text-sm cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                checked={scheduleForm.report_ids.includes(rep.id)}
+                                                onChange={(e) => {
+                                                    if(e.target.checked) {
+                                                        setScheduleForm({...scheduleForm, report_ids: [...scheduleForm.report_ids, rep.id]});
+                                                    } else {
+                                                        setScheduleForm({...scheduleForm, report_ids: scheduleForm.report_ids.filter(id => id !== rep.id)});
+                                                    }
+                                                }}
+                                            />
+                                            <span className="text-gray-700 truncate">{rep.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Time & Frequency */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+                                    <select 
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        value={scheduleForm.frequency}
+                                        onChange={(e) => setScheduleForm({...scheduleForm, frequency: e.target.value})}
+                                    >
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Run Time (24H)</label>
+                                    <input 
+                                        type="time" 
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        value={scheduleForm.run_time}
+                                        onChange={(e) => setScheduleForm({...scheduleForm, run_time: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+                            <button 
+                                onClick={() => setIsScheduleModalOpen(false)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    // Add to frontend UI temporarily
+                                    const newSchedule = {
+                                        id: Date.now(),
+                                        name: scheduleForm.name || 'New Schedule',
+                                        frequency: scheduleForm.frequency,
+                                        recipient: 'Admins',
+                                        enabled: true
+                                    };
+                                    setScheduledReports([...scheduledReports, newSchedule]);
+                                    
+                                    // Close modal
+                                    setIsScheduleModalOpen(false);
+                                    
+                                    // Reset form
+                                    setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', recipient_roles: ['admin', 'superadmin'] });
+                                }}
+                                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                            >
+                                Save Schedule
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+            {/* 👆 END OF MODAL BLOCK 👆 */}
+
         </div>
     );
 };
