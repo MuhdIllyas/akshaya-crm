@@ -15,6 +15,7 @@ import {
     CartesianGrid, LineChart, Line, PieChart, Pie, Cell,
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
+import * as htmlToImage from 'html-to-image';
 import { toPng } from 'html-to-image';
 import { jspdf } from 'jspdf';
 
