@@ -161,7 +161,7 @@ const checkAndRunSchedules = async () => {
                 await sendReportEmail(
                     emails, 
                     `${schedule.name} - ${yesterdayStr}`, 
-                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${yesterdayStr}.\n\n- Akshaya CRM System`, 
+                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${yesterdayStr}.\n\n- Akshaya Sahayi`, 
                     [{ filename: fileName, content: pdfBuffer }]
                 );
             } else {
