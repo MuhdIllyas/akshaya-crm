@@ -123,12 +123,26 @@ const checkAndRunSchedules = async () => {
                 yest.setDate(yest.getDate() - 1);
                 const yesterdayStr = yest.toISOString().split('T')[0];
 
-                // Ensure report_ids is ALWAYS a standard JavaScript array
+                // 👇 BULLETPROOF ARRAY PARSER 👇
                 let parsedReportIds = schedule.report_ids;
 
-                // If PostgreSQL returned it as a string formatted like "{1,2}", parse it into an array
-                if (typeof parsedReportIds === 'string') {
-                    parsedReportIds = parsedReportIds.replace(/[{}]/g, '').split(',').map(Number);
+                // 1. If it's NULL or undefined in the database, make it an empty array
+                if (!parsedReportIds) {
+                    parsedReportIds = [];
+                } 
+                // 2. If Postgres returned it as a string "{1,2}", parse it
+                else if (typeof parsedReportIds === 'string') {
+                    parsedReportIds = parsedReportIds.replace(/[{}]/g, '').split(',').filter(Boolean).map(Number);
+                } 
+                // 3. If it's a single number instead of an array, wrap it
+                else if (!Array.isArray(parsedReportIds)) {
+                    parsedReportIds = [parsedReportIds];
+                }
+
+                // 4. Safety Check: If no reports were selected for this schedule, skip it!
+                if (parsedReportIds.length === 0) {
+                    console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No reports selected in this schedule.`);
+                    continue; 
                 }
 
                 const data = await getReportData(schedule.centre_id || 'all', { fromDate: yesterdayStr, toDate: yesterdayStr }, parsedReportIds, 'all', client);
