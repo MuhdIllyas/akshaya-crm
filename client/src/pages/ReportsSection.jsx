@@ -627,6 +627,18 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         topOverallContributor = [...teamContribData].sort((a, b) => b.gross_profit - a.gross_profit)[0];
     }
 
+    // 👇 THE CENTRE COMPARISON EXTRACTION 👇
+    const centreComparisonData = apiData.centreComparison || [];
+    let topRevenueCentre = null;
+    let topProfitCentre = null;
+    let topVolumeCentre = null;
+
+    if (centreComparisonData.length > 0) {
+        topRevenueCentre = [...centreComparisonData].sort((a, b) => b.total_revenue - a.total_revenue)[0];
+        topProfitCentre = [...centreComparisonData].sort((a, b) => b.net_profit - a.net_profit)[0];
+        topVolumeCentre = [...centreComparisonData].sort((a, b) => b.total_services - a.total_services)[0];
+    }
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1383,6 +1395,35 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                     </div>
                                 </>
                             )}
+
+                            {/* Centre Comparison Preview Summary */}
+                            {report?.id === 29 && centreComparisonData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Highest Revenue" value={topRevenueCentre?.centre_name || '-'} subtitle={`₹${(topRevenueCentre?.total_revenue || 0).toLocaleString('en-IN')}`} icon={FiTrendingUp} color="bg-emerald-600" />
+                                        <StatCard title="Highest Net Profit" value={topProfitCentre?.centre_name || '-'} subtitle={`₹${(topProfitCentre?.net_profit || 0).toLocaleString('en-IN')}`} icon={FiAward} color="bg-indigo-600" />
+                                        <StatCard title="Highest Service Volume" value={topVolumeCentre?.centre_name || '-'} subtitle={`${topVolumeCentre?.total_services || 0} services`} icon={FiActivity} color="bg-amber-500" />
+                                    </div>
+                                    {renderChartCard('Centre Comparison (Gross Profit vs Expenses)',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={centreComparisonData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('centreProfitGrad', '#10B981')}
+                                                    {renderGradient('centreExpGrad', '#EF4444')}
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="centre_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                                <Bar dataKey="gross_profit" name="Gross Profit" fill="url(#centreProfitGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                                <Bar dataKey="total_expenses" name="Operating Expenses" fill="url(#centreExpGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </>
+                            )}
+
                         </div>
                     )}
                     
@@ -1390,8 +1431,58 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Team Contribution Table */}
-                            {report?.id === 28 ? (
+                            {/* 👇 NEW: Centre Comparison Table 👇 */}
+                            {report?.id === 29 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Centre Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Active Staff</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Services</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Revenue</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Gross Profit</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-rose-600">Expenses</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-indigo-600">Net Profit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {centreComparisonData.length > 0 ? (
+                                                centreComparisonData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm font-bold text-gray-900">
+                                                            <div className="flex items-center">
+                                                                {idx === 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" />}
+                                                                {row.centre_name}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center text-sm text-gray-600">
+                                                            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                                                {row.active_staff} Users
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center font-medium">{row.total_services}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-right">₹{row.total_revenue.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.gross_profit.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">- ₹{row.total_expenses.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold bg-indigo-50/30">₹{row.net_profit.toLocaleString('en-IN')}</td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="7" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiHome className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Centre Data Found</h3>
+                                                        <p className="text-xs text-gray-500">No operational data across centres for this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 28 ? (
                                 <div className="p-0">
                                     {(() => {
                                         // Mathematically group the data by Team Name

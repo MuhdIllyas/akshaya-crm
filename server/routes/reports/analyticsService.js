@@ -1417,6 +1417,69 @@ const fetchTeamContributionAnalytics = async (client, centreId, dates) => {
   }
 };
 
+// ✅ Centre Comparison Fetcher (Report ID 29)
+const fetchCentreComparisonAnalytics = async (client, dates) => {
+  try {
+    const res = await client.query(`
+      WITH centre_services AS (
+        SELECT 
+          st.centre_id,
+          COUNT(se.id) as total_services,
+          COALESCE(SUM(se.total_charges), 0) as total_revenue,
+          COALESCE(SUM(se.service_charges), 0) as gross_profit
+        FROM service_entries se
+        JOIN staff st ON se.staff_id = st.id
+        WHERE se.created_at::date >= $1 AND se.created_at::date <= $2
+          AND se.status = 'completed'
+        GROUP BY st.centre_id
+      ),
+      centre_expenses AS (
+        SELECT 
+          centre_id,
+          COALESCE(SUM(amount), 0) as total_expenses
+        FROM expenses
+        WHERE expense_date >= $1 AND expense_date <= $2
+          AND status IN ('approved', 'auto_approved')
+          AND (is_reversal IS NULL OR is_reversal = FALSE)
+        GROUP BY centre_id
+      ),
+      centre_staff AS (
+        SELECT centre_id, COUNT(id) as active_staff
+        FROM staff
+        WHERE status = 'Active'
+        GROUP BY centre_id
+      )
+      SELECT 
+        c.id as centre_id,
+        c.name as centre_name,
+        COALESCE(cs.total_services, 0) as total_services,
+        COALESCE(cs.total_revenue, 0) as total_revenue,
+        COALESCE(cs.gross_profit, 0) as gross_profit,
+        COALESCE(ce.total_expenses, 0) as total_expenses,
+        (COALESCE(cs.gross_profit, 0) - COALESCE(ce.total_expenses, 0)) as net_profit,
+        COALESCE(cst.active_staff, 0) as active_staff
+      FROM centres c
+      LEFT JOIN centre_services cs ON c.id = cs.centre_id
+      LEFT JOIN centre_expenses ce ON c.id = ce.centre_id
+      LEFT JOIN centre_staff cst ON c.id = cst.centre_id
+      ORDER BY net_profit DESC
+    `, [dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      centre_name: row.centre_name,
+      total_services: Number(row.total_services),
+      total_revenue: Number(row.total_revenue),
+      gross_profit: Number(row.gross_profit),
+      total_expenses: Number(row.total_expenses),
+      net_profit: Number(row.net_profit),
+      active_staff: Number(row.active_staff)
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchCentreComparisonAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1909,6 +1972,10 @@ export const getReportData = async (params) => {
         // ID 28: Team Contribution
         case 28: {
           compiledReport.data.teamContribution = await fetchTeamContributionAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 29: {
+          compiledReport.data.centreComparison = await fetchCentreComparisonAnalytics(client, reportDates);
           break;
         }
         default: {
