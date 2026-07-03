@@ -18,6 +18,7 @@ import {
 import { toPng } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import * as XLSX from 'xlsx';
+import autoTable from 'jspdf-autotable';
 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
@@ -422,6 +423,87 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             console.error('Error generating Excel:', error);
             alert('Failed to generate Excel file.');
         }
+    };
+
+    // 👇 Multi-page Tabular PDF Export
+    const generateTabularPDF = () => {
+        if (!previewData || !previewData.data) {
+            alert("No data available to export.");
+            return;
+        }
+
+        // 1. Grab the exact same data array we used for the Excel export!
+        let exportData = [];
+        switch (report.id) {
+            case 1: case 2: exportData = [financials]; break;
+            case 4: exportData = expenseData; break;
+            case 5: exportData = walletSummaryData; break;
+            case 6: exportData = cashFlowData; break;
+            case 7: exportData = ledgerData; break;
+            case 8: exportData = pendingCollectionsData; break;
+            case 9: exportData = attendanceData; break;
+            case 10: exportData = performanceData; break;
+            case 11: exportData = salaryData; break;
+            case 12: exportData = incentiveData; break;
+            case 13: case 25: exportData = reviewData; break;
+            case 14: exportData = leaveData; break;
+            case 15: case 16: exportData = serviceProfitData.length > 0 ? serviceProfitData : serviceRevenueData; break;
+            case 17: exportData = pendingServicesData; break;
+            case 18: exportData = completedServicesData; break;
+            case 19: exportData = staffWiseServicesData; break;
+            case 20: exportData = serviceTimeData; break;
+            case 21: exportData = customerSummaryData; break;
+            case 22: exportData = newCustomerData; break;
+            case 23: exportData = repeatCustomerData; break;
+            case 24: exportData = activityData; break;
+            case 26: exportData = teamFinData; break;
+            case 27: exportData = teamPerfData; break;
+            case 28: exportData = teamContribData; break;
+            case 29: exportData = centreComparisonData; break;
+            case 30: exportData = revCentreSummary; break;
+            case 31: exportData = profitCentreSummary; break;
+            case 32: exportData = attByCentreData; break;
+            case 33: exportData = svcCompareDataRaw; break;
+            default: return alert("Export logic not mapped for this report.");
+        }
+
+        if (exportData.length === 0) {
+            return alert("The table is empty for the selected period.");
+        }
+
+        // 2. Initialize the PDF Document
+        const doc = new jsPDF();
+
+        // Add Header text
+        doc.setFontSize(16);
+        doc.text(`${report.name}`, 14, 15);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')}`, 14, 22);
+
+        // 3. Format the keys into beautiful Table Headers (e.g., "net_profit" -> "NET PROFIT")
+        const headers = Object.keys(exportData[0]).map(key => 
+            key.replace(/_/g, ' ').toUpperCase()
+        );
+
+        // Format the rows (Add commas to big numbers)
+        const rows = exportData.map(obj => Object.values(obj).map(val => 
+            typeof val === 'number' ? val.toLocaleString('en-IN') : val
+        ));
+
+        // 4. Generate the AutoTable
+        autoTable(doc, {
+            startY: 30,
+            head: [headers],
+            body: rows,
+            theme: 'striped',
+            headStyles: { fillColor: [79, 70, 229] }, // Tailwind Indigo-600 to match your UI
+            styles: { fontSize: 8 },
+            alternateRowStyles: { fillColor: [249, 250, 251] } // Tailwind Gray-50
+        });
+
+        // 5. Download the file
+        doc.save(`${report.name.replace(/\s+/g, '_')}_Table.pdf`);
     };
 
     // 1. SAFELY EXTRACT API DATA 
@@ -964,26 +1046,39 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <button 
-                                onClick={generateVisualPDF} 
-                                disabled={isGeneratingPDF || activeTab !== 'preview'}
-                                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                                    activeTab !== 'preview' 
-                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
-                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                }`}
-                                title={activeTab !== 'preview' ? "Please switch to the Preview tab to download visual PDF" : "Download PDF"}
-                            >
-                                <FiDownload className="h-4 w-4" />
-                                <span>{isGeneratingPDF ? 'Creating...' : 'Export PDF'}</span>
-                            </button>
-                            <button 
-                                onClick={generateExcelData} 
-                                className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
-                            >
-                                <FiFileText className="h-4 w-4" /><span>Export Excel</span>
-                            </button>
-                            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                            
+                            {/* If they are on the PREVIEW tab -> Show Visual PDF */}
+                            {activeTab === 'preview' && (
+                                <button 
+                                    onClick={generateVisualPDF} 
+                                    disabled={isGeneratingPDF}
+                                    className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+                                >
+                                    <FiDownload className="h-4 w-4" />
+                                    <span>{isGeneratingPDF ? 'Creating...' : 'Export Visual PDF'}</span>
+                                </button>
+                            )}
+
+                            {/* If they are on the DATA tab -> Show Table PDF and Excel */}
+                            {activeTab === 'data' && (
+                                <>
+                                    <button 
+                                        onClick={generateTabularPDF} 
+                                        className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+                                    >
+                                        <FiFileText className="h-4 w-4" /><span>Export Table PDF</span>
+                                    </button>
+                                    <button 
+                                        onClick={generateExcelData} 
+                                        className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                                    >
+                                        <FiDatabase className="h-4 w-4" /><span>Export Excel</span>
+                                    </button>
+                                </>
+                            )}
+                            
+                            {/* Close Button */}
+                            <button onClick={onClose} className="p-2 ml-2 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">
                                 <FiX className="h-4 w-4 text-gray-600" />
                             </button>
                         </div>
