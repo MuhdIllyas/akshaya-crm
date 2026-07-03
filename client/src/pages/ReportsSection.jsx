@@ -228,14 +228,14 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
                 <div>
                     <p className="font-medium text-gray-900 text-sm">{schedule.name}</p>
                     <p className="text-xs text-gray-500">
-                        {schedule.frequency.charAt(0).toUpperCase() + schedule.frequency.slice(1)} • {schedule.recipient}
+                        {schedule.frequency.slice(1)} • To: {schedule.recipient_roles?.join(', ')}
                     </p>
                 </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
                 <input
                     type="checkbox"
-                    checked={schedule.enabled}
+                    checked={schedule.is_active}
                     onChange={() => onToggle?.(schedule.id)}
                     className="sr-only peer"
                 />
@@ -2902,12 +2902,26 @@ const ReportsSection = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedReport, setSelectedReport] = useState(null);
     const [favourites, setFavourites] = useState([1, 2, 3]);
-    const [scheduledReports, setScheduledReports] = useState([
-        { id: 1, name: 'CEO Monthly Report', frequency: 'monthly', recipient: 'ceo@company.com', enabled: true },
-        { id: 2, name: 'Weekly Financial Report', frequency: 'weekly', recipient: 'finance@company.com', enabled: true },
-        { id: 3, name: 'Attendance Report', frequency: 'weekly', recipient: 'hr@company.com', enabled: false },
-        { id: 4, name: 'Daily Closing Report', frequency: 'daily', recipient: 'manager@company.com', enabled: true },
-    ]);
+    const [scheduledReports, setScheduledReports] = useState([]);
+    
+    const fetchSchedules = async () => {
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/schedules`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setScheduledReports(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch schedules:", error);
+        }
+    };
+
+    // Fetch schedules when the component loads
+    useEffect(() => {
+        fetchSchedules();
+    }, []);
 
     // 👇 ADD THESE NEW LINES HERE 👇
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -3030,12 +3044,27 @@ const ReportsSection = ({
         );
     };
 
-    const toggleScheduled = (scheduleId) => {
-        setScheduledReports(prev =>
-            prev.map(s =>
-                s.id === scheduleId ? { ...s, enabled: !s.enabled } : s
-            )
-        );
+    const toggleScheduled = async (scheduleId) => {
+        // Find the current status
+        const schedule = scheduledReports.find(s => s.id === scheduleId);
+        if (!schedule) return;
+
+        // Optimistic UI Update (flips it instantly for a snappy feel)
+        setScheduledReports(prev => prev.map(s => 
+            s.id === scheduleId ? { ...s, is_active: !s.is_active } : s
+        ));
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/schedules/${scheduleId}/toggle`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            
+            if (!res.ok) throw new Error("Failed to toggle");
+        } catch (error) {
+            console.error("Error toggling schedule:", error);
+            fetchSchedules(); // If it fails, fetch the real data to revert the UI
+        }
     };
 
     const handleGenerate = async (overrideFormat = null, specificReport = null) => {
@@ -3549,22 +3578,36 @@ const ReportsSection = ({
                                 Cancel
                             </button>
                             <button 
-                                onClick={() => {
-                                    // Add to frontend UI temporarily
-                                    const newSchedule = {
-                                        id: Date.now(),
-                                        name: scheduleForm.name || 'New Schedule',
-                                        frequency: scheduleForm.frequency,
-                                        recipient: 'Admins',
-                                        enabled: true
-                                    };
-                                    setScheduledReports([...scheduledReports, newSchedule]);
-                                    
-                                    // Close modal
-                                    setIsScheduleModalOpen(false);
-                                    
-                                    // Reset form
-                                    setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', recipient_roles: ['admin', 'superadmin'] });
+                                onClick={async () => {
+                                    try {
+                                        const payload = {
+                                            ...scheduleForm,
+                                            // Send centre_id if one is selected, otherwise null for global
+                                            centre_id: selectedCentre === 'all' ? null : parseInt(selectedCentre)
+                                        };
+
+                                        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/schedules`, {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                            },
+                                            body: JSON.stringify(payload)
+                                        });
+
+                                        if (res.ok) {
+                                            fetchSchedules(); 
+                                            setIsScheduleModalOpen(false); 
+                                            // Reset form
+                                            setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', recipient_roles: ['admin', 'superadmin'] });
+                                        } else {
+                                            alert("Failed to save schedule.");
+                                        }
+                                    } catch (error) {
+                                        console.error("Error saving schedule:", error);
+                                        alert("An error occurred.");
+                                    }
+                                    // 👆 END OF REPLACEMENT 👆
                                 }}
                                 className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                             >
