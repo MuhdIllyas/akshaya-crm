@@ -2929,6 +2929,13 @@ const ReportsSection = ({
         { id: 27, name: "Team Productivity" }
     ];
 
+    const [recentExports, setRecentExports] = useState([
+        { name: 'Financial Report - June.pdf', date: '2026-06-28', size: '2.4 MB' },
+        { name: 'Attendance Report.xlsx', date: '2026-06-27', size: '1.1 MB' },
+        { name: 'Profit Report.pdf', date: '2026-06-26', size: '3.2 MB' },
+        { name: 'Staff Report.xlsx', date: '2026-06-25', size: '1.8 MB' },
+    ]);
+
     // ─── Report Data ───
     const allReports = [
         // Financial Reports
