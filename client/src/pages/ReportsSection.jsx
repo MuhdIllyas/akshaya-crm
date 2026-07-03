@@ -2901,53 +2901,53 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
 };
 
 // ─── MAIN REPORTS SECTION ───
-const ReportsSection = ({
-    centreId,
-    isSuperAdmin = false,
-    onExport,
-    onGenerateReport,
-}) => {
-    // ─── State ───
+const ReportsSection = () => {
+    
+    // Read directly from the browser storage saved during Login.jsx
+    const storedRole = localStorage.getItem('role');
+    const storedCentreId = localStorage.getItem('centre_id');
+    const isSuper = storedRole === 'superadmin';
+
+    // ─── Native Auth State ───
+    const [isSuperAdmin] = useState(isSuper);
+    const [userCentreId] = useState(storedCentreId);
+
+    // ─── Report States ───
     const [previewData, setPreviewData] = useState(null); 
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const [period, setPeriod] = useState('monthly');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
-    const [selectedCentre, setSelectedCentre] = useState(isSuperAdmin ? 'all' : centreId);
+    
+    // 👇 2. Instantly defaults to 'all' for Superadmin, or locks to specific Centre for Admin
+    const [selectedCentre, setSelectedCentre] = useState(isSuper ? 'all' : storedCentreId); 
     const [selectedStaff, setSelectedStaff] = useState('all');
     const [exportFormat, setExportFormat] = useState('pdf');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedReport, setSelectedReport] = useState(null);
     const [favourites, setFavourites] = useState([1, 2, 3]);
     const [scheduledReports, setScheduledReports] = useState([]);
+    const [centresList, setCentresList] = useState([]);
 
-    // 👇 STATE & FETCH LOGIC FOR QUICK CARDS 👇
-    const [quickMetrics, setQuickMetrics] = useState({
-        collection: 0, expenses: 0, profit: 0, 
-        attendancePresent: 0, attendanceTotal: 0, 
-        servicesCount: 0, pendingAmount: 0, isLoading: true
-    });
-
+    // 👇 3. Only fetch the Centres Dropdown List if they are a Superadmin
     useEffect(() => {
-        const fetchQuickMetrics = async () => {
-            setQuickMetrics(prev => ({ ...prev, isLoading: true }));
-            try {
-                // Fetches metrics and reacts if the Superadmin changes the centre filter!
-                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=${selectedCentre}`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setQuickMetrics({ ...data, isLoading: false });
+        if (isSuper) {
+            const fetchCentres = async () => {
+                try {
+                    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/centres`, {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setCentresList(data);
+                    }
+                } catch (error) {
+                    console.error("Failed to fetch centres:", error);
                 }
-            } catch (error) {
-                console.error("Failed to fetch quick metrics:", error);
-                setQuickMetrics(prev => ({ ...prev, isLoading: false }));
-            }
-        };
-
-        fetchQuickMetrics();
-    }, [selectedCentre]);
+            };
+            fetchCentres();
+        }
+    }, [isSuper]);
     
     const fetchSchedules = async () => {
         try {
@@ -2975,7 +2975,9 @@ const ReportsSection = ({
         report_ids: [],
         frequency: 'daily',
         run_time: '08:00',
-        recipient_roles: ['admin', 'superadmin']
+        send_to_mode: 'specific', // 👈 NEW: Default to specific emails
+        specific_emails: '',      // 👈 NEW: Empty string for text input
+        recipient_roles: []       // 👈 CHANGED: Empty by default
     });
 
     const SCHEDULABLE_REPORTS = [
@@ -3523,19 +3525,7 @@ const ReportsSection = ({
                     />
                 )}
             </AnimatePresence>
-            {/* ─── REPORT PREVIEW PANEL ─── */}
-           <AnimatePresence>
-                {selectedReport && (
-                    <ReportPreviewPanel
-                        report={selectedReport}
-                        previewData={previewData}             
-                        onClose={() => setSelectedReport(null)}
-                        onExport={handleGenerate}            
-                    />
-                )}
-            </AnimatePresence>
 
-            {/* 👇 ADD THIS ENTIRE MODAL BLOCK HERE 👇 */}
             {/* ─── SCHEDULE CREATION MODAL ─── */}
             {isScheduleModalOpen && (
                 <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -3651,7 +3641,10 @@ const ReportsSection = ({
                                     try {
                                         const payload = {
                                             ...scheduleForm,
-                                            // Send centre_id if one is selected, otherwise null for global
+                                            // Convert comma-separated string into a clean array
+                                            specific_emails: scheduleForm.specific_emails 
+                                                ? scheduleForm.specific_emails.split(',').map(e => e.trim()).filter(e => e) 
+                                                : [],
                                             centre_id: selectedCentre === 'all' ? null : parseInt(selectedCentre)
                                         };
 
