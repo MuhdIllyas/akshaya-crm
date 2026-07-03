@@ -3514,6 +3514,31 @@ const ReportsSection = ({
                                     />
                                 </div>
                             </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Send To (Roles)</label>
+                                <div className="flex flex-wrap gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                    {['superadmin', 'admin', 'manager', 'staff'].map(role => (
+                                        <label key={role} className="flex items-center space-x-2 text-sm cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                checked={scheduleForm.recipient_roles.includes(role)}
+                                                onChange={(e) => {
+                                                    if(e.target.checked) {
+                                                        setScheduleForm({...scheduleForm, recipient_roles: [...scheduleForm.recipient_roles, role]});
+                                                    } else {
+                                                        setScheduleForm({...scheduleForm, recipient_roles: scheduleForm.recipient_roles.filter(r => r !== role)});
+                                                    }
+                                                }}
+                                            />
+                                            <span className="text-gray-700 capitalize">{role}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    The system will automatically email all active users who have these roles.
+                                </p>
+                            </div>
                         </div>
 
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
