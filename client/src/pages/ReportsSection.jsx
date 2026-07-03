@@ -4468,7 +4468,7 @@ const ReportsSection = () => {
                                 {scheduleForm.send_to_mode === 'roles' && (
                                     <div>
                                         <div className="flex flex-wrap gap-4">
-                                            {['superadmin', 'admin', 'manager', 'staff'].map(role => (
+                                            {['superadmin', 'admin', 'staff'].map(role => (
                                                 <label key={role} className="flex items-center space-x-2 text-sm cursor-pointer">
                                                     <input 
                                                         type="checkbox" 
