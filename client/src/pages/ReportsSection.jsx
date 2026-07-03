@@ -228,7 +228,7 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
                 <div>
                     <p className="font-medium text-gray-900 text-sm">{schedule.name}</p>
                     <p className="text-xs text-gray-500">
-                        {schedule.frequency.slice(1)} • To: {schedule.recipient_roles?.join(', ')}
+                        {schedule.frequency} • To: {schedule.recipient_roles?.join(', ')}
                     </p>
                 </div>
             </div>
@@ -3387,7 +3387,7 @@ const ReportsSection = ({
                     <span className="text-xs text-gray-500">Automated email delivery</span>
                 </div>
                 <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         {scheduledReports.map((schedule) => (
                             <ScheduledReportCard
                                 key={schedule.id}
