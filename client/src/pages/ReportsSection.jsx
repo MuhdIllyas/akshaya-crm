@@ -15,7 +15,7 @@ import {
     CartesianGrid, LineChart, Line, PieChart, Pie, Cell,
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 import { jspdf } from 'jspdf';
 
 // ─── StatCard Component (matching existing design) ───
@@ -305,22 +305,23 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         setIsGeneratingPDF(true);
 
         try {
-            // Take a high-quality snapshot of the HTML element
-            const canvas = await html2canvas(reportRef.current, {
-                scale: 2, // High resolution
-                useCORS: true, 
+            // Take snapshot using native browser rendering (Supports oklch & modern CSS!)
+            const dataUrl = await toPng(reportRef.current, {
+                pixelRatio: 2, // High resolution for crisp charts
                 backgroundColor: '#ffffff'
             });
 
-            // Calculate PDF dimensions (A4 size)
-            const imgData = canvas.toDataURL('image/png');
+            // Set up the PDF
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            
+            // Get the image properties to maintain the exact aspect ratio
+            const imgProps = pdf.getImageProperties(dataUrl);
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
             // Add the image to the PDF and download
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`${report.name.replace(/\s+/g, '_')}_Visual_Report.pdf`);
+            pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`${report?.name?.replace(/\s+/g, '_')}_Visual_Report.pdf`);
             
         } catch (error) {
             console.error('Error generating PDF:', error);
