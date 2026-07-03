@@ -639,6 +639,27 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         topVolumeCentre = [...centreComparisonData].sort((a, b) => b.total_services - a.total_services)[0];
     }
 
+    // 👇 THE REVENUE BY CENTRE EXTRACTION 👇
+    const revByCentreData = apiData.revenueByCentre || { summary: [], trend: [] };
+    const revCentreSummary = revByCentreData.summary || [];
+    
+    // Calculate Top Stats
+    const totalGlobalRevenue = revCentreSummary.reduce((sum, c) => sum + c.total_revenue, 0);
+    const topRevCentreObj = revCentreSummary.length > 0 ? revCentreSummary[0] : null; 
+    const avgRevenuePerCentre = revCentreSummary.length > 0 ? Math.round(totalGlobalRevenue / revCentreSummary.length) : 0;
+
+    // Pivot the Trend Data so Recharts can draw multiple lines easily
+    const revTrendMap = {};
+    const revCentresSet = new Set();
+    (revByCentreData.trend || []).forEach(row => {
+        const dStr = new Date(row.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        if (!revTrendMap[dStr]) revTrendMap[dStr] = { date: dStr };
+        revTrendMap[dStr][row.centre_name] = row.revenue;
+        revCentresSet.add(row.centre_name);
+    });
+    const revTrendChartData = Object.values(revTrendMap);
+    const activeRevCentres = Array.from(revCentresSet);
+
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
@@ -1424,6 +1445,44 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                 </>
                             )}
 
+                            {/* Revenue by Centre Preview Summary */}
+                            {report?.id === 30 && revCentreSummary.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Global Revenue" value={`₹${totalGlobalRevenue.toLocaleString('en-IN')}`} subtitle="Across all centres" icon={FiDollarSign} color="bg-indigo-600" />
+                                        <StatCard title="Top Generating Centre" value={topRevCentreObj?.centre_name || '-'} subtitle={`Generated ₹${(topRevCentreObj?.total_revenue || 0).toLocaleString('en-IN')}`} icon={FiAward} color="bg-emerald-600" />
+                                        <StatCard title="Average per Centre" value={`₹${avgRevenuePerCentre.toLocaleString('en-IN')}`} subtitle="Baseline comparison" icon={FiActivity} color="bg-amber-500" />
+                                    </div>
+                                    
+                                    {renderChartCard('Daily Revenue Timeline Comparison',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={revTrendChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                                
+                                                {/* Dynamically generate a line for every active centre */}
+                                                {activeRevCentres.map((centreName, idx) => (
+                                                    <Line 
+                                                        key={idx}
+                                                        type="monotone" 
+                                                        dataKey={centreName} 
+                                                        name={centreName}
+                                                        stroke={CHART_COLORS[idx % CHART_COLORS.length]} 
+                                                        strokeWidth={3} 
+                                                        dot={false}
+                                                        activeDot={{ r: 6 }} 
+                                                        animationDuration={800} 
+                                                    />
+                                                ))}
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </>
+                            )}
+
                         </div>
                     )}
                     
@@ -1431,8 +1490,50 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* 👇 NEW: Centre Comparison Table 👇 */}
-                            {report?.id === 29 ? (
+                            {/* 👇 NEW: Revenue by Centre Table 👇 */}
+                            {report?.id === 30 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Centre Name</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Completed Services</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Revenue</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-rose-600">Govt/Dept Charges</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-indigo-600">Gross Profit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {revCentreSummary.length > 0 ? (
+                                                revCentreSummary.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm font-bold text-gray-900">
+                                                            <div className="flex items-center">
+                                                                {idx === 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" />}
+                                                                {row.centre_name}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 text-center font-medium">{row.total_services}</td>
+                                                        <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.total_revenue.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">- ₹{row.total_dept_charges.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold bg-indigo-50/30">₹{row.gross_profit.toLocaleString('en-IN')}</td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-4 py-12 text-center">
+                                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                            <FiBarChart2 className="h-5 w-5 text-gray-400" />
+                                                        </div>
+                                                        <h3 className="text-sm font-medium text-gray-900 mb-1">No Revenue Data</h3>
+                                                        <p className="text-xs text-gray-500">No profitable services were recorded across the centres during this period.</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 29 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">

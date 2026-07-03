@@ -1480,6 +1480,61 @@ const fetchCentreComparisonAnalytics = async (client, dates) => {
   }
 };
 
+// ✅ Revenue by Centre Fetcher (Report ID 30)
+const fetchRevenueByCentreAnalytics = async (client, dates) => {
+  try {
+    // 1. Overall Summary by Centre
+    const summary = await client.query(`
+      SELECT 
+        c.id, c.name as centre_name, 
+        COUNT(se.id) as total_services,
+        COALESCE(SUM(se.total_charges), 0) as total_revenue,
+        COALESCE(SUM(se.department_charges), 0) as total_dept_charges,
+        COALESCE(SUM(se.service_charges), 0) as gross_profit
+      FROM centres c
+      LEFT JOIN staff st ON c.id = st.centre_id
+      LEFT JOIN service_entries se ON st.id = se.staff_id 
+        AND se.created_at::date >= $1 AND se.created_at::date <= $2 
+        AND se.status = 'completed'
+      GROUP BY c.id, c.name
+      ORDER BY total_revenue DESC
+    `, [dates.fromDate, dates.toDate]);
+
+    // 2. Daily Trend Breakdown (For the Line Chart)
+    const trend = await client.query(`
+      SELECT 
+        c.name as centre_name, 
+        se.created_at::date as date, 
+        COALESCE(SUM(se.total_charges), 0) as daily_revenue
+      FROM centres c
+      JOIN staff st ON c.id = st.centre_id
+      JOIN service_entries se ON st.id = se.staff_id 
+      WHERE se.created_at::date >= $1 AND se.created_at::date <= $2 
+        AND se.status = 'completed'
+      GROUP BY c.name, se.created_at::date
+      ORDER BY se.created_at::date ASC
+    `, [dates.fromDate, dates.toDate]);
+
+    return {
+      summary: summary.rows.map(r => ({
+        centre_name: r.centre_name,
+        total_services: Number(r.total_services),
+        total_revenue: Number(r.total_revenue),
+        total_dept_charges: Number(r.total_dept_charges),
+        gross_profit: Number(r.gross_profit)
+      })),
+      trend: trend.rows.map(r => ({
+        centre_name: r.centre_name,
+        date: r.date,
+        revenue: Number(r.daily_revenue)
+      }))
+    };
+  } catch (error) {
+    console.error("SQL Error in fetchRevenueByCentreAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -1976,6 +2031,10 @@ export const getReportData = async (params) => {
         }
         case 29: {
           compiledReport.data.centreComparison = await fetchCentreComparisonAnalytics(client, reportDates);
+          break;
+        }
+        case 30: {
+          compiledReport.data.revenueByCentre = await fetchRevenueByCentreAnalytics(client, reportDates);
           break;
         }
         default: {
