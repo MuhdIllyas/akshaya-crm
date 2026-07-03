@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { toPng } from 'html-to-image';
 import { jsPDF } from "jspdf";
+import * as XLSX from 'xlsx';
 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
@@ -328,6 +329,98 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             alert('Failed to generate visual PDF.');
         } finally {
             setIsGeneratingPDF(false);
+        }
+    };
+
+    // 👇 Excel Data Export Function
+    const generateExcelData = () => {
+        if (!previewData || !previewData.data) {
+            alert("No data available to export.");
+            return;
+        }
+
+        try {
+            // 1. Determine which data array to export based on the report ID
+            let exportData = [];
+            let sheetName = "Data";
+
+            // Map the report ID to the exact data array we formatted earlier
+            switch (report.id) {
+                case 1: case 2: // Financials
+                    exportData = [financials]; sheetName = "Financial_Summary"; break;
+                case 4: // Expenses
+                    exportData = expenseData; sheetName = "Expenses"; break;
+                case 5: // Wallets
+                    exportData = walletSummaryData; sheetName = "Wallet_Summary"; break;
+                case 6: // Cash Flow
+                    exportData = cashFlowData; sheetName = "Cash_Flow"; break;
+                case 7: // Ledger
+                    exportData = ledgerData; sheetName = "Ledger_Transactions"; break;
+                case 8: // Pending Collections
+                    exportData = pendingCollectionsData; sheetName = "Pending_Payments"; break;
+                case 9: // Attendance
+                    exportData = attendanceData; sheetName = "Attendance_Log"; break;
+                case 10: // Performance
+                    exportData = performanceData; sheetName = "Staff_Performance"; break;
+                case 11: // Salary
+                    exportData = salaryData; sheetName = "Salaries"; break;
+                case 12: // Incentives
+                    exportData = incentiveData; sheetName = "Incentives"; break;
+                case 13: case 25: // Reviews
+                    exportData = reviewData; sheetName = "Reviews"; break;
+                case 14: // Leaves
+                    exportData = leaveData; sheetName = "Leave_Applications"; break;
+                case 15: case 16: // Service Revenue/Profit
+                    exportData = serviceProfitData.length > 0 ? serviceProfitData : serviceRevenueData; sheetName = "Services"; break;
+                case 17: // Pending Services
+                    exportData = pendingServicesData; sheetName = "Pending_Services"; break;
+                case 18: // Completed Services
+                    exportData = completedServicesData; sheetName = "Completed_Services"; break;
+                case 19: // Staff Wise
+                    exportData = staffWiseServicesData; sheetName = "Staff_Services"; break;
+                case 20: // Service Time
+                    exportData = serviceTimeData; sheetName = "Turnaround_Times"; break;
+                case 21: // Customer Summary
+                    exportData = customerSummaryData; sheetName = "Customers"; break;
+                case 22: // New Customers
+                    exportData = newCustomerData; sheetName = "New_Customers"; break;
+                case 23: // Returning Customers
+                    exportData = repeatCustomerData; sheetName = "Repeat_Customers"; break;
+                case 24: // Customer Activity
+                    exportData = activityData; sheetName = "Customer_Activity"; break;
+                case 26: // Team Financials
+                    exportData = teamFinData; sheetName = "Team_Financials"; break;
+                case 27: // Team Performance
+                    exportData = teamPerfData; sheetName = "Team_Performance"; break;
+                case 28: // Team Contribution
+                    exportData = teamContribData; sheetName = "Team_Contributions"; break;
+                case 29: // Centre Comparison
+                    exportData = centreComparisonData; sheetName = "Centres_Overview"; break;
+                case 30: // Revenue by Centre
+                    exportData = revCentreSummary; sheetName = "Centre_Revenue"; break;
+                case 31: // Profit by Centre
+                    exportData = profitCentreSummary; sheetName = "Centre_Profit"; break;
+                case 32: // Attendance by Centre
+                    exportData = attByCentreData; sheetName = "Centre_Attendance"; break;
+                case 33: // Service Comparison
+                    exportData = svcCompareDataRaw; sheetName = "Centre_Services"; break;
+                default:
+                    alert("Export logic not mapped for this specific report.");
+                    return;
+            }
+
+            // 2. Create the Excel Workbook
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+            // 3. Trigger Download
+            const fileName = `${report.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+
+        } catch (error) {
+            console.error('Error generating Excel:', error);
+            alert('Failed to generate Excel file.');
         }
     };
 
@@ -884,8 +977,11 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                 <FiDownload className="h-4 w-4" />
                                 <span>{isGeneratingPDF ? 'Creating...' : 'Export PDF'}</span>
                             </button>
-                            <button onClick={() => onExport?.('excel', report)} className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm">
-                                <FiFileText className="h-4 w-4" /><span>Excel</span>
+                            <button 
+                                onClick={generateExcelData} 
+                                className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                            >
+                                <FiFileText className="h-4 w-4" /><span>Export Excel</span>
                             </button>
                             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                                 <FiX className="h-4 w-4 text-gray-600" />
