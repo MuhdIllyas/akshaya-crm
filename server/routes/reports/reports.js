@@ -1,5 +1,6 @@
 import express from "express";
 import jwt from "jsonwebtoken";
+import pool from "../../db.js";
 import { getReportData , getQuickMetrics } from "./analyticsService.js";
 import { buildPDF, buildExcel, buildCSV } from '../../utils/exportBuilder.js';
 
