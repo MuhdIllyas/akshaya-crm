@@ -15,6 +15,8 @@ import {
     CartesianGrid, LineChart, Line, PieChart, Pie, Cell,
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
@@ -212,7 +214,6 @@ const QuickReportTile = ({ label, value, icon: Icon, color, onClick }) => (
 );
 
 // ─── Scheduled Report Card ───
-// ─── Scheduled Report Card ───
 const ScheduledReportCard = ({ schedule, onToggle }) => {
     const frequencyColors = {
         daily: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -220,11 +221,9 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
         monthly: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     };
 
-    // Safely format the emails array
     const emails = schedule.resolved_emails || [];
     let displayEmails = 'No active users found';
     if (emails.length > 0) {
-        // If there are more than 2 emails, show the first 2 and say "+X more"
         displayEmails = emails.length > 2 
             ? `${emails.slice(0, 2).join(', ')} +${emails.length - 2} more`
             : emails.join(', ');
@@ -241,7 +240,6 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
                     <p className="text-xs text-gray-500 capitalize">
                         {schedule.frequency} • {schedule.recipient_roles?.join(', ')}
                     </p>
-                    {/* 👇 The new exact Email ID display 👇 */}
                     <div className="flex items-center mt-1 text-[10px] text-gray-400 font-mono" title={emails.join(', ')}>
                         <FiUserCheck className="mr-1 h-3 w-3 shrink-0" />
                         <span className="truncate">{displayEmails}</span>
@@ -288,20 +286,18 @@ const CustomTooltip = ({ active, payload, label, formatter, labelFormatter }) =>
 const formatCurrency = (value) => `₹${value.toLocaleString('en-IN')}`;
 const formatDays = (value) => `${value} ${value === 1 ? 'Day' : 'Days'}`;
 
-// ─── Report Preview Panel (Wired to V3 Backend) ───
+// ─── Report Preview Panel ───
 const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const [activeTab, setActiveTab] = useState('preview');
     const COLORS = CHART_COLORS;
 
-    // 1. SAFELY EXTRACT API DATA 
-    // We default everything to empty objects/arrays so React never crashes
+    // SAFELY EXTRACT API DATA
     const apiData = previewData?.data || {};
     const financials = apiData.financials?.today || {};
     const staffData = apiData.staff?.staff || {};
     const serviceRevenueData = apiData.serviceRevenue || [];
     const expenseData = apiData.expenseReport || [];
 
-    // Extract the new Expense by Wallet data
     const expenseByWalletData = apiData.expenseByWallet || [];
     const expenseWalletDistribution = expenseByWalletData.map(w => ({
         name: w.wallet_name,
@@ -311,22 +307,19 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const walletSummaryData = apiData.walletSummary || [];
     const cashFlowData = apiData.cashFlow || [];
 
-    // ✅ ADD THIS: Extract Ledger Data and calculate quick summaries
     const ledgerData = apiData.ledger || [];
     const ledgerSummary = { credit: 0, debit: 0, count: ledgerData.length };
     const ledgerCategories = {};
-    
     ledgerData.forEach(tx => {
         if (tx.type === 'credit') ledgerSummary.credit += tx.amount;
         if (tx.type === 'debit') ledgerSummary.debit += tx.amount;
         if (!ledgerCategories[tx.category]) ledgerCategories[tx.category] = 0;
         ledgerCategories[tx.category] += tx.amount;
     });
-
     const ledgerCategoryChart = Object.entries(ledgerCategories)
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
-        .slice(0, 10); // Top 10 volume categories
+        .slice(0, 10);
 
     const pendingCollectionsData = apiData.pendingCollections || [];
     const pendingSummary = { 
@@ -334,55 +327,41 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         count: pendingCollectionsData.length 
     };
 
-    // ✅ Extract Attendance Data and calculate distribution
     const attendanceData = apiData.attendanceReport || [];
     const attendanceSummary = { present: 0, absent: 0, late: 0, half_day: 0 };
-    
     attendanceData.forEach(record => {
         if (attendanceSummary[record.status] !== undefined) {
             attendanceSummary[record.status]++;
         } else {
-            attendanceSummary[record.status] = 1; // Catch anything else
+            attendanceSummary[record.status] = 1;
         }
-        // Also count as "Late" if they were present but late
         if (record.late_minutes > 0) attendanceSummary.late++;
     });
-
     const attendancePieData = [
         { name: 'Present', value: attendanceSummary.present },
         { name: 'Absent', value: attendanceSummary.absent },
         { name: 'Half Day', value: attendanceSummary.half_day || 0 }
     ].filter(d => d.value > 0);
 
-    // ✅ Extract Performance Data and calculate leaderboard stats
     const performanceData = apiData.performanceReport || [];
     const topPerformer = performanceData.length > 0 ? performanceData[0] : null;
     const totalTeamServices = performanceData.reduce((sum, r) => sum + r.total_services, 0);
     const activeContributors = performanceData.filter(r => r.total_services > 0).length;
 
-    // ✅ Extract Salary Data and calculate total payroll
     const salaryData = apiData.salaryReport || [];
-    const salarySummary = { 
-        totalPayroll: 0, 
-        totalDeductions: 0, 
-        pendingPayouts: 0 
-    };
-
-    // ✅ Extract Incentive Data
-    const incentiveData = apiData.incentiveReport || [];
-    const totalSuggestedBonus = incentiveData.reduce((sum, r) => sum + r.suggested_bonus, 0);
-
-        salaryData.forEach(s => {
+    const salarySummary = { totalPayroll: 0, totalDeductions: 0, pendingPayouts: 0 };
+    salaryData.forEach(s => {
         salarySummary.totalPayroll += s.net_salary;
         salarySummary.totalDeductions += s.deductions;
         if (s.status === 'pending') salarySummary.pendingPayouts++;
     });
 
-    // ✅ Extract Review Data and calculate averages/distribution
+    const incentiveData = apiData.incentiveReport || [];
+    const totalSuggestedBonus = incentiveData.reduce((sum, r) => sum + r.suggested_bonus, 0);
+
     const reviewData = apiData.reviewReport || [];
     let totalServiceStars = 0, totalStaffStars = 0, ratedStaffCount = 0;
     const ratingDist = { 5:0, 4:0, 3:0, 2:0, 1:0 };
-
     reviewData.forEach(r => {
         totalServiceStars += r.service_rating;
         if (r.staff_rating > 0) {
@@ -393,71 +372,58 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             ratingDist[r.service_rating]++;
         }
     });
-
     const reviewSummary = {
         count: reviewData.length,
         avgService: reviewData.length > 0 ? (totalServiceStars / reviewData.length).toFixed(1) : 0,
         avgStaff: ratedStaffCount > 0 ? (totalStaffStars / ratedStaffCount).toFixed(1) : 0
     };
-
     const reviewChartData = [
-        { stars: '5 Stars', count: ratingDist[5], fill: '#10B981' }, // Emerald
+        { stars: '5 Stars', count: ratingDist[5], fill: '#10B981' },
         { stars: '4 Stars', count: ratingDist[4], fill: '#34D399' },
-        { stars: '3 Stars', count: ratingDist[3], fill: '#FBBF24' }, // Amber
-        { stars: '2 Stars', count: ratingDist[2], fill: '#F87171' }, // Rose
+        { stars: '3 Stars', count: ratingDist[3], fill: '#FBBF24' },
+        { stars: '2 Stars', count: ratingDist[2], fill: '#F87171' },
         { stars: '1 Star',  count: ratingDist[1], fill: '#EF4444' },
     ];
 
-    // ✅ ADD THIS: Extract Leave Data and calculate distribution
     const leaveData = apiData.leaveReport || [];
     const leaveSummary = { total_days: 0, pending: 0, approved: 0, rejected: 0 };
-    
     leaveData.forEach(l => {
         leaveSummary.total_days += l.days_taken;
         if (leaveSummary[l.status] !== undefined) leaveSummary[l.status]++;
     });
-
     const leaveStatusChart = [
-        { name: 'Approved', value: leaveSummary.approved, fill: '#10B981' }, // Emerald
-        { name: 'Pending', value: leaveSummary.pending, fill: '#F59E0B' },   // Amber
-        { name: 'Rejected', value: leaveSummary.rejected, fill: '#EF4444' }  // Rose
+        { name: 'Approved', value: leaveSummary.approved, fill: '#10B981' },
+        { name: 'Pending', value: leaveSummary.pending, fill: '#F59E0B' },
+        { name: 'Rejected', value: leaveSummary.rejected, fill: '#EF4444' }
     ].filter(d => d.value > 0);
 
-    // ✅ Extract Service Profit Data
     const serviceProfitData = apiData.serviceProfit || [];
     const profitSummary = { 
         totalProfit: 0, 
         totalServices: serviceProfitData.length,
         mostProfitable: serviceProfitData.length > 0 ? serviceProfitData[0] : null
     };
-    
     serviceProfitData.forEach(s => {
         profitSummary.totalProfit += s.gross_profit;
     });
 
-    // ✅ ADD THIS: Extract Pending Services Data
     const pendingServicesData = apiData.pendingServices || [];
     const pendingServicesSummary = { pending: 0, in_progress: 0, rejected: 0, totalDays: 0 };
-    
     pendingServicesData.forEach(s => {
         if (s.status === 'pending') pendingServicesSummary.pending++;
         else if (s.status === 'in_progress') pendingServicesSummary.in_progress++;
         else pendingServicesSummary.rejected++;
-        
         pendingServicesSummary.totalDays += s.days_pending;
     });
-
     const avgDaysPending = pendingServicesData.length > 0 
         ? Math.round(pendingServicesSummary.totalDays / pendingServicesData.length) 
         : 0;
-
     const pendingChartData = [
-        { name: 'Not Started', value: pendingServicesSummary.pending, fill: '#F59E0B' },   // Amber
-        { name: 'In Progress', value: pendingServicesSummary.in_progress, fill: '#6366F1' }, // Indigo
-        { name: 'Rejected/Delayed', value: pendingServicesSummary.rejected, fill: '#EF4444' } // Rose
+        { name: 'Not Started', value: pendingServicesSummary.pending, fill: '#F59E0B' },
+        { name: 'In Progress', value: pendingServicesSummary.in_progress, fill: '#6366F1' },
+        { name: 'Rejected/Delayed', value: pendingServicesSummary.rejected, fill: '#EF4444' }
     ].filter(d => d.value > 0);
 
-    // ✅ Extract Completed Services Data
     const completedServicesData = apiData.completedServicesReport || [];
     const completedSummary = {
         total: completedServicesData.length,
@@ -465,152 +431,114 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             ? Math.round(completedServicesData.reduce((sum, r) => sum + r.days_taken, 0) / completedServicesData.length)
             : 0
     };
-    
     const completedByCategory = {};
     completedServicesData.forEach(r => {
         completedByCategory[r.service_name] = (completedByCategory[r.service_name] || 0) + 1;
     });
-    
     const completedChartData = Object.entries(completedByCategory)
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
-        .slice(0, 10); // Top 10 completed volume
+        .slice(0, 10);
 
-    // ✅ Extract Staff-wise Services Data
     const staffWiseServicesData = apiData.staffWiseServices || [];
 
-    // ✅ Extract Service Time Data
     const serviceTimeData = apiData.serviceTimeReport || [];
-    
-    // Smart Time Formatter
     const formatDuration = (hours) => {
         if (hours < 1) return '< 1 Hr';
         if (hours < 24) return `${hours.toFixed(1)} Hrs`;
         return `${(hours / 24).toFixed(1)} Days`;
     };
-
-    // Calculate overall averages
     let totalServiceHours = 0, totalServiceVolume = 0;
     serviceTimeData.forEach(r => {
         totalServiceHours += (r.avg_hours * r.total_requests);
         totalServiceVolume += r.total_requests;
     });
-    
     const overallAvgHours = totalServiceVolume > 0 ? (totalServiceHours / totalServiceVolume) : 0;
-    const slowestService = serviceTimeData.length > 0 ? serviceTimeData[0] : null; // Already sorted DESC by backend
-    
-    // Convert to days for the Bar Chart so it scales nicely
+    const slowestService = serviceTimeData.length > 0 ? serviceTimeData[0] : null;
     const timeChartData = serviceTimeData.slice(0, 10).map(r => ({
         name: r.service_name,
         avg_days: Number((r.avg_hours / 24).toFixed(1))
     }));
 
-    // ✅ Extract Customer Summary Data
     const customerSummaryData = apiData.customerSummary || [];
     const custStats = { total: customerSummaryData.length, registered: 0, walkIn: 0, returning: 0, new: 0 };
-    
     customerSummaryData.forEach(c => {
         if (c.is_registered) custStats.registered++; else custStats.walkIn++;
         if (c.is_returning) custStats.returning++; else custStats.new++;
     });
-
     const registeredChart = [
-        { name: 'Portal Registered', value: custStats.registered, fill: '#6366F1' }, // Indigo
-        { name: 'Walk-ins', value: custStats.walkIn, fill: '#94A3B8' }               // Slate
+        { name: 'Portal Registered', value: custStats.registered, fill: '#6366F1' },
+        { name: 'Walk-ins', value: custStats.walkIn, fill: '#94A3B8' }
+    ].filter(d => d.value > 0);
+    const returningChart = [
+        { name: 'Returning', value: custStats.returning, fill: '#10B981' },
+        { name: 'New Customers', value: custStats.new, fill: '#F59E0B' }
     ].filter(d => d.value > 0);
 
-    const returningChart = [
-        { name: 'Returning', value: custStats.returning, fill: '#10B981' }, // Emerald
-        { name: 'New Customers', value: custStats.new, fill: '#F59E0B' }    // Amber
-    ].filter(d => d.value > 0);
-    
-    // ✅ ADD THIS: Extract Returning Customers Data
     const repeatCustomerData = apiData.repeatCustomers || [];
     const repeatStats = { 
         totalVips: repeatCustomerData.length,
         totalLTV: 0,
         mostFrequent: repeatCustomerData.length > 0 ? repeatCustomerData[0] : null
     };
-    
     repeatCustomerData.forEach(c => {
         repeatStats.totalLTV += c.lifetime_spent;
     });
-
     const avgLTV = repeatStats.totalVips > 0 ? Math.round(repeatStats.totalLTV / repeatStats.totalVips) : 0;
 
-    // ✅ Extract New Customers Data
     const newCustomerData = apiData.newCustomers || [];
 
-    // ✅ Extract Customer Activity Data
     const activityData = apiData.customerActivity || [];
-    
-    // Generate an Activity Timeline (Services per day)
     const timelineMap = {};
     activityData.forEach(r => {
         const dStr = new Date(r.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
         timelineMap[dStr] = (timelineMap[dStr] || 0) + 1;
     });
-    
-    // Convert to array and reverse it so the chart reads left-to-right chronologically
     const activityTimelineChart = Object.keys(timelineMap)
         .map(key => ({ date: key, volume: timelineMap[key] }))
         .reverse();
 
-    // ✅ Extract Customer Feedback Data
     const feedbackData = apiData.customerFeedback || [];
     const feedbackStats = { total: feedbackData.length, sumStars: 0, fiveStar: 0 };
     const distMap = { 5:0, 4:0, 3:0, 2:0, 1:0 };
-    
     feedbackData.forEach(r => {
         feedbackStats.sumStars += r.service_rating;
         if (r.service_rating === 5) feedbackStats.fiveStar++;
         if (distMap[r.service_rating] !== undefined) distMap[r.service_rating]++;
     });
-
     const avgCentreRating = feedbackStats.total > 0 ? (feedbackStats.sumStars / feedbackStats.total).toFixed(1) : 0;
-
     const feedbackChartData = [
-        { stars: '5 Stars', count: distMap[5], fill: '#10B981' }, // Emerald
+        { stars: '5 Stars', count: distMap[5], fill: '#10B981' },
         { stars: '4 Stars', count: distMap[4], fill: '#34D399' },
-        { stars: '3 Stars', count: distMap[3], fill: '#FBBF24' }, // Amber
-        { stars: '2 Stars', count: distMap[2], fill: '#F87171' }, // Rose
+        { stars: '3 Stars', count: distMap[3], fill: '#FBBF24' },
+        { stars: '2 Stars', count: distMap[2], fill: '#F87171' },
         { stars: '1 Star',  count: distMap[1], fill: '#EF4444' }
-    ];    
+    ];
 
-    // ✅ Extract Team Financial Data
     const teamFinData = apiData.teamFinancials || [];
     const teamStats = { totalRev: 0, totalExp: 0, totalNet: 0, topTeam: null };
-    
     teamFinData.forEach((t, index) => {
         teamStats.totalRev += t.total_revenue;
         teamStats.totalExp += t.total_expenses;
         teamStats.totalNet += t.net_profit;
-        if (index === 0) teamStats.topTeam = t; // Since SQL sorted by Net Profit DESC
+        if (index === 0) teamStats.topTeam = t;
     });
 
-    // ✅ Extract Team Performance Data
     const teamPerfData = apiData.teamPerformance || [];
-    
     let highestVolumeTeam = null;
     let highestRatedTeam = null;
     let fastestTeam = null;
-
     if (teamPerfData.length > 0) {
-        // Find top volume
         highestVolumeTeam = [...teamPerfData].sort((a, b) => b.total_services - a.total_services)[0];
-        // Find highest rated (must have ratings)
         const ratedTeams = teamPerfData.filter(t => t.avg_rating > 0);
         if (ratedTeams.length > 0) {
             highestRatedTeam = [...ratedTeams].sort((a, b) => b.avg_rating - a.avg_rating)[0];
         }
-        // Find fastest (must have handled services)
         const activeTeams = teamPerfData.filter(t => t.total_services > 0);
         if (activeTeams.length > 0) {
             fastestTeam = [...activeTeams].sort((a, b) => a.avg_tat_hours - b.avg_tat_hours)[0];
         }
     }
-
-    // Helper to format hours cleanly in the UI
     const formatHoursToText = (hours) => {
         if (hours === 0) return '-';
         if (hours < 1) return '< 1 Hr';
@@ -618,58 +546,40 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         return `${(hours / 24).toFixed(1)} Days`;
     };
 
-    // ✅ Extract Team Contribution Data
     const teamContribData = apiData.teamContribution || [];
     let topOverallContributor = null;
-    
     if (teamContribData.length > 0) {
-        // Find the absolute highest earner across all teams
         topOverallContributor = [...teamContribData].sort((a, b) => b.gross_profit - a.gross_profit)[0];
     }
 
-    // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
     const todayStr = new Date().toISOString().split('T')[0];
     const includesToday = previewData?.metadata?.toDate === todayStr;
 
-    // ✅ Smart Trend Calculator
     const periodTrendRaw = apiData.financials?.periodTrend || [];
     let displayTrend = [];
-
     if (periodTrendRaw.length > 31) {
-        // If the date range is huge (e.g. Yearly), automatically group the daily data into Months!
         const monthlyGroups = {};
         periodTrendRaw.forEach(pt => {
             const date = new Date(pt.label);
             const monthKey = date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-            if (!monthlyGroups[monthKey]) monthlyGroups[monthKey] = { label: monthKey, revenue: 0, expenses: 0, profit: 0, grossProfit: 0 }; // 👈 Added grossProfit
+            if (!monthlyGroups[monthKey]) monthlyGroups[monthKey] = { label: monthKey, revenue: 0, expenses: 0, profit: 0, grossProfit: 0 };
             monthlyGroups[monthKey].revenue += pt.revenueCollected;
             monthlyGroups[monthKey].expenses += pt.operatingExpenses;
             monthlyGroups[monthKey].profit += pt.netProfit;
-            monthlyGroups[monthKey].grossProfit += (pt.grossProfit || 0); // 👈 Added grossProfit
+            monthlyGroups[monthKey].grossProfit += (pt.grossProfit || 0);
         });
         displayTrend = Object.values(monthlyGroups);
     } else {
-        // If the range is a month or less, show the exact Days!
         displayTrend = periodTrendRaw.map(pt => ({
             label: new Date(pt.label).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
             revenue: pt.revenueCollected,
             expenses: pt.operatingExpenses,
             profit: pt.netProfit,
-            grossProfit: pt.grossProfit || 0 // 👈 Added grossProfit
+            grossProfit: pt.grossProfit || 0
         }));
     }
-    
-    // Note: V3 Analytics returns 'monthly', not 'monthlyTrend'
-    const monthlyTrendRaw = apiData.financials?.monthly || {}; 
 
-    // Extract and format the live wallet data for the Pie Chart
-    const rawWallets = apiData.wallets || [];
-    const walletDistribution = rawWallets.map(w => ({
-        name: w.wallet_type ? w.wallet_type.charAt(0).toUpperCase() + w.wallet_type.slice(1) : 'Unknown',
-        value: Number(w.total_balance || 0)
-    })).filter(w => w.value > 0); 
-
-    // 2. TRANSFORM MONTHLY TREND FOR RECHARTS
+    const monthlyTrendRaw = apiData.financials?.monthly || {};
     const monthlyTrend = monthlyTrendRaw.revenueCollected ? 
         monthlyTrendRaw.revenueCollected.map((rev, i) => ({
             month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i],
@@ -678,19 +588,13 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
         })).filter(m => m.revenue > 0 || m.expenses > 0)
         : [];
 
-    // 3. SAFE FALLBACKS FOR UN-WIRED TABS 
-    // We use mock data here temporarily so the Data/Charts tabs don't throw .map() errors!
-    const fallbackWallets = [
-        { name: 'Cash', value: 85000 },
-        { name: 'Bank', value: 465000 },
-        { name: 'Digital', value: 210000 },
-    ];
-    const fallbackServices = [
-        { name: 'Photocopy', revenue: 320000 },
-        { name: 'Printing', revenue: 280000 },
-    ];
+    const rawWallets = apiData.wallets || [];
+    const walletDistribution = rawWallets.map(w => ({
+        name: w.wallet_type ? w.wallet_type.charAt(0).toUpperCase() + w.wallet_type.slice(1) : 'Unknown',
+        value: Number(w.total_balance || 0)
+    })).filter(w => w.value > 0);
 
-    // ─── Modern Chart Helpers ───
+    // Chart helpers
     const renderChartCard = (title, children, icon = FiBarChart2) => (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4">
             <div className="flex items-center space-x-2 mb-3">
@@ -771,14 +675,14 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                {/* Content with ID for PDF capture */}
+                <div id="report-preview-content" className="flex-1 overflow-y-auto p-6">
                     {!previewData ? (
                         <div className="flex justify-center items-center h-full text-gray-500">Loading preview data...</div>
                     ) : activeTab === 'preview' && (
                         <div className="space-y-6">
                             
-                            {/* V3 Financial Summary Cards (Now Guaranteed to Render) */}
+                            {/* V3 Financial Summary Cards */}
                             {Object.keys(financials).length > 0 && (
                                 <div className="grid grid-cols-4 gap-3">
                                     <StatCard title="Revenue Collected" value={`₹${(financials.revenueCollected || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiTrendingUp} color="bg-emerald-600" />
@@ -921,14 +825,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             {report?.id === 10 && performanceData.length > 0 && (
                                 <>
                                     <div className="grid grid-cols-3 gap-3">
-                                        {/* Golden Top Performer Card */}
-                                        <StatCard 
-                                            title="Top Performer" 
-                                            value={topPerformer?.staff_name || '-'} 
-                                            subtitle={`₹${(topPerformer?.total_revenue || 0).toLocaleString('en-IN')} Generated`} 
-                                            icon={FiAward} 
-                                            color="bg-amber-500" 
-                                        />
+                                        <StatCard title="Top Performer" value={topPerformer?.staff_name || '-'} subtitle={`₹${(topPerformer?.total_revenue || 0).toLocaleString('en-IN')} Generated`} icon={FiAward} color="bg-amber-500" />
                                         <StatCard title="Team Services" value={totalTeamServices} subtitle="Successfully Completed" icon={FiCheckCircle} color="bg-emerald-600" />
                                         <StatCard title="Active Contributors" value={activeContributors} subtitle="Staff Generated Revenue" icon={FiUsers} color="bg-blue-600" />
                                     </div>
@@ -1087,7 +984,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                 <>
                                     <div className="grid grid-cols-3 gap-3">
                                         <StatCard title="Total Backlog" value={pendingServicesData.length} subtitle="Active Applications" icon={FiBriefcase} color="bg-rose-600" />
-                                        <StatCard title="In Progress" value={pendingSummary.in_progress} subtitle="Currently being worked on" icon={FiActivity} color="bg-indigo-600" />
+                                        <StatCard title="In Progress" value={pendingServicesSummary.in_progress} subtitle="Currently being worked on" icon={FiActivity} color="bg-indigo-600" />
                                         <StatCard title="Avg Time in Queue" value={`${avgDaysPending} Days`} subtitle="Across all pending items" icon={FiClock} color="bg-amber-500" />
                                     </div>
                                     {renderChartCard('Pipeline Status',
@@ -1390,11 +1287,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* ✅ NEW: Team Contribution Table */}
+                            {/* Team Contribution Table */}
                             {report?.id === 28 ? (
                                 <div className="p-0">
                                     {(() => {
-                                        // Mathematically group the data by Team Name
                                         const groupedByTeam = {};
                                         teamContribData.forEach(row => {
                                             if (!groupedByTeam[row.team_name]) {
@@ -1420,7 +1316,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                         Object.entries(groupedByTeam).map(([teamName, data], groupIdx) => (
                                                             <React.Fragment key={groupIdx}>
                                                                 
-                                                                {/* 🟦 BEAUTIFUL TEAM BANNER ROW */}
                                                                 <tr className="bg-indigo-50/60 border-t border-indigo-100">
                                                                     <td colSpan="4" className="px-4 py-2 text-sm font-bold text-indigo-900">
                                                                         <div className="flex items-center justify-between">
@@ -1440,7 +1335,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                                     </td>
                                                                 </tr>
 
-                                                                {/* 🗂️ STAFF ROWS UNDERNEATH THE BANNER */}
                                                                 {data.members.map((row, idx) => (
                                                                     <tr key={`${groupIdx}-${idx}`} className="hover:bg-gray-50 transition-colors">
                                                                         <td className="px-4 py-3 pl-8">
@@ -1915,7 +1809,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             ) : report?.id === 19 ? (
                                 <div className="p-0">
                                     {(() => {
-                                        // Mathematically group the data by Staff Name
                                         const groupedByStaff = {};
                                         staffWiseServicesData.forEach(row => {
                                             if (!groupedByStaff[row.staff_name]) {
@@ -1941,7 +1834,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                         Object.entries(groupedByStaff).map(([staffName, data], groupIdx) => (
                                                             <React.Fragment key={groupIdx}>
                                                                 
-                                                                {/* 🟦 BEAUTIFUL STAFF BANNER ROW */}
                                                                 <tr className="bg-indigo-50/60 border-t border-indigo-100">
                                                                     <td colSpan="4" className="px-4 py-2 text-sm font-bold text-indigo-900">
                                                                         <div className="flex items-center justify-between">
@@ -1961,7 +1853,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                                     </td>
                                                                 </tr>
 
-                                                                {/* 🗂️ SERVICE ROWS UNDERNEATH THE BANNER */}
                                                                 {data.rows.map((row, idx) => (
                                                                     <tr key={`${groupIdx}-${idx}`} className="hover:bg-gray-50 transition-colors">
                                                                         <td className="px-4 py-3 text-sm text-gray-900 font-medium pl-8">
@@ -2390,7 +2281,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                     <tr key={idx} className="hover:bg-gray-50 transition-colors">
                                                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">
                                                             <div className="flex items-center">
-                                                                {/* Optional: Add a little trophy to #1! */}
                                                                 {idx === 0 && row.total_services > 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" />}
                                                                 {row.staff_name}
                                                                 <span className="ml-2 text-[10px] text-gray-400 capitalize font-normal">({row.role})</span>
@@ -2417,7 +2307,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                 </div>
                             ) : report?.id === 9 ? (
                                 <div className="p-0">
-                                    {/* 1. Mathematically group the data by Date before rendering */}
                                     {(() => {
                                         const groupedAttendance = {};
                                         attendanceData.forEach(row => {
@@ -2442,7 +2331,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                         Object.entries(groupedAttendance).map(([dateStr, records], groupIdx) => (
                                                             <React.Fragment key={groupIdx}>
                                                                 
-                                                                {/* 🟦 BEAUTIFUL DATE BANNER ROW */}
                                                                 <tr className="bg-indigo-50/60 border-t border-indigo-100">
                                                                     <td colSpan="6" className="px-4 py-2 text-sm font-bold text-indigo-900">
                                                                         <div className="flex items-center">
@@ -2455,7 +2343,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                                     </td>
                                                                 </tr>
 
-                                                                {/* 🧑‍🤝‍🧑 STAFF ROWS UNDERNEATH THE BANNER */}
                                                                 {records.map((row, idx) => (
                                                                     <tr key={`${groupIdx}-${idx}`} className="hover:bg-gray-50 transition-colors">
                                                                         <td className="px-4 py-3 text-sm text-gray-900 font-medium pl-6">
@@ -2561,7 +2448,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                             {new Date(row.date).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                         </td>
                                                         <td className="px-4 py-3 text-sm text-gray-900 font-medium">{row.wallet}</td>
-                                                        {/* ✅ NEW: Category with Smart Reversal Badge */}
                                                         <td className="px-4 py-3 text-sm text-gray-600">
                                                             <div className="flex flex-col items-start">
                                                                 <span>{row.category}</span>
@@ -2759,7 +2645,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                                     ₹{displayTrend.reduce((sum, r) => sum + r.expenses, 0).toLocaleString('en-IN')}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">
-                                                    {/* 👇 This is the exact fix for your buggy Net Profit total! */}
                                                     ₹{displayTrend.reduce((sum, r) => sum + r.profit, 0).toLocaleString('en-IN')}
                                                 </td>
                                             </tr>
@@ -2781,7 +2666,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {activeTab === 'charts' && (
                         <div className="space-y-4">
                             
-                            {/* ✅ NEW: Expenses by Wallet Chart (Only shows on the Expense Report) */}
+                            {/* Expenses by Wallet Chart */}
                             {report?.id === 4 && expenseWalletDistribution.length > 0 && (
                                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4">
                                     <div className="flex items-center space-x-2 mb-3">
@@ -2853,7 +2738,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                                 </div>
                             )}
 
-                            {/* EXISTING: Current Wallet Balances Chart */}
+                            {/* Current Wallet Balances Chart */}
                             <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4">
                                 <div className="flex items-center space-x-2 mb-3">
                                     <div className="p-1.5 bg-indigo-50 rounded-lg">
@@ -2903,23 +2788,18 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
 // ─── MAIN REPORTS SECTION ───
 const ReportsSection = () => {
     
-    // Read directly from the browser storage saved during Login.jsx
     const storedRole = localStorage.getItem('role');
     const storedCentreId = localStorage.getItem('centre_id');
     const isSuper = storedRole === 'superadmin';
 
-    // ─── Native Auth State ───
     const [isSuperAdmin] = useState(isSuper);
     const [userCentreId] = useState(storedCentreId);
 
-    // ─── Report States ───
     const [previewData, setPreviewData] = useState(null); 
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const [period, setPeriod] = useState('monthly');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
-    
-    // 👇 2. Instantly defaults to 'all' for Superadmin, or locks to specific Centre for Admin
     const [selectedCentre, setSelectedCentre] = useState(isSuper ? 'all' : storedCentreId); 
     const [selectedStaff, setSelectedStaff] = useState('all');
     const [exportFormat, setExportFormat] = useState('pdf');
@@ -2928,8 +2808,30 @@ const ReportsSection = () => {
     const [favourites, setFavourites] = useState([1, 2, 3]);
     const [scheduledReports, setScheduledReports] = useState([]);
     const [centresList, setCentresList] = useState([]);
+    const [staffList, setStaffList] = useState([]);
+    const [quickMetrics, setQuickMetrics] = useState({
+        collection: 0, expenses: 0, profit: 0, 
+        attendancePresent: 0, attendanceTotal: 0, 
+        servicesCount: 0, pendingAmount: 0, isLoading: true
+    });
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+    const [scheduleForm, setScheduleForm] = useState({
+        name: '',
+        report_ids: [],
+        frequency: 'daily',
+        run_time: '08:00',
+        send_to_mode: 'specific',
+        specific_emails: '',
+        recipient_roles: []
+    });
+    const [recentExports, setRecentExports] = useState([
+        { name: 'Financial Report - June.pdf', date: '2026-06-28', size: '2.4 MB' },
+        { name: 'Attendance Report.xlsx', date: '2026-06-27', size: '1.1 MB' },
+        { name: 'Profit Report.pdf', date: '2026-06-26', size: '3.2 MB' },
+        { name: 'Staff Report.xlsx', date: '2026-06-25', size: '1.8 MB' },
+    ]);
+    const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
-    // 👇 3. Only fetch the Centres Dropdown List if they are a Superadmin
     useEffect(() => {
         if (isSuper) {
             const fetchCentres = async () => {
@@ -2949,14 +2851,9 @@ const ReportsSection = () => {
         }
     }, [isSuper]);
 
-    // 👇 State and Fetch logic for Staff Dropdown 👇
-    const [staffList, setStaffList] = useState([]);
-
     useEffect(() => {
         const fetchStaff = async () => {
             try {
-                // If 'all' is selected, send 'all'. Otherwise, send the specific centre ID.
-                // This perfectly matches the route you used in SuperAdminAccountingSection!
                 const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/all?centreId=${selectedCentre}`, {
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                 });
@@ -2968,23 +2865,13 @@ const ReportsSection = () => {
                 console.error("Failed to fetch staff:", error);
             }
         };
-
-        // Fetch staff immediately, and re-fetch anytime the selectedCentre changes
         fetchStaff();
     }, [selectedCentre]);
 
-        // 👇 STATE & FETCH LOGIC FOR QUICK CARDS 👇
-    const [quickMetrics, setQuickMetrics] = useState({
-        collection: 0, expenses: 0, profit: 0, 
-        attendancePresent: 0, attendanceTotal: 0, 
-        servicesCount: 0, pendingAmount: 0, isLoading: true
-    });
-    
-        useEffect(() => {
+    useEffect(() => {
         const fetchQuickMetrics = async () => {
             setQuickMetrics(prev => ({ ...prev, isLoading: true }));
             try {
-                // Fetches metrics and reacts if the Superadmin changes the centre filter!
                 const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=${selectedCentre}`, {
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                 });
@@ -2997,7 +2884,6 @@ const ReportsSection = () => {
                 setQuickMetrics(prev => ({ ...prev, isLoading: false }));
             }
         };
-
         fetchQuickMetrics();
     }, [selectedCentre]);
 
@@ -3015,124 +2901,46 @@ const ReportsSection = () => {
         }
     };
 
-    // Fetch schedules when the component loads
     useEffect(() => {
         fetchSchedules();
     }, []);
 
-    // 👇 ADD THESE NEW LINES HERE 👇
-    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-    const [scheduleForm, setScheduleForm] = useState({
-        name: '',
-        report_ids: [],
-        frequency: 'daily',
-        run_time: '08:00',
-        send_to_mode: 'specific', // 👈 NEW: Default to specific emails
-        specific_emails: '',      // 👈 NEW: Empty string for text input
-        recipient_roles: []       // 👈 CHANGED: Empty by default
-    });
-
-    const SCHEDULABLE_REPORTS = [
-        { id: 1, name: "Financial Summary" },
-        { id: 2, name: "Profit & Loss" },
-        { id: 17, name: "Pending Services" },
-        { id: 18, name: "Completed Services" },
-        { id: 21, name: "Customer Summary" },
-        { id: 26, name: "Team Financials" },
-        { id: 27, name: "Team Productivity" }
-    ];
-
-    const [recentExports, setRecentExports] = useState([
-        { name: 'Financial Report - June.pdf', date: '2026-06-28', size: '2.4 MB' },
-        { name: 'Attendance Report.xlsx', date: '2026-06-27', size: '1.1 MB' },
-        { name: 'Profit Report.pdf', date: '2026-06-26', size: '3.2 MB' },
-        { name: 'Staff Report.xlsx', date: '2026-06-25', size: '1.8 MB' },
-    ]);
-
-    // ─── Report Data ───
-    const allReports = [
-        // Financial Reports
-        { id: 1, name: 'Executive Financial Summary', description: 'Revenue, Expenses, Profit, Wallet Balances', category: 'financial', updatedAt: 'Today' },
-        { id: 2, name: 'Profit & Loss Statement', description: 'Complete P&L', category: 'financial', updatedAt: 'Today' },
-        { id: 3, name: 'Revenue Report', description: 'Revenue by services', category: 'financial', updatedAt: 'Yesterday' },
-        { id: 4, name: 'Expense Report', description: 'Category-wise expenses', category: 'financial', updatedAt: 'Yesterday' },
-        { id: 5, name: 'Wallet Summary', description: 'Opening, Credit, Debit, Closing', category: 'financial', updatedAt: 'Today' },
-        { id: 6, name: 'Cash Flow Report', description: 'Cash movement', category: 'financial', updatedAt: 'Today' },
-        { id: 7, name: 'Ledger Report', description: 'All transactions', category: 'financial', updatedAt: 'Yesterday' },
-        { id: 8, name: 'Pending Collections', description: 'Pending customer payments', category: 'financial', updatedAt: 'Today' },
-
-        // Staff Reports
-        { id: 9, name: 'Attendance Report', description: 'Present, Absent, Late', category: 'staff', updatedAt: 'Today' },
-        { id: 10, name: 'Performance Report', description: 'Revenue & productivity', category: 'staff', updatedAt: 'Yesterday' },
-        { id: 11, name: 'Salary Report', description: 'Salary calculations', category: 'staff', updatedAt: 'Today' },
-        { id: 12, name: 'Incentive Report', description: 'Suggested incentives', category: 'staff', updatedAt: 'Yesterday' },
-        { id: 13, name: 'Review Report', description: 'Customer ratings', category: 'staff', updatedAt: 'Today' },
-        { id: 14, name: 'Leave Report', description: 'Leave history', category: 'staff', updatedAt: 'Yesterday' },
-
-        // Service Reports
-        { id: 15, name: 'Service Revenue', description: 'Revenue by service', category: 'service', updatedAt: 'Today' },
-        { id: 16, name: 'Service Profit', description: 'Profit by service', category: 'service', updatedAt: 'Yesterday' },
-        { id: 17, name: 'Pending Services', description: 'Pending applications', category: 'service', updatedAt: 'Today' },
-        { id: 18, name: 'Completed Services', description: 'Completed applications', category: 'service', updatedAt: 'Today' },
-        { id: 19, name: 'Staff-wise Services', description: 'Staff performance', category: 'service', updatedAt: 'Yesterday' },
-        { id: 20, name: 'Service Time Analysis', description: 'Average completion time', category: 'service', updatedAt: 'Today' },
-
-        // Customer Reports
-        { id: 21, name: 'Customer Summary', description: 'Customer statistics', category: 'customer', updatedAt: 'Today' },
-        { id: 22, name: 'New Customers', description: 'Newly registered', category: 'customer', updatedAt: 'Yesterday' },
-        { id: 23, name: 'Returning Customers', description: 'Repeat customers', category: 'customer', updatedAt: 'Today' },
-        { id: 24, name: 'Customer Activity', description: 'Service history', category: 'customer', updatedAt: 'Yesterday' },
-        { id: 25, name: 'Customer Reviews', description: 'Ratings', category: 'customer', updatedAt: 'Today' },
-
-        // Team Reports
-        { id: 26, name: 'Team Financial Report', description: 'Revenue & Profit', category: 'team', updatedAt: 'Today' },
-        { id: 27, name: 'Team Performance', description: 'Productivity', category: 'team', updatedAt: 'Yesterday' },
-        { id: 28, name: 'Team Contribution', description: 'Staff contribution', category: 'team', updatedAt: 'Today' },
-
-        // Centre Reports (Superadmin only)
-        { id: 29, name: 'Centre Comparison', description: 'Compare all centres', category: 'centre', updatedAt: 'Today' },
-        { id: 30, name: 'Revenue by Centre', description: 'Financial comparison', category: 'centre', updatedAt: 'Yesterday' },
-        { id: 31, name: 'Profit by Centre', description: 'Profit comparison', category: 'centre', updatedAt: 'Today' },
-        { id: 32, name: 'Attendance by Centre', description: 'Staff attendance', category: 'centre', updatedAt: 'Yesterday' },
-        { id: 33, name: 'Service Comparison', description: 'Services handled', category: 'centre', updatedAt: 'Today' },
-    ];
-
-    // ─── Filters ───
-    const filteredReports = useMemo(() => {
-        let reports = allReports;
-
-        // Filter by category (superadmin)
-        if (!isSuperAdmin) {
-            reports = reports.filter(r => r.category !== 'centre');
+    // ─── Client-side PDF export from preview content ───
+    const exportPreviewAsPDF = async (reportName) => {
+        const element = document.getElementById('report-preview-content');
+        if (!element) {
+            alert('Preview content not found. Please open the report preview first.');
+            return;
         }
 
-        // Search
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            reports = reports.filter(r =>
-                r.name.toLowerCase().includes(q) ||
-                r.description.toLowerCase().includes(q) ||
-                r.category.toLowerCase().includes(q)
-            );
+        setIsPdfGenerating(true);
+        try {
+            const canvas = await html2canvas(element, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                scrollY: 0,
+                windowHeight: element.scrollHeight,
+                windowWidth: element.scrollWidth,
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'px',
+                format: [canvas.width, canvas.height],
+                hotfixes: ['px_scaling'],
+            });
+
+            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+            pdf.save(`${reportName || 'report'}_${new Date().toISOString().slice(0,10)}.pdf`);
+        } catch (error) {
+            console.error('PDF generation failed:', error);
+            alert('Failed to generate PDF. Please try again.');
+        } finally {
+            setIsPdfGenerating(false);
         }
-
-        return reports;
-    }, [allReports, searchQuery, isSuperAdmin]);
-
-    // ─── Group by Category ───
-    const groupedReports = useMemo(() => {
-        const groups = {};
-        filteredReports.forEach(r => {
-            if (!groups[r.category]) groups[r.category] = [];
-            groups[r.category].push(r);
-        });
-        return groups;
-    }, [filteredReports]);
-
-    // ─── Favourite Reports ───
-    const favouriteReports = useMemo(() => {
-        return allReports.filter(r => favourites.includes(r.id));
-    }, [allReports, favourites]);
+    };
 
     // ─── Handlers ───
     const toggleFavourite = (reportId) => {
@@ -3144,11 +2952,9 @@ const ReportsSection = () => {
     };
 
     const toggleScheduled = async (scheduleId) => {
-        // Find the current status
         const schedule = scheduledReports.find(s => s.id === scheduleId);
         if (!schedule) return;
 
-        // Optimistic UI Update (flips it instantly for a snappy feel)
         setScheduledReports(prev => prev.map(s => 
             s.id === scheduleId ? { ...s, is_active: !s.is_active } : s
         ));
@@ -3158,17 +2964,23 @@ const ReportsSection = () => {
                 method: 'PUT',
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
             });
-            
             if (!res.ok) throw new Error("Failed to toggle");
         } catch (error) {
             console.error("Error toggling schedule:", error);
-            fetchSchedules(); // If it fails, fetch the real data to revert the UI
+            fetchSchedules();
         }
     };
 
     const handleGenerate = async (overrideFormat = null, specificReport = null) => {
         const targetFormat = overrideFormat || exportFormat;
         const reportToGen = specificReport || selectedReport;
+
+        // If we are in preview mode and format is PDF, use client-side generation
+        if (targetFormat === 'pdf' && reportToGen && previewData) {
+            await exportPreviewAsPDF(reportToGen.name);
+            return;
+        }
+
         const selectedIds = reportToGen ? [reportToGen.id] : filteredReports.map(r => r.id);
 
         const payload = {
@@ -3195,20 +3007,16 @@ const ReportsSection = () => {
 
             if (!res.ok) throw new Error('Failed to generate report');
 
-            // 1. Handle Preview (JSON)
             if (targetFormat === 'preview') {
                 const data = await res.json();
                 setPreviewData(data);
-                setSelectedReport(reportToGen); // Open the panel
-            } 
-            // 2. Handle File Download (Blob)
-            else {
+                setSelectedReport(reportToGen);
+            } else {
                 const blob = await res.blob();
                 const downloadUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = downloadUrl;
                 
-                // Get filename from header or fallback
                 const disposition = res.headers.get('Content-Disposition');
                 let filename = `${reportToGen?.name || 'Batch_Report'}_${new Date().toISOString().slice(0,10)}.${targetFormat}`;
                 if (disposition && disposition.includes('filename=')) {
@@ -3221,7 +3029,6 @@ const ReportsSection = () => {
                 a.remove();
                 window.URL.revokeObjectURL(downloadUrl);
 
-                // Add to recent exports UI
                 const newExport = {
                     name: filename,
                     date: new Date().toISOString().slice(0, 10),
@@ -3237,7 +3044,74 @@ const ReportsSection = () => {
         }
     };
 
-    // ─── Quick Reports Data (DYNAMIC) ───
+    // ─── Report Data ───
+    const allReports = [
+        { id: 1, name: 'Executive Financial Summary', description: 'Revenue, Expenses, Profit, Wallet Balances', category: 'financial', updatedAt: 'Today' },
+        { id: 2, name: 'Profit & Loss Statement', description: 'Complete P&L', category: 'financial', updatedAt: 'Today' },
+        { id: 3, name: 'Revenue Report', description: 'Revenue by services', category: 'financial', updatedAt: 'Yesterday' },
+        { id: 4, name: 'Expense Report', description: 'Category-wise expenses', category: 'financial', updatedAt: 'Yesterday' },
+        { id: 5, name: 'Wallet Summary', description: 'Opening, Credit, Debit, Closing', category: 'financial', updatedAt: 'Today' },
+        { id: 6, name: 'Cash Flow Report', description: 'Cash movement', category: 'financial', updatedAt: 'Today' },
+        { id: 7, name: 'Ledger Report', description: 'All transactions', category: 'financial', updatedAt: 'Yesterday' },
+        { id: 8, name: 'Pending Collections', description: 'Pending customer payments', category: 'financial', updatedAt: 'Today' },
+        { id: 9, name: 'Attendance Report', description: 'Present, Absent, Late', category: 'staff', updatedAt: 'Today' },
+        { id: 10, name: 'Performance Report', description: 'Revenue & productivity', category: 'staff', updatedAt: 'Yesterday' },
+        { id: 11, name: 'Salary Report', description: 'Salary calculations', category: 'staff', updatedAt: 'Today' },
+        { id: 12, name: 'Incentive Report', description: 'Suggested incentives', category: 'staff', updatedAt: 'Yesterday' },
+        { id: 13, name: 'Review Report', description: 'Customer ratings', category: 'staff', updatedAt: 'Today' },
+        { id: 14, name: 'Leave Report', description: 'Leave history', category: 'staff', updatedAt: 'Yesterday' },
+        { id: 15, name: 'Service Revenue', description: 'Revenue by service', category: 'service', updatedAt: 'Today' },
+        { id: 16, name: 'Service Profit', description: 'Profit by service', category: 'service', updatedAt: 'Yesterday' },
+        { id: 17, name: 'Pending Services', description: 'Pending applications', category: 'service', updatedAt: 'Today' },
+        { id: 18, name: 'Completed Services', description: 'Completed applications', category: 'service', updatedAt: 'Today' },
+        { id: 19, name: 'Staff-wise Services', description: 'Staff performance', category: 'service', updatedAt: 'Yesterday' },
+        { id: 20, name: 'Service Time Analysis', description: 'Average completion time', category: 'service', updatedAt: 'Today' },
+        { id: 21, name: 'Customer Summary', description: 'Customer statistics', category: 'customer', updatedAt: 'Today' },
+        { id: 22, name: 'New Customers', description: 'Newly registered', category: 'customer', updatedAt: 'Yesterday' },
+        { id: 23, name: 'Returning Customers', description: 'Repeat customers', category: 'customer', updatedAt: 'Today' },
+        { id: 24, name: 'Customer Activity', description: 'Service history', category: 'customer', updatedAt: 'Yesterday' },
+        { id: 25, name: 'Customer Reviews', description: 'Ratings', category: 'customer', updatedAt: 'Today' },
+        { id: 26, name: 'Team Financial Report', description: 'Revenue & Profit', category: 'team', updatedAt: 'Today' },
+        { id: 27, name: 'Team Performance', description: 'Productivity', category: 'team', updatedAt: 'Yesterday' },
+        { id: 28, name: 'Team Contribution', description: 'Staff contribution', category: 'team', updatedAt: 'Today' },
+        { id: 29, name: 'Centre Comparison', description: 'Compare all centres', category: 'centre', updatedAt: 'Today' },
+        { id: 30, name: 'Revenue by Centre', description: 'Financial comparison', category: 'centre', updatedAt: 'Yesterday' },
+        { id: 31, name: 'Profit by Centre', description: 'Profit comparison', category: 'centre', updatedAt: 'Today' },
+        { id: 32, name: 'Attendance by Centre', description: 'Staff attendance', category: 'centre', updatedAt: 'Yesterday' },
+        { id: 33, name: 'Service Comparison', description: 'Services handled', category: 'centre', updatedAt: 'Today' },
+    ];
+
+    // ─── Filters ───
+    const filteredReports = useMemo(() => {
+        let reports = allReports;
+        if (!isSuperAdmin) {
+            reports = reports.filter(r => r.category !== 'centre');
+        }
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            reports = reports.filter(r =>
+                r.name.toLowerCase().includes(q) ||
+                r.description.toLowerCase().includes(q) ||
+                r.category.toLowerCase().includes(q)
+            );
+        }
+        return reports;
+    }, [allReports, searchQuery, isSuperAdmin]);
+
+    const groupedReports = useMemo(() => {
+        const groups = {};
+        filteredReports.forEach(r => {
+            if (!groups[r.category]) groups[r.category] = [];
+            groups[r.category].push(r);
+        });
+        return groups;
+    }, [filteredReports]);
+
+    const favouriteReports = useMemo(() => {
+        return allReports.filter(r => favourites.includes(r.id));
+    }, [allReports, favourites]);
+
+    // ─── Quick Reports Data ───
     const quickReports = [
         { 
             label: "Today's Collection", 
@@ -3271,7 +3145,6 @@ const ReportsSection = () => {
         },
     ];
 
-    // ─── Category Labels ───
     const categoryLabels = {
         financial: { label: 'Financial Reports', icon: FiDollarSign, color: 'text-indigo-600' },
         staff: { label: 'Staff Reports', icon: FiUsers, color: 'text-blue-600' },
@@ -3280,6 +3153,16 @@ const ReportsSection = () => {
         team: { label: 'Team Reports', icon: FiUsers, color: 'text-amber-600' },
         centre: { label: 'Centre Reports', icon: FiHome, color: 'text-rose-600' },
     };
+
+    const SCHEDULABLE_REPORTS = [
+        { id: 1, name: "Financial Summary" },
+        { id: 2, name: "Profit & Loss" },
+        { id: 17, name: "Pending Services" },
+        { id: 18, name: "Completed Services" },
+        { id: 21, name: "Customer Summary" },
+        { id: 26, name: "Team Financials" },
+        { id: 27, name: "Team Productivity" }
+    ];
 
     return (
         <div className="mb-6">
@@ -3371,7 +3254,6 @@ const ReportsSection = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
                             >
                                 <option value="all">All Centres</option>
-                                {/* 👇 Maps over your real database centres 👇 */}
                                 {centresList.map(c => (
                                     <option key={c.id} value={c.id}>
                                         {c.name}
@@ -3390,7 +3272,6 @@ const ReportsSection = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
                         >
                             <option value="all">All Staff</option>
-                            {/* 👇 Maps over the real staff for the selected centre 👇 */}
                             {staffList.map(staffMember => (
                                 <option key={staffMember.id} value={staffMember.id}>
                                     {staffMember.name} {staffMember.role ? `(${staffMember.role})` : ''}
@@ -3445,8 +3326,6 @@ const ReportsSection = () => {
                             icon={qr.icon}
                             color={qr.color}
                             onClick={() => {
-                                // In a real app, this would generate the specific report
-                                // For now, we'll just show a preview of the first report
                                 const report = allReports.find(r => r.category === 'financial');
                                 if (report) setSelectedReport(report);
                             }}
@@ -3576,7 +3455,7 @@ const ReportsSection = () => {
             </div>
 
             {/* ─── REPORT PREVIEW PANEL ─── */}
-           <AnimatePresence>
+            <AnimatePresence>
                 {selectedReport && (
                     <ReportPreviewPanel
                         report={selectedReport}
@@ -3663,11 +3542,10 @@ const ReportsSection = () => {
                                     />
                                 </div>
                             </div>
+
                             {/* Smart Delivery Selection */}
                             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                                 <label className="block text-sm font-bold text-gray-900 mb-3">Delivery Method</label>
-                                
-                                {/* The Toggle */}
                                 <div className="flex space-x-4 mb-4">
                                     <label className="flex items-center space-x-2 text-sm cursor-pointer">
                                         <input 
@@ -3689,7 +3567,6 @@ const ReportsSection = () => {
                                     </label>
                                 </div>
 
-                                {/* Dynamic Input: Specific Emails */}
                                 {scheduleForm.send_to_mode === 'specific' && (
                                     <div>
                                         <input 
@@ -3703,7 +3580,6 @@ const ReportsSection = () => {
                                     </div>
                                 )}
 
-                                {/* Dynamic Input: Broadcast Roles */}
                                 {scheduleForm.send_to_mode === 'roles' && (
                                     <div>
                                         <div className="flex flex-wrap gap-4">
@@ -3740,7 +3616,6 @@ const ReportsSection = () => {
                                     try {
                                         const payload = {
                                             ...scheduleForm,
-                                            // Convert comma-separated string into a clean array
                                             specific_emails: scheduleForm.specific_emails 
                                                 ? scheduleForm.specific_emails.split(',').map(e => e.trim()).filter(e => e) 
                                                 : [],
@@ -3759,7 +3634,6 @@ const ReportsSection = () => {
                                         if (res.ok) {
                                             fetchSchedules(); 
                                             setIsScheduleModalOpen(false); 
-                                            // Reset form
                                             setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', recipient_roles: ['admin', 'superadmin'] });
                                         } else {
                                             alert("Failed to save schedule.");
@@ -3768,7 +3642,6 @@ const ReportsSection = () => {
                                         console.error("Error saving schedule:", error);
                                         alert("An error occurred.");
                                     }
-                                    // 👆 END OF REPLACEMENT 👆
                                 }}
                                 className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
                             >
@@ -3778,8 +3651,6 @@ const ReportsSection = () => {
                     </motion.div>
                 </div>
             )}
-            {/* 👆 END OF MODAL BLOCK 👆 */}
-
         </div>
     );
 };
