@@ -2949,6 +2949,27 @@ const ReportsSection = () => {
         }
     }, [isSuper]);
     
+        useEffect(() => {
+        const fetchQuickMetrics = async () => {
+            setQuickMetrics(prev => ({ ...prev, isLoading: true }));
+            try {
+                // Fetches metrics and reacts if the Superadmin changes the centre filter!
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=${selectedCentre}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setQuickMetrics({ ...data, isLoading: false });
+                }
+            } catch (error) {
+                console.error("Failed to fetch quick metrics:", error);
+                setQuickMetrics(prev => ({ ...prev, isLoading: false }));
+            }
+        };
+
+        fetchQuickMetrics();
+    }, [selectedCentre]);
+
     const fetchSchedules = async () => {
         try {
             const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/schedules`, {
