@@ -15,6 +15,8 @@ import {
     CartesianGrid, LineChart, Line, PieChart, Pie, Cell,
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
+import html2canvas from 'html2canvas';
+import { jspdf } from 'jspdf';
 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
@@ -292,6 +294,41 @@ const formatDays = (value) => `${value} ${value === 1 ? 'Day' : 'Days'}`;
 const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const [activeTab, setActiveTab] = useState('preview');
     const COLORS = CHART_COLORS;
+
+    // 👇 1. Create a reference to attach to our report content
+    const reportRef = useRef(null);
+    const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+    // 👇 2. Add the Visual PDF Generator Function
+    const generateVisualPDF = async () => {
+        if (!reportRef.current) return;
+        setIsGeneratingPDF(true);
+
+        try {
+            // Take a high-quality snapshot of the HTML element
+            const canvas = await html2canvas(reportRef.current, {
+                scale: 2, // High resolution
+                useCORS: true, 
+                backgroundColor: '#ffffff'
+            });
+
+            // Calculate PDF dimensions (A4 size)
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            // Add the image to the PDF and download
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`${report.name.replace(/\s+/g, '_')}_Visual_Report.pdf`);
+            
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Failed to generate visual PDF.');
+        } finally {
+            setIsGeneratingPDF(false);
+        }
+    };
 
     // 1. SAFELY EXTRACT API DATA 
     // We default everything to empty objects/arrays so React never crashes
@@ -833,8 +870,18 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                             </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <button onClick={() => onExport?.('pdf', report)} className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm">
-                                <FiDownload className="h-4 w-4" /><span>Export PDF</span>
+                            <button 
+                                onClick={generateVisualPDF} 
+                                disabled={isGeneratingPDF || activeTab !== 'preview'}
+                                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                    activeTab !== 'preview' 
+                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                }`}
+                                title={activeTab !== 'preview' ? "Please switch to the Preview tab to download visual PDF" : "Download PDF"}
+                            >
+                                <FiDownload className="h-4 w-4" />
+                                <span>{isGeneratingPDF ? 'Creating...' : 'Export PDF'}</span>
                             </button>
                             <button onClick={() => onExport?.('excel', report)} className="flex items-center space-x-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm">
                                 <FiFileText className="h-4 w-4" /><span>Excel</span>
@@ -859,7 +906,8 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                     {!previewData ? (
                         <div className="flex justify-center items-center h-full text-gray-500">Loading preview data...</div>
                     ) : activeTab === 'preview' && (
-                        <div className="space-y-6">
+
+                        <div ref={reportRef} className="space-y-6 bg-white p-4">
                             
                             {/* V3 Financial Summary Cards (Now Guaranteed to Render) */}
                             {Object.keys(financials).length > 0 && (
