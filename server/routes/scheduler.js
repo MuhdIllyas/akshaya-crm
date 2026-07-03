@@ -3,6 +3,15 @@ import pool from '../db.js';
 import generateDailyBalances from './walletDailyBalanceService.js';
 import generateRecurringTasks from "../controllers/recurringTaskService.js";
 
+// 👇 NEW: Automated Reports 👇
+import { getReportData } from '../routes/reports/analyticsService.js';
+import { buildPDF } from '../utils/exportBuilder.js';
+import { sendReportEmail } from '../utils/emailService.js';
+
+// ==========================================
+// 1. END OF DAY OPERATIONS (Midnight)
+// ==========================================
+
 // Run every day at 00:05 AM IST
 cron.schedule("5 0 * * *", async () => {
   try {
@@ -42,10 +51,94 @@ cron.schedule("10 0 * * *", async () => {
 
 // Run every day at 00:15 AM IST for recurring tasks
 cron.schedule("15 0 * * *", async () => {
-  console.log("Running recurring engine...");
+  console.log("[CRON] Running recurring engine...");
   await generateRecurringTasks();
 }, {
   timezone: "Asia/Kolkata"
+});
+
+
+// ==========================================
+// 2. DYNAMIC REPORT SCHEDULER ENGINE
+// ==========================================
+
+const checkAndRunSchedules = async () => {
+    const client = await pool.connect();
+    try {
+        // 1. Get the current exact time in IST (e.g., "08:00:00")
+        const now = new Date();
+        const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+        const istDate = new Date(istString);
+        
+        const hours = String(istDate.getHours()).padStart(2, '0');
+        const minutes = String(istDate.getMinutes()).padStart(2, '0');
+        const currentTime = `${hours}:${minutes}:00`; 
+        
+        const currentDayOfWeek = istDate.getDay(); // 0-6 (Sun-Sat)
+        const currentDayOfMonth = istDate.getDate(); // 1-31
+
+        // 2. Find schedules in the DB that are scheduled for RIGHT NOW
+        const res = await client.query(`
+            SELECT * FROM report_schedules 
+            WHERE is_active = true 
+            AND run_time = $1
+            AND (
+                (frequency = 'daily') OR
+                (frequency = 'weekly' AND day_of_week = $2) OR
+                (frequency = 'monthly' AND day_of_month = $3)
+            )
+        `, [currentTime, currentDayOfWeek, currentDayOfMonth]);
+
+        const schedules = res.rows;
+        if (schedules.length === 0) return; // Nothing scheduled for this specific minute
+
+        console.log(`[CRON] 🕒 Found ${schedules.length} reports scheduled for ${currentTime}. Generating...`);
+
+        // 3. Execute each schedule
+        for (let schedule of schedules) {
+            // Get emails of the requested roles
+            const emailRes = await client.query(
+                `SELECT email FROM staff WHERE role = ANY($1) AND is_active = true AND ($2::int IS NULL OR centre_id = $2)`,
+                [schedule.recipient_roles, schedule.centre_id]
+            );
+            const emails = emailRes.rows.map(r => r.email).filter(e => e);
+
+            if (emails.length > 0) {
+                console.log(`[CRON] 📧 Sending "${schedule.name}" to ${emails.length} recipients...`);
+                
+                // Get yesterday's date string for the report data
+                const yest = new Date(istDate);
+                yest.setDate(yest.getDate() - 1);
+                const yesterdayStr = yest.toISOString().split('T')[0];
+
+                // Fetch Data & Build PDF
+                const data = await getReportData(schedule.centre_id || 'all', { fromDate: yesterdayStr, toDate: yesterdayStr }, schedule.report_ids, 'all', client);
+                const pdfBuffer = await buildPDF(data, schedule.report_ids);
+
+                // Send via Resend/Email Service
+                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${yesterdayStr}.pdf`;
+                await sendReportEmail(
+                    emails, 
+                    `${schedule.name} - ${yesterdayStr}`, 
+                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${yesterdayStr}.\n\n- Akshaya CRM System`, 
+                    [{ filename: fileName, content: pdfBuffer }]
+                );
+            } else {
+                console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No active emails found for roles: ${schedule.recipient_roles}`);
+            }
+        }
+    } catch (error) {
+        console.error('[CRON] Dynamic Scheduler Error:', error);
+    } finally {
+        client.release();
+    }
+};
+
+// 👉 The "Tick" Engine: Runs every 1 minute to check for scheduled reports
+cron.schedule("* * * * *", async () => {
+    await checkAndRunSchedules();
+}, {
+    timezone: "Asia/Kolkata"
 });
 
 export default cron;
