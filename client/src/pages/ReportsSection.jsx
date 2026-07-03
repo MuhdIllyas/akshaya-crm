@@ -19,6 +19,7 @@ import { toPng } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
+import { toast } from 'react-toastify'; // ✅ Added toast import
 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
@@ -336,10 +337,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             // Add the image to the PDF and download
             pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
             pdf.save(`${report?.name?.replace(/\s+/g, '_')}_Visual_Report.pdf`);
-            
+            toast.success('Visual PDF downloaded successfully!'); // ✅ Toast
         } catch (error) {
             console.error('Error generating PDF:', error);
-            alert('Failed to generate visual PDF.');
+            toast.error('Failed to generate visual PDF.'); // ✅ Toast
         } finally {
             setIsGeneratingPDF(false);
         }
@@ -348,7 +349,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     // 👇 Excel Data Export Function
     const generateExcelData = () => {
         if (!previewData || !previewData.data) {
-            alert("No data available to export.");
+            toast.error("No data available to export."); // ✅ Toast
             return;
         }
 
@@ -418,7 +419,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
                 case 33: // Service Comparison
                     exportData = svcCompareDataRaw; sheetName = "Centre_Services"; break;
                 default:
-                    alert("Export logic not mapped for this specific report.");
+                    toast.error("Export logic not mapped for this specific report."); // ✅ Toast
                     return;
             }
 
@@ -430,17 +431,17 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             // 3. Trigger Download
             const fileName = `${report.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
             XLSX.writeFile(workbook, fileName);
-
+            toast.success('Excel file downloaded successfully!'); // ✅ Toast
         } catch (error) {
             console.error('Error generating Excel:', error);
-            alert('Failed to generate Excel file.');
+            toast.error('Failed to generate Excel file.');
         }
     };
 
     // 👇 Multi-page Tabular PDF Export
     const generateTabularPDF = () => {
         if (!previewData || !previewData.data) {
-            alert("No data available to export.");
+            toast.error("No data available to export."); // ✅ Toast
             return;
         }
 
@@ -476,11 +477,14 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             case 31: exportData = profitCentreSummary; break;
             case 32: exportData = attByCentreData; break;
             case 33: exportData = svcCompareDataRaw; break;
-            default: return alert("Export logic not mapped for this report.");
+            default: 
+                toast.error("Export logic not mapped for this report.");
+                return;
         }
 
         if (exportData.length === 0) {
-            return alert("The table is empty for the selected period.");
+            toast.error("The table is empty for the selected period."); // ✅ Toast
+            return;
         }
 
         // 2. Initialize the PDF Document
@@ -516,6 +520,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
 
         // 5. Download the file
         doc.save(`${report.name.replace(/\s+/g, '_')}_Table.pdf`);
+        toast.success('Tabular PDF downloaded successfully!'); // ✅ Toast
     };
 
     // 1. SAFELY EXTRACT API DATA 
@@ -3874,12 +3879,16 @@ const ReportsSection = () => {
             });
 
             if (!res.ok) throw new Error("Failed to save favourite");
+            
+            // Success toast
+            toast.success(favourites.includes(reportId) ? 'Removed from favourites' : 'Added to favourites');
         } catch (error) {
             console.error("Error saving favourite:", error);
             // Revert on fail so the UI doesn't lie to the user
             setFavourites(prev => 
                 prev.includes(reportId) ? prev.filter(id => id !== reportId) : [...prev, reportId]
             );
+            toast.error('Failed to update favourite. Please try again.');
         }
     };
 
@@ -3900,9 +3909,11 @@ const ReportsSection = () => {
             });
             
             if (!res.ok) throw new Error("Failed to toggle");
+            toast.info(`Schedule ${schedule.is_active ? 'paused' : 'resumed'} successfully`);
         } catch (error) {
             console.error("Error toggling schedule:", error);
             fetchSchedules(); // If it fails, fetch the real data to revert the UI
+            toast.error('Failed to toggle schedule. Please try again.');
         }
     };
 
@@ -3918,9 +3929,10 @@ const ReportsSection = () => {
             });
 
             if (!res.ok) throw new Error("Failed to delete schedule record");
+            toast.success('Schedule deleted successfully');
         } catch (error) {
             console.error("Error running deleteSchedule:", error);
-            alert("Failed to delete the schedule. Reverting changes.");
+            toast.error('Failed to delete schedule. Reverting changes.');
             // Roll back UI state if network connection fails
             setScheduledReports(previousSchedules);
         }
@@ -3960,6 +3972,7 @@ const ReportsSection = () => {
                 const data = await res.json();
                 setPreviewData(data);
                 setSelectedReport(reportToGen); // Open the panel
+                toast.info('Report preview loaded');
             } 
             // 2. Handle File Download (Blob)
             else {
@@ -3988,10 +4001,11 @@ const ReportsSection = () => {
                     size: `${(blob.size / (1024 * 1024)).toFixed(2)} MB`,
                 };
                 setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
+                toast.success(`Report "${filename}" downloaded`);
             }
         } catch (error) {
             console.error("Report generation failed:", error);
-            alert("Failed to generate report. Please try again.");
+            toast.error("Failed to generate report. Please try again.");
         } finally {
             setIsPreviewLoading(false);
         }
@@ -4526,13 +4540,14 @@ const ReportsSection = () => {
                                             fetchSchedules(); 
                                             setIsScheduleModalOpen(false); 
                                             // Reset form
-                                            setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', recipient_roles: ['admin', 'superadmin'] });
+                                            setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', send_to_mode: 'specific', specific_emails: '', recipient_roles: [] });
+                                            toast.success('Schedule created successfully');
                                         } else {
-                                            alert("Failed to save schedule.");
+                                            toast.error('Failed to save schedule.');
                                         }
                                     } catch (error) {
                                         console.error("Error saving schedule:", error);
-                                        alert("An error occurred.");
+                                        toast.error('An error occurred while creating the schedule.');
                                     }
                                     // 👆 END OF REPLACEMENT 👆
                                 }}
