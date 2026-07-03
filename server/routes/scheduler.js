@@ -96,12 +96,24 @@ const checkAndRunSchedules = async () => {
 
         // 3. Execute each schedule
         for (let schedule of schedules) {
-            // Get emails of the requested roles
-            const emailRes = await client.query(
-                `SELECT email FROM staff WHERE role = ANY($1) AND is_active = true AND ($2::int IS NULL OR centre_id = $2)`,
-                [schedule.recipient_roles, schedule.centre_id]
-            );
-            const emails = emailRes.rows.map(r => r.email).filter(e => e);
+            // 👇 NEW: Smart Email Resolution (Supports Specific Emails & Role Broadcasting) 👇
+            let emails = [];
+
+            if (schedule.specific_emails && schedule.specific_emails.length > 0) {
+                // Mode 1: User typed in specific emails manually
+                emails = schedule.specific_emails;
+            } else if (schedule.recipient_roles && schedule.recipient_roles.length > 0) {
+                // Mode 2: User selected roles. Filter safely by Centre (Superadmins always get it)
+                const emailRes = await client.query(
+                    `SELECT email FROM staff 
+                     WHERE role = ANY($1) 
+                     AND status = 'Active' 
+                     AND ($2::int IS NULL OR centre_id = $2 OR role = 'superadmin')`,
+                    [schedule.recipient_roles, schedule.centre_id]
+                );
+                emails = emailRes.rows.map(r => r.email).filter(e => e);
+            }
+            // 👆 END NEW EMAIL RESOLUTION 👆
 
             if (emails.length > 0) {
                 console.log(`[CRON] 📧 Sending "${schedule.name}" to ${emails.length} recipients...`);

@@ -4450,7 +4450,12 @@ const ReportsSection = () => {
                                                 </label>
                                             ))}
                                         </div>
-                                        <p className="text-[10px] text-amber-600 mt-1 font-medium">⚠️ Warning: This will send the report to every active user with these roles.</p>
+                                        <p className="text-[10px] text-amber-600 mt-2 font-medium bg-amber-50 p-2 rounded border border-amber-200">
+                                            {selectedCentre === 'all' 
+                                                ? "⚠️ Global Broadcast: This will send the report to EVERY active user across ALL centres with these roles."
+                                                : "🔒 Centre Locked: This will only send the report to active users with these roles in the currently selected centre (and global Superadmins)."
+                                            }
+                                        </p>
                                     </div>
                                 )}
                             </div>
