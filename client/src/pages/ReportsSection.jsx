@@ -2948,6 +2948,13 @@ const ReportsSection = () => {
             fetchCentres();
         }
     }, [isSuper]);
+
+        // 👇 STATE & FETCH LOGIC FOR QUICK CARDS 👇
+    const [quickMetrics, setQuickMetrics] = useState({
+        collection: 0, expenses: 0, profit: 0, 
+        attendancePresent: 0, attendanceTotal: 0, 
+        servicesCount: 0, pendingAmount: 0, isLoading: true
+    });
     
         useEffect(() => {
         const fetchQuickMetrics = async () => {
