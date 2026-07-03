@@ -1535,6 +1535,79 @@ const fetchRevenueByCentreAnalytics = async (client, dates) => {
   }
 };
 
+// ✅ Profit by Centre Fetcher (Report ID 31)
+const fetchProfitByCentreAnalytics = async (client, dates) => {
+  try {
+    // 1. Overall Profit Summary by Centre
+    const summary = await client.query(`
+      WITH rev AS (
+        SELECT st.centre_id, COALESCE(SUM(se.service_charges), 0) as gross_profit
+        FROM service_entries se
+        JOIN staff st ON se.staff_id = st.id
+        WHERE se.created_at::date >= $1 AND se.created_at::date <= $2 AND se.status = 'completed'
+        GROUP BY st.centre_id
+      ),
+      exp AS (
+        SELECT centre_id, COALESCE(SUM(amount), 0) as total_expenses
+        FROM expenses
+        WHERE expense_date >= $1 AND expense_date <= $2
+          AND status IN ('approved', 'auto_approved') AND (is_reversal IS NULL OR is_reversal = FALSE)
+        GROUP BY centre_id
+      )
+      SELECT 
+        c.id, c.name as centre_name,
+        COALESCE(r.gross_profit, 0) as gross_profit,
+        COALESCE(e.total_expenses, 0) as total_expenses,
+        (COALESCE(r.gross_profit, 0) - COALESCE(e.total_expenses, 0)) as net_profit
+      FROM centres c
+      LEFT JOIN rev r ON c.id = r.centre_id
+      LEFT JOIN exp e ON c.id = e.centre_id
+      ORDER BY net_profit DESC
+    `, [dates.fromDate, dates.toDate]);
+
+    // 2. Daily Profit Trend (Revenue minus Expenses per day, per centre)
+    const trend = await client.query(`
+      WITH daily_data AS (
+        SELECT st.centre_id, se.created_at::date as date, SUM(se.service_charges) as profit, 0 as expense
+        FROM service_entries se
+        JOIN staff st ON se.staff_id = st.id
+        WHERE se.created_at::date >= $1 AND se.created_at::date <= $2 AND se.status = 'completed'
+        GROUP BY st.centre_id, se.created_at::date
+        UNION ALL
+        SELECT centre_id, expense_date as date, 0 as profit, SUM(amount) as expense
+        FROM expenses
+        WHERE expense_date >= $1 AND expense_date <= $2 AND status IN ('approved', 'auto_approved') AND (is_reversal IS NULL OR is_reversal = FALSE)
+        GROUP BY centre_id, expense_date
+      )
+      SELECT 
+        c.name as centre_name,
+        d.date,
+        SUM(d.profit - d.expense) as daily_net_profit
+      FROM daily_data d
+      JOIN centres c ON d.centre_id = c.id
+      GROUP BY c.name, d.date
+      ORDER BY d.date ASC
+    `, [dates.fromDate, dates.toDate]);
+
+    return {
+      summary: summary.rows.map(r => ({
+        centre_name: r.centre_name,
+        gross_profit: Number(r.gross_profit),
+        total_expenses: Number(r.total_expenses),
+        net_profit: Number(r.net_profit)
+      })),
+      trend: trend.rows.map(r => ({
+        centre_name: r.centre_name,
+        date: r.date,
+        daily_net_profit: Number(r.daily_net_profit)
+      }))
+    };
+  } catch (error) {
+    console.error("SQL Error in fetchProfitByCentreAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -2035,6 +2108,10 @@ export const getReportData = async (params) => {
         }
         case 30: {
           compiledReport.data.revenueByCentre = await fetchRevenueByCentreAnalytics(client, reportDates);
+          break;
+        }
+        case 31: {
+          compiledReport.data.profitByCentre = await fetchProfitByCentreAnalytics(client, reportDates);
           break;
         }
         default: {
