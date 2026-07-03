@@ -216,27 +216,24 @@ const QuickReportTile = ({ label, value, icon: Icon, color, onClick }) => (
 );
 
 // ─── Scheduled Report Card ───
-// ─── Scheduled Report Card ───
-const ScheduledReportCard = ({ schedule, onToggle }) => {
+const ScheduledReportCard = ({ schedule, onToggle, onDelete }) => {
     const frequencyColors = {
         daily: 'bg-blue-50 text-blue-700 border-blue-200',
         weekly: 'bg-purple-50 text-purple-700 border-purple-200',
         monthly: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     };
 
-    // Safely format the emails array
     const emails = schedule.resolved_emails || [];
     let displayEmails = 'No active users found';
     if (emails.length > 0) {
-        // If there are more than 2 emails, show the first 2 and say "+X more"
         displayEmails = emails.length > 2 
             ? `${emails.slice(0, 2).join(', ')} +${emails.length - 2} more`
             : emails.join(', ');
     }
 
     return (
-        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
-            <div className="flex items-center space-x-3 overflow-hidden">
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors relative group">
+            <div className="flex items-center space-x-3 overflow-hidden mr-6">
                 <div className={`rounded-lg p-2 shrink-0 ${frequencyColors[schedule.frequency] || 'bg-gray-100 text-gray-700'}`}>
                     <FiMail className="h-4 w-4" />
                 </div>
@@ -245,7 +242,6 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
                     <p className="text-xs text-gray-500 capitalize">
                         {schedule.frequency} • {schedule.recipient_roles?.join(', ')}
                     </p>
-                    {/* 👇 The new exact Email ID display 👇 */}
                     <div className="flex items-center mt-1 text-[10px] text-gray-400 font-mono" title={emails.join(', ')}>
                         <FiUserCheck className="mr-1 h-3 w-3 shrink-0" />
                         <span className="truncate">{displayEmails}</span>
@@ -253,15 +249,31 @@ const ScheduledReportCard = ({ schedule, onToggle }) => {
                 </div>
             </div>
             
-            <label className="relative inline-flex items-center cursor-pointer ml-3 shrink-0">
-                <input
-                    type="checkbox"
-                    checked={schedule.is_active}
-                    onChange={() => onToggle?.(schedule.id)}
-                    className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
+            <div className="flex items-center space-x-2 shrink-0">
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={schedule.is_active}
+                        onChange={() => onToggle?.(schedule.id)}
+                        className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+
+                {/* 👇 Delete Button (Visible slightly on default, fully opaque on hover) 👇 */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm("Are you sure you want to delete this automated schedule?")) {
+                            onDelete?.(schedule.id);
+                        }
+                    }}
+                    className="p-1 rounded-md text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors opacity-40 group-hover:opacity-100"
+                    title="Delete Schedule"
+                >
+                    <FiX className="h-4 w-4" />
+                </button>
+            </div>
         </div>
     );
 };
@@ -3894,6 +3906,26 @@ const ReportsSection = () => {
         }
     };
 
+    const deleteSchedule = async (scheduleId) => {
+        // 1. Optimistic UI update: remove it immediately from view for snappy performance
+        const previousSchedules = [...scheduledReports];
+        setScheduledReports(prev => prev.filter(s => s.id !== scheduleId));
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/schedules/${scheduleId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+
+            if (!res.ok) throw new Error("Failed to delete schedule record");
+        } catch (error) {
+            console.error("Error running deleteSchedule:", error);
+            alert("Failed to delete the schedule. Reverting changes.");
+            // Roll back UI state if network connection fails
+            setScheduledReports(previousSchedules);
+        }
+    };
+
     const handleGenerate = async (overrideFormat = null, specificReport = null) => {
         const targetFormat = overrideFormat || exportFormat;
         const reportToGen = specificReport || selectedReport;
@@ -4253,6 +4285,7 @@ const ReportsSection = () => {
                                 key={schedule.id}
                                 schedule={schedule}
                                 onToggle={toggleScheduled}
+                                onDelete={deleteSchedule}
                             />
                         ))}
                     </div>

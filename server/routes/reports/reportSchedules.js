@@ -125,4 +125,31 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+// DELETE /api/reports/schedules/:id -> Permanently delete a schedule
+router.delete('/schedules/:id', authenticateToken, async (req, res) => {
+    // Only allow Admin or Superadmin roles to modify schedules
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+        return res.status(403).json({ error: "Access denied" });
+    }
+
+    const { id } = req.params;
+
+    try {
+        const result = await pool.query(
+            'DELETE FROM report_schedules WHERE id = $1',
+            [id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Schedule not found" });
+        }
+
+        console.log(`[Reports] 🗑️ Schedule ID ${id} deleted by user ${req.user.id}`);
+        res.json({ message: "Schedule successfully deleted" });
+    } catch (error) {
+        console.error('Error deleting schedule:', error);
+        res.status(500).json({ error: 'Failed to delete schedule' });
+    }
+});
+
 export default router;
