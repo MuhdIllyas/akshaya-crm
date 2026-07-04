@@ -5,7 +5,7 @@ import {
   FiMapPin, FiUsers, FiUserCheck, FiCheckSquare, FiDollarSign,
   FiTrendingUp, FiBriefcase, FiCreditCard, FiStar, FiActivity,
   FiClock, FiCheckCircle, FiAlertCircle, FiFileText, FiAward,
-  FiAlertTriangle, FiBell, FiMap, FiZap, FiCpu
+  FiAlertTriangle, FiBell, FiMap, FiZap, FiCpu, FiBarChart2
 } from "react-icons/fi";
 
 const SuperadminDashboard = () => {
