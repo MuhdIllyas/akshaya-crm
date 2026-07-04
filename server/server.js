@@ -26,6 +26,8 @@ import accountingRoute from "./routes/reports/accounting.js";
 import transactionRoute from "./routes/reports/transactionReports.js";
 import adminAnalyticsRoutes from './routes/reports/adminAnalytics.js';
 import superAdminAnalyticsRoutes from './routes/reports/superAdminAnalytics.js';
+import reportsRoute from './routes/reports/reports.js';
+import reportSchedulesRoute from './routes/reports/reportSchedules.js';
 
 import customerRoute from "./routes/customer.js";
 import customerDocumentsRoutes from "./routes/customerDocuments.js";
@@ -286,7 +288,8 @@ app.use("/api/accounting", accountingRoute);
 app.use("/api/transaction", transactionRoute);
 app.use('/api/analytics/admin', adminAnalyticsRoutes);
 app.use('/api/analytics/superadmin', superAdminAnalyticsRoutes);
-
+app.use('/api/reports/schedules', reportSchedulesRoute);
+app.use("/api/reports", reportsRoute);
 app.use("/api/customer/documents", customerDocumentsRoutes);
 app.use("/api/customer/bookings", customerBookingRoutes);
 app.use("/api/customer", customerRoute);
