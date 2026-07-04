@@ -142,13 +142,13 @@ const SuperadminDashboard = () => {
     // Read the real data from our fetched state, fallback to zeros if loading
     const trend = dashboardData.monthlyTrend || {};
     const data = {
-      revenue: trend.revenueCollected || new Array(12).fill(0),
-      profit: trend.grossProfit || new Array(12).fill(0),
-      expenses: trend.operatingExpenses || new Array(12).fill(0),
+      revenue: revenue?.monthlyTrend || [0,0,0,0,0,0,0,0,0,0,0,0],
+      profit: revenue?.profitTrend || [0,0,0,0,0,0,0,0,0,0,0,0],
+      expenses: revenue?.expenseTrend || [0,0,0,0,0,0,0,0,0,0,0,0],
     };
     
     const selected = data[revenueView] || data.revenue;
-    const max = Math.max(...selected, 1); // ,1 prevents division by zero error
+    const max = Math.max(...selected, 1); 
 
     return (
       <div className="w-full h-64 flex items-end space-x-2">
@@ -220,27 +220,28 @@ const SuperadminDashboard = () => {
   } = dashboardData;
 
   // Compute summary stats
-  const totalCentres = centres.length;
-  const totalStaff = staff.length;
-  const admins = staff.filter(s => s.role === "admin").length;
-  const staffCount = staff.filter(s => s.role === "staff" || s.role === "supervisor").length;
-  const totalCustomers = customers;
-  const servicesToday = services?.completedToday || 1584;
-  const revenueToday = revenue?.today || 124850;
-  const monthlyRevenue = revenue?.monthly || 3684200;
-  const netProfit = revenue?.profit || 941500;
-  const pendingPayments = revenue?.pending || 212000;
-  const pendingCustomers = revenue?.pendingCustomers || 341;
-  const avgRating = revenue?.avgRating || 4.8;
-  const totalReviews = revenue?.totalReviews || 13240;
-  const pendingServices = services?.pending || 1230;
-  const completedToday = services?.completed || 541;
-  const delayedServices = services?.delayed || 67;
-  const applicationsInProgress = services?.inProgress || 210;
-  const walletCash = wallets?.cash || 520000;
-  const walletBank = wallets?.bank || 1840000;
-  const walletDigital = wallets?.digital || 290000;
-  const walletTotal = wallets?.total || 2650000;
+  const totalCentres = centres?.length || 0;
+  const totalStaff = staff?.length || 0;
+  const admins = staff?.filter(s => s.role === "admin")?.length || 0;
+  const staffCount = staff?.filter(s => s.role === "staff" || s.role === "supervisor")?.length || 0;
+  const totalCustomers = customers || 0;
+
+  const servicesToday = services?.completedToday || 0;
+  const revenueToday = revenue?.today || 0;
+  const monthlyRevenue = revenue?.monthly || 0;
+  const netProfit = revenue?.profit || 0;
+  const pendingPayments = revenue?.pending || 0;
+  const pendingCustomers = revenue?.pendingCustomers || 0;
+  const avgRating = revenue?.avgRating || 0;
+  const totalReviews = revenue?.totalReviews || 0;
+  const pendingServices = services?.pending || 0;
+  const completedToday = services?.completed || 0;
+  const delayedServices = services?.delayed || 0;
+  const applicationsInProgress = services?.inProgress || 0;
+  const walletCash = wallets?.cash || 0;
+  const walletBank = wallets?.bank || 0;
+  const walletDigital = wallets?.digital || 0;
+  const walletTotal = wallets?.total || 0;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-8">
