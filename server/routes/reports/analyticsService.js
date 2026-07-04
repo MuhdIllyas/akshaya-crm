@@ -2085,7 +2085,10 @@ export const getReportData = async (params) => {
       // Always fetch base financials so the top cards render
       if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].includes(id) && !hasFetchedFinancials) {
         const rawFinancials = await fetchFinancialAnalytics(client, targetCentreId, reportDates);
-        compiledReport.data.financials = calculateFinancialMetrics(rawFinancials);
+        
+        const metrics = calculateFinancialMetrics(rawFinancials);
+        compiledReport.data.financials = buildFinancialSummary(metrics); 
+        
         hasFetchedFinancials = true;
       }
 
