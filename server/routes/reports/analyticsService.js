@@ -99,7 +99,6 @@ const fetchServiceAnalytics = async (client, centreId, dates) => {
 const fetchFinancialAnalytics = async (client, centreId, dates) => {
   const [todayRev, todayOpEx, monthlyRev, monthlyOpEx, periodRev, periodOpEx] = await Promise.all([
     
-    // ✅ 1. Updated to use date ranges (fromDate and toDate)
     client.query(`
       SELECT 
         COALESCE(SUM(se.total_charges), 0) as revenue_collected,
@@ -107,19 +106,19 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
         COALESCE(SUM(se.service_charges), 0) as gross_profit
       FROM service_entries se 
       JOIN staff s ON se.staff_id = s.id 
-      WHERE s.centre_id = $1 AND se.created_at::date >= $2 AND se.created_at::date <= $3
+      WHERE ($1::text = 'all' OR $1 IS NULL OR s.centre_id = NULLIF($1::text, 'all')::int)
+        AND se.created_at::date >= $2 AND se.created_at::date <= $3
     `, [centreId, dates.fromDate, dates.toDate]),
     
-    // ✅ 2. Updated to use date ranges (fromDate and toDate)
     client.query(`
       SELECT COALESCE(SUM(amount), 0) as operating_expenses
       FROM expenses 
-      WHERE centre_id = $1 AND expense_date >= $2 AND expense_date <= $3 
-      AND status IN ('approved', 'auto_approved') 
-      AND (is_reversal IS NULL OR is_reversal = FALSE)
+      WHERE ($1::text = 'all' OR $1 IS NULL OR centre_id = NULLIF($1::text, 'all')::int)
+        AND expense_date >= $2 AND expense_date <= $3 
+        AND status IN ('approved', 'auto_approved') 
+        AND (is_reversal IS NULL OR is_reversal = FALSE)
     `, [centreId, dates.fromDate, dates.toDate]),
     
-    // ✅ 3. Monthly Revenue
     client.query(`
       SELECT 
         EXTRACT(MONTH FROM se.created_at) as month_num,
@@ -128,23 +127,23 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
         COALESCE(SUM(se.service_charges), 0) as gross_profit
       FROM service_entries se 
       JOIN staff s ON se.staff_id = s.id 
-      WHERE s.centre_id = $1 AND EXTRACT(YEAR FROM se.created_at) = $2 AND se.status = 'completed'
+      WHERE ($1::text = 'all' OR $1 IS NULL OR s.centre_id = NULLIF($1::text, 'all')::int)
+        AND EXTRACT(YEAR FROM se.created_at) = $2 AND se.status = 'completed'
       GROUP BY month_num
     `, [centreId, dates.currentYear]),
     
-    // ✅ 4. Monthly Operating Expenses
     client.query(`
       SELECT 
         EXTRACT(MONTH FROM expense_date) as month_num,
         COALESCE(SUM(amount), 0) as operating_expenses
       FROM expenses 
-      WHERE centre_id = $1 AND EXTRACT(YEAR FROM expense_date) = $2 
-      AND status IN ('approved', 'auto_approved') 
-      AND (is_reversal IS NULL OR is_reversal = FALSE)
+      WHERE ($1::text = 'all' OR $1 IS NULL OR centre_id = NULLIF($1::text, 'all')::int)
+        AND EXTRACT(YEAR FROM expense_date) = $2 
+        AND status IN ('approved', 'auto_approved') 
+        AND (is_reversal IS NULL OR is_reversal = FALSE)
       GROUP BY month_num
     `, [centreId, dates.currentYear]),
 
-    // ✅ 5. NEW: Dynamic Period Revenue (Grouped by Exact Date)
     client.query(`
       SELECT 
         TO_CHAR(se.created_at, 'YYYY-MM-DD') as date_label,
@@ -152,19 +151,20 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
         COALESCE(SUM(se.service_charges), 0) as gross_profit
       FROM service_entries se 
       JOIN staff s ON se.staff_id = s.id 
-      WHERE s.centre_id = $1 AND se.created_at::date >= $2 AND se.created_at::date <= $3 AND se.status = 'completed'
+      WHERE ($1::text = 'all' OR $1 IS NULL OR s.centre_id = NULLIF($1::text, 'all')::int)
+        AND se.created_at::date >= $2 AND se.created_at::date <= $3 AND se.status = 'completed'
       GROUP BY date_label
     `, [centreId, dates.fromDate, dates.toDate]),
     
-    // ✅ 6. NEW: Dynamic Period Expenses (Grouped by Exact Date)
     client.query(`
       SELECT 
         TO_CHAR(expense_date, 'YYYY-MM-DD') as date_label,
         COALESCE(SUM(amount), 0) as operating_expenses
       FROM expenses 
-      WHERE centre_id = $1 AND expense_date >= $2 AND expense_date <= $3 
-      AND status IN ('approved', 'auto_approved') 
-      AND (is_reversal IS NULL OR is_reversal = FALSE)
+      WHERE ($1::text = 'all' OR $1 IS NULL OR centre_id = NULLIF($1::text, 'all')::int)
+        AND expense_date >= $2 AND expense_date <= $3 
+        AND status IN ('approved', 'auto_approved') 
+        AND (is_reversal IS NULL OR is_reversal = FALSE)
       GROUP BY date_label
     `, [centreId, dates.fromDate, dates.toDate])
   ]);

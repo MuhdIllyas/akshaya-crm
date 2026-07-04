@@ -31,10 +31,10 @@ const SuperadminDashboard = () => {
         // 1. Fetch Quick Live Metrics (For the top KPI cards)
         const quickResPromise = axios.get(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=all`, { headers });
         
-        // 2. Fetch Deep Analytics via V3 Engine (Requesting the specific report IDs)
+        // 2. Fetch Deep Analytics via V3 Engine (Using Global Report IDs)
         const engineResPromise = axios.post(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
-            period: "monthly",
-            centreId: "all", 
+            period: "monthly", 
+            targetCentreId: "all", // 👈 CHANGED from centreId to targetCentreId
             format: "preview",
             reportIds: [1, 5, 10, 17, 18, 27, 29, 30, 31, 32] 
         }, { headers });
