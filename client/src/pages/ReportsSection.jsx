@@ -3780,7 +3780,7 @@ const ReportsSection = () => {
     const [recentExports, setRecentExports] = useState([]);
 
         // 👇 Helper to tell the backend when a local browser file is downloaded
-    const logLocalExport = async (fileName) => {
+        const logLocalExport = async (fileName) => {
         // 1. Update the UI instantly
         const newExport = {
             name: fileName,
