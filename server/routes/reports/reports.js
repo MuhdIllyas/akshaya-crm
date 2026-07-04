@@ -160,4 +160,40 @@ router.post("/generate", async (req, res) => {
   }
 });
 
+// ==========================================
+// EXPORT AUDIT LOGS
+// ==========================================
+
+// GET /api/reports/exports -> Fetch the last 10 exports for this specific user
+router.get('/exports', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT file_name as name, file_size as size, TO_CHAR(created_at, 'YYYY-MM-DD') as date 
+             FROM report_exports 
+             WHERE staff_id = $1 
+             ORDER BY created_at DESC LIMIT 10`,
+            [req.user.id]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching export logs:', error);
+        res.status(500).json({ error: 'Failed to fetch exports' });
+    }
+});
+
+// POST /api/reports/exports -> Save a new export record
+router.post('/exports', authenticateToken, async (req, res) => {
+    const { fileName, fileSize } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO report_exports (staff_id, file_name, file_size) VALUES ($1, $2, $3)',
+            [req.user.id, fileName, fileSize]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error logging export:', error);
+        res.status(500).json({ error: 'Failed to log export' });
+    }
+});
+
 export default router;

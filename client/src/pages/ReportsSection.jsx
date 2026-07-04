@@ -3766,12 +3766,27 @@ const ReportsSection = () => {
         { id: 27, name: "Team Productivity" }
     ];
 
-    const [recentExports, setRecentExports] = useState([
-        { name: 'Financial Report - June.pdf', date: '2026-06-28', size: '2.4 MB' },
-        { name: 'Attendance Report.xlsx', date: '2026-06-27', size: '1.1 MB' },
-        { name: 'Profit Report.pdf', date: '2026-06-26', size: '3.2 MB' },
-        { name: 'Staff Report.xlsx', date: '2026-06-25', size: '1.8 MB' },
-    ]);
+    // Start with an empty array
+    const [recentExports, setRecentExports] = useState([]);
+
+    // Fetch the real history when the page loads
+    useEffect(() => {
+        const fetchRecentExports = async () => {
+            try {
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reports/exports`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setRecentExports(data || []);
+                }
+            } catch (error) {
+                console.error("Failed to fetch recent exports:", error);
+            }
+        };
+
+        fetchRecentExports();
+    }, []);
 
     // ─── Report Data ───
     const allReports = [
@@ -4002,6 +4017,22 @@ const ReportsSection = () => {
                 };
                 setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
                 toast.success(`Report "${filename}" downloaded`);
+
+                try {
+                    await fetch(`${import.meta.env.VITE_API_URL}/api/reports/exports`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}` 
+                        },
+                        body: JSON.stringify({ 
+                            fileName: filename, 
+                            fileSize: newExport.size 
+                        })
+                    });
+                } catch (logError) {
+                    console.error("Failed to save export to database:", logError);
+                }
             }
         } catch (error) {
             console.error("Report generation failed:", error);
