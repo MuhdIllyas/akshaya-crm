@@ -21,59 +21,96 @@ const SuperadminDashboard = () => {
   });
   const [revenueView, setRevenueView] = useState("revenue"); // revenue | profit | expenses
 
-  // ✅ REPLACE YOUR useEffect WITH THIS:
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
 
-        // 1. Fetch Quick Live Metrics (For the top KPI cards)
-        const quickResPromise = axios.get(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=all`, { headers });
-        
-        // 2. Fetch Deep Analytics via V3 Engine (Using Global Report IDs)
-        const engineResPromise = axios.post(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
+        // 1. Fetch Centres List & Quick Metrics
+        const [centresRes, quickRes] = await Promise.all([
+            axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, { headers }),
+            axios.get(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=all`, { headers })
+        ]);
+
+        const centresList = centresRes.data || [];
+        const qData = quickRes.data;
+
+        // 2. Fetch Deep Analytics PER CENTRE to avoid backend SQL crashes
+        const reportPromises = centresList.map(centre => 
+            axios.post(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
+                period: "monthly", 
+                targetCentreId: centre.id, // Pass actual integer ID!
+                format: "preview",
+                reportIds: [1, 5, 10, 17, 18, 27] 
+            }, { headers })
+        );
+
+        // Also fetch the global comparison reports once (using a safe dummy ID)
+        const globalReportPromise = axios.post(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
             period: "monthly", 
-            targetCentreId: "all", // 👈 CHANGED from centreId to targetCentreId
+            targetCentreId: centresList[0]?.id || 1, 
             format: "preview",
-            reportIds: [1, 5, 10, 17, 18, 27, 29, 30, 31, 32] 
+            reportIds: [29, 30, 31, 32] 
         }, { headers });
 
-        // 3. Fetch basic Centre list for the Map
-        const centresResPromise = axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, { headers });
+        const [...centreResults] = await Promise.all([...reportPromises, globalReportPromise]);
+        const globalRes = centreResults.pop(); // The last one is the global report
 
-        // Run all three concurrently
-        const [quickRes, engineRes, centresRes] = await Promise.all([quickResPromise, engineResPromise, centresResPromise]);
+        // 3. AGGREGATE THE RESULTS
+        let totalCash = 0, totalBank = 0, totalDigital = 0;
+        let combinedMonthlyTrend = { revenueCollected: Array(12).fill(0), grossProfit: Array(12).fill(0), operatingExpenses: Array(12).fill(0) };
+        let allPending = 0, allDelayed = 0, allCompleted = 0;
+        let allStaff = [];
+        let allTeams = [];
 
-        const qData = quickRes.data;
-        const eData = engineRes.data.data;
+        centreResults.forEach(res => {
+            const eData = res.data.data;
+            
+            // Aggregate Wallets
+            (eData.walletSummary || []).forEach(w => {
+                const bal = Number(w.closing_balance || 0);
+                const name = w.wallet_name.toLowerCase();
+                if (name.includes('cash')) totalCash += bal;
+                else if (name.includes('bank') || name.includes('hdfc') || name.includes('sbi')) totalBank += bal;
+                else totalDigital += bal;
+            });
 
-        // Process Wallets
-        let cash = 0, bank = 0, digital = 0, total = 0;
-        (eData.walletSummary || []).forEach(w => {
-            const bal = Number(w.closing_balance || 0);
-            total += bal;
-            const name = w.wallet_name.toLowerCase();
-            if (name.includes('cash')) cash += bal;
-            else if (name.includes('bank') || name.includes('hdfc') || name.includes('sbi')) bank += bal;
-            else digital += bal;
+            // Aggregate Trends
+            if (eData.financials?.monthlyTrend) {
+                const mt = eData.financials.monthlyTrend;
+                for(let i=0; i<12; i++){
+                    combinedMonthlyTrend.revenueCollected[i] += (mt.revenueCollected[i] || 0);
+                    combinedMonthlyTrend.grossProfit[i] += (mt.grossProfit[i] || 0);
+                    combinedMonthlyTrend.operatingExpenses[i] += (mt.operatingExpenses[i] || 0);
+                }
+            }
+
+            // Aggregate Services
+            allPending += (eData.pendingServices?.length || 0);
+            allDelayed += (eData.pendingServices?.filter(s => s.days_pending > 5).length || 0);
+            allCompleted += (eData.completedServicesReport?.length || 0);
+
+            // Aggregate Arrays
+            allStaff.push(...(eData.performanceReport || []));
+            allTeams.push(...(eData.teamPerformance || []));
         });
 
-        // Process Leaderboards
-        const revCentres = [...(eData.revenueByCentre?.summary || [])].sort((a,b) => b.total_revenue - a.total_revenue);
-        const profCentres = [...(eData.profitByCentre?.summary || [])].sort((a,b) => b.net_profit - a.net_profit);
-        
-        // Map the real data to your EXACT existing state structure
+        // Parse Global Data
+        const gData = globalRes.data.data;
+        const revCentres = [...(gData.revenueByCentre?.summary || [])].sort((a,b) => b.total_revenue - a.total_revenue);
+        const profCentres = [...(gData.profitByCentre?.summary || [])].sort((a,b) => b.net_profit - a.net_profit);
+
+        // 4. Update State
         setDashboardData({
-          centres: centresRes.data || [],
-          staff: new Array(qData.attendanceTotal || 0).fill({ role: 'staff' }), // Mocks array length for your 'Total Staff' card
+          centres: centresList,
+          staff: new Array(qData.attendanceTotal || 0).fill({ role: 'staff' }), 
           customers: 0, 
           services: {
               completedToday: qData.servicesCount || 0,
-              pending: eData.pendingServices?.length || 0,
-              inProgress: eData.pendingServices?.filter(s => s.status === 'in_progress').length || 0,
-              delayed: eData.pendingServices?.filter(s => s.days_pending > 5).length || 0,
-              completed: eData.completedServicesReport?.length || 0
+              pending: allPending,
+              delayed: allDelayed,
+              completed: allCompleted
           },
           revenue: {
               today: qData.collection || 0,
@@ -84,8 +121,8 @@ const SuperadminDashboard = () => {
               avgRating: 4.8, 
               totalReviews: 0
           },
-          wallets: { cash, bank, digital, total },
-          monthlyTrend: eData.financials?.monthlyTrend, // Passed down for the chart
+          wallets: { cash: totalCash, bank: totalBank, digital: totalDigital, total: totalCash + totalBank + totalDigital },
+          monthlyTrend: combinedMonthlyTrend, 
           activities: [], 
           notifications: [], 
           healthScores: {}, 
@@ -101,10 +138,10 @@ const SuperadminDashboard = () => {
               delayed: { name: 'N/A', value: 0 },
               complaints: { name: 'N/A', value: 0 }
           },
-          topStaff: (eData.performanceReport || []).map(s => ({
+          topStaff: allStaff.sort((a,b) => b.gross_profit - a.gross_profit).map(s => ({
               name: s.staff_name, revenue: s.gross_profit, applications: s.total_services, rating: s.avg_rating || 0
           })),
-          topTeams: (eData.teamPerformance || []).map(t => ({
+          topTeams: allTeams.sort((a,b) => b.total_services - a.total_services).map(t => ({
               name: t.team_name, revenue: t.total_services, profit: t.avg_tat_hours, expenses: 0 
           }))
         });
@@ -135,11 +172,12 @@ const SuperadminDashboard = () => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   };
 
+  
   // Simple bar chart for revenue trend
   const RevenueChart = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
-    // ✅ Read directly from the API response
+    // ✅ FIX: Extract trend safely from dashboardData
     const trend = dashboardData?.monthlyTrend || {};
     const data = {
       revenue: trend.revenueCollected || [0,0,0,0,0,0,0,0,0,0,0,0],
