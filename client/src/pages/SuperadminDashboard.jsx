@@ -135,29 +135,37 @@ const SuperadminDashboard = () => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   };
 
-  // Simple bar chart for revenue trend (placeholder)
+  // Simple bar chart for revenue trend
   const RevenueChart = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
-    // Read the real data from our fetched state, fallback to zeros if loading
-    const trend = dashboardData.monthlyTrend || {};
+    // ✅ Read directly from the API response
+    const trend = dashboardData?.monthlyTrend || {};
     const data = {
-      revenue: revenue?.monthlyTrend || [0,0,0,0,0,0,0,0,0,0,0,0],
-      profit: revenue?.profitTrend || [0,0,0,0,0,0,0,0,0,0,0,0],
-      expenses: revenue?.expenseTrend || [0,0,0,0,0,0,0,0,0,0,0,0],
+      revenue: trend.revenueCollected || [0,0,0,0,0,0,0,0,0,0,0,0],
+      profit: trend.grossProfit || [0,0,0,0,0,0,0,0,0,0,0,0],
+      expenses: trend.operatingExpenses || [0,0,0,0,0,0,0,0,0,0,0,0],
     };
     
     const selected = data[revenueView] || data.revenue;
-    const max = Math.max(...selected, 1); 
+    const max = Math.max(...selected, 1); // '1' prevents division by zero if all values are 0
 
     return (
       <div className="w-full h-64 flex items-end space-x-2">
         {selected.map((value, idx) => (
-          <div key={idx} className="flex-1 flex flex-col items-center">
+          <div key={idx} className="flex-1 flex flex-col items-center group relative">
+            {/* Hover Tooltip */}
+            <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded pointer-events-none transition-opacity whitespace-nowrap z-10">
+                {formatCurrency(value)}
+            </div>
+            {/* Dynamic Bar */}
             <div
-              className="w-full bg-blue-500 rounded-t transition-all duration-500"
+              className={`w-full rounded-t transition-all duration-500 ${
+                revenueView === 'profit' ? 'bg-green-500' : 
+                revenueView === 'expenses' ? 'bg-red-500' : 
+                'bg-blue-500'
+              }`}
               style={{ height: `${(value / max) * 100}%`, minHeight: '4px' }}
-              title={formatCurrency(value)}
             ></div>
             <span className="text-xs text-gray-600 mt-1">{months[idx]}</span>
           </div>
@@ -226,6 +234,7 @@ const SuperadminDashboard = () => {
   const staffCount = staff?.filter(s => s.role === "staff" || s.role === "supervisor")?.length || 0;
   const totalCustomers = customers || 0;
 
+  // fallback numbers to 0
   const servicesToday = services?.completedToday || 0;
   const revenueToday = revenue?.today || 0;
   const monthlyRevenue = revenue?.monthly || 0;
