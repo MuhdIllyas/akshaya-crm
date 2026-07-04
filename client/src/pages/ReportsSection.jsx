@@ -343,7 +343,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             toast.success('Visual PDF downloaded successfully!'); 
             
             // Tell the backend to save this to the Recent Exports table!
-            logLocalExport(finalName); 
+            onLogExport(finalName); 
             // 👆 END UPDATED BLOCK 👆
             
         } catch (error) {
@@ -441,7 +441,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
             XLSX.writeFile(workbook, fileName);
             toast.success('Excel file downloaded successfully!');
 
-            logLocalExport(fileName);
+            onLogExport(fileName);
         } catch (error) {
             console.error('Error generating Excel:', error);
             toast.error('Failed to generate Excel file.');
