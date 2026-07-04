@@ -1683,6 +1683,43 @@ const fetchServiceComparisonAnalytics = async (client, dates) => {
   }
 };
 
+// ✅ Salary Advance Fetcher (Report ID 34)
+const fetchSalaryAdvanceAnalytics = async (client, centreId, dates) => {
+  try {
+    const res = await client.query(`
+      SELECT 
+        st.name as staff_name,
+        e.expense_date as date_given,
+        COALESCE(e.amount, 0) as amount_given,
+        -- Note: If you add a 'recovered' column or join with salaries later, update these two lines:
+        0 as amount_recovered, 
+        COALESCE(e.amount, 0) as pending_balance,
+        e.status
+      FROM expenses e
+      JOIN staff st ON e.staff_id = st.id
+      WHERE e.centre_id = $1 
+        AND (e.category_id = 2 OR e.category = 'Salary Advance')
+        AND e.expense_date >= $2 
+        AND e.expense_date <= $3
+        AND e.status IN ('approved', 'auto_approved')
+        AND (e.is_reversal IS NULL OR e.is_reversal = FALSE)
+      ORDER BY e.expense_date DESC
+    `, [centreId, dates.fromDate, dates.toDate]);
+
+    return res.rows.map(row => ({
+      staff_name: row.staff_name,
+      date_given: new Date(row.date_given).toISOString(),
+      amount_given: Number(row.amount_given),
+      amount_recovered: Number(row.amount_recovered),
+      pending_balance: Number(row.pending_balance),
+      status: row.status ? row.status.toLowerCase() : 'pending'
+    }));
+  } catch (error) {
+    console.error("SQL Error in fetchSalaryAdvanceAnalytics:", error.message);
+    throw error;
+  }
+};
+
 // ✅ Returning Customers Fetcher (Lifetime Value & Loyalty)
 const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
   try {
@@ -2092,6 +2129,10 @@ export const getReportData = async (params) => {
         // ID 11: Salary Report
         case 11: {
           compiledReport.data.salaryReport = await fetchSalaryAnalytics(client, targetCentreId, reportDates);
+          break;
+        }
+        case 34: {
+          compiledReport.data.salaryAdvanceReport = await fetchSalaryAdvanceAnalytics(client, targetCentreId, reportDates);
           break;
         }
         case 12: {
