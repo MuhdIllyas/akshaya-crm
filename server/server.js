@@ -57,6 +57,8 @@ import notesRoutes from "./routes/notes.js";
 //communication routes
 import communicationRoutes from "./routes/communication.js";
 
+import "./routes/scheduler.js";
+
 dotenv.config();
 
 import "./routes/scheduler.js";
