@@ -314,31 +314,6 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
     const reportRef = useRef(null);
     const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-    // 👇 Helper to tell the backend when a local browser file is downloaded
-    const logLocalExport = async (fileName) => {
-        // 1. Update the UI instantly
-        const newExport = {
-            name: fileName,
-            date: new Date().toISOString().slice(0, 10),
-            size: 'Local Export' // Browsers don't give exact byte sizes easily before saving
-        };
-        setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
-
-        // 2. Save it to the database silently
-        try {
-            await fetch(`${import.meta.env.VITE_API_URL}/api/reports/exports`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}` 
-                },
-                body: JSON.stringify({ fileName: newExport.name, fileSize: newExport.size })
-            });
-        } catch (error) {
-            console.error("Failed to log export to DB:", error);
-        }
-    };
-
     // 👇 2. Add the Visual PDF Generator Function
     const generateVisualPDF = async () => {
         if (!reportRef.current) return;
@@ -3803,6 +3778,31 @@ const ReportsSection = () => {
 
     // Start with an empty array
     const [recentExports, setRecentExports] = useState([]);
+
+        // 👇 Helper to tell the backend when a local browser file is downloaded
+    const logLocalExport = async (fileName) => {
+        // 1. Update the UI instantly
+        const newExport = {
+            name: fileName,
+            date: new Date().toISOString().slice(0, 10),
+            size: 'Local Export' // Browsers don't give exact byte sizes easily before saving
+        };
+        setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
+
+        // 2. Save it to the database silently
+        try {
+            await fetch(`${import.meta.env.VITE_API_URL}/api/reports/exports`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}` 
+                },
+                body: JSON.stringify({ fileName: newExport.name, fileSize: newExport.size })
+            });
+        } catch (error) {
+            console.error("Failed to log export to DB:", error);
+        }
+    };
 
     // Fetch the real history when the page loads
     useEffect(() => {
