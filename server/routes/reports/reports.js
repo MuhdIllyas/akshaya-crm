@@ -164,15 +164,14 @@ router.post("/generate", async (req, res) => {
 // EXPORT AUDIT LOGS
 // ==========================================
 
-// GET /api/reports/exports -> Fetch the last 10 exports for this specific user
+// GET /api/reports/exports -> Fetch the last 10 global exports
 router.get('/exports', authenticateToken, async (req, res) => {
     try {
+        // We removed the WHERE staff_id = $1 so it shows ALL recent exports!
         const result = await pool.query(
             `SELECT file_name as name, file_size as size, TO_CHAR(created_at, 'YYYY-MM-DD') as date 
              FROM report_exports 
-             WHERE staff_id = $1 
-             ORDER BY created_at DESC LIMIT 10`,
-            [req.user.id]
+             ORDER BY created_at DESC LIMIT 10`
         );
         res.json(result.rows);
     } catch (error) {
@@ -185,9 +184,12 @@ router.get('/exports', authenticateToken, async (req, res) => {
 router.post('/exports', authenticateToken, async (req, res) => {
     const { fileName, fileSize } = req.body;
     try {
+        // Make sure to use req.staff.id if req.user is undefined in your auth setup!
+        const userId = req.user?.id || req.staff?.id || null; 
+        
         await pool.query(
             'INSERT INTO report_exports (staff_id, file_name, file_size) VALUES ($1, $2, $3)',
-            [req.user.id, fileName, fileSize]
+            [userId, fileName, fileSize]
         );
         res.json({ success: true });
     } catch (error) {
