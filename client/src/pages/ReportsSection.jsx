@@ -306,7 +306,7 @@ const formatCurrency = (value) => `₹${value.toLocaleString('en-IN')}`;
 const formatDays = (value) => `${value} ${value === 1 ? 'Day' : 'Days'}`;
 
 // ─── Report Preview Panel (Wired to V3 Backend) ───
-const ReportPreviewPanel = ({ report, previewData, onClose, onExport }) => {
+const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
     const [activeTab, setActiveTab] = useState('preview');
     const COLORS = CHART_COLORS;
 
