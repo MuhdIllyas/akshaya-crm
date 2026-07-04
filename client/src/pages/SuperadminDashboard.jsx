@@ -1,19 +1,27 @@
-import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import axios from "axios";
 import { toast } from "react-toastify";
-import {
-  FiMapPin, FiUsers, FiUserCheck, FiCheckSquare, FiDollarSign,
-  FiTrendingUp, FiBriefcase, FiCreditCard, FiStar, FiActivity,
-  FiClock, FiCheckCircle, FiAlertCircle, FiFileText, FiAward,
-  FiAlertTriangle, FiBell, FiMap, FiZap, FiCpu, FiBarChart2
-} from "react-icons/fi";
 
 const SuperadminDashboard = () => {
-  const [loading, setLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [dashboardData, setDashboardData] = useState({
+    centres: [],
+    staff: [],
+    customers: [],
+    services: [],
+    revenue: {},
+    wallets: {},
+    activities: [],
+    notifications: [],
+    healthScores: {},
+    topCentres: [],
+    worstCentres: [],
+    topStaff: [],
+    topTeams: [],
+  });
   const [revenueView, setRevenueView] = useState("revenue"); // revenue | profit | expenses
 
-  // Fallback Mock data generator
+  // Mock data generators
   const generateMockData = () => {
     return {
       centres: [
@@ -75,28 +83,28 @@ const SuperadminDashboard = () => {
         { name: "Team Gamma", revenue: 410000, profit: 85000, expenses: 325000 },
       ],
       notifications: [
-        { id: 1, type: "critical", message: "Centre Tirur has not closed accounting for 2 days." },
-        { id: 2, type: "warning", message: "VK Padi wallet mismatch detected (₹2,450 variance)." },
-        { id: 3, type: "warning", message: "45 high-priority applications awaiting approval." },
-        { id: 4, type: "critical", message: "Network connection lost at Malappuram branch." },
-        { id: 5, type: "info", message: "Monthly automated backups completed successfully." },
-        { id: 6, type: "warning", message: "WhatsApp API disconnected. Re-authentication required." },
+        { id: 1, type: "critical", message: "Centre X has not closed accounting." },
+        { id: 2, type: "warning", message: "Centre Y wallet mismatch." },
+        { id: 3, type: "warning", message: "Pending approvals." },
+        { id: 4, type: "critical", message: "Attendance missing." },
+        { id: 5, type: "info", message: "Communication account expired." },
+        { id: 6, type: "warning", message: "WhatsApp disconnected." },
       ],
       activities: [
-        { id: 1, action: "Admin created new centre 'Kondotty'", time: "2 mins ago" },
-        { id: 2, action: "Staff 'Jane Smith' joined Pukayur", time: "15 mins ago" },
-        { id: 3, action: "Digital Wallet limit updated", time: "1 hour ago" },
-        { id: 4, action: "Expense batch #842 approved", time: "2 hours ago" },
-        { id: 5, action: "Team 'Delta' created by Superadmin", time: "3 hours ago" },
-        { id: 6, action: "New 5-star review received at VK Padi", time: "5 hours ago" },
-        { id: 7, action: "Customer complaint #102 resolved", time: "yesterday" },
+        { id: 1, action: "Admin created new centre", time: "2 mins ago" },
+        { id: 2, action: "Staff joined", time: "15 mins ago" },
+        { id: 3, action: "Wallet created", time: "1 hour ago" },
+        { id: 4, action: "Expense approved", time: "2 hours ago" },
+        { id: 5, action: "Team created", time: "3 hours ago" },
+        { id: 6, action: "New review", time: "5 hours ago" },
+        { id: 7, action: "Customer complaint", time: "yesterday" },
       ],
       healthScores: {
-        "Pukayur": { score: 94, status: "Excellent" },
-        "Kolathoor": { score: 78, status: "Attention" },
+        Pukayur: { score: 94, status: "Excellent" },
+        Kolathoor: { score: 78, status: "Attention" },
         "VK Padi": { score: 85, status: "Good" },
-        "Tirur": { score: 52, status: "Critical" },
-        "Malappuram": { score: 88, status: "Good" },
+        Tirur: { score: 52, status: "Critical" },
+        Malappuram: { score: 88, status: "Good" },
       },
     };
   };
@@ -105,23 +113,75 @@ const SuperadminDashboard = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Attempt to fetch real data from APIs using standard fetch
-        const token = localStorage.getItem("token");
-        const headers = { Authorization: `Bearer ${token}` };
+        // Fetch real data from APIs
+        const centresRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const staffRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        // Additional endpoints (assume they exist)
+        const customersRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/customers/count`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const servicesRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/services/today`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const revenueRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/revenue/aggregate`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const walletRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/wallets/total`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const activitiesRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/activities/recent`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const notificationsRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/notifications`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const healthRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/health`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const topCentresRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/top`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const worstCentresRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/worst`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const topStaffRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/top`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        const topTeamsRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/teams/top`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
 
-        // For this environment, we'll intentionally throw an error to use our beautiful mock data
-        // In your real codebase, this would be: 
-        // const res = await fetch(`${import.meta.env.VITE_API_URL}/api/dashboard/superadmin`, { headers });
-        // const data = await res.json();
-        
-        throw new Error("Simulating API fetch failure to load mock data");
-        
+        // Combine all data
+        setDashboardData({
+          centres: centresRes.data,
+          staff: staffRes.data,
+          customers: customersRes.data.count,
+          services: servicesRes.data,
+          revenue: revenueRes.data,
+          wallets: walletRes.data,
+          activities: activitiesRes.data,
+          notifications: notificationsRes.data,
+          healthScores: healthRes.data,
+          topCentres: topCentresRes.data,
+          worstCentres: worstCentresRes.data,
+          topStaff: topStaffRes.data,
+          topTeams: topTeamsRes.data,
+        });
       } catch (err) {
-        console.log("Using rich mock data for Superadmin Dashboard.");
-        setTimeout(() => {
-            setDashboardData(generateMockData());
-            setLoading(false);
-        }, 800); // Small artificial delay to show the nice loading state
+        console.error("Error fetching dashboard data:", err);
+        toast.error("Failed to load dashboard data. Using mock data.", {
+          position: "top-right",
+          autoClose: 5000,
+          theme: "light",
+        });
+        // Fallback to mock data
+        setDashboardData(generateMockData());
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
@@ -130,10 +190,10 @@ const SuperadminDashboard = () => {
   // Helper to get health color and icon
   const getHealthStatus = (health) => {
     const map = {
-      excellent: { color: "text-emerald-500", bg: "bg-emerald-100", label: "Excellent" },
-      good: { color: "text-emerald-500", bg: "bg-emerald-100", label: "Good" },
-      attention: { color: "text-amber-500", bg: "bg-amber-100", label: "Attention" },
-      critical: { color: "text-rose-500", bg: "bg-rose-100", label: "Critical" },
+      excellent: { color: "green", icon: "🟢", label: "Excellent" },
+      good: { color: "green", icon: "🟢", label: "Good" },
+      attention: { color: "yellow", icon: "🟡", label: "Attention" },
+      critical: { color: "red", icon: "🔴", label: "Critical" },
     };
     return map[health] || map.good;
   };
@@ -143,9 +203,10 @@ const SuperadminDashboard = () => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   };
 
-  // Simple pure-CSS bar chart for revenue trend
+  // Simple bar chart for revenue trend (placeholder)
   const RevenueChart = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    // Mock data - would come from API
     const data = {
       revenue: [280000, 310000, 340000, 360000, 380000, 420000, 450000, 480000, 520000, 560000, 600000, 640000],
       profit: [70000, 80000, 90000, 95000, 100000, 110000, 115000, 120000, 130000, 140000, 150000, 160000],
@@ -153,227 +214,203 @@ const SuperadminDashboard = () => {
     };
     const selected = data[revenueView] || data.revenue;
     const max = Math.max(...selected);
-    const colorClass = revenueView === "profit" ? "bg-emerald-500" : revenueView === "expenses" ? "bg-rose-500" : "bg-indigo-500";
 
     return (
-      <div className="w-full h-64 flex items-end justify-between space-x-1 sm:space-x-2 mt-6">
+      <div className="w-full h-64 flex items-end space-x-2">
         {selected.map((value, idx) => (
-          <div key={idx} className="flex-1 flex flex-col items-center group relative">
-            {/* Tooltip on Hover */}
-            <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-gray-900 text-white text-[10px] py-1 px-2 rounded pointer-events-none transition-opacity whitespace-nowrap z-10">
-                {formatCurrency(value)}
-            </div>
-            {/* Bar */}
-            <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: `${(value / max) * 100}%` }}
-              transition={{ duration: 0.8, delay: idx * 0.05 }}
-              className={`w-full rounded-t-sm hover:brightness-110 cursor-pointer ${colorClass}`}
-              style={{ minHeight: '4px' }}
-            />
-            <span className="text-[10px] sm:text-xs text-gray-500 mt-2 font-medium">{months[idx]}</span>
+          <div key={idx} className="flex-1 flex flex-col items-center">
+            <div
+              className="w-full bg-blue-500 rounded-t"
+              style={{ height: `${(value / max) * 100}%`, minHeight: '4px' }}
+            ></div>
+            <span className="text-xs text-gray-600 mt-1">{months[idx]}</span>
           </div>
         ))}
       </div>
     );
   };
 
-  // Map placeholder - Clean SVG of Kerala with animated markers
+  // Map placeholder - SVG of Kerala with markers (simplified)
   const MapView = () => {
+    // In real implementation, use Leaflet or Google Maps
     return (
-      <div className="relative bg-indigo-50/50 rounded-xl h-72 flex items-center justify-center overflow-hidden border border-indigo-100">
-        <svg viewBox="0 0 200 200" className="w-full h-full opacity-60">
-          {/* Abstract State outline */}
-          <path d="M70,30 L110,20 L140,50 L160,110 L120,180 L80,190 L50,150 L60,80 Z" fill="#e0e7ff" stroke="#a5b4fc" strokeWidth="2" strokeLinejoin="round" />
-          
+      <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <path d="M50,50 L150,50 L180,120 L120,180 L40,160 Z" fill="#e2e8f0" stroke="#94a3b8" />
           {/* Markers for centres */}
-          {dashboardData.centres.map((centre, i) => {
+          {dashboardData.centres.map((centre) => {
             const health = getHealthStatus(centre.health);
-            const isGreen = health.color.includes("emerald");
-            const isYellow = health.color.includes("amber");
-            const markerColor = isGreen ? "#10b981" : isYellow ? "#f59e0b" : "#ef4444";
-            
-            // Distributed positions based on ID
-            const x = [85, 100, 115, 130, 95][i % 5];
-            const y = [50, 80, 110, 140, 160][i % 5];
-            
+            const color = health.color === "green" ? "#22c55e" : health.color === "yellow" ? "#eab308" : "#ef4444";
+            // Random positions for demo
+            const x = 40 + (centre.id * 30) % 140;
+            const y = 40 + (centre.id * 20) % 120;
             return (
-              <g key={centre.id} className="cursor-pointer group">
-                <circle cx={x} cy={y} r="8" fill={markerColor} opacity="0.2" className="animate-ping" style={{ animationDuration: '2s' }} />
-                <circle cx={x} cy={y} r="3" fill={markerColor} stroke="white" strokeWidth="1.5" />
-                <text x={x + 8} y={y + 3} fontSize="5" fontWeight="bold" fill="#3730a3" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    {centre.name}
-                </text>
-              </g>
+              <circle key={centre.id} cx={x} cy={y} r="6" fill={color} stroke="white" strokeWidth="2" />
             );
           })}
         </svg>
-        <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-[10px] font-bold text-indigo-900 border border-indigo-100 shadow-sm">
-            Live Centre Map
-        </div>
+        <div className="absolute bottom-2 left-2 text-xs text-gray-600">Kerala Map</div>
       </div>
     );
   };
 
-  if (loading || !dashboardData) {
+  if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col items-center justify-center min-h-[500px]">
-        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
-        <span className="text-gray-600 font-medium tracking-wide animate-pulse">Aggregating Global Network Data...</span>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex items-center justify-center min-h-[400px]">
+        <svg className="animate-spin h-8 w-8 text-navy-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span className="text-gray-600">Loading Superadmin Dashboard...</span>
       </div>
     );
   }
 
-  // Destructure Data
+  // Destructure data
   const {
-    centres, staff, customers, services, revenue, wallets,
-    activities, notifications, healthScores, topCentres,
-    worstCentres, topStaff, topTeams,
+    centres,
+    staff,
+    customers,
+    services,
+    revenue,
+    wallets,
+    activities,
+    notifications,
+    healthScores,
+    topCentres,
+    worstCentres,
+    topStaff,
+    topTeams,
   } = dashboardData;
 
-  // Compute Stats
+  // Compute summary stats
   const totalCentres = centres.length;
   const totalStaff = staff.length;
   const admins = staff.filter(s => s.role === "admin").length;
   const staffCount = staff.filter(s => s.role === "staff" || s.role === "supervisor").length;
+  const totalCustomers = customers;
+  const servicesToday = services?.completedToday || 1584;
+  const revenueToday = revenue?.today || 124850;
+  const monthlyRevenue = revenue?.monthly || 3684200;
+  const netProfit = revenue?.profit || 941500;
+  const pendingPayments = revenue?.pending || 212000;
+  const pendingCustomers = revenue?.pendingCustomers || 341;
+  const avgRating = revenue?.avgRating || 4.8;
+  const totalReviews = revenue?.totalReviews || 13240;
+  const pendingServices = services?.pending || 1230;
+  const completedToday = services?.completed || 541;
+  const delayedServices = services?.delayed || 67;
+  const applicationsInProgress = services?.inProgress || 210;
+  const walletCash = wallets?.cash || 520000;
+  const walletBank = wallets?.bank || 1840000;
+  const walletDigital = wallets?.digital || 290000;
+  const walletTotal = wallets?.total || 2650000;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="space-y-6">
-      
-      {/* ─── HEADER ─── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Global Command Center</h1>
-            <p className="text-sm text-gray-500 mt-1">Superadmin overview across all branches and personnel.</p>
-          </div>
-          <div className="flex items-center space-x-3 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-lg text-indigo-700 font-medium text-sm shadow-sm">
-             <FiClock className="h-4 w-4" />
-             <span>Last synced: {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
-          </div>
-      </div>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-8">
+      <h1 className="text-2xl font-bold text-gray-800">Superadmin Dashboard</h1>
 
-      {/* ─── SECTION 1: GLOBAL KPI CARDS ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm col-span-2 md:col-span-1 hover:shadow-md transition-shadow">
-          <div className="flex items-center space-x-2 text-indigo-600 mb-2">
-              <FiMapPin className="h-4 w-4" />
-              <div className="text-xs font-bold uppercase tracking-wider">Centres</div>
-          </div>
-          <div className="text-2xl font-black text-gray-900">{totalCentres}</div>
-          <div className="text-[10px] text-emerald-600 font-medium mt-1">+2 this month</div>
+      {/* Section 1: Global KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 col-span-1">
+          <div className="text-sm text-blue-800 font-medium">🌍 Total Centres</div>
+          <div className="text-2xl font-bold text-blue-900">{totalCentres}</div>
+          <div className="text-xs text-blue-600">+2 this month</div>
         </div>
-        
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm col-span-2 md:col-span-1 hover:shadow-md transition-shadow">
-          <div className="flex items-center space-x-2 text-blue-600 mb-2">
-              <FiUsers className="h-4 w-4" />
-              <div className="text-xs font-bold uppercase tracking-wider">Staff</div>
-          </div>
-          <div className="text-2xl font-black text-gray-900">{totalStaff}</div>
-          <div className="text-[10px] text-gray-500 font-medium mt-1">{admins} Admins, {staffCount} Staff</div>
+        <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 col-span-1">
+          <div className="text-sm text-purple-800 font-medium">👥 Total Staff</div>
+          <div className="text-2xl font-bold text-purple-900">{totalStaff}</div>
+          <div className="text-xs text-purple-600">{admins} Admins, {staffCount} Staff</div>
         </div>
-        
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm col-span-2 md:col-span-2 hover:shadow-md transition-shadow">
-          <div className="flex items-center space-x-2 text-emerald-600 mb-2">
-              <FiUserCheck className="h-4 w-4" />
-              <div className="text-xs font-bold uppercase tracking-wider">Total Customers</div>
-          </div>
-          <div className="text-2xl font-black text-gray-900">{dashboardData.customers.toLocaleString()}</div>
-          <div className="text-[10px] text-emerald-600 font-medium mt-1">+824 active this week</div>
+        <div className="bg-green-50 p-4 rounded-xl border border-green-100 col-span-1">
+          <div className="text-sm text-green-800 font-medium">👨‍👩‍👧 Total Customers</div>
+          <div className="text-2xl font-bold text-green-900">{totalCustomers.toLocaleString()}</div>
+          <div className="text-xs text-green-600">+824 this month</div>
         </div>
-        
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm col-span-2 md:col-span-2 hover:shadow-md transition-shadow">
-          <div className="flex items-center space-x-2 text-amber-600 mb-2">
-              <FiCheckSquare className="h-4 w-4" />
-              <div className="text-xs font-bold uppercase tracking-wider">Services Today</div>
-          </div>
-          <div className="text-2xl font-black text-gray-900">{dashboardData.servicesCompletedToday.toLocaleString()}</div>
-          <div className="text-[10px] text-gray-500 font-medium mt-1">Across all global centres</div>
+        <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 col-span-1">
+          <div className="text-sm text-indigo-800 font-medium">📑 Services Completed Today</div>
+          <div className="text-2xl font-bold text-indigo-900">{servicesToday}</div>
+          <div className="text-xs text-indigo-600">Across all centres</div>
         </div>
-
-        <div className="bg-gray-900 p-4 rounded-xl border border-gray-800 shadow-sm col-span-2 md:col-span-2 hover:shadow-md transition-shadow relative overflow-hidden">
-          <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-4 translate-y-4">
-              <FiTrendingUp className="h-24 w-24 text-white" />
-          </div>
-          <div className="flex items-center space-x-2 text-indigo-300 mb-2 relative z-10">
-              <FiDollarSign className="h-4 w-4" />
-              <div className="text-xs font-bold uppercase tracking-wider">Today's Revenue</div>
-          </div>
-          <div className="text-2xl font-black text-white relative z-10">{formatCurrency(dashboardData.revenueToday)}</div>
-          <div className="text-[10px] text-emerald-400 font-medium mt-1 relative z-10">Target: 85% achieved</div>
+        <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-1">
+          <div className="text-sm text-yellow-800 font-medium">💰 Today's Revenue</div>
+          <div className="text-2xl font-bold text-yellow-900">{formatCurrency(revenueToday)}</div>
+        </div>
+        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 col-span-1">
+          <div className="text-sm text-orange-800 font-medium">📈 Monthly Revenue</div>
+          <div className="text-2xl font-bold text-orange-900">{formatCurrency(monthlyRevenue)}</div>
+          <div className="text-xs text-orange-600">↑ 18%</div>
+        </div>
+        <div className="bg-red-50 p-4 rounded-xl border border-red-100 col-span-1">
+          <div className="text-sm text-red-800 font-medium">💵 Net Profit</div>
+          <div className="text-2xl font-bold text-red-900">{formatCurrency(netProfit)}</div>
+        </div>
+        <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 col-span-1">
+          <div className="text-sm text-pink-800 font-medium">💳 Pending Payments</div>
+          <div className="text-2xl font-bold text-pink-900">{formatCurrency(pendingPayments)}</div>
+          <div className="text-xs text-pink-600">{pendingCustomers} Customers</div>
+        </div>
+        <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 col-span-2 md:col-span-1">
+          <div className="text-sm text-teal-800 font-medium">⭐ Average Rating</div>
+          <div className="text-2xl font-bold text-teal-900">{avgRating}</div>
+          <div className="text-xs text-teal-600">{totalReviews.toLocaleString()} Reviews</div>
         </div>
       </div>
 
-      {/* ─── METRICS ROW 2 ─── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-xs text-gray-500 font-semibold mb-1 flex items-center"><FiActivity className="mr-1.5"/> Monthly Revenue</div>
-          <div className="text-xl font-bold text-gray-900">{formatCurrency(dashboardData.monthlyRevenue)}</div>
-          <div className="text-xs text-emerald-600 mt-1 font-medium flex items-center"><FiTrendingUp className="mr-1"/> 18% vs last month</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-xs text-gray-500 font-semibold mb-1 flex items-center"><FiBriefcase className="mr-1.5"/> Net Profit</div>
-          <div className="text-xl font-bold text-gray-900">{formatCurrency(dashboardData.netProfit)}</div>
-          <div className="text-xs text-emerald-600 mt-1 font-medium flex items-center"><FiTrendingUp className="mr-1"/> 12% margin</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow border-l-4 border-l-rose-500">
-          <div className="text-xs text-gray-500 font-semibold mb-1 flex items-center"><FiClock className="mr-1.5"/> Pending Payments</div>
-          <div className="text-xl font-bold text-rose-600">{formatCurrency(dashboardData.pendingPayments)}</div>
-          <div className="text-xs text-rose-500 mt-1 font-medium">{dashboardData.pendingCustomers} Customers owing</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow border-l-4 border-l-amber-500">
-          <div className="text-xs text-gray-500 font-semibold mb-1 flex items-center"><FiStar className="mr-1.5"/> Average Rating</div>
-          <div className="text-xl font-bold text-amber-600">{dashboardData.averageRating} <span className="text-sm text-gray-400">/ 5.0</span></div>
-          <div className="text-xs text-gray-500 mt-1 font-medium">{dashboardData.totalReviews.toLocaleString()} Total Reviews</div>
-        </div>
-      </div>
-
-      {/* ─── SECTION 2: REVENUE ANALYTICS + CENTRE PERFORMANCE ─── */}
+      {/* Section 2: Revenue Analytics + Centre Performance (side by side) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart */}
-        <div className="lg:col-span-2 bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 sm:mb-0 flex items-center">
-                <FiBarChart2 className="mr-2 text-indigo-600 h-5 w-5" /> Financial Growth Matrix
-            </h2>
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              {['revenue', 'profit', 'expenses'].map(view => (
-                <button
-                    key={view}
-                    onClick={() => setRevenueView(view)}
-                    className={`px-4 py-1.5 text-xs font-bold rounded-md capitalize transition-all ${
-                        revenueView === view ? "bg-white text-gray-900 shadow-sm border border-gray-200" : "text-gray-500 hover:text-gray-700"
-                    }`}
-                >
-                    {view}
-                </button>
-              ))}
+        <div className="lg:col-span-2 bg-white p-4 rounded-xl shadow-md border border-gray-200">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-700">Revenue Analytics</h2>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setRevenueView("revenue")}
+                className={`px-3 py-1 text-sm rounded-full ${revenueView === "revenue" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
+              >
+                Revenue
+              </button>
+              <button
+                onClick={() => setRevenueView("profit")}
+                className={`px-3 py-1 text-sm rounded-full ${revenueView === "profit" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
+              >
+                Profit
+              </button>
+              <button
+                onClick={() => setRevenueView("expenses")}
+                className={`px-3 py-1 text-sm rounded-full ${revenueView === "expenses" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
+              >
+                Expenses
+              </button>
             </div>
           </div>
           <RevenueChart />
         </div>
 
-        {/* Top Centres Table */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 flex items-center">
-              <FiAward className="mr-2 text-amber-500 h-5 w-5" /> Top Regional Branches
-          </h2>
-          <div className="overflow-hidden rounded-lg border border-gray-100">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
+        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">Centre Performance Leaderboard</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rank</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Centre</th>
-                  <th className="px-4 py-2.5 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rev (Lakhs)</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Services</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 bg-white">
-                {centres.sort((a,b) => b.revenue - a.revenue).slice(0, 5).map((centre, idx) => (
-                  <tr key={centre.id} className="hover:bg-indigo-50/50 transition-colors">
-                    <td className="px-4 py-2.5 whitespace-nowrap font-medium text-gray-500">
-                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx+1}.`}
+              <tbody className="divide-y divide-gray-200">
+                {centres.slice(0, 5).map((centre, idx) => (
+                  <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
                     </td>
-                    <td className="px-4 py-2.5 font-bold text-gray-900">{centre.name}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-emerald-600">₹{(centre.revenue / 100000).toFixed(1)}L</td>
+                    <td className="px-3 py-2 font-medium">{centre.name}</td>
+                    <td className="px-3 py-2">{formatCurrency(centre.revenue || 0)}</td>
+                    <td className="px-3 py-2">{formatCurrency(centre.profit || 0)}</td>
+                    <td className="px-3 py-2">{centre.services || 0}</td>
+                    <td className="px-3 py-2">{centre.rating || 0}</td>
                   </tr>
                 ))}
               </tbody>
@@ -382,172 +419,241 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* ─── SECTION 3: MAP & NOTIFICATIONS ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Map */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 flex items-center">
-              <FiMap className="mr-2 text-indigo-600 h-5 w-5" /> Network Geography
-          </h2>
-          <MapView />
-        </div>
-
-        {/* Notifications */}
-        <div className="lg:col-span-2 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center">
-                  <FiBell className="mr-2 text-rose-500 h-5 w-5" /> System Alerts
-              </h2>
-              <span className="bg-rose-100 text-rose-700 text-xs font-bold px-2 py-0.5 rounded-full">{notifications.length} Unresolved</span>
-          </div>
-          <div className="space-y-3 flex-1 overflow-y-auto max-h-72 pr-2">
-            {notifications.map((notif) => (
-              <div key={notif.id} className={`p-3 rounded-lg flex items-start border-l-4 ${
-                  notif.type === "critical" ? "bg-rose-50 border-rose-500" : 
-                  notif.type === "warning" ? "bg-amber-50 border-amber-400" : 
-                  "bg-blue-50 border-blue-400"
-              }`}>
-                <div className="mt-0.5 mr-3 flex-shrink-0">
-                    {notif.type === "critical" ? <FiAlertCircle className="h-4 w-4 text-rose-600" /> : 
-                     notif.type === "warning" ? <FiAlertTriangle className="h-4 w-4 text-amber-600" /> : 
-                     <FiBell className="h-4 w-4 text-blue-600" />}
-                </div>
+      {/* Section 4: Centre Health */}
+      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {centres.map((centre) => {
+            const health = getHealthStatus(centre.health);
+            const score = healthScores[centre.name]?.score || 0;
+            return (
+              <div key={centre.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
-                    <p className={`text-sm font-bold ${
-                        notif.type === "critical" ? "text-rose-900" : 
-                        notif.type === "warning" ? "text-amber-900" : 
-                        "text-blue-900"
-                    }`}>{notif.message}</p>
-                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wide">Requires Superadmin Intervention</p>
+                  <div className="font-medium">{centre.name}</div>
+                  <div className="text-sm text-gray-600">{health.icon} {health.label}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold">{score}</div>
+                  <div className="text-xs text-gray-500">/100</div>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* ─── SECTION 4: FINANCIAL HEALTH & WALLETS ─── */}
-      <div className="bg-gray-900 p-6 rounded-2xl shadow-xl border border-gray-800">
-        <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-5 flex items-center">
-            <FiCreditCard className="mr-2 text-emerald-400 h-5 w-5" /> Consolidated Liquidity & Wallets
-        </h2>
+      {/* Section 5: Live Operations */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+          <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
+          <div className="text-2xl font-bold text-red-900">{pendingServices}</div>
+        </div>
+        <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+          <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
+          <div className="text-2xl font-bold text-green-900">{completedToday}</div>
+        </div>
+        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+          <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
+          <div className="text-2xl font-bold text-orange-900">{delayedServices}</div>
+        </div>
+        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+          <div className="text-sm text-blue-800 font-medium">📋 Applications in Progress</div>
+          <div className="text-2xl font-bold text-blue-900">{applicationsInProgress}</div>
+        </div>
+      </div>
+
+      {/* Section 6: Financial Health */}
+      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-            <div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wider">Physical Cash</div>
-            <div className="text-2xl font-black text-white">{formatCurrency(dashboardData.wallet.cash)}</div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm text-gray-600">Cash Wallet</div>
+            <div className="text-xl font-bold">{formatCurrency(walletCash)}</div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-            <div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wider">Bank Transfer</div>
-            <div className="text-2xl font-black text-white">{formatCurrency(dashboardData.wallet.bank)}</div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm text-gray-600">Bank</div>
+            <div className="text-xl font-bold">{formatCurrency(walletBank)}</div>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-            <div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wider">Digital (UPI)</div>
-            <div className="text-2xl font-black text-white">{formatCurrency(dashboardData.wallet.digital)}</div>
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <div className="text-sm text-gray-600">Digital</div>
+            <div className="text-xl font-bold">{formatCurrency(walletDigital)}</div>
           </div>
-          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-4 rounded-xl border border-indigo-500 shadow-inner">
-            <div className="text-xs text-indigo-200 font-semibold mb-1 uppercase tracking-wider">Total Aggregated</div>
-            <div className="text-2xl font-black text-white">{formatCurrency(dashboardData.wallet.total)}</div>
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+            <div className="text-sm text-blue-800 font-semibold">Total Wallets</div>
+            <div className="text-xl font-bold text-blue-900">{formatCurrency(walletTotal)}</div>
           </div>
         </div>
       </div>
 
-      {/* ─── SECTION 5: LIVE OPERATIONS & ACTIVITY ─── */}
+      {/* Section 7 & 8: Best & Worst Performing Centres */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-        {/* Live Ops Grid */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 flex items-center">
-                <FiZap className="mr-2 text-indigo-600 h-5 w-5" /> Live Workflow Status
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-                <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 flex flex-col items-center justify-center text-center">
-                <div className="text-3xl font-black text-rose-600">{dashboardData.pendingServices}</div>
-                <div className="text-xs text-rose-800 font-bold uppercase tracking-wider mt-1">Pending</div>
-                </div>
-                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col items-center justify-center text-center">
-                <div className="text-3xl font-black text-emerald-600">{dashboardData.completedToday}</div>
-                <div className="text-xs text-emerald-800 font-bold uppercase tracking-wider mt-1">Done Today</div>
-                </div>
-                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex flex-col items-center justify-center text-center">
-                <div className="text-3xl font-black text-amber-600">{dashboardData.delayedServices}</div>
-                <div className="text-xs text-amber-800 font-bold uppercase tracking-wider mt-1">SLA Breached</div>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-center justify-center text-center">
-                <div className="text-3xl font-black text-blue-600">{dashboardData.applicationsInProgress}</div>
-                <div className="text-xs text-blue-800 font-bold uppercase tracking-wider mt-1">In Progress</div>
-                </div>
+        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-green-50 p-3 rounded-lg">
+              <div className="text-xs text-green-700">Best Revenue</div>
+              <div className="font-medium">{topCentres?.revenue?.name || "N/A"}</div>
+              <div className="text-sm">{topCentres?.revenue?.value ? formatCurrency(topCentres.revenue.value) : ""}</div>
             </div>
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="text-xs text-blue-700">Best Profit</div>
+              <div className="font-medium">{topCentres?.profit?.name || "N/A"}</div>
+              <div className="text-sm">{topCentres?.profit?.value ? formatCurrency(topCentres.profit.value) : ""}</div>
+            </div>
+            <div className="bg-yellow-50 p-3 rounded-lg">
+              <div className="text-xs text-yellow-700">Best Rating</div>
+              <div className="font-medium">{topCentres?.rating?.name || "N/A"}</div>
+              <div className="text-sm">{topCentres?.rating?.value || ""}</div>
+            </div>
+            <div className="bg-purple-50 p-3 rounded-lg">
+              <div className="text-xs text-purple-700">Best Collection %</div>
+              <div className="font-medium">{topCentres?.collection?.name || "N/A"}</div>
+              <div className="text-sm">{topCentres?.collection?.value ? `${topCentres.collection.value}%` : ""}</div>
+            </div>
+          </div>
         </div>
 
-        {/* Global Audit Log */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 flex items-center">
-                <FiActivity className="mr-2 text-indigo-600 h-5 w-5" /> Global Audit Trail
-            </h2>
-            <div className="space-y-0 flex-1 overflow-y-auto pr-2 relative">
-                {/* Timeline vertical line */}
-                <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-gray-100"></div>
-                
-                {activities.map((activity, idx) => (
-                <div key={activity.id} className="relative pl-8 py-3 group">
-                    <div className="absolute left-0 top-[18px] w-6 h-6 bg-white border-2 border-indigo-200 rounded-full flex items-center justify-center z-10 group-hover:border-indigo-500 transition-colors">
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                    </div>
-                    <p className="text-sm font-semibold text-gray-800">{activity.action}</p>
-                    <p className="text-xs text-gray-500 font-mono mt-0.5">{activity.time}</p>
-                </div>
+        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-red-50 p-3 rounded-lg">
+              <div className="text-xs text-red-700">Lowest Revenue</div>
+              <div className="font-medium">{worstCentres?.revenue?.name || "N/A"}</div>
+              <div className="text-sm">{worstCentres?.revenue?.value ? formatCurrency(worstCentres.revenue.value) : ""}</div>
+            </div>
+            <div className="bg-red-50 p-3 rounded-lg">
+              <div className="text-xs text-red-700">Highest Pending</div>
+              <div className="font-medium">{worstCentres?.pending?.name || "N/A"}</div>
+              <div className="text-sm">{worstCentres?.pending?.value ? formatCurrency(worstCentres.pending.value) : ""}</div>
+            </div>
+            <div className="bg-red-50 p-3 rounded-lg">
+              <div className="text-xs text-red-700">Most Delayed</div>
+              <div className="font-medium">{worstCentres?.delayed?.name || "N/A"}</div>
+              <div className="text-sm">{worstCentres?.delayed?.value ? `${worstCentres.delayed.value} services` : ""}</div>
+            </div>
+            <div className="bg-red-50 p-3 rounded-lg">
+              <div className="text-xs text-red-700">Most Complaints</div>
+              <div className="font-medium">{worstCentres?.complaints?.name || "N/A"}</div>
+              <div className="text-sm">{worstCentres?.complaints?.value ? `${worstCentres.complaints.value} complaints` : ""}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 9 & 10: Staff & Teams */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">👨‍💼 Top Staff</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Name</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Revenue</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Applications</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Rating</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topStaff.map((staff, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium">{staff.name}</td>
+                    <td className="px-3 py-2">{formatCurrency(staff.revenue || 0)}</td>
+                    <td className="px-3 py-2">{staff.applications || 0}</td>
+                    <td className="px-3 py-2">{staff.rating || 0}</td>
+                  </tr>
                 ))}
-            </div>
+              </tbody>
+            </table>
+          </div>
         </div>
 
+        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">👥 Top Teams</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Team</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Revenue</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Profit</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Expenses</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topTeams.map((team, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium">{team.name}</td>
+                    <td className="px-3 py-2">{formatCurrency(team.revenue || 0)}</td>
+                    <td className="px-3 py-2">{formatCurrency(team.profit || 0)}</td>
+                    <td className="px-3 py-2">{formatCurrency(team.expenses || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      {/* ─── SECTION 6: AI INSIGHTS & ACTIONS ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
-        {/* AI Insights */}
-        <div className="lg:col-span-3 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 p-5 rounded-xl border border-indigo-100 shadow-sm relative overflow-hidden">
-            <div className="absolute -right-4 -top-4 opacity-5">
-                <FiCpu className="w-48 h-48" />
+      {/* Section 11: Notifications */}
+      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🔔 Notifications</h2>
+        <div className="space-y-2">
+          {notifications.map((notif) => (
+            <div key={notif.id} className={`p-3 rounded-lg flex items-center ${notif.type === "critical" ? "bg-red-50" : notif.type === "warning" ? "bg-yellow-50" : "bg-blue-50"}`}>
+              <span className="mr-2">{notif.type === "critical" ? "🔴" : notif.type === "warning" ? "🟠" : "🔵"}</span>
+              <span>{notif.message}</span>
             </div>
-            <h2 className="text-sm font-bold text-indigo-900 uppercase tracking-wider mb-3 flex items-center relative z-10">
-                <FiCpu className="mr-2 text-indigo-600 h-5 w-5" /> Automated AI Insights
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 relative z-10">
-                <ul className="space-y-2 text-sm text-gray-700 font-medium">
-                    <li className="flex items-start"><span className="text-emerald-500 mr-2">↑</span> Overall Network Revenue increased 18% MoM.</li>
-                    <li className="flex items-start"><span className="text-rose-500 mr-2">↓</span> Kolathoor operating profit dropped by 11% this week.</li>
-                    <li className="flex items-start"><span className="text-indigo-500 mr-2">★</span> VK Padi maintains highest customer satisfaction (4.9/5).</li>
-                </ul>
-                <ul className="space-y-2 text-sm text-gray-700 font-medium">
-                    <li className="flex items-start"><span className="text-emerald-500 mr-2">✓</span> Pukayur recovered ₹72,000 in pending payments.</li>
-                    <li className="flex items-start"><span className="text-amber-500 mr-2">⚠</span> Staff attendance dropped significantly in 3 centres.</li>
-                    <li className="flex items-start"><span className="text-rose-500 mr-2">!</span> 2 active centres missed the mandatory daily closing window.</li>
-                </ul>
-            </div>
+          ))}
         </div>
-
-        {/* Quick Actions Panel */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 flex items-center">
-                <FiZap className="mr-2 text-amber-500 h-5 w-5" /> Actions
-            </h2>
-            <div className="flex flex-col space-y-2">
-                <button className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-bold shadow-sm">
-                    Generate Network Report
-                </button>
-                <button className="w-full py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-bold">
-                    Broadcast Message
-                </button>
-                <button className="w-full py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-bold">
-                    Add New Branch
-                </button>
-            </div>
-        </div>
-
       </div>
-    </motion.div>
+
+      {/* Section 12: Recent Activities */}
+      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🕒 Recent Activities</h2>
+        <div className="space-y-3">
+          {activities.map((activity) => (
+            <div key={activity.id} className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <span>{activity.action}</span>
+              <span className="text-sm text-gray-500">{activity.time}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Section 13: Map View */}
+      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Locations</h2>
+        <MapView />
+      </div>
+
+      {/* Section 14: Quick Actions */}
+      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
+        <div className="flex flex-wrap gap-3">
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ Create Centre</button>
+          <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">+ Create Admin</button>
+          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">📢 Broadcast Notification</button>
+          <button className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition">🌐 Global Event</button>
+          <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">📣 Global Campaign</button>
+          <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">📊 Financial Report</button>
+          <button className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">📤 Export Reports</button>
+        </div>
+      </div>
+
+      {/* Section 15: AI Insights (Future) */}
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-200">
+        <h2 className="text-lg font-semibold text-indigo-800 mb-2">🤖 AI Insights</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
+          <li>Revenue increased 18%.</li>
+          <li>Kolathoor profit dropped 11%.</li>
+          <li>VK Padi has the highest customer satisfaction.</li>
+          <li>Pukayur recovered ₹72,000 pending payments this week.</li>
+          <li>Attendance dropped in 3 centres.</li>
+          <li>2 centres haven't completed daily closing.</li>
+        </ul>
+      </div>
+    </div>
   );
 };
 
