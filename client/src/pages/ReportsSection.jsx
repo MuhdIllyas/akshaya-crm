@@ -4423,7 +4423,8 @@ const ReportsSection = () => {
                         report={selectedReport}
                         previewData={previewData}             
                         onClose={() => setSelectedReport(null)}
-                        onExport={handleGenerate}            
+                        onExport={handleGenerate}
+                        onLogExport={logLocalExport}            
                     />
                 )}
             </AnimatePresence>
