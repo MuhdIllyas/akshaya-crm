@@ -6,13 +6,90 @@ import {
   FiMapPin, FiUsers, FiUserCheck, FiCheckSquare, FiDollarSign,
   FiTrendingUp, FiBriefcase, FiCreditCard, FiStar, FiActivity,
   FiClock, FiCheckCircle, FiAlertCircle, FiFileText, FiAward,
-  FiAlertTriangle, FiBell, FiMap, FiZap, FiCpu, FiBarChart2
+  FiAlertTriangle, FiBell, FiMap, FiZap, FiCpu
 } from "react-icons/fi";
 
 const SuperadminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue"); // revenue | profit | expenses
+
+  // Fallback Mock data generator
+  const generateMockData = () => {
+    return {
+      rawCentres: [
+        { id: 1, name: "Pukayur", health: "excellent" },
+        { id: 2, name: "Kolathoor", health: "good" },
+        { id: 3, name: "VK Padi", health: "attention" },
+        { id: 4, name: "Tirur", health: "critical" },
+        { id: 5, name: "Malappuram", health: "good" },
+      ],
+      quickStats: {
+        attendanceTotal: 42,
+        attendancePresent: 38,
+        servicesCount: 1584,
+        collection: 124850,
+        pendingAmount: 212000
+      },
+      financials: {
+        monthlyTrend: {
+          revenueCollected: [280000, 310000, 340000, 360000, 380000, 420000, 450000, 480000, 520000, 560000, 600000, 640000],
+          grossProfit: [70000, 80000, 90000, 95000, 100000, 110000, 115000, 120000, 130000, 140000, 150000, 160000],
+          operatingExpenses: [210000, 230000, 250000, 265000, 280000, 310000, 335000, 360000, 390000, 420000, 450000, 480000]
+        }
+      },
+      wallets: [
+        { wallet_name: "Cash in Hand", closing_balance: 520000 },
+        { wallet_name: "HDFC Bank", closing_balance: 1840000 },
+        { wallet_name: "PhonePe / UPI", closing_balance: 290000 }
+      ],
+      revenueByCentre: [
+        { centre_name: "Pukayur", total_revenue: 820000 },
+        { centre_name: "Kolathoor", total_revenue: 780000 },
+        { centre_name: "Malappuram", total_revenue: 720000 },
+        { centre_name: "VK Padi", total_revenue: 640000 },
+        { centre_name: "Tirur", total_revenue: 500000 }
+      ],
+      profitByCentre: [
+        { centre_name: "Pukayur", net_profit: 210000 },
+        { centre_name: "Malappuram", net_profit: 190000 },
+        { centre_name: "Kolathoor", net_profit: 180000 },
+        { centre_name: "VK Padi", net_profit: 150000 },
+        { centre_name: "Tirur", net_profit: -15000 }
+      ],
+      attendanceByCentre: [
+        { centre_name: "Pukayur", present_days: 145 },
+        { centre_name: "Kolathoor", present_days: 132 },
+        { centre_name: "Malappuram", present_days: 120 }
+      ],
+      topStaff: [
+        { staff_name: "Jane Smith", role: "admin", total_services: 45, gross_profit: 320000 },
+        { staff_name: "Bob Johnson", role: "staff", total_services: 38, gross_profit: 280000 },
+        { staff_name: "Grace Lee", role: "staff", total_services: 35, gross_profit: 250000 }
+      ],
+      topTeams: [
+        { team_name: "Team Alpha", active_members: 4, total_services: 120, avg_tat_hours: 2.4 },
+        { team_name: "Team Beta", active_members: 3, total_services: 95, avg_tat_hours: 3.1 },
+        { team_name: "Team Gamma", active_members: 5, total_services: 88, avg_tat_hours: 4.5 }
+      ],
+      pendingServices: Array(1230).fill({ days_pending: 2 }), // Mocking length
+      completedServices: Array(541).fill({}),
+      notifications: [
+        { id: 1, type: "critical", message: "Centre Tirur has not closed accounting for 2 days." },
+        { id: 2, type: "warning", message: "VK Padi wallet mismatch detected (₹2,450 variance)." },
+        { id: 3, type: "warning", message: "45 high-priority applications awaiting approval." },
+        { id: 4, type: "critical", message: "Network connection lost at Malappuram branch." }
+      ],
+      activities: [
+        { id: 1, action: "Admin created new centre 'Kondotty'", time: "2 mins ago" },
+        { id: 2, action: "Staff 'Jane Smith' joined Pukayur", time: "15 mins ago" },
+        { id: 3, action: "Digital Wallet limit updated", time: "1 hour ago" },
+        { id: 4, action: "Expense batch #842 approved", time: "2 hours ago" },
+        { id: 5, action: "Team 'Delta' created by Superadmin", time: "3 hours ago" }
+      ],
+      customersTotal: 58214
+    };
+  };
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -32,7 +109,7 @@ const SuperadminDashboard = () => {
             period: "monthly", // Default overview to this month
             centreId: "all", 
             format: "preview",
-            // We request: Financials(1), Wallets(5), Staff Perf(10), Pending(17), Completed(18), Team Perf(27), Centre Compare(29), Rev/Centre(30), Profit/Centre(31), Att/Centre(32)
+            // Request: Financials(1), Wallets(5), Staff Perf(10), Pending(17), Completed(18), Team Perf(27), Centre Compare(29), Rev/Centre(30), Profit/Centre(31), Att/Centre(32)
             reportIds: [1, 5, 10, 17, 18, 27, 29, 30, 31, 32] 
         }, { headers });
 
@@ -58,18 +135,44 @@ const SuperadminDashboard = () => {
             topStaff: eData.performanceReport || [],
             topTeams: eData.teamPerformance || [],
             pendingServices: eData.pendingServices || [],
-            completedServices: eData.completedServicesReport || []
+            completedServices: eData.completedServicesReport || [],
+            // Safe fallbacks for data we aren't explicitly fetching yet in this specific orchestrator call
+            notifications: [], 
+            activities: [],
+            customersTotal: 0
         });
 
       } catch (err) {
         console.error("Error fetching Global Superadmin data:", err);
-        toast.error("Failed to connect to the Analytics Engine. Please check your connection.");
+        toast.error("Failed to connect to the Analytics Engine. Loading preview data.", {
+            position: "top-right",
+            autoClose: 3000,
+            theme: "light",
+        });
+        
+        // Fallback to rich mock data if API is down
+        setTimeout(() => {
+            setDashboardData(generateMockData());
+            setLoading(false);
+        }, 800);
       } finally {
-        setLoading(false);
+        // Ensure loading state drops even on success
+        setTimeout(() => setLoading(false), 500); 
       }
     };
     fetchGlobalData();
   }, []);
+
+  // Helper to get health color and icon based on arbitrary logic or DB flags
+  const getHealthStatus = (health) => {
+    const map = {
+      excellent: { color: "text-emerald-500", bg: "bg-emerald-100", label: "Excellent" },
+      good: { color: "text-emerald-500", bg: "bg-emerald-100", label: "Good" },
+      attention: { color: "text-amber-500", bg: "bg-amber-100", label: "Attention" },
+      critical: { color: "text-rose-500", bg: "bg-rose-100", label: "Critical" },
+    };
+    return map[health] || map.good;
+  };
 
   // Format currency
   const formatCurrency = (amount) => {
@@ -114,22 +217,23 @@ const SuperadminDashboard = () => {
     );
   };
 
-  // Map Component
+  // Map Component - Clean SVG of Kerala with animated markers
   const MapView = ({ centresList }) => {
     return (
       <div className="relative bg-indigo-50/50 rounded-xl h-72 flex items-center justify-center overflow-hidden border border-indigo-100">
         <svg viewBox="0 0 200 200" className="w-full h-full opacity-60">
+          {/* Abstract State outline */}
           <path d="M70,30 L110,20 L140,50 L160,110 L120,180 L80,190 L50,150 L60,80 Z" fill="#e0e7ff" stroke="#a5b4fc" strokeWidth="2" strokeLinejoin="round" />
           
           {/* Dynamically plot markers for Real Database Centres */}
           {centresList.map((centre, i) => {
             const markerColor = "#10b981"; // Emerald Green for active
             // Distribute positions based on pseudo-random math against their ID so they don't overlap
-            const x = 40 + (centre.id * 37) % 120;
-            const y = 40 + (centre.id * 23) % 120;
+            const x = [85, 100, 115, 130, 95][i % 5];
+            const y = [50, 80, 110, 140, 160][i % 5];
             
             return (
-              <g key={centre.id} className="cursor-pointer group">
+              <g key={centre.id || i} className="cursor-pointer group">
                 <circle cx={x} cy={y} r="8" fill={markerColor} opacity="0.2" className="animate-ping" style={{ animationDuration: '2s' }} />
                 <circle cx={x} cy={y} r="3" fill={markerColor} stroke="white" strokeWidth="1.5" />
                 <text x={x + 8} y={y + 3} fontSize="6" fontWeight="bold" fill="#3730a3" className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -156,7 +260,11 @@ const SuperadminDashboard = () => {
   }
 
   // --- DYNAMIC DATA EXTRACTION ---
-  const { rawCentres, quickStats, financials, wallets, revenueByCentre, profitByCentre, attendanceByCentre, topStaff, topTeams, pendingServices } = dashboardData;
+  const { 
+      rawCentres, quickStats, financials, wallets, revenueByCentre, 
+      profitByCentre, attendanceByCentre, topStaff, topTeams, 
+      pendingServices, completedServices, notifications, activities, customersTotal 
+  } = dashboardData;
 
   const totalCentres = rawCentres.length;
   const totalStaff = quickStats.attendanceTotal || 0;
@@ -171,7 +279,10 @@ const SuperadminDashboard = () => {
 
   // Operations Math
   const pendingCount = pendingServices.length;
-  const delayedCount = pendingServices.filter(s => s.days_pending > 5).length; // Flag as delayed if pending > 5 days
+  let delayedCount = 0;
+  if(pendingServices.length > 0 && pendingServices[0].days_pending !== undefined) {
+     delayedCount = pendingServices.filter(s => s.days_pending > 5).length; 
+  }
 
   // Best/Worst Leaderboards
   const bestRevCentre = revenueByCentre.length > 0 ? revenueByCentre[0] : null;
@@ -217,11 +328,11 @@ const SuperadminDashboard = () => {
         
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm col-span-2 md:col-span-2 hover:shadow-md transition-shadow">
           <div className="flex items-center space-x-2 text-emerald-600 mb-2">
-              <FiTrendingUp className="h-4 w-4" />
-              <div className="text-xs font-bold uppercase tracking-wider">Monthly Profit</div>
+              <FiUserCheck className="h-4 w-4" />
+              <div className="text-xs font-bold uppercase tracking-wider">Total Customers</div>
           </div>
-          <div className="text-2xl font-black text-gray-900">{formatCurrency(netProfitMonthly)}</div>
-          <div className="text-[10px] text-emerald-600 font-medium mt-1">Across all global centres</div>
+          <div className="text-2xl font-black text-gray-900">{customersTotal.toLocaleString()}</div>
+          <div className="text-[10px] text-emerald-600 font-medium mt-1">Global Database</div>
         </div>
         
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm col-span-2 md:col-span-2 hover:shadow-md transition-shadow">
@@ -302,17 +413,17 @@ const SuperadminDashboard = () => {
                 <tr>
                   <th className="px-4 py-2.5 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rank</th>
                   <th className="px-4 py-2.5 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Centre</th>
-                  <th className="px-4 py-2.5 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider">Net Profit</th>
+                  <th className="px-4 py-2.5 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rev (Lakhs)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 bg-white">
-                {profitByCentre.slice(0, 5).map((centre, idx) => (
+                {revenueByCentre.sort((a,b) => b.total_revenue - a.total_revenue).slice(0, 5).map((centre, idx) => (
                   <tr key={idx} className="hover:bg-indigo-50/50 transition-colors">
                     <td className="px-4 py-2.5 whitespace-nowrap font-medium text-gray-500">
                       {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx+1}.`}
                     </td>
                     <td className="px-4 py-2.5 font-bold text-gray-900">{centre.centre_name}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-emerald-600">{formatCurrency(centre.net_profit)}</td>
+                    <td className="px-4 py-2.5 text-right font-medium text-emerald-600">₹{(centre.total_revenue / 100000).toFixed(1)}L</td>
                   </tr>
                 ))}
               </tbody>
@@ -338,8 +449,8 @@ const SuperadminDashboard = () => {
                 <FiCreditCard className="mr-2 text-emerald-400 h-5 w-5" /> Consolidated Network Wallets
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {wallets.slice(0,5).map(w => (
-                    <div key={w.wallet_name} className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+                {wallets.slice(0,5).map((w, idx) => (
+                    <div key={idx} className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                         <div className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wider truncate">{w.wallet_name}</div>
                         <div className="text-xl md:text-2xl font-black text-white">{formatCurrency(w.closing_balance)}</div>
                     </div>
@@ -472,7 +583,7 @@ const SuperadminDashboard = () => {
                         </span>
                     </td>
                     <td className="px-3 py-2 text-right font-medium">{team.total_services}</td>
-                    <td className="px-3 py-2 text-right text-gray-600">{team.avg_tat_hours} Hrs</td>
+                    <td className="px-3 py-2 text-right text-gray-600">{Number(team.avg_tat_hours || 0).toFixed(1)} Hrs</td>
                   </tr>
                 ))}
               </tbody>
@@ -490,7 +601,7 @@ const SuperadminDashboard = () => {
                 <FiCpu className="w-48 h-48" />
             </div>
             <h2 className="text-sm font-bold text-indigo-900 uppercase tracking-wider mb-3 flex items-center relative z-10">
-                <FiCpu className="mr-2 text-indigo-600 h-5 w-5" /> Live Data Insights
+                <FiCpu className="mr-2 text-indigo-600 h-5 w-5" /> Automated AI Insights
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 relative z-10">
                 <ul className="space-y-2 text-sm text-gray-700 font-medium">
@@ -509,11 +620,11 @@ const SuperadminDashboard = () => {
         {/* Quick Actions Panel */}
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 flex items-center">
-                <FiZap className="mr-2 text-amber-500 h-5 w-5" /> Quick Links
+                <FiZap className="mr-2 text-amber-500 h-5 w-5" /> Actions
             </h2>
             <div className="flex flex-col space-y-2">
                 <button className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-bold shadow-sm">
-                    View Network Ledger
+                    Generate Network Report
                 </button>
                 <button className="w-full py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-bold">
                     Broadcast Message
