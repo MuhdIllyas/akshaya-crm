@@ -21,165 +21,97 @@ const SuperadminDashboard = () => {
   });
   const [revenueView, setRevenueView] = useState("revenue"); // revenue | profit | expenses
 
-  // Mock data generators
-  const generateMockData = () => {
-    return {
-      centres: [
-        { id: 1, name: "Pukayur", admin_id: 2, created_by: 1, revenue: 820000, profit: 210000, services: 1450, rating: 4.9, health: "excellent", location: { lat: 10.5, lng: 76.2 } },
-        { id: 2, name: "Kolathoor", admin_id: 3, created_by: 1, revenue: 780000, profit: 180000, services: 1311, rating: 4.8, health: "good", location: { lat: 10.6, lng: 76.3 } },
-        { id: 3, name: "VK Padi", admin_id: 4, created_by: 1, revenue: 640000, profit: 150000, services: 1110, rating: 4.7, health: "attention", location: { lat: 10.7, lng: 76.4 } },
-        { id: 4, name: "Tirur", admin_id: 5, created_by: 1, revenue: 500000, profit: 90000, services: 890, rating: 4.5, health: "critical", location: { lat: 10.8, lng: 76.5 } },
-        { id: 5, name: "Malappuram", admin_id: 6, created_by: 1, revenue: 720000, profit: 190000, services: 1020, rating: 4.6, health: "good", location: { lat: 10.9, lng: 76.6 } },
-      ],
-      staff: [
-        { id: 1, name: "John Doe", role: "admin", centre_id: 1 },
-        { id: 2, name: "Jane Smith", role: "staff", centre_id: 1 },
-        { id: 3, name: "Bob Johnson", role: "staff", centre_id: 2 },
-        { id: 4, name: "Alice Brown", role: "supervisor", centre_id: 3 },
-        { id: 5, name: "Charlie Davis", role: "staff", centre_id: 4 },
-        { id: 6, name: "Eva Wilson", role: "admin", centre_id: 5 },
-        { id: 7, name: "Frank Miller", role: "staff", centre_id: 5 },
-        { id: 8, name: "Grace Lee", role: "staff", centre_id: 2 },
-      ],
-      customers: 58214,
-      servicesCompletedToday: 1584,
-      revenueToday: 124850,
-      monthlyRevenue: 3684200,
-      netProfit: 941500,
-      pendingPayments: 212000,
-      pendingCustomers: 341,
-      averageRating: 4.8,
-      totalReviews: 13240,
-      pendingServices: 1230,
-      completedToday: 541,
-      delayedServices: 67,
-      applicationsInProgress: 210,
-      wallet: {
-        cash: 520000,
-        bank: 1840000,
-        digital: 290000,
-        total: 2650000,
-      },
-      topCentres: {
-        revenue: { name: "Pukayur", value: 820000 },
-        profit: { name: "Kolathoor", value: 180000 },
-        rating: { name: "VK Padi", value: 4.7 },
-        collection: { name: "Malappuram", value: 95 }, // percentage
-      },
-      worstCentres: {
-        revenue: { name: "Tirur", value: 500000 },
-        pending: { name: "Kolathoor", value: 45000 },
-        delayed: { name: "Pukayur", value: 12 },
-        complaints: { name: "Tirur", value: 8 },
-      },
-      topStaff: [
-        { name: "Jane Smith", revenue: 320000, applications: 45, rating: 4.9 },
-        { name: "Bob Johnson", revenue: 280000, applications: 38, rating: 4.8 },
-        { name: "Grace Lee", revenue: 250000, applications: 35, rating: 4.7 },
-      ],
-      topTeams: [
-        { name: "Team Alpha", revenue: 520000, profit: 120000, expenses: 400000 },
-        { name: "Team Beta", revenue: 480000, profit: 100000, expenses: 380000 },
-        { name: "Team Gamma", revenue: 410000, profit: 85000, expenses: 325000 },
-      ],
-      notifications: [
-        { id: 1, type: "critical", message: "Centre X has not closed accounting." },
-        { id: 2, type: "warning", message: "Centre Y wallet mismatch." },
-        { id: 3, type: "warning", message: "Pending approvals." },
-        { id: 4, type: "critical", message: "Attendance missing." },
-        { id: 5, type: "info", message: "Communication account expired." },
-        { id: 6, type: "warning", message: "WhatsApp disconnected." },
-      ],
-      activities: [
-        { id: 1, action: "Admin created new centre", time: "2 mins ago" },
-        { id: 2, action: "Staff joined", time: "15 mins ago" },
-        { id: 3, action: "Wallet created", time: "1 hour ago" },
-        { id: 4, action: "Expense approved", time: "2 hours ago" },
-        { id: 5, action: "Team created", time: "3 hours ago" },
-        { id: 6, action: "New review", time: "5 hours ago" },
-        { id: 7, action: "Customer complaint", time: "yesterday" },
-      ],
-      healthScores: {
-        Pukayur: { score: 94, status: "Excellent" },
-        Kolathoor: { score: 78, status: "Attention" },
-        "VK Padi": { score: 85, status: "Good" },
-        Tirur: { score: 52, status: "Critical" },
-        Malappuram: { score: 88, status: "Good" },
-      },
-    };
-  };
-
+  // ✅ REPLACE YOUR useEffect WITH THIS:
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch real data from APIs
-        const centresRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const staffRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/all`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        // Additional endpoints (assume they exist)
-        const customersRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/customers/count`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const servicesRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/services/today`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const revenueRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/revenue/aggregate`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const walletRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/wallets/total`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const activitiesRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/activities/recent`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const notificationsRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/notifications`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const healthRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/health`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const topCentresRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/top`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const worstCentresRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/worst`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const topStaffRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/staff/top`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        const topTeamsRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/teams/top`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+        // 1. Fetch Quick Live Metrics (For the top KPI cards)
+        const quickResPromise = axios.get(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=all`, { headers });
+        
+        // 2. Fetch Deep Analytics via V3 Engine (Requesting the specific report IDs)
+        const engineResPromise = axios.post(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
+            period: "monthly",
+            centreId: "all", 
+            format: "preview",
+            reportIds: [1, 5, 10, 17, 18, 27, 29, 30, 31, 32] 
+        }, { headers });
+
+        // 3. Fetch basic Centre list for the Map
+        const centresResPromise = axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, { headers });
+
+        // Run all three concurrently
+        const [quickRes, engineRes, centresRes] = await Promise.all([quickResPromise, engineResPromise, centresResPromise]);
+
+        const qData = quickRes.data;
+        const eData = engineRes.data.data;
+
+        // Process Wallets
+        let cash = 0, bank = 0, digital = 0, total = 0;
+        (eData.walletSummary || []).forEach(w => {
+            const bal = Number(w.closing_balance || 0);
+            total += bal;
+            const name = w.wallet_name.toLowerCase();
+            if (name.includes('cash')) cash += bal;
+            else if (name.includes('bank') || name.includes('hdfc') || name.includes('sbi')) bank += bal;
+            else digital += bal;
         });
 
-        // Combine all data
+        // Process Leaderboards
+        const revCentres = [...(eData.revenueByCentre?.summary || [])].sort((a,b) => b.total_revenue - a.total_revenue);
+        const profCentres = [...(eData.profitByCentre?.summary || [])].sort((a,b) => b.net_profit - a.net_profit);
+        
+        // Map the real data to your EXACT existing state structure
         setDashboardData({
-          centres: centresRes.data,
-          staff: staffRes.data,
-          customers: customersRes.data.count,
-          services: servicesRes.data,
-          revenue: revenueRes.data,
-          wallets: walletRes.data,
-          activities: activitiesRes.data,
-          notifications: notificationsRes.data,
-          healthScores: healthRes.data,
-          topCentres: topCentresRes.data,
-          worstCentres: worstCentresRes.data,
-          topStaff: topStaffRes.data,
-          topTeams: topTeamsRes.data,
+          centres: centresRes.data || [],
+          staff: new Array(qData.attendanceTotal || 0).fill({ role: 'staff' }), // Mocks array length for your 'Total Staff' card
+          customers: 0, 
+          services: {
+              completedToday: qData.servicesCount || 0,
+              pending: eData.pendingServices?.length || 0,
+              inProgress: eData.pendingServices?.filter(s => s.status === 'in_progress').length || 0,
+              delayed: eData.pendingServices?.filter(s => s.days_pending > 5).length || 0,
+              completed: eData.completedServicesReport?.length || 0
+          },
+          revenue: {
+              today: qData.collection || 0,
+              monthly: revCentres.reduce((acc, c) => acc + c.total_revenue, 0),
+              profit: profCentres.reduce((acc, c) => acc + c.net_profit, 0),
+              pending: qData.pendingAmount || 0,
+              pendingCustomers: 0,
+              avgRating: 4.8, 
+              totalReviews: 0
+          },
+          wallets: { cash, bank, digital, total },
+          monthlyTrend: eData.financials?.monthlyTrend, // Passed down for the chart
+          activities: [], 
+          notifications: [], 
+          healthScores: {}, 
+          topCentres: {
+              revenue: { name: revCentres[0]?.centre_name || 'N/A', value: revCentres[0]?.total_revenue || 0 },
+              profit: { name: profCentres[0]?.centre_name || 'N/A', value: profCentres[0]?.net_profit || 0 },
+              rating: { name: 'N/A', value: 0 },
+              collection: { name: 'N/A', value: 0 }
+          },
+          worstCentres: {
+              revenue: { name: revCentres[revCentres.length-1]?.centre_name || 'N/A', value: revCentres[revCentres.length-1]?.total_revenue || 0 },
+              pending: { name: 'N/A', value: 0 },
+              delayed: { name: 'N/A', value: 0 },
+              complaints: { name: 'N/A', value: 0 }
+          },
+          topStaff: (eData.performanceReport || []).map(s => ({
+              name: s.staff_name, revenue: s.gross_profit, applications: s.total_services, rating: s.avg_rating || 0
+          })),
+          topTeams: (eData.teamPerformance || []).map(t => ({
+              name: t.team_name, revenue: t.total_services, profit: t.avg_tat_hours, expenses: 0 
+          }))
         });
+
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
-        toast.error("Failed to load dashboard data. Using mock data.", {
-          position: "top-right",
-          autoClose: 5000,
-          theme: "light",
-        });
-        // Fallback to mock data
-        setDashboardData(generateMockData());
+        toast.error("Failed to load dashboard data.", { position: "top-right" });
       } finally {
         setLoading(false);
       }
@@ -206,22 +138,26 @@ const SuperadminDashboard = () => {
   // Simple bar chart for revenue trend (placeholder)
   const RevenueChart = () => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    // Mock data - would come from API
+    
+    // Read the real data from our fetched state, fallback to zeros if loading
+    const trend = dashboardData.monthlyTrend || {};
     const data = {
-      revenue: [280000, 310000, 340000, 360000, 380000, 420000, 450000, 480000, 520000, 560000, 600000, 640000],
-      profit: [70000, 80000, 90000, 95000, 100000, 110000, 115000, 120000, 130000, 140000, 150000, 160000],
-      expenses: [210000, 230000, 250000, 265000, 280000, 310000, 335000, 360000, 390000, 420000, 450000, 480000],
+      revenue: trend.revenueCollected || new Array(12).fill(0),
+      profit: trend.grossProfit || new Array(12).fill(0),
+      expenses: trend.operatingExpenses || new Array(12).fill(0),
     };
+    
     const selected = data[revenueView] || data.revenue;
-    const max = Math.max(...selected);
+    const max = Math.max(...selected, 1); // ,1 prevents division by zero error
 
     return (
       <div className="w-full h-64 flex items-end space-x-2">
         {selected.map((value, idx) => (
           <div key={idx} className="flex-1 flex flex-col items-center">
             <div
-              className="w-full bg-blue-500 rounded-t"
+              className="w-full bg-blue-500 rounded-t transition-all duration-500"
               style={{ height: `${(value / max) * 100}%`, minHeight: '4px' }}
+              title={formatCurrency(value)}
             ></div>
             <span className="text-xs text-gray-600 mt-1">{months[idx]}</span>
           </div>
