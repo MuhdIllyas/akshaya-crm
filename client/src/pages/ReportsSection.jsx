@@ -112,6 +112,7 @@ const ReportCard = ({ report, onClick, isFavourite, onToggleFavourite }) => {
         'Attendance Report': FiUserCheck,
         'Performance Report': FiAward,
         'Salary Report': FiDollarSign,
+        'Salary Advance Report': FiDollarSign,
         'Incentive Report': FiStar,
         'Review Report': FiStarIcon,
         'Leave Report': FiCalendarIcon,
@@ -616,6 +617,15 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
         salarySummary.totalPayroll += s.net_salary;
         salarySummary.totalDeductions += s.deductions;
         if (s.status === 'pending') salarySummary.pendingPayouts++;
+    });
+
+    // 👇 Extract Salary Advance Data
+    const salaryAdvanceData = apiData.salaryAdvanceReport || [];
+    const advanceSummary = { totalGiven: 0, totalRecovered: 0, totalPending: 0 };
+    salaryAdvanceData.forEach(a => {
+        advanceSummary.totalGiven += a.amount_given || 0;
+        advanceSummary.totalRecovered += a.amount_recovered || 0;
+        advanceSummary.totalPending += a.pending_balance || 0;
     });
 
     // ✅ Extract Review Data and calculate averages/distribution
@@ -1326,6 +1336,34 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                 </>
                             )}
 
+                            {/* Salary Advance Report Preview Summary */}
+                            {report?.id === 34 && salaryAdvanceData.length > 0 && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard title="Total Advances Given" value={`₹${advanceSummary.totalGiven.toLocaleString('en-IN')}`} subtitle="In Selected Period" icon={FiTrendingUp} color="bg-amber-500" />
+                                        <StatCard title="Total Recovered" value={`₹${advanceSummary.totalRecovered.toLocaleString('en-IN')}`} subtitle="Deducted from salary" icon={FiCheckCircle} color="bg-emerald-600" />
+                                        <StatCard title="Pending Balances" value={`₹${advanceSummary.totalPending.toLocaleString('en-IN')}`} subtitle="Yet to be recovered" icon={FiClock} color="bg-rose-600" />
+                                    </div>
+                                    {renderChartCard('Pending vs Recovered Advances by Staff',
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={salaryAdvanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    {renderGradient('advRecGrad', '#10B981')}
+                                                    {renderGradient('advPendGrad', '#EF4444')}
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                                <XAxis dataKey="staff_name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
+                                                <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
+                                                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                                                <Bar dataKey="amount_recovered" name="Amount Recovered" fill="url(#advRecGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                                <Bar dataKey="pending_balance" name="Pending Balance" fill="url(#advPendGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </>
+                            )}
+
                             {/* Incentive Report Preview Summary */}
                             {report?.id === 12 && incentiveData.length > 0 && (
                                 <>
@@ -1896,8 +1934,45 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                     {activeTab === 'data' && (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             
-                            {/* 👇 NEW: Service Comparison Table (ID 33) 👇 */}
-                            {report?.id === 33 ? (
+                            {/* Salary Advance Data Table */}
+                            {report?.id === 34 ? (
+                                <div className="p-0">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date Given</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount Given</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-emerald-600">Recovered</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase text-rose-600">Pending</th>
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {salaryAdvanceData.length > 0 ? (
+                                                salaryAdvanceData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-3 text-sm font-bold text-gray-900">{row.staff_name}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600">{new Date(row.date_given).toLocaleDateString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">₹{row.amount_given.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">₹{row.amount_recovered.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-sm font-bold text-rose-600 text-right">₹{row.pending_balance.toLocaleString('en-IN')}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${row.status === 'cleared' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                                                {row.status.toUpperCase()}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="6" className="px-4 py-12 text-center text-gray-500">No salary advances recorded for this period.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : report?.id === 33 ? (
                                 <div className="p-0">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 border-b border-gray-200">
@@ -3869,6 +3944,7 @@ const ReportsSection = () => {
         { id: 31, name: 'Profit by Centre', description: 'Profit comparison', category: 'centre', updatedAt: 'Today' },
         { id: 32, name: 'Attendance by Centre', description: 'Staff attendance', category: 'centre', updatedAt: 'Yesterday' },
         { id: 33, name: 'Service Comparison', description: 'Services handled', category: 'centre', updatedAt: 'Today' },
+        { id: 34, name: 'Salary Advance Report', description: 'Staff advance payouts & recovery', category: 'staff', updatedAt: 'Today' },
     ];
 
     // ─── Filters ───
