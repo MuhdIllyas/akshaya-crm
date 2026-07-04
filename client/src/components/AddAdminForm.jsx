@@ -22,6 +22,7 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
     emergencyRelationship: ""
   });
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reportsToOptions, setReportsToOptions] = useState([]);
 
@@ -60,9 +61,13 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
         });
         return;
       }
+      
+      // Save the actual physical file for the backend
+      setSelectedFile(file);
+
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData({ ...formData, photo: reader.result });
+        // Only update the preview, DO NOT set the base64 string into formData
         setPhotoPreview(reader.result);
       };
       reader.readAsDataURL(file);
@@ -78,21 +83,37 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
   
     setLoading(true);
     try {
+      // 1. Create a FormData object
+      const submitData = new FormData();
+      
+      // 2. Append all standard form text fields
+      Object.keys(formData).forEach(key => {
+        if (key !== 'photo' && formData[key] !== null && formData[key] !== "") {
+          submitData.append(key, formData[key]);
+        }
+      });
+
+      // 3. Append the hardcoded fields required for an Admin
+      submitData.append("role", "admin");
+      submitData.append("centre_id", centreId);
+      submitData.append("password", "Abcd@1234");
+
+      // 4. Append the physical file if one was selected
+      if (selectedFile) {
+        submitData.append("photo", selectedFile);
+      }
+
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/staff/add`,
-        {
-          ...formData,
-          role: "admin",
-          centre_id: centreId,
-          password: "Abcd@1234" 
-        },
+        submitData, // Send the FormData object
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "Content-Type": "application/json"
+            // REMOVED "Content-Type": "application/json" so browser sets the boundary automatically
           }
         }
       );
+      
       toast.success(
         <div>
           <p>Admin created successfully!</p>
@@ -102,10 +123,12 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
         </div>,
         {
           position: "top-right",
-          autoClose: 10000, // Longer duration to allow user to read password
+          autoClose: 10000,
           theme: "light"
         }
       );
+      
+      setSelectedFile(null); // Clear the file state
       onAdd();
     } catch (err) {
       console.error("Error creating admin:", err);

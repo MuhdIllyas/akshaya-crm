@@ -1,8 +1,16 @@
 import express from "express";
 import pool from "../db.js";
 import jwt from "jsonwebtoken";
+import multer from "multer"; 
+import path from "path";
 
 const router = express.Router();
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const upload = multer({ storage });
 
 // Middleware to verify token and role
 const authMiddleware = (allowedRoles) => async (req, res, next) => {
@@ -37,7 +45,9 @@ router.get("/", authMiddleware(["superadmin"]), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT c.id, c.name, c.created_by, s1.name AS created_by_name,
-             c.admin_id, s2.name AS admin_name, c.communication_account_id
+             c.admin_id, s2.name AS admin_name, c.communication_account_id,
+             c.address, c.district, c.state, c.pincode, c.latitude, 
+             c.longitude, c.google_place_id, c.working_hours, c.phone, c.email, c.logo
       FROM centres c
       LEFT JOIN staff s1 ON c.created_by = s1.id
       LEFT JOIN staff s2 ON c.admin_id = s2.id
@@ -51,13 +61,15 @@ router.get("/", authMiddleware(["superadmin"]), async (req, res) => {
 });
 
 // GET /api/centres/:id
-router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.get("/:id", authMiddleware(["staff" ,"admin", "superadmin"]), async (req, res) => {
   const { id } = req.params;
 
   try {
     const result = await pool.query(`
       SELECT c.id, c.name, c.created_by, s1.name AS created_by_name,
-             c.admin_id, s2.name AS admin_name, c.communication_account_id
+             c.admin_id, s2.name AS admin_name, c.communication_account_id,
+             c.address, c.district, c.state, c.pincode, c.latitude, 
+             c.longitude, c.google_place_id, c.working_hours, c.phone, c.email, c.logo
       FROM centres c
       LEFT JOIN staff s1 ON c.created_by = s1.id
       LEFT JOIN staff s2 ON c.admin_id = s2.id
@@ -79,13 +91,15 @@ router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
 });
 
 // GET /api/centres/:id/staff
-router.get("/:id/staff", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.get("/:id/staff", authMiddleware(["staff" , "admin", "superadmin"]), async (req, res) => {
   const { id } = req.params;
 
   try {
     const centreResult = await pool.query(`
       SELECT c.id, c.name, c.created_by, s1.name AS created_by_name,
-             c.admin_id, s2.name AS admin_name, c.communication_account_id
+             c.admin_id, s2.name AS admin_name, c.communication_account_id,
+             c.address, c.district, c.state, c.pincode, c.latitude, 
+             c.longitude, c.google_place_id, c.working_hours, c.phone, c.email, c.logo
       FROM centres c
       LEFT JOIN staff s1 ON c.created_by = s1.id
       LEFT JOIN staff s2 ON c.admin_id = s2.id
@@ -122,12 +136,17 @@ router.get("/:id/staff", authMiddleware(["admin", "superadmin"]), async (req, re
 });
 
 // POST /api/centres
-router.post("/", authMiddleware(["superadmin"]), async (req, res) => {
-  const { name, admin_id, communication_account_id } = req.body;
+router.post("/", authMiddleware(["superadmin"]), upload.single("logo"), async (req, res) => {
+  const { 
+    name, admin_id, communication_account_id, address, district, state, 
+    pincode, latitude, longitude, google_place_id, working_hours, phone, email 
+  } = req.body;
   
   if (!name) {
     return res.status(400).json({ error: "Centre name is required" });
   }
+
+  const logoPath = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
     if (admin_id) {
@@ -138,8 +157,14 @@ router.post("/", authMiddleware(["superadmin"]), async (req, res) => {
     }
 
     const result = await pool.query(
-      "INSERT INTO centres (name, created_by, admin_id, communication_account_id) VALUES ($1, $2, $3, $4) RETURNING *",
-      [name, req.user.id, admin_id || null, communication_account_id || null]
+      `INSERT INTO centres (
+        name, created_by, admin_id, communication_account_id, address, district, state, 
+        pincode, latitude, longitude, google_place_id, working_hours, phone, email, logo
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+      [
+        name, req.user.id, admin_id || null, communication_account_id || null, address, district, state, 
+        pincode, latitude, longitude, google_place_id, working_hours, phone, email, logoPath
+      ]
     );
     
     const centre = result.rows[0];
@@ -164,9 +189,12 @@ router.post("/", authMiddleware(["superadmin"]), async (req, res) => {
 });
 
 // PUT /api/centres/:id
-router.put("/:id", authMiddleware(["superadmin"]), async (req, res) => {
+router.put("/:id", authMiddleware(["superadmin"]), upload.single("logo"), async (req, res) => {
   const { id } = req.params;
-  const { name, admin_id, communication_account_id } = req.body;
+  const { 
+    name, admin_id, communication_account_id, address, district, state, 
+    pincode, latitude, longitude, google_place_id, working_hours, phone, email 
+  } = req.body;
 
   try {
     const centreCheck = await pool.query("SELECT id FROM centres WHERE id = $1", [id]);
@@ -181,14 +209,39 @@ router.put("/:id", authMiddleware(["superadmin"]), async (req, res) => {
       }
     }
 
-    const result = await pool.query(
-      `UPDATE centres 
-       SET name = COALESCE($1, name), 
-           admin_id = $2,
-           communication_account_id = $3 
-       WHERE id = $4 RETURNING *`,
-      [name, admin_id || null, communication_account_id || null, id]
-    );
+    // Dynamically build the update query to avoid overwriting the logo if a new one isn't uploaded
+    let updateQuery = `
+      UPDATE centres 
+      SET name = COALESCE($1, name), 
+          admin_id = $2,
+          communication_account_id = $3,
+          address = $4,
+          district = $5,
+          state = $6,
+          pincode = $7,
+          latitude = $8,
+          longitude = $9,
+          google_place_id = $10,
+          working_hours = $11,
+          phone = $12,
+          email = $13
+    `;
+    
+    const params = [
+      name, admin_id || null, communication_account_id || null, 
+      address, district, state, pincode, latitude, longitude, 
+      google_place_id, working_hours, phone, email
+    ];
+
+    if (req.file) {
+      updateQuery += `, logo = $14`;
+      params.push(`/uploads/${req.file.filename}`);
+    }
+
+    updateQuery += ` WHERE id = $${params.length + 1} RETURNING *`;
+    params.push(id);
+
+    const result = await pool.query(updateQuery, params);
     
     const centre = result.rows[0];
     const createdByResult = await pool.query("SELECT name FROM staff WHERE id = $1", [centre.created_by]);

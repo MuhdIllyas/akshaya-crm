@@ -232,10 +232,12 @@ const Login = () => {
           
           <div className="z-10">
             <div className="flex flex-col items-center mb-12">
-              <div className="bg-white p-4 rounded-2xl shadow-lg mb-6">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-navy-800" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
+              <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 hover:shadow-[0_10px_40px_-10px_rgba(26,172,147,0.4)] transition-all duration-300">
+                <img 
+                  src="/logo-light.png" 
+                  alt="Akshaya Sahayi Logo" 
+                  className="h-20 w-20 object-contain drop-shadow-sm" 
+                />
               </div>
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-navy-600 mb-2">Akshaya Sahayi</h1>
@@ -272,7 +274,7 @@ const Login = () => {
           
           <div className="z-10 mt-8">
             <p className="text-navy-800 mb-2 text-sm text-center">© 2026 Muhammed Illyas. All rights reserved.</p>
-            <p className="text-navy-800 mb-2 text-sm text-center mt-1">Akshaya e Centre Pukayur</p>
+            <p className="text-navy-800 mb-2 text-sm text-center mt-1">Made with ❤️</p>
           </div>
         </div>
 

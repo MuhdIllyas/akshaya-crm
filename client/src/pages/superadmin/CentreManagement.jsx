@@ -9,7 +9,12 @@ const CentreManagement = () => {
   const [availableCommAccounts, setAvailableCommAccounts] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [centreForm, setCentreForm] = useState({ name: "", admin_id: "" });
+  const [centreForm, setCentreForm] = useState({ 
+    name: "", admin_id: "", communication_account_id: "",
+    address: "", district: "", state: "", pincode: "", 
+    latitude: "", longitude: "", google_place_id: "", 
+    working_hours: "", phone: "", email: "", logo: "" 
+  });
   const [editingCentreId, setEditingCentreId] = useState(null);
   const [showAddAdminForm, setShowAddAdminForm] = useState(null);
   const [showCentreDetails, setShowCentreDetails] = useState(null);
@@ -98,26 +103,47 @@ const CentreManagement = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      // Create a FormData object to handle the file upload
+      const formData = new FormData();
+      
+      // Append all form fields to the FormData object
+      Object.keys(centreForm).forEach(key => {
+        // Only append if the value exists (avoids sending strings of "null" or "undefined")
+        if (centreForm[key] !== "" && centreForm[key] !== null && centreForm[key] !== undefined) {
+          formData.append(key, centreForm[key]);
+        }
+      });
+
+      const config = {
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          'Content-Type': 'multipart/form-data' // Tell the server we are sending a file
+        }
+      };
+
       if (editingCentreId) {
-        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/centres/${editingCentreId}`, centreForm, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
+        const response = await axios.put(`${import.meta.env.VITE_API_URL}/api/centres/${editingCentreId}`, formData, config);
         toast.success(response.data.message || "Centre updated successfully", {
           position: "top-right",
           autoClose: 3000,
           theme: "light"
         });
       } else {
-        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/centres`, centreForm, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
+        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/centres`, formData, config);
         toast.success(response.data.message || "Centre created successfully", {
           position: "top-right",
           autoClose: 3000,
           theme: "light"
         });
       }
-      setCentreForm({ name: "", admin_id: "" });
+      
+      // Reset form
+      setCentreForm({ 
+        name: "", admin_id: "", communication_account_id: "",
+        address: "", district: "", state: "", pincode: "", 
+        latitude: "", longitude: "", google_place_id: "", 
+        working_hours: "", phone: "", email: "", logo: "" 
+      });
       setEditingCentreId(null);
       setShowForm(false);
       fetchCentres();
@@ -135,9 +161,20 @@ const CentreManagement = () => {
 
   const handleEditCentre = (centre) => {
     setCentreForm({ 
-      name: centre.name, 
+      name: centre.name || "", 
       admin_id: centre.admin_id || "",
-      communication_account_id: centre.communication_account_id || "" // 👈 ADD THIS LINE
+      communication_account_id: centre.communication_account_id || "",
+      address: centre.address || "",
+      district: centre.district || "",
+      state: centre.state || "",
+      pincode: centre.pincode || "",
+      latitude: centre.latitude || "",
+      longitude: centre.longitude || "",
+      google_place_id: centre.google_place_id || "",
+      working_hours: centre.working_hours || "",
+      phone: centre.phone || "",
+      email: centre.email || "",
+      logo: centre.logo || ""
     });
     setEditingCentreId(centre.id);
     setShowForm(true);
@@ -236,36 +273,201 @@ const CentreManagement = () => {
                     name="name"
                     value={centreForm.name}
                     onChange={(e) => setCentreForm({ ...centreForm, name: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
                     placeholder="Enter centre name"
                     required
                     disabled={loading}
                   />
                 </div>
-                  <div>
-                    <label htmlFor="centre-admin_id" className="block text-sm font-medium text-gray-700 mb-2">
-                      Assign Admin
-                    </label>
-                    <select
-                      id="centre-admin_id"
-                      name="admin_id"
-                      value={centreForm.admin_id || ""}
-                      onChange={(e) => setCentreForm({ ...centreForm, admin_id: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                      disabled={loading}
-                    >
-                      <option value="">-- Select an Admin (Optional) --</option>
-                      {admins.map(admin => (
-                        <option key={admin.id} value={admin.id}>
-                          {admin.name} (ID: {admin.id})
-                        </option>
-                      ))}
-                      {/* Failsafe: If the assigned admin was deleted or changed roles, still show their ID */}
-                      {centreForm.admin_id && !admins.find(a => String(a.id) === String(centreForm.admin_id)) && (
-                        <option value={centreForm.admin_id}>Unknown Admin (ID: {centreForm.admin_id})</option>
-                      )}
-                    </select>
-                  </div>
+                
+                <div>
+                  <label htmlFor="centre-phone" className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-phone"
+                    value={centreForm.phone}
+                    onChange={(e) => setCentreForm({ ...centreForm, phone: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="Enter contact number"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="centre-email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    id="centre-email"
+                    value={centreForm.email}
+                    onChange={(e) => setCentreForm({ ...centreForm, email: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="Enter email address"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="centre-working-hours" className="block text-sm font-medium text-gray-700 mb-2">
+                    Working Hours
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-working-hours"
+                    value={centreForm.working_hours}
+                    onChange={(e) => setCentreForm({ ...centreForm, working_hours: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="e.g., 9:00 AM - 6:00 PM"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label htmlFor="centre-address" className="block text-sm font-medium text-gray-700 mb-2">
+                    Address
+                  </label>
+                  <textarea
+                    id="centre-address"
+                    value={centreForm.address}
+                    onChange={(e) => setCentreForm({ ...centreForm, address: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="Enter full address"
+                    rows="2"
+                    disabled={loading}
+                  ></textarea>
+                </div>
+
+                <div>
+                  <label htmlFor="centre-district" className="block text-sm font-medium text-gray-700 mb-2">
+                    District
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-district"
+                    value={centreForm.district}
+                    onChange={(e) => setCentreForm({ ...centreForm, district: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="Enter district"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="centre-state" className="block text-sm font-medium text-gray-700 mb-2">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-state"
+                    value={centreForm.state}
+                    onChange={(e) => setCentreForm({ ...centreForm, state: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="Enter state"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="centre-pincode" className="block text-sm font-medium text-gray-700 mb-2">
+                    Pincode
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-pincode"
+                    value={centreForm.pincode}
+                    onChange={(e) => setCentreForm({ ...centreForm, pincode: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="Enter pincode"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="centre-logo" className="block text-sm font-medium text-gray-700 mb-2">
+                    Centre Logo
+                  </label>
+                  <input
+                    type="file"
+                    id="centre-logo"
+                    accept="image/*"
+                    onChange={(e) => setCentreForm({ ...centreForm, logo: e.target.files[0] })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    disabled={loading}
+                  />
+                  {/* Optional: Show a message if editing and a logo already exists */}
+                  {editingCentreId && typeof centreForm.logo === 'string' && centreForm.logo !== "" && (
+                     <p className="text-xs text-gray-500 mt-1">Current logo is uploaded. Select a new file to overwrite.</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="centre-latitude" className="block text-sm font-medium text-gray-700 mb-2">
+                    Latitude
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-latitude"
+                    value={centreForm.latitude}
+                    onChange={(e) => setCentreForm({ ...centreForm, latitude: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="e.g., 11.2588"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="centre-longitude" className="block text-sm font-medium text-gray-700 mb-2">
+                    Longitude
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-longitude"
+                    value={centreForm.longitude}
+                    onChange={(e) => setCentreForm({ ...centreForm, longitude: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="e.g., 75.7804"
+                    disabled={loading}
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="centre-place-id" className="block text-sm font-medium text-gray-700 mb-2">
+                    Google Place ID (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="centre-place-id"
+                    value={centreForm.google_place_id}
+                    onChange={(e) => setCentreForm({ ...centreForm, google_place_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="Enter Google Place ID"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="centre-admin_id" className="block text-sm font-medium text-gray-700 mb-2">
+                    Assign Admin
+                  </label>
+                  <select
+                    id="centre-admin_id"
+                    name="admin_id"
+                    value={centreForm.admin_id || ""}
+                    onChange={(e) => setCentreForm({ ...centreForm, admin_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    disabled={loading}
+                  >
+                    <option value="">-- Select an Admin (Optional) --</option>
+                    {admins.map(admin => (
+                      <option key={admin.id} value={admin.id}>
+                        {admin.name} (ID: {admin.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end pt-4">
                 <button
