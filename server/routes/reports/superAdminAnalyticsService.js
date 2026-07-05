@@ -132,7 +132,6 @@ async function fetchOrganisationStats(client, dates) {
     const { startDate, endDate } = dates;
 
     const [revenueResult, expenseResult, entityCountsResult, operationsResult] = await Promise.all([
-        // 1. Revenue
         client.query(`
             SELECT 
                 COALESCE(SUM(total_charges), 0) as total_revenue, 
@@ -143,7 +142,6 @@ async function fetchOrganisationStats(client, dates) {
             AND created_at >= $1 AND created_at <= $2
         `, [startDate, endDate]),
 
-        // 2. Expenses
         client.query(`
             SELECT COALESCE(SUM(amount), 0) as total_expenses 
             FROM expenses 
@@ -152,15 +150,16 @@ async function fetchOrganisationStats(client, dates) {
             AND expense_date >= $1 AND expense_date <= $2
         `, [startDate, endDate]),
 
-        // 3. Global Entity Counts
+        // 👇 FIXED: Explicitly counting Admins vs Staff, and counting unique Walk-in Phone Numbers!
         client.query(`
             SELECT 
                 (SELECT COUNT(*) FROM centres WHERE status = 'active') as total_centres,
                 (SELECT COUNT(*) FROM staff WHERE status = 'active') as total_staff,
-                (SELECT COUNT(*) FROM customers) as total_customers
+                (SELECT COUNT(*) FROM staff WHERE status = 'active' AND role = 'admin') as total_admins,
+                (SELECT COUNT(*) FROM staff WHERE status = 'active' AND role = 'staff') as total_regular_staff,
+                (SELECT COUNT(DISTINCT phone) FROM service_entries WHERE phone IS NOT NULL AND TRIM(phone) != '') as total_customers
         `),
 
-        // 4. Live Operations (FIXED: Now uses service_tracking perfectly matching Admin dashboard)
         client.query(`
             SELECT 
                 COUNT(se.id) FILTER (WHERE LOWER(strak.status) IN ('pending')) as pending_services,
@@ -182,14 +181,19 @@ async function fetchOrganisationStats(client, dates) {
         expenses,
         profit: grossProfit - expenses, 
         servicesCompleted: parseInt(revenueResult.rows[0].total_services, 10) || 0,
+        
+        // 👇 FIXED: Sending the exact variables the React UI is asking for
         totalCentres: parseInt(entityCountsResult.rows[0].total_centres, 10) || 0,
         totalStaff: parseInt(entityCountsResult.rows[0].total_staff, 10) || 0,
+        admins: parseInt(entityCountsResult.rows[0].total_admins, 10) || 0,
+        staffCount: parseInt(entityCountsResult.rows[0].total_regular_staff, 10) || 0,
         totalCustomers: parseInt(entityCountsResult.rows[0].total_customers, 10) || 0,
+
         todayRevenue: parseFloat(operationsResult.rows[0].today_revenue) || 0,
         todayServices: parseInt(operationsResult.rows[0].today_services, 10) || 0,
         pendingServices: parseInt(operationsResult.rows[0].pending_services, 10) || 0,
         inProgressServices: parseInt(operationsResult.rows[0].in_progress_services, 10) || 0,
-        delayedServices: parseInt(operationsResult.rows[0].delayed_services, 10) || 0 // <-- Added this for your UI!
+        delayedServices: parseInt(operationsResult.rows[0].delayed_services, 10) || 0
     };
 }
 
@@ -706,12 +710,12 @@ async function fetchHealthAnalytics(client, dates) {
             WITH ServicePayments AS (
                 SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
                 FROM payments
-                -- 👇 FIXED
                 WHERE status = 'received' AND (is_reversal IS NULL OR is_reversal = FALSE)
                 GROUP BY service_entry_id
             )
             SELECT 
                 COUNT(se.id) as count, 
+                COUNT(DISTINCT se.phone) as pending_customers, -- 👇 FIXED: Count unique customers who owe money
                 COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as total_value 
             FROM service_entries se
             LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
@@ -745,6 +749,8 @@ async function fetchHealthAnalytics(client, dates) {
         metrics: {
             negativeWallets: negativeWallets.rows.length,
             pendingPaymentValue: parseFloat(pendingPayments.rows[0].total_value),
+            // 👇 FIXED: Sending the variable to the UI
+            pendingCustomers: parseInt(pendingPayments.rows[0].pending_customers, 10) || 0, 
             unassignedServices: parseInt(unassignedServices.rows[0].count, 10)
         }
     };
