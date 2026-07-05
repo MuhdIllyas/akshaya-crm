@@ -326,10 +326,10 @@ async function fetchWalletAnalytics(client, dates) {
 
         // 2. Transaction Flow (In/Out within the date range)
         client.query(`
-            SELECT transaction_type, COALESCE(SUM(amount), 0) as total_amount
+            SELECT type, COALESCE(SUM(amount), 0) as total_amount
             FROM wallet_transactions
             WHERE created_at >= $1 AND created_at <= $2
-            GROUP BY transaction_type
+            GROUP BY type
         `, [startDate, endDate])
     ]);
 
@@ -359,9 +359,9 @@ async function fetchWalletAnalytics(client, dates) {
     flowResult.rows.forEach(row => {
         const amount = parseFloat(row.total_amount);
         // Adjust these strings based on your actual database ENUMs for transaction_type
-        if (row.transaction_type === 'credit' || row.transaction_type === 'income') {
+        if (row.type === 'credit' || row.type === 'income') {
             flow.moneyIn += amount;
-        } else if (row.transaction_type === 'debit' || row.transaction_type === 'expense') {
+        } else if (row.type === 'debit' || row.type === 'expense') {
             flow.moneyOut += amount;
         }
     });
@@ -620,8 +620,8 @@ async function fetchRecentActivities(client) {
                 wt.created_at,
                 wt.amount,
                 w.type || ' Wallet' as centre_name, 
-                wt.transaction_type as staff_name,
-                'Wallet ' || wt.transaction_type as title,
+                wt.type as staff_name,
+                'Wallet ' || wt.type as title,
                 wt.id as reference_id
             FROM wallet_transactions wt
             JOIN wallets w ON w.id = wt.wallet_id
