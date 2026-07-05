@@ -69,7 +69,12 @@ function getDateContext(filters = {}) {
  * Main entry point for the SuperAdmin Executive Dashboard
  */
 export const getSuperAdminDashboard = async (filters = {}) => {
-    const modules = filters.modules ? filters.modules.split(',') : ['stats']; 
+    // FIXED: Safely parsing modules whether it comes as an array or a comma string from the API
+    let modules = ['stats'];
+    if (filters.modules) {
+        modules = Array.isArray(filters.modules) ? filters.modules : filters.modules.split(',');
+    }
+
     const dates = getDateContext(filters);
     const client = await pool.connect();
     
@@ -132,11 +137,11 @@ function buildDashboard(data) {
 async function fetchOrganisationStats(client, dates) {
     const { startDate, endDate } = dates;
 
-    // We use Promise.all to run these lightweight aggregations concurrently
     const [
         revenueResult,
         expenseResult,
-        entityCountsResult
+        entityCountsResult,
+        operationsResult // <-- ADDED: For todayServices and pendingServices
     ] = await Promise.all([
         // 1. Revenue for the period
         client.query(`
@@ -161,6 +166,16 @@ async function fetchOrganisationStats(client, dates) {
                 (SELECT COUNT(*) FROM centres WHERE status = 'active') as total_centres,
                 (SELECT COUNT(*) FROM staff WHERE status = 'active') as total_staff,
                 (SELECT COUNT(*) FROM customers) as total_customers
+        `),
+
+        // 4. Live Operations (Required by React UI)
+        client.query(`
+            SELECT 
+                COUNT(*) FILTER (WHERE status = 'pending') as pending_services,
+                COUNT(*) FILTER (WHERE status = 'processing') as in_progress_services,
+                COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed') as today_services,
+                COALESCE(SUM(total_charges) FILTER (WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'), 0) as today_revenue
+            FROM service_entries
         `)
     ]);
 
@@ -175,7 +190,12 @@ async function fetchOrganisationStats(client, dates) {
         servicesCompleted: parseInt(revenueResult.rows[0].total_services, 10),
         totalCentres: parseInt(entityCountsResult.rows[0].total_centres, 10),
         totalStaff: parseInt(entityCountsResult.rows[0].total_staff, 10),
-        totalCustomers: parseInt(entityCountsResult.rows[0].total_customers, 10)
+        totalCustomers: parseInt(entityCountsResult.rows[0].total_customers, 10),
+        // ADDED fields for UI
+        todayRevenue: parseFloat(operationsResult.rows[0].today_revenue) || 0,
+        todayServices: parseInt(operationsResult.rows[0].today_services, 10) || 0,
+        pendingServices: parseInt(operationsResult.rows[0].pending_services, 10) || 0,
+        inProgressServices: parseInt(operationsResult.rows[0].in_progress_services, 10) || 0
     };
 }
 
@@ -289,6 +309,13 @@ function calculateFinancialMetrics(rawFinancial) {
     // Convert map to sorted array
     const combinedTrend = Array.from(trendMap.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
 
+    // ADDED: Constructing the exact chart shape React expects ({ label, value })
+    const charts = {
+        revenue: combinedTrend.map(t => ({ label: t.date, value: t.revenue })),
+        profit: combinedTrend.map(t => ({ label: t.date, value: t.profit })),
+        expenses: combinedTrend.map(t => ({ label: t.date, value: t.expense }))
+    };
+
     return {
         totals: {
             revenue: totalRevenue,
@@ -300,7 +327,8 @@ function calculateFinancialMetrics(rawFinancial) {
             revenue: rawFinancial.revenueBreakdown.map(r => ({ category: r.category, amount: parseFloat(r.total) })),
             expenses: rawFinancial.expenseBreakdown.map(e => ({ category: e.category, amount: parseFloat(e.total) }))
         },
-        trends: combinedTrend
+        trends: combinedTrend,
+        charts // <-- ADDED: Passes to frontend
     };
 }
 
@@ -343,8 +371,12 @@ async function fetchWalletAnalytics(client, dates) {
 
     balancesResult.rows.forEach(row => {
         const amount = parseFloat(row.total_balance);
-        if (balances[row.type] !== undefined) {
-            balances[row.type] = amount;
+        const type = (row.wallet_type || "").toLowerCase(); // FIXED fallback mapping
+        
+        if (balances[type] !== undefined) {
+            balances[type] = amount;
+        } else {
+            balances[type] = amount; 
         }
         balances.total += amount;
     });
@@ -444,11 +476,27 @@ async function fetchCentreLeaderboard(client, dates) {
         rating: parseFloat(row.rating)
     }));
 
-    // Pre-slice top and bottom performers for the Executive Dashboard
+    // ADDED: Sorting out best and worst for UI cards
+    const sortedByRevenue = [...formattedList].sort((a, b) => b.revenue - a.revenue);
+    const sortedByProfit = [...formattedList].sort((a, b) => b.profit - a.profit);
+    const sortedByRating = [...formattedList].sort((a, b) => b.rating - a.rating);
+
+    const best = {
+        revenue: { name: sortedByRevenue[0]?.name, value: sortedByRevenue[0]?.revenue },
+        profit: { name: sortedByProfit[0]?.name, value: sortedByProfit[0]?.profit },
+        rating: { name: sortedByRating[0]?.name, value: sortedByRating[0]?.rating }
+    };
+    
+    const worst = {
+        revenue: { name: sortedByRevenue[sortedByRevenue.length - 1]?.name, value: sortedByRevenue[sortedByRevenue.length - 1]?.revenue },
+    };
+
     return {
         fullList: formattedList,
         topPerformers: formattedList.slice(0, 5),
-        worstPerformers: [...formattedList].sort((a, b) => a.profit - b.profit).slice(0, 5) // Sort ascending by profit
+        worstPerformers: [...formattedList].sort((a, b) => a.profit - b.profit).slice(0, 5),
+        best, // <-- ADDED
+        worst // <-- ADDED
     };
 }
 
@@ -560,7 +608,7 @@ async function fetchRecentActivities(client) {
             FROM service_entries se
             JOIN staff st ON st.id = se.staff_id
             JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = se.category_id -- <-- FIXED: Added 'se.' prefix
+            JOIN services sv ON sv.id = se.category_id 
             WHERE se.status = 'completed'
             ORDER BY se.created_at DESC LIMIT 25
         `),
@@ -635,13 +683,13 @@ async function fetchRecentActivities(client) {
         ...walletsResult.rows
     ];
 
-    // FIX 1: Filter out any corrupted rows where created_at is null
+    // Filter out any corrupted rows where created_at is null
     const validActivities = allActivities.filter(act => act.created_at != null);
 
-    // FIX 2: Safely sort chronologically (newest first)
+    // Safely sort chronologically (newest first)
     validActivities.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // FIX 3: Safely map to the timeline using defensive parsing
+    // Safely map to the timeline using defensive parsing
     const timeline = validActivities.slice(0, 100).map(act => {
         // Double-check the date is valid before calling toISOString()
         const safeDate = act.created_at ? new Date(act.created_at) : new Date();
