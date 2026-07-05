@@ -128,7 +128,7 @@ const SuperadminDashboard = () => {
     time: new Date(item.createdAt).toLocaleString()
   }));
 
-  // Revenue chart component – now uses pre‑aggregated chart data
+  // Revenue chart component
   const RevenueChart = () => {
     if (!revenueChartData || revenueChartData.length === 0) {
       return <div className="text-gray-500 text-sm">No data available</div>;
@@ -136,23 +136,42 @@ const SuperadminDashboard = () => {
     const max = Math.max(...revenueChartData.map(d => d.value), 1);
 
     return (
-      <div className="w-full h-64 flex items-end space-x-2">
-        {revenueChartData.map((item, idx) => (
-          <div key={item.label || idx} className="flex-1 flex flex-col items-center group relative">
-            <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded pointer-events-none transition-opacity whitespace-nowrap z-10">
-              {formatCurrency(item.value)}
+      // 1. Added overflow-x-auto so it scrolls if there are too many dates
+      // 2. Swapped space-x-2 for a smaller gap-1
+      <div className="w-full h-64 flex items-end gap-1 overflow-x-auto pb-2">
+        {revenueChartData.map((item, idx) => {
+          // Shorten date from "2026-05-11" to "05-11" so they don't overlap
+          const shortDate = item.label ? item.label.slice(5) : '';
+
+          return (
+            // 3. Added h-full to the wrapper so percentage heights work
+            // 4. Added min-w-[30px] so bars never shrink to invisibility
+            <div key={item.label || idx} className="flex-1 min-w-[30px] flex flex-col justify-end items-center group relative h-full">
+              
+              {/* Tooltip */}
+              <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded pointer-events-none transition-opacity whitespace-nowrap z-10">
+                {formatCurrency(item.value)}
+              </div>
+              
+              {/* Bar Wrapper - takes remaining vertical space */}
+              <div className="w-full flex-1 flex items-end justify-center">
+                <div
+                  className={`w-full rounded-t transition-all duration-500 ${
+                    revenueView === 'profit' ? 'bg-green-500' :
+                    revenueView === 'expenses' ? 'bg-red-500' :
+                    'bg-blue-500'
+                  }`}
+                  style={{ height: `${(item.value / max) * 100}%`, minHeight: '4px' }}
+                ></div>
+              </div>
+
+              {/* Date Label */}
+              <span className="text-[10px] text-gray-500 mt-2 whitespace-nowrap">
+                {shortDate}
+              </span>
             </div>
-            <div
-              className={`w-full rounded-t transition-all duration-500 ${
-                revenueView === 'profit' ? 'bg-green-500' :
-                revenueView === 'expenses' ? 'bg-red-500' :
-                'bg-blue-500'
-              }`}
-              style={{ height: `${(item.value / max) * 100}%`, minHeight: '4px' }}
-            ></div>
-            <span className="text-xs text-gray-600 mt-1">{item.label}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
