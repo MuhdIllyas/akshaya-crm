@@ -357,69 +357,100 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Global KPI Cards – now 10 columns on large screens, taller and narrower */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-10 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-blue-800 font-medium">🌍 Centres</span>
-            <span className="text-xs text-blue-600 bg-blue-200 px-2 py-0.5 rounded-full">+{newCentresThisMonth ?? 0}</span>
+      {/* Global KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        
+        {/* 1. Total Centres */}
+        <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-blue-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Total Centres</span><span>🌍</span>
           </div>
-          <div className="text-3xl font-bold text-blue-900 mt-2">{totalCentres}</div>
-        </div>
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-5 rounded-2xl border border-purple-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-purple-800 font-medium">👥 Staff</span>
-            <span className="text-xs text-purple-600">{admins ?? 0} Admins</span>
-          </div>
-          <div className="text-3xl font-bold text-purple-900 mt-2">{totalStaff}</div>
-        </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-green-800 font-medium">👨‍👩‍👧 Customers</span>
-            <span className="text-xs text-green-600 bg-green-200 px-2 py-0.5 rounded-full">+{customerGrowth ?? 0}</span>
-          </div>
-          <div className="text-3xl font-bold text-green-900 mt-2">{totalCustomers?.toLocaleString()}</div>
-        </div>
-        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-5 rounded-2xl border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-indigo-800 font-medium">📑 Services Today</span>
-          </div>
-          <div className="text-3xl font-bold text-indigo-900 mt-2">{todayServices ?? 0}</div>
-        </div>
-        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-5 rounded-2xl border border-yellow-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-yellow-800 font-medium">💰 Today Revenue</span>
-          </div>
-          <div className="text-3xl font-bold text-yellow-900 mt-2">{formatCurrency(todayRevenue)}</div>
-        </div>
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-5 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-orange-800 font-medium">📈 Period Revenue</span>
-          </div>
-          <div className="text-3xl font-bold text-orange-900 mt-2">{formatCurrency(monthlyRevenue)}</div>
-          <div className="text-xs flex items-center mt-1">
-            {revenueGrowthPercent >= 0 ? (
-              <span className="text-green-600 font-semibold bg-green-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↑ {revenueGrowthPercent}%</span>
-            ) : (
-              <span className="text-red-600 font-semibold bg-red-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↓ {Math.abs(revenueGrowthPercent)}%</span>
-            )}
-            <span className="text-orange-600">vs last month</span>
+          <div className="text-lg xl:text-xl font-bold text-blue-950">{totalCentres}</div>
+          <div className="text-[10px] font-medium text-blue-700 mt-1 truncate">
+            +{newCentresThisMonth ?? 0} this month
           </div>
         </div>
-        <div className="bg-gradient-to-br from-red-50 to-red-100 p-5 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-red-800 font-medium">💵 Period Profit</span>
+
+        {/* 2. Total Staff */}
+        <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-purple-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Total Staff</span><span>👥</span>
           </div>
-          <div className="text-3xl font-bold text-red-900 mt-2">{formatCurrency(netProfit)}</div>
-        </div>
-        <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-5 rounded-2xl border border-pink-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
-          <div className="flex items-center justify-between w-full">
-            <span className="text-sm text-pink-800 font-medium">💳 Pending Payments</span>
+          <div className="text-lg xl:text-xl font-bold text-purple-950">{totalStaff}</div>
+          <div className="text-[10px] font-medium text-purple-700 mt-1 truncate">
+            {admins ?? 0} Admins, {staffCount ?? 0} Staff
           </div>
-          <div className="text-3xl font-bold text-pink-900 mt-2">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
-          <div className="text-xs text-pink-600 mt-1">{health?.metrics?.pendingCustomers ?? 0} Customers</div>
         </div>
-        {/* Extra card to fill grid if needed – but we have 8 items, grid will handle */}
+
+        {/* 3. Total Customers */}
+        <div className="bg-green-50 p-3 rounded-xl border border-green-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-green-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Customers</span><span>👨‍👩‍👧</span>
+          </div>
+          <div className="text-lg xl:text-xl font-bold text-green-950">{totalCustomers?.toLocaleString()}</div>
+          <div className="text-[10px] font-medium text-green-700 mt-1 truncate">
+            +{customerGrowth ?? 0} this month
+          </div>
+        </div>
+
+        {/* 4. Services Completed Today */}
+        <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-indigo-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Today's Svcs</span><span>📑</span>
+          </div>
+          <div className="text-lg xl:text-xl font-bold text-indigo-950">{todayServices ?? 0}</div>
+          <div className="text-[10px] font-medium text-indigo-700 mt-1 truncate">
+            All centres
+          </div>
+        </div>
+
+        {/* 5. Today's Revenue */}
+        <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-yellow-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Today's Rev</span><span>💰</span>
+          </div>
+          <div className="text-lg xl:text-xl font-bold text-yellow-950 truncate">{formatCurrency(todayRevenue)}</div>
+          <div className="text-[10px] font-medium text-yellow-700 mt-1 truncate">
+            Live collection
+          </div>
+        </div>
+
+        {/* 6. Period Revenue */}
+        <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-orange-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Period Rev</span><span>📈</span>
+          </div>
+          <div className="text-lg xl:text-xl font-bold text-orange-950 truncate">{formatCurrency(monthlyRevenue)}</div>
+          <div className="text-[10px] mt-1 flex items-center truncate">
+            <span className={`font-bold mr-1 ${revenueGrowthPercent >= 0 ? "text-green-600" : "text-red-600"}`}>
+              {revenueGrowthPercent >= 0 ? '↑' : '↓'} {Math.abs(revenueGrowthPercent)}%
+            </span>
+            <span className="text-orange-600 font-medium">vs prev</span>
+          </div>
+        </div>
+
+        {/* 7. Period Profit */}
+        <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-red-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Period Profit</span><span>💵</span>
+          </div>
+          <div className="text-lg xl:text-xl font-bold text-red-950 truncate">{formatCurrency(netProfit)}</div>
+          <div className="text-[10px] font-medium text-red-700 mt-1 truncate">
+            Selected range
+          </div>
+        </div>
+
+        {/* 8. Pending Payments */}
+        <div className="bg-pink-50 p-3 rounded-xl border border-pink-100 flex flex-col justify-between shadow-sm">
+          <div className="text-xs text-pink-800 font-semibold mb-1 flex justify-between">
+            <span className="truncate mr-1">Pending Pay</span><span>💳</span>
+          </div>
+          <div className="text-lg xl:text-xl font-bold text-pink-950 truncate">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
+          <div className="text-[10px] font-medium text-pink-700 mt-1 truncate">
+            {health?.metrics?.pendingCustomers ?? 0} Customers
+          </div>
+        </div>
+
       </div>
 
       {/* Rest of the dashboard remains the same – just adjust max width removed */}
