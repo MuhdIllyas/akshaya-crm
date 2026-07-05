@@ -318,7 +318,7 @@ async function fetchWalletAnalytics(client, dates) {
         // 1. Current Balances (Grouped by Wallet Type)
         // Note: We don't use date filters here because balances are absolute current states.
         client.query(`
-            SELECT type, COALESCE(SUM(balance), 0) as total_balance
+            SELECT wallet_type, COALESCE(SUM(balance), 0) as total_balance
             FROM wallets
             WHERE status = 'active'
             GROUP BY wallet_type
@@ -772,7 +772,7 @@ async function fetchSystemAlerts(client) {
     ] = await Promise.all([
         // 1. Wallets below 0
         client.query(`
-            SELECT w.id, w.type, w.balance, c.name as centre_name
+            SELECT w.id, w.wallet_type, w.balance, c.name as centre_name
             FROM wallets w 
             JOIN centres c ON c.id = w.centre_id
             WHERE w.balance < 0
