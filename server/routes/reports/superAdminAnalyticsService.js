@@ -194,12 +194,12 @@ async function fetchFinancialOverview(client, dates) {
     ] = await Promise.all([
         // 1. Revenue by Service Category
         client.query(`
-            SELECT sv.category, COALESCE(SUM(se.total_charges), 0) as total
+            SELECT sv.category_id, COALESCE(SUM(se.total_charges), 0) as total
             FROM service_entries se
             JOIN services sv ON se.category_id = sv.id
             WHERE se.status = 'completed'
             AND se.created_at >= $1 AND se.created_at <= $2
-            GROUP BY sv.category
+            GROUP BY sv.category_id
             ORDER BY total DESC
         `, [startDate, endDate]),
 
