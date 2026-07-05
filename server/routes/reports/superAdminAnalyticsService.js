@@ -321,7 +321,6 @@ async function fetchWalletAnalytics(client, dates) {
     const { startDate, endDate } = dates;
 
     const [balancesResult, flowResult] = await Promise.all([
-        // FIXED 1: Removed `WHERE status = 'active'` which was blocking the rows
         client.query(`
             SELECT wallet_type, COALESCE(SUM(balance), 0) as total_balance
             FROM wallets
@@ -341,7 +340,6 @@ async function fetchWalletAnalytics(client, dates) {
         const amount = parseFloat(row.total_balance) || 0;
         const type = (row.wallet_type || "").toLowerCase();
 
-        // FIXED 2: Replicated your exact bucket logic!
         if (type === 'cash') {
             balances.cash += amount;
         } else if (type === 'bank') {
