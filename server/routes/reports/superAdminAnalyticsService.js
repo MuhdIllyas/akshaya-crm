@@ -407,16 +407,50 @@ async function fetchCentreLeaderboard(client, dates) {
 
     const result = await client.query(leaderboardQuery, [startDate, endDate]);
 
-    const formattedList = result.rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        revenue: parseFloat(row.revenue),
-        expenses: parseFloat(row.expenses),
-        profit: parseFloat(row.profit),
-        servicesCompleted: parseInt(row.services_completed, 10),
-        rating: parseFloat(row.rating)
-    }));
+    // Format the SQL output into clean JavaScript types AND calculate Health Status
+    const formattedList = result.rows.map(row => {
+        const revenue = parseFloat(row.revenue);
+        const expenses = parseFloat(row.expenses);
+        const profit = parseFloat(row.profit);
+        const rating = parseFloat(row.rating);
+        const margin = revenue > 0 ? (profit / revenue) : 0;
 
+        // Smart Health Grading Algorithm
+        let healthStatus = { label: "Healthy", icon: "🟢", color: "green" };
+
+        if (revenue === 0 && expenses === 0) {
+            // Centre has done absolutely no business in this period
+            healthStatus = { label: "Inactive", icon: "⚪", color: "gray" };
+        } else if (profit < 0) {
+            // Centre is losing money
+            healthStatus = { label: "Loss Making", icon: "🔴", color: "red" };
+        } else if (rating > 0 && rating < 3.0) {
+            // Centre has terrible reviews
+            healthStatus = { label: "Poor Rating", icon: "🔴", color: "red" };
+        } else if (profit >= 0 && margin < 0.15) {
+            // Centre is profitable, but margin is very low (< 15%)
+            healthStatus = { label: "Low Margin", icon: "🟡", color: "yellow" };
+        } else if (rating >= 3.0 && rating < 4.0) {
+            // Centre is profitable, but reviews are just average
+            healthStatus = { label: "Needs Improvement", icon: "🟡", color: "yellow" };
+        } else {
+            // Centre is highly profitable with good ratings
+            healthStatus = { label: "Excellent", icon: "🟢", color: "green" };
+        }
+
+        return {
+            id: row.id,
+            name: row.name,
+            revenue,
+            expenses,
+            profit,
+            servicesCompleted: parseInt(row.services_completed, 10),
+            rating,
+            healthStatus // <-- We now inject the calculated health status here!
+        };
+    });
+
+    // Sorting out best and worst for UI cards
     const sortedByRevenue = [...formattedList].sort((a, b) => b.revenue - a.revenue);
     const sortedByProfit = [...formattedList].sort((a, b) => b.profit - a.profit);
     const sortedByRating = [...formattedList].sort((a, b) => b.rating - a.rating);
