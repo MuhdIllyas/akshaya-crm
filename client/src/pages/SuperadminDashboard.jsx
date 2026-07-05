@@ -4,9 +4,10 @@ import { toast } from "react-toastify";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 // ==========================================
-// NEW: STAFF PERFORMANCE CHART COMPONENT
+// NEW: STAFF PERFORMANCE CHART COMPONENT (WITH 3 GRAPHS)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
+  // 'revenue', 'servicesCompleted', or 'scatter'
   const [metric, setMetric] = useState('revenue'); 
 
   if (!staffData || staffData.length === 0) {
@@ -17,7 +18,8 @@ const StaffPerformanceChart = ({ staffData }) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   };
 
-  const CustomTooltip = ({ active, payload }) => {
+  // Tooltip for the Bar Charts
+  const BarTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -32,56 +34,110 @@ const StaffPerformanceChart = ({ staffData }) => {
     return null;
   };
 
+  // Tooltip for the Scatter Plot
+  const ScatterTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base mb-1">{data.name}</p>
+          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
+          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
+          <p className="text-blue-400 font-semibold">Revenue: {formatCurrency(data.revenue)}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex flex-col h-[400px]">
-      <div className="flex justify-between items-center mb-6">
+    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex flex-col h-[450px]">
+      <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-700">👨‍💼 Top Staff Performers</h2>
           <p className="text-xs text-gray-500">Ranked across all centres</p>
         </div>
-        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-          <button
-            onClick={() => setMetric('revenue')}
-            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-              metric === 'revenue' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Revenue
-          </button>
-          <button
-            onClick={() => setMetric('servicesCompleted')}
-            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-              metric === 'servicesCompleted' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Applications
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+            <button
+              onClick={() => setMetric('revenue')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                metric === 'revenue' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Revenue
+            </button>
+            <button
+              onClick={() => setMetric('servicesCompleted')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                metric === 'servicesCompleted' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Applications
+            </button>
+            <button
+              onClick={() => setMetric('scatter')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                metric === 'scatter' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Efficiency
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="flex-1 w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-            <XAxis type="number" hide />
-            <YAxis 
-              dataKey="name" 
-              type="category" 
-              axisLine={false} 
-              tickLine={false}
-              tick={{ fontSize: 12, fill: '#4B5563' }}
-              width={120}
-            />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F3F4F6' }} />
-            <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000}>
-              {staffData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={metric === 'revenue' ? '#3B82F6' : '#8B5CF6'} 
-                  className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
+          {metric === 'scatter' ? (
+            // THE THIRD GRAPH: SCATTER PLOT
+            import('recharts').then(({ ScatterChart, Scatter, CartesianGrid, ZAxis }) => (
+              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis 
+                  type="number" 
+                  dataKey="servicesCompleted" 
+                  name="Applications" 
+                  tick={{ fontSize: 12 }} 
+                  label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
                 />
-              ))}
-            </Bar>
-          </BarChart>
+                <YAxis 
+                  type="number" 
+                  dataKey="revenue" 
+                  name="Revenue" 
+                  tickFormatter={(val) => `₹${(val/1000)}k`} 
+                  tick={{ fontSize: 12 }}
+                />
+                {/* ZAxis determines bubble size based on revenue */}
+                <ZAxis type="number" dataKey="revenue" range={[100, 500]} name="Volume" />
+                <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
+              </ScatterChart>
+            )).catch(() => <div className="text-center text-sm text-gray-500">Loading scatter chart...</div>) // Fallback while lazy loading
+          ) : (
+            // THE ORIGINAL BAR CHARTS
+            <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+              <XAxis type="number" hide />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                axisLine={false} 
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#4B5563' }}
+                width={120}
+              />
+              <Tooltip content={<BarTooltip />} cursor={{ fill: '#F3F4F6' }} />
+              <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000}>
+                {staffData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={metric === 'revenue' ? '#3B82F6' : '#8B5CF6'} 
+                    className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          )}
         </ResponsiveContainer>
       </div>
     </div>
