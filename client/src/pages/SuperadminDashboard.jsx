@@ -340,14 +340,22 @@ const SuperadminDashboard = () => {
           <div className="text-sm text-yellow-800 font-medium">💰 Today's Revenue</div>
           <div className="text-2xl font-bold text-yellow-900">{formatCurrency(todayRevenue)}</div>
         </div>
+        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 col-span-1">
+          <div className="text-sm text-orange-800 font-medium">📈 Period Revenue</div>
+          <div className="text-2xl font-bold text-orange-900">{formatCurrency(monthlyRevenue)}</div>
+          <div className="text-xs flex items-center mt-1">
+            {revenueGrowthPercent >= 0 ? (
+                <span className="text-green-600 font-semibold bg-green-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↑ {revenueGrowthPercent}%</span>
+            ) : (
+                <span className="text-red-600 font-semibold bg-red-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↓ {Math.abs(revenueGrowthPercent)}%</span>
+            )}
+            <span className="text-orange-600">vs last month</span>
+          </div>
+        </div>
         <div className="bg-red-50 p-4 rounded-xl border border-red-100 col-span-1">
           <div className="text-sm text-red-800 font-medium">💵 Period Profit</div>
           <div className="text-2xl font-bold text-red-900">{formatCurrency(netProfit)}</div>
           <div className="text-xs text-red-600 mt-1">Selected date range</div>
-        </div>
-        <div className="bg-red-50 p-4 rounded-xl border border-red-100 col-span-1">
-          <div className="text-sm text-red-800 font-medium">💵 Net Profit</div>
-          <div className="text-2xl font-bold text-red-900">{formatCurrency(netProfit)}</div>
         </div>
         <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 col-span-1">
           <div className="text-sm text-pink-800 font-medium">💳 Pending Payments</div>
