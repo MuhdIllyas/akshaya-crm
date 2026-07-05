@@ -196,7 +196,7 @@ async function fetchFinancialOverview(client, dates) {
         client.query(`
             SELECT sv.category, COALESCE(SUM(se.total_charges), 0) as total
             FROM service_entries se
-            JOIN services sv ON se.service_id = sv.id
+            JOIN services sv ON se.category_id = sv.id
             WHERE se.status = 'completed'
             AND se.created_at >= $1 AND se.created_at <= $2
             GROUP BY sv.category
@@ -563,7 +563,7 @@ async function fetchRecentActivities(client) {
             FROM service_entries se
             JOIN staff st ON st.id = se.staff_id
             JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = se.service_id
+            JOIN services sv ON sv.id = category_id
             WHERE se.status = 'completed'
             ORDER BY se.created_at DESC LIMIT 25
         `),
@@ -783,7 +783,7 @@ async function fetchSystemAlerts(client) {
             FROM service_entries se
             JOIN staff st ON st.id = se.staff_id
             JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = se.service_id
+            JOIN services sv ON sv.id = se.category_id
             WHERE se.payment_status = 'pending' AND se.balance_amount > 5000
         `),
         // 3. Bad reviews in the last 7 days (Requires immediate damage control)
@@ -801,7 +801,7 @@ async function fetchSystemAlerts(client) {
             FROM service_entries se
             JOIN staff st ON st.id = se.staff_id
             JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = se.service_id
+            JOIN services sv ON sv.id = se.category_id
             WHERE se.status IN ('pending', 'processing')
             AND se.created_at < NOW() - INTERVAL '5 days'
         `)
