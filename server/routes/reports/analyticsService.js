@@ -1850,7 +1850,6 @@ const calculateFinancialMetrics = (raw) => {
   }).sort((a, b) => a.label.localeCompare(b.label)); 
   return { today, monthly, periodTrend }; 
 
-  return { today, monthly };
 };
 
 // ==========================================

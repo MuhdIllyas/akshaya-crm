@@ -4,237 +4,48 @@ import { toast } from "react-toastify";
 
 const SuperadminDashboard = () => {
   const [loading, setLoading] = useState(false);
-  const [dashboardData, setDashboardData] = useState({
-    centres: [],
-    staff: [],
-    customers: [],
-    services: [],
-    revenue: {},
-    wallets: {},
-    activities: [],
-    notifications: [],
-    healthScores: {},
-    topCentres: [],
-    worstCentres: [],
-    topStaff: [],
-    topTeams: [],
-  });
-  const [revenueView, setRevenueView] = useState("revenue"); // revenue | profit | expenses
+  const [dashboard, setDashboard] = useState(null);
+  const [revenueView, setRevenueView] = useState("revenue");
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchDashboard = async () => {
       setLoading(true);
       try {
-        const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+        const token = localStorage.getItem("token");
+        if (!token) throw new Error("No token");
 
-        // 1. Fetch Centres List & Quick Metrics
-        const [centresRes, quickRes] = await Promise.all([
-            axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, { headers }),
-            axios.get(`${import.meta.env.VITE_API_URL}/api/reports/quick-metrics?centre_id=all`, { headers })
-        ]);
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        const formatDate = (d) => d.toISOString().split('T')[0];
 
-        const centresList = centresRes.data || [];
-        const qData = quickRes.data;
-
-        // 2. Fetch Deep Analytics PER CENTRE to avoid backend SQL crashes
-        const reportPromises = centresList.map(centre => 
-            axios.post(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
-                period: "monthly", 
-                targetCentreId: centre.id, // Pass actual integer ID!
-                format: "preview",
-                reportIds: [1, 5, 10, 17, 18, 27] 
-            }, { headers })
+        const response = await axios.get(
+          `${import.meta.env.VITE_API_URL}/api/analytics/superadmin/dashboard`,
+          {
+            params: {
+              modules: "stats,financials,leaderboards,health,alerts,activity,customers,staff,teams,wallets,insights",
+              timeframe: "custom",
+              customStartDate: formatDate(startDate),
+              customEndDate: formatDate(endDate)
+            },
+            headers: { Authorization: `Bearer ${token}` }
+          }
         );
 
-        // Also fetch the global comparison reports once (using a safe dummy ID)
-        const globalReportPromise = axios.post(`${import.meta.env.VITE_API_URL}/api/reports/generate`, {
-            period: "monthly", 
-            targetCentreId: centresList[0]?.id || 1, 
-            format: "preview",
-            reportIds: [29, 30, 31, 32] 
-        }, { headers });
-
-        const [...centreResults] = await Promise.all([...reportPromises, globalReportPromise]);
-        const globalRes = centreResults.pop(); // The last one is the global report
-
-        // 3. AGGREGATE THE RESULTS
-        let totalCash = 0, totalBank = 0, totalDigital = 0;
-        let combinedMonthlyTrend = { revenueCollected: Array(12).fill(0), grossProfit: Array(12).fill(0), operatingExpenses: Array(12).fill(0) };
-        let allPending = 0, allDelayed = 0, allCompleted = 0;
-        let allStaff = [];
-        let allTeams = [];
-
-        centreResults.forEach(res => {
-            const eData = res.data.data;
-            
-            // Aggregate Wallets
-            (eData.walletSummary || []).forEach(w => {
-                const bal = Number(w.closing_balance || 0);
-                const name = w.wallet_name.toLowerCase();
-                if (name.includes('cash')) totalCash += bal;
-                else if (name.includes('bank') || name.includes('hdfc') || name.includes('sbi')) totalBank += bal;
-                else totalDigital += bal;
-            });
-
-            // Aggregate Trends
-            if (eData.financials?.monthlyTrend) {
-                const mt = eData.financials.monthlyTrend;
-                for(let i=0; i<12; i++){
-                    combinedMonthlyTrend.revenueCollected[i] += (mt.revenueCollected[i] || 0);
-                    combinedMonthlyTrend.grossProfit[i] += (mt.grossProfit[i] || 0);
-                    combinedMonthlyTrend.operatingExpenses[i] += (mt.operatingExpenses[i] || 0);
-                }
-            }
-
-            // Aggregate Services
-            allPending += (eData.pendingServices?.length || 0);
-            allDelayed += (eData.pendingServices?.filter(s => s.days_pending > 5).length || 0);
-            allCompleted += (eData.completedServicesReport?.length || 0);
-
-            // Aggregate Arrays
-            allStaff.push(...(eData.performanceReport || []));
-            allTeams.push(...(eData.teamPerformance || []));
-        });
-
-        // Parse Global Data
-        const gData = globalRes.data.data;
-        const revCentres = [...(gData.revenueByCentre?.summary || [])].sort((a,b) => b.total_revenue - a.total_revenue);
-        const profCentres = [...(gData.profitByCentre?.summary || [])].sort((a,b) => b.net_profit - a.net_profit);
-
-        // 4. Update State
-        setDashboardData({
-          centres: centresList,
-          staff: new Array(qData.attendanceTotal || 0).fill({ role: 'staff' }), 
-          customers: 0, 
-          services: {
-              completedToday: qData.servicesCount || 0,
-              pending: allPending,
-              delayed: allDelayed,
-              completed: allCompleted
-          },
-          revenue: {
-              today: qData.collection || 0,
-              monthly: revCentres.reduce((acc, c) => acc + c.total_revenue, 0),
-              profit: profCentres.reduce((acc, c) => acc + c.net_profit, 0),
-              pending: qData.pendingAmount || 0,
-              pendingCustomers: 0,
-              avgRating: 4.8, 
-              totalReviews: 0
-          },
-          wallets: { cash: totalCash, bank: totalBank, digital: totalDigital, total: totalCash + totalBank + totalDigital },
-          monthlyTrend: combinedMonthlyTrend, 
-          activities: [], 
-          notifications: [], 
-          healthScores: {}, 
-          topCentres: {
-              revenue: { name: revCentres[0]?.centre_name || 'N/A', value: revCentres[0]?.total_revenue || 0 },
-              profit: { name: profCentres[0]?.centre_name || 'N/A', value: profCentres[0]?.net_profit || 0 },
-              rating: { name: 'N/A', value: 0 },
-              collection: { name: 'N/A', value: 0 }
-          },
-          worstCentres: {
-              revenue: { name: revCentres[revCentres.length-1]?.centre_name || 'N/A', value: revCentres[revCentres.length-1]?.total_revenue || 0 },
-              pending: { name: 'N/A', value: 0 },
-              delayed: { name: 'N/A', value: 0 },
-              complaints: { name: 'N/A', value: 0 }
-          },
-          topStaff: allStaff.sort((a,b) => b.gross_profit - a.gross_profit).map(s => ({
-              name: s.staff_name, revenue: s.gross_profit, applications: s.total_services, rating: s.avg_rating || 0
-          })),
-          topTeams: allTeams.sort((a,b) => b.total_services - a.total_services).map(t => ({
-              name: t.team_name, revenue: t.total_services, profit: t.avg_tat_hours, expenses: 0 
-          }))
-        });
-
+        setDashboard(response.data);
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
+        console.error("Error fetching dashboard:", err);
         toast.error("Failed to load dashboard data.", { position: "top-right" });
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
+    fetchDashboard();
   }, []);
-
-  // Helper to get health color and icon
-  const getHealthStatus = (health) => {
-    const map = {
-      excellent: { color: "green", icon: "🟢", label: "Excellent" },
-      good: { color: "green", icon: "🟢", label: "Good" },
-      attention: { color: "yellow", icon: "🟡", label: "Attention" },
-      critical: { color: "red", icon: "🔴", label: "Critical" },
-    };
-    return map[health] || map.good;
-  };
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
-  };
-
-  
-  // Simple bar chart for revenue trend
-  const RevenueChart = () => {
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    
-    // ✅ FIX: Extract trend safely from dashboardData
-    const trend = dashboardData?.monthlyTrend || {};
-    const data = {
-      revenue: trend.revenueCollected || [0,0,0,0,0,0,0,0,0,0,0,0],
-      profit: trend.grossProfit || [0,0,0,0,0,0,0,0,0,0,0,0],
-      expenses: trend.operatingExpenses || [0,0,0,0,0,0,0,0,0,0,0,0],
-    };
-    
-    const selected = data[revenueView] || data.revenue;
-    const max = Math.max(...selected, 1); // '1' prevents division by zero if all values are 0
-
-    return (
-      <div className="w-full h-64 flex items-end space-x-2">
-        {selected.map((value, idx) => (
-          <div key={idx} className="flex-1 flex flex-col items-center group relative">
-            {/* Hover Tooltip */}
-            <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded pointer-events-none transition-opacity whitespace-nowrap z-10">
-                {formatCurrency(value)}
-            </div>
-            {/* Dynamic Bar */}
-            <div
-              className={`w-full rounded-t transition-all duration-500 ${
-                revenueView === 'profit' ? 'bg-green-500' : 
-                revenueView === 'expenses' ? 'bg-red-500' : 
-                'bg-blue-500'
-              }`}
-              style={{ height: `${(value / max) * 100}%`, minHeight: '4px' }}
-            ></div>
-            <span className="text-xs text-gray-600 mt-1">{months[idx]}</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // Map placeholder - SVG of Kerala with markers (simplified)
-  const MapView = () => {
-    // In real implementation, use Leaflet or Google Maps
-    return (
-      <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
-        <svg viewBox="0 0 200 200" className="w-full h-full">
-          <path d="M50,50 L150,50 L180,120 L120,180 L40,160 Z" fill="#e2e8f0" stroke="#94a3b8" />
-          {/* Markers for centres */}
-          {dashboardData.centres.map((centre) => {
-            const health = getHealthStatus(centre.health);
-            const color = health.color === "green" ? "#22c55e" : health.color === "yellow" ? "#eab308" : "#ef4444";
-            // Random positions for demo
-            const x = 40 + (centre.id * 30) % 140;
-            const y = 40 + (centre.id * 20) % 120;
-            return (
-              <circle key={centre.id} cx={x} cy={y} r="6" fill={color} stroke="white" strokeWidth="2" />
-            );
-          })}
-        </svg>
-        <div className="absolute bottom-2 left-2 text-xs text-gray-600">Kerala Map</div>
-      </div>
-    );
-  };
 
   if (loading) {
     return (
@@ -248,82 +59,159 @@ const SuperadminDashboard = () => {
     );
   }
 
-  // Destructure data
+  const { executive = {}, finance = {}, operations = {}, leaderboards = {} } = dashboard || {};
+
+  // --- Executive ---
+  const { stats = {}, health = {}, alerts = [], insights = [] } = executive;
+
+  // --- Finance ---
+  const { financials = {}, wallets = {} } = finance;
+  const chartData = financials.charts || {};
+  const revenueChartData = chartData[revenueView] || [];
+
+  // --- Operations ---
+  const { customers = {}, staff = {}, teams = {}, activity = {} } = operations;
+
+  // --- Leaderboards ---
+  const { centres = {} } = leaderboards;
+  const centreList = centres.fullList || [];
+  const best = centres.best || {};
+  const worst = centres.worst || {};
+
+  // Direct access to pre‑computed fields
   const {
-    centres,
-    staff,
-    customers,
-    services,
-    revenue,
-    wallets,
-    activities,
-    notifications,
-    healthScores,
-    topCentres,
-    worstCentres,
-    topStaff,
-    topTeams,
-  } = dashboardData;
+    totalCentres,
+    totalStaff,
+    totalCustomers,
+    customerGrowth,
+    revenueGrowthPercent,
+    newCentresThisMonth,
+    todayRevenue,
+    todayServices,
+    pendingServices,
+    delayedServices,
+    inProgressServices,
+    admins,
+    staffCount
+  } = stats;
 
-  // Compute summary stats
-  const totalCentres = centres?.length || 0;
-  const totalStaff = staff?.length || 0;
-  const admins = staff?.filter(s => s.role === "admin")?.length || 0;
-  const staffCount = staff?.filter(s => s.role === "staff" || s.role === "supervisor")?.length || 0;
-  const totalCustomers = customers || 0;
+  const {
+    revenue: monthlyRevenue,
+    profit: netProfit,
+    expenses: monthlyExpenses
+  } = financials.totals || {};
 
-  // fallback numbers to 0
-  const servicesToday = services?.completedToday || 0;
-  const revenueToday = revenue?.today || 0;
-  const monthlyRevenue = revenue?.monthly || 0;
-  const netProfit = revenue?.profit || 0;
-  const pendingPayments = revenue?.pending || 0;
-  const pendingCustomers = revenue?.pendingCustomers || 0;
-  const avgRating = revenue?.avgRating || 0;
-  const totalReviews = revenue?.totalReviews || 0;
-  const pendingServices = services?.pending || 0;
-  const completedToday = services?.completed || 0;
-  const delayedServices = services?.delayed || 0;
-  const applicationsInProgress = services?.inProgress || 0;
-  const walletCash = wallets?.cash || 0;
-  const walletBank = wallets?.bank || 0;
-  const walletDigital = wallets?.digital || 0;
-  const walletTotal = wallets?.total || 0;
+  const {
+    cash: walletCash,
+    bank: walletBank,
+    digital: walletDigital,
+    total: walletTotal
+  } = wallets.summary || {};
+
+  const {
+    averageRating: avgRating,
+    totalReviews
+  } = customers.summary || {};
+
+  const topStaffList = staff.topPerformers || [];
+  const topTeamsList = teams.topTeams || [];
+
+  const timeline = activity.timeline || [];
+
+  // Notifications are alerts directly
+  const notifications = alerts;
+
+  // Activities – stable keys
+  const activities = timeline.map(item => ({
+    id: item.id || item.referenceId || `${item.type}-${item.createdAt}`,
+    action: `${item.type}: ${item.title}`,
+    time: new Date(item.createdAt).toLocaleString()
+  }));
+
+  // Revenue chart component – now uses pre‑aggregated chart data
+  const RevenueChart = () => {
+    if (!revenueChartData || revenueChartData.length === 0) {
+      return <div className="text-gray-500 text-sm">No data available</div>;
+    }
+    const max = Math.max(...revenueChartData.map(d => d.value), 1);
+
+    return (
+      <div className="w-full h-64 flex items-end space-x-2">
+        {revenueChartData.map((item, idx) => (
+          <div key={item.label || idx} className="flex-1 flex flex-col items-center group relative">
+            <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded pointer-events-none transition-opacity whitespace-nowrap z-10">
+              {formatCurrency(item.value)}
+            </div>
+            <div
+              className={`w-full rounded-t transition-all duration-500 ${
+                revenueView === 'profit' ? 'bg-green-500' :
+                revenueView === 'expenses' ? 'bg-red-500' :
+                'bg-blue-500'
+              }`}
+              style={{ height: `${(item.value / max) * 100}%`, minHeight: '4px' }}
+            ></div>
+            <span className="text-xs text-gray-600 mt-1">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Map view – unchanged, but uses centreList from backend
+  const MapView = () => {
+    return (
+      <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <path d="M50,50 L150,50 L180,120 L120,180 L40,160 Z" fill="#e2e8f0" stroke="#94a3b8" />
+          {centreList.map((centre) => {
+            const status = centre.healthStatus || { color: "gray" };
+            const color = status.color === "green" ? "#22c55e" : status.color === "yellow" ? "#eab308" : "#ef4444";
+            const x = 40 + (centre.id * 30) % 140;
+            const y = 40 + (centre.id * 20) % 120;
+            return (
+              <circle key={centre.id} cx={x} cy={y} r="6" fill={color} stroke="white" strokeWidth="2" />
+            );
+          })}
+        </svg>
+        <div className="absolute bottom-2 left-2 text-xs text-gray-600">Kerala Map</div>
+      </div>
+    );
+  };
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-8">
       <h1 className="text-2xl font-bold text-gray-800">Superadmin Dashboard</h1>
 
-      {/* Section 1: Global KPI Cards */}
+      {/* Global KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 col-span-1">
           <div className="text-sm text-blue-800 font-medium">🌍 Total Centres</div>
           <div className="text-2xl font-bold text-blue-900">{totalCentres}</div>
-          <div className="text-xs text-blue-600">+2 this month</div>
+          <div className="text-xs text-blue-600">+{newCentresThisMonth ?? 0} this month</div>
         </div>
         <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 col-span-1">
           <div className="text-sm text-purple-800 font-medium">👥 Total Staff</div>
           <div className="text-2xl font-bold text-purple-900">{totalStaff}</div>
-          <div className="text-xs text-purple-600">{admins} Admins, {staffCount} Staff</div>
+          <div className="text-xs text-purple-600">{admins ?? 0} Admins, {staffCount ?? 0} Staff</div>
         </div>
         <div className="bg-green-50 p-4 rounded-xl border border-green-100 col-span-1">
           <div className="text-sm text-green-800 font-medium">👨‍👩‍👧 Total Customers</div>
-          <div className="text-2xl font-bold text-green-900">{totalCustomers.toLocaleString()}</div>
-          <div className="text-xs text-green-600">+824 this month</div>
+          <div className="text-2xl font-bold text-green-900">{totalCustomers?.toLocaleString()}</div>
+          <div className="text-xs text-green-600">+{customerGrowth ?? 0} this month</div>
         </div>
         <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 col-span-1">
           <div className="text-sm text-indigo-800 font-medium">📑 Services Completed Today</div>
-          <div className="text-2xl font-bold text-indigo-900">{servicesToday}</div>
+          <div className="text-2xl font-bold text-indigo-900">{todayServices ?? 0}</div>
           <div className="text-xs text-indigo-600">Across all centres</div>
         </div>
         <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-1">
           <div className="text-sm text-yellow-800 font-medium">💰 Today's Revenue</div>
-          <div className="text-2xl font-bold text-yellow-900">{formatCurrency(revenueToday)}</div>
+          <div className="text-2xl font-bold text-yellow-900">{formatCurrency(todayRevenue)}</div>
         </div>
         <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 col-span-1">
           <div className="text-sm text-orange-800 font-medium">📈 Monthly Revenue</div>
           <div className="text-2xl font-bold text-orange-900">{formatCurrency(monthlyRevenue)}</div>
-          <div className="text-xs text-orange-600">↑ 18%</div>
+          <div className="text-xs text-orange-600">↑{revenueGrowthPercent ?? 0}%</div>
         </div>
         <div className="bg-red-50 p-4 rounded-xl border border-red-100 col-span-1">
           <div className="text-sm text-red-800 font-medium">💵 Net Profit</div>
@@ -331,17 +219,17 @@ const SuperadminDashboard = () => {
         </div>
         <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 col-span-1">
           <div className="text-sm text-pink-800 font-medium">💳 Pending Payments</div>
-          <div className="text-2xl font-bold text-pink-900">{formatCurrency(pendingPayments)}</div>
-          <div className="text-xs text-pink-600">{pendingCustomers} Customers</div>
+          <div className="text-2xl font-bold text-pink-900">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
+          <div className="text-xs text-pink-600">{health?.metrics?.pendingCustomers ?? 0} Customers</div>
         </div>
         <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 col-span-2 md:col-span-1">
           <div className="text-sm text-teal-800 font-medium">⭐ Average Rating</div>
           <div className="text-2xl font-bold text-teal-900">{avgRating}</div>
-          <div className="text-xs text-teal-600">{totalReviews.toLocaleString()} Reviews</div>
+          <div className="text-xs text-teal-600">{totalReviews?.toLocaleString()} Reviews</div>
         </div>
       </div>
 
-      {/* Section 2: Revenue Analytics + Centre Performance (side by side) */}
+      {/* Revenue Analytics + Centre Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-4 rounded-xl shadow-md border border-gray-200">
           <div className="flex justify-between items-center mb-4">
@@ -385,15 +273,15 @@ const SuperadminDashboard = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {centres.slice(0, 5).map((centre, idx) => (
+                {centreList.slice(0, 5).map((centre, idx) => (
                   <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer">
                     <td className="px-3 py-2 whitespace-nowrap">
                       {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
                     </td>
                     <td className="px-3 py-2 font-medium">{centre.name}</td>
-                    <td className="px-3 py-2">{formatCurrency(centre.revenue || 0)}</td>
-                    <td className="px-3 py-2">{formatCurrency(centre.profit || 0)}</td>
-                    <td className="px-3 py-2">{centre.services || 0}</td>
+                    <td className="px-3 py-2">{formatCurrency(centre.revenue)}</td>
+                    <td className="px-3 py-2">{formatCurrency(centre.profit)}</td>
+                    <td className="px-3 py-2">{centre.servicesCompleted || 0}</td>
                     <td className="px-3 py-2">{centre.rating || 0}</td>
                   </tr>
                 ))}
@@ -403,50 +291,62 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Section 4: Centre Health */}
+      {/* Centre Health */}
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {centres.map((centre) => {
-            const health = getHealthStatus(centre.health);
-            const score = healthScores[centre.name]?.score || 0;
+          {centreList.map((centre) => {
+            const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
             return (
               <div key={centre.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
                   <div className="font-medium">{centre.name}</div>
-                  <div className="text-sm text-gray-600">{health.icon} {health.label}</div>
+                  <div className="text-sm text-gray-600">{status.icon} {status.label}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold">{score}</div>
-                  <div className="text-xs text-gray-500">/100</div>
+                  <div className="text-lg font-bold">{centre.rating || 0}</div>
+                  <div className="text-xs text-gray-500">Rating</div>
                 </div>
               </div>
             );
           })}
         </div>
+        {health?.overallScore !== undefined && (
+          <div className="mt-4 text-sm text-gray-600">
+            Overall Health Score: <span className="font-bold">{health.overallScore}/100</span>
+          </div>
+        )}
       </div>
 
-      {/* Section 5: Live Operations */}
+      {/* Live Operations */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-          <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
-          <div className="text-2xl font-bold text-red-900">{pendingServices}</div>
-        </div>
-        <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-          <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
-          <div className="text-2xl font-bold text-green-900">{completedToday}</div>
-        </div>
-        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-          <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
-          <div className="text-2xl font-bold text-orange-900">{delayedServices}</div>
-        </div>
-        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-          <div className="text-sm text-blue-800 font-medium">📋 Applications in Progress</div>
-          <div className="text-2xl font-bold text-blue-900">{applicationsInProgress}</div>
-        </div>
+        {pendingServices !== undefined && (
+          <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+            <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
+            <div className="text-2xl font-bold text-red-900">{pendingServices}</div>
+          </div>
+        )}
+        {todayServices !== undefined && (
+          <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+            <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
+            <div className="text-2xl font-bold text-green-900">{todayServices}</div>
+          </div>
+        )}
+        {delayedServices !== undefined && (
+          <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+            <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
+            <div className="text-2xl font-bold text-orange-900">{delayedServices}</div>
+          </div>
+        )}
+        {inProgressServices !== undefined && (
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <div className="text-sm text-blue-800 font-medium">📋 Applications in Progress</div>
+            <div className="text-2xl font-bold text-blue-900">{inProgressServices}</div>
+          </div>
+        )}
       </div>
 
-      {/* Section 6: Financial Health */}
+      {/* Financial Health */}
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -469,30 +369,25 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Section 7 & 8: Best & Worst Performing Centres */}
+      {/* Best & Worst Centres */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-green-50 p-3 rounded-lg">
               <div className="text-xs text-green-700">Best Revenue</div>
-              <div className="font-medium">{topCentres?.revenue?.name || "N/A"}</div>
-              <div className="text-sm">{topCentres?.revenue?.value ? formatCurrency(topCentres.revenue.value) : ""}</div>
+              <div className="font-medium">{best.revenue?.name || "N/A"}</div>
+              <div className="text-sm">{formatCurrency(best.revenue?.value)}</div>
             </div>
             <div className="bg-blue-50 p-3 rounded-lg">
               <div className="text-xs text-blue-700">Best Profit</div>
-              <div className="font-medium">{topCentres?.profit?.name || "N/A"}</div>
-              <div className="text-sm">{topCentres?.profit?.value ? formatCurrency(topCentres.profit.value) : ""}</div>
+              <div className="font-medium">{best.profit?.name || "N/A"}</div>
+              <div className="text-sm">{formatCurrency(best.profit?.value)}</div>
             </div>
             <div className="bg-yellow-50 p-3 rounded-lg">
               <div className="text-xs text-yellow-700">Best Rating</div>
-              <div className="font-medium">{topCentres?.rating?.name || "N/A"}</div>
-              <div className="text-sm">{topCentres?.rating?.value || ""}</div>
-            </div>
-            <div className="bg-purple-50 p-3 rounded-lg">
-              <div className="text-xs text-purple-700">Best Collection %</div>
-              <div className="font-medium">{topCentres?.collection?.name || "N/A"}</div>
-              <div className="text-sm">{topCentres?.collection?.value ? `${topCentres.collection.value}%` : ""}</div>
+              <div className="font-medium">{best.rating?.name || "N/A"}</div>
+              <div className="text-sm">{best.rating?.value || 0}</div>
             </div>
           </div>
         </div>
@@ -502,29 +397,29 @@ const SuperadminDashboard = () => {
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-red-50 p-3 rounded-lg">
               <div className="text-xs text-red-700">Lowest Revenue</div>
-              <div className="font-medium">{worstCentres?.revenue?.name || "N/A"}</div>
-              <div className="text-sm">{worstCentres?.revenue?.value ? formatCurrency(worstCentres.revenue.value) : ""}</div>
+              <div className="font-medium">{worst.revenue?.name || "N/A"}</div>
+              <div className="text-sm">{formatCurrency(worst.revenue?.value)}</div>
             </div>
             <div className="bg-red-50 p-3 rounded-lg">
               <div className="text-xs text-red-700">Highest Pending</div>
-              <div className="font-medium">{worstCentres?.pending?.name || "N/A"}</div>
-              <div className="text-sm">{worstCentres?.pending?.value ? formatCurrency(worstCentres.pending.value) : ""}</div>
+              <div className="font-medium">{worst.pending?.name || "N/A"}</div>
+              <div className="text-sm">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
             </div>
             <div className="bg-red-50 p-3 rounded-lg">
               <div className="text-xs text-red-700">Most Delayed</div>
-              <div className="font-medium">{worstCentres?.delayed?.name || "N/A"}</div>
-              <div className="text-sm">{worstCentres?.delayed?.value ? `${worstCentres.delayed.value} services` : ""}</div>
+              <div className="font-medium">{worst.delayed?.name || "N/A"}</div>
+              <div className="text-sm">{worst.delayed?.value ?? "N/A"}</div>
             </div>
             <div className="bg-red-50 p-3 rounded-lg">
               <div className="text-xs text-red-700">Most Complaints</div>
-              <div className="font-medium">{worstCentres?.complaints?.name || "N/A"}</div>
-              <div className="text-sm">{worstCentres?.complaints?.value ? `${worstCentres.complaints.value} complaints` : ""}</div>
+              <div className="font-medium">{worst.complaints?.name || "N/A"}</div>
+              <div className="text-sm">{worst.complaints?.value ?? "N/A"}</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Section 9 & 10: Staff & Teams */}
+      {/* Top Staff & Teams */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">👨‍💼 Top Staff</h2>
@@ -539,11 +434,11 @@ const SuperadminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {topStaff.map((staff, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
+                {topStaffList.map((staff, idx) => (
+                  <tr key={staff.id || idx} className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-medium">{staff.name}</td>
-                    <td className="px-3 py-2">{formatCurrency(staff.revenue || 0)}</td>
-                    <td className="px-3 py-2">{staff.applications || 0}</td>
+                    <td className="px-3 py-2">{formatCurrency(staff.revenue)}</td>
+                    <td className="px-3 py-2">{staff.servicesCompleted || 0}</td>
                     <td className="px-3 py-2">{staff.rating || 0}</td>
                   </tr>
                 ))}
@@ -565,10 +460,10 @@ const SuperadminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {topTeams.map((team, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
+                {topTeamsList.map((team, idx) => (
+                  <tr key={team.id || idx} className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-medium">{team.name}</td>
-                    <td className="px-3 py-2">{formatCurrency(team.revenue || 0)}</td>
+                    <td className="px-3 py-2">{formatCurrency(team.revenue)}</td>
                     <td className="px-3 py-2">{formatCurrency(team.profit || 0)}</td>
                     <td className="px-3 py-2">{formatCurrency(team.expenses || 0)}</td>
                   </tr>
@@ -579,39 +474,47 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Section 11: Notifications */}
+      {/* Notifications */}
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">🔔 Notifications</h2>
         <div className="space-y-2">
-          {notifications.map((notif) => (
-            <div key={notif.id} className={`p-3 rounded-lg flex items-center ${notif.type === "critical" ? "bg-red-50" : notif.type === "warning" ? "bg-yellow-50" : "bg-blue-50"}`}>
-              <span className="mr-2">{notif.type === "critical" ? "🔴" : notif.type === "warning" ? "🟠" : "🔵"}</span>
-              <span>{notif.message}</span>
-            </div>
-          ))}
+          {notifications.length > 0 ? (
+            notifications.map((notif) => (
+              <div key={notif.id} className={`p-3 rounded-lg flex items-center ${notif.priority === "critical" ? "bg-red-50" : notif.priority === "warning" ? "bg-yellow-50" : "bg-blue-50"}`}>
+                <span className="mr-2">{notif.priority === "critical" ? "🔴" : notif.priority === "warning" ? "🟠" : "🔵"}</span>
+                <span>{notif.message}</span>
+              </div>
+            ))
+          ) : (
+            <div className="text-gray-500 text-sm">No notifications</div>
+          )}
         </div>
       </div>
 
-      {/* Section 12: Recent Activities */}
+      {/* Recent Activities */}
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">🕒 Recent Activities</h2>
         <div className="space-y-3">
-          {activities.map((activity) => (
-            <div key={activity.id} className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <span>{activity.action}</span>
-              <span className="text-sm text-gray-500">{activity.time}</span>
-            </div>
-          ))}
+          {activities.length > 0 ? (
+            activities.map((activity) => (
+              <div key={activity.id} className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <span>{activity.action}</span>
+                <span className="text-sm text-gray-500">{activity.time}</span>
+              </div>
+            ))
+          ) : (
+            <div className="text-gray-500 text-sm">No recent activities</div>
+          )}
         </div>
       </div>
 
-      {/* Section 13: Map View */}
+      {/* Map View */}
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Locations</h2>
         <MapView />
       </div>
 
-      {/* Section 14: Quick Actions */}
+      {/* Quick Actions */}
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
@@ -625,18 +528,17 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Section 15: AI Insights (Future) */}
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-200">
-        <h2 className="text-lg font-semibold text-indigo-800 mb-2">🤖 AI Insights</h2>
-        <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
-          <li>Revenue increased 18%.</li>
-          <li>Kolathoor profit dropped 11%.</li>
-          <li>VK Padi has the highest customer satisfaction.</li>
-          <li>Pukayur recovered ₹72,000 pending payments this week.</li>
-          <li>Attendance dropped in 3 centres.</li>
-          <li>2 centres haven't completed daily closing.</li>
-        </ul>
-      </div>
+      {/* AI Insights */}
+      {insights.length > 0 && (
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-200">
+          <h2 className="text-lg font-semibold text-indigo-800 mb-2">🤖 AI Insights</h2>
+          <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
+            {insights.map((insight, idx) => (
+              <li key={idx}>{insight}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

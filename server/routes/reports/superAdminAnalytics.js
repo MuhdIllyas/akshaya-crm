@@ -3,6 +3,9 @@ import express from "express";
 import jwt from "jsonwebtoken";
 // Import the unified engine
 import { getDashboardAnalytics } from "./analyticsService.js"; 
+import {
+    getSuperAdminDashboard
+} from "./superAdminAnalyticsService.js";
 
 const router = express.Router();
 
@@ -37,5 +40,39 @@ router.get("/centre/:centreId", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch centre analytics" });
   }
 });
+
+/**
+ * SuperAdmin Executive Dashboard
+ *
+ * GET /api/superadmin/dashboard
+ */
+
+router.get("/dashboard", async (req, res) => {
+
+    try {
+        const {
+            period = "monthly",
+            fromDate,
+            toDate,
+            modules
+        } = req.query;
+
+        const analytics = await getSuperAdminDashboard({
+            period,
+            fromDate,
+            toDate,
+            modules
+        });
+        res.json(analytics);
+    }
+    catch (err) {
+        console.error("SuperAdmin Dashboard:", err);
+        res.status(500).json({
+            error: "Failed to load dashboard"
+        });
+    }
+});
+
+export default router;
 
 export default router;
