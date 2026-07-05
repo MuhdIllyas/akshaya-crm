@@ -635,19 +635,27 @@ async function fetchRecentActivities(client) {
         ...walletsResult.rows
     ];
 
-    // Sort chronologically (newest first)
-    allActivities.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    // FIX 1: Filter out any corrupted rows where created_at is null
+    const validActivities = allActivities.filter(act => act.created_at != null);
 
-    // Slice to keep only the absolute 100 most recent events
-    const timeline = allActivities.slice(0, 100).map(act => ({
-        type: act.type,
-        title: act.title,
-        amount: parseFloat(act.amount) || 0,
-        centre: act.centre_name,
-        staff: act.staff_name,
-        createdAt: act.created_at.toISOString(),
-        referenceId: act.reference_id
-    }));
+    // FIX 2: Safely sort chronologically (newest first)
+    validActivities.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // FIX 3: Safely map to the timeline using defensive parsing
+    const timeline = validActivities.slice(0, 100).map(act => {
+        // Double-check the date is valid before calling toISOString()
+        const safeDate = act.created_at ? new Date(act.created_at) : new Date();
+        
+        return {
+            type: act.type,
+            title: act.title,
+            amount: parseFloat(act.amount) || 0,
+            centre: act.centre_name || 'Unknown',
+            staff: act.staff_name || 'System',
+            createdAt: safeDate.toISOString(),
+            referenceId: act.reference_id
+        };
+    });
 
     // Calculate Summary based on the pulled timeline
     const summary = {
