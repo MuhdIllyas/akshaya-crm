@@ -625,24 +625,71 @@ async function fetchRecentActivities(client) {
 
 async function fetchTeamAnalytics(client, dates) {
     const { startDate, endDate } = dates;
+    
     const query = `
+        WITH TeamRevenue AS (
+            SELECT 
+                t.id as team_id, 
+                t.name as team_name, 
+                c.name as centre_name,
+                COUNT(DISTINCT st.id) as members,
+                COUNT(se.id) as services_completed,
+                COALESCE(SUM(se.total_charges), 0) as revenue,
+                COALESCE(SUM(se.service_charges), 0) as gross_profit
+            FROM teams t
+            JOIN centres c ON c.id = t.centre_id
+            LEFT JOIN team_members tm ON tm.team_id = t.id AND tm.is_active = true
+            LEFT JOIN staff st ON st.id = tm.staff_id
+            LEFT JOIN service_entries se ON se.staff_id = st.id 
+                AND se.status = 'completed' 
+                AND se.created_at >= $1 AND se.created_at <= $2
+            GROUP BY t.id, t.name, c.name
+        ),
+        TeamExpenses AS (
+            SELECT 
+                team_id, 
+                COALESCE(SUM(amount), 0) as expenses
+            FROM expenses
+            WHERE status IN ('approved', 'auto_approved')
+                AND (is_reversal IS NULL OR is_reversal = FALSE)
+                AND expense_date >= $1 AND expense_date <= $2
+                AND team_id IS NOT NULL
+            GROUP BY team_id
+        )
         SELECT 
-            t.id, t.name as team_name, c.name as centre_name,
-            COUNT(DISTINCT st.id) as members, COUNT(se.id) as services_completed,
-            COALESCE(SUM(se.total_charges), 0) as revenue
-        FROM teams t
-        JOIN centres c ON c.id = t.centre_id
-        LEFT JOIN team_members tm ON tm.team_id = t.id AND tm.is_active = true
-        LEFT JOIN staff st ON st.id = tm.staff_id
-        LEFT JOIN service_entries se ON se.staff_id = st.id AND se.status = 'completed' AND se.created_at >= $1 AND se.created_at <= $2
-        GROUP BY t.id, t.name, c.name ORDER BY revenue DESC
+            tr.team_id as id, 
+            tr.team_name, 
+            tr.centre_name, 
+            tr.members,
+            tr.services_completed, 
+            tr.revenue, 
+            tr.gross_profit,
+            COALESCE(te.expenses, 0) as expenses,
+            (tr.gross_profit - COALESCE(te.expenses, 0)) as net_profit
+        FROM TeamRevenue tr
+        LEFT JOIN TeamExpenses te ON tr.team_id = te.team_id
+        ORDER BY net_profit DESC
     `;
+    
     const result = await client.query(query, [startDate, endDate]);
+    
     const formatted = result.rows.map(r => ({
-        id: r.id, name: r.team_name, centre: r.centre_name, members: parseInt(r.members, 10),
-        servicesCompleted: parseInt(r.services_completed, 10), revenue: parseFloat(r.revenue)
+        id: r.id, 
+        name: r.team_name, 
+        centre: r.centre_name, 
+        members: parseInt(r.members, 10),
+        servicesCompleted: parseInt(r.services_completed, 10), 
+        revenue: parseFloat(r.revenue),
+        grossProfit: parseFloat(r.gross_profit),
+        expenses: parseFloat(r.expenses),
+        profit: parseFloat(r.net_profit) // Maps perfectly to the frontend table now
     }));
-    return { topTeams: formatted.slice(0, 5), worstTeams: [...formatted].sort((a, b) => a.revenue - b.revenue).slice(0, 5), fullList: formatted };
+
+    return { 
+        topTeams: formatted.slice(0, 5), 
+        worstTeams: [...formatted].sort((a, b) => a.profit - b.profit).slice(0, 5), 
+        fullList: formatted 
+    };
 }
 
 async function fetchHealthAnalytics(client, dates) {
