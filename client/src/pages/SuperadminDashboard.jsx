@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import {
   BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis,
-  Tooltip, ResponsiveContainer, Cell, Legend
+  Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 
 // ==========================================
@@ -140,7 +140,7 @@ const StaffPerformanceChart = ({ staffData }) => {
 };
 
 // ==========================================
-// REVENUE CHART COMPONENT (NEW – using Recharts)
+// REVENUE CHART COMPONENT
 // ==========================================
 const RevenueChart = ({ data, view }) => {
   if (!data || data.length === 0) {
@@ -174,7 +174,6 @@ const RevenueChart = ({ data, view }) => {
     return null;
   };
 
-  // Determine colour based on view
   const getBarColor = () => {
     if (view === 'profit') return '#22c55e';
     if (view === 'expenses') return '#ef4444';
@@ -203,7 +202,7 @@ const RevenueChart = ({ data, view }) => {
           dataKey="value"
           fill={getBarColor()}
           radius={[4, 4, 0, 0]}
-          barSize={data.length > 6 ? 30 : Math.min(60, 80 / data.length)} // dynamic bar width
+          barSize={data.length > 6 ? 30 : Math.min(60, 80 / data.length)}
           animationDuration={800}
         >
           {data.map((entry, index) => (
@@ -326,7 +325,6 @@ const SuperadminDashboard = () => {
     time: new Date(item.createdAt).toLocaleString()
   }));
 
-  // MapView (unchanged)
   const MapView = () => {
     return (
       <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
@@ -348,366 +346,379 @@ const SuperadminDashboard = () => {
   };
 
   return (
-    <div className="bg-gray-50 min-h-screen p-6 space-y-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 tracking-tight">📊 Superadmin Dashboard</h1>
-          <div className="flex space-x-2">
-            <span className="px-4 py-2 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full shadow-sm">Last 12 months</span>
+    <div className="bg-gray-50 min-h-screen p-4 lg:p-8 space-y-8">
+      {/* Removed max-width constraint – now full width with padding */}
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-gray-800 tracking-tight">📊 Superadmin Dashboard</h1>
+        <div className="flex space-x-2">
+          <span className="px-4 py-2 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full shadow-sm">Last 12 months</span>
+        </div>
+      </div>
+
+      {/* Global KPI Cards – now 10 columns on large screens, taller and narrower */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-10 gap-4 mb-8">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-blue-800 font-medium">🌍 Centres</span>
+            <span className="text-xs text-blue-600 bg-blue-200 px-2 py-0.5 rounded-full">+{newCentresThisMonth ?? 0}</span>
+          </div>
+          <div className="text-3xl font-bold text-blue-900 mt-2">{totalCentres}</div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-5 rounded-2xl border border-purple-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-purple-800 font-medium">👥 Staff</span>
+            <span className="text-xs text-purple-600">{admins ?? 0} Admins</span>
+          </div>
+          <div className="text-3xl font-bold text-purple-900 mt-2">{totalStaff}</div>
+        </div>
+        <div className="bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-green-800 font-medium">👨‍👩‍👧 Customers</span>
+            <span className="text-xs text-green-600 bg-green-200 px-2 py-0.5 rounded-full">+{customerGrowth ?? 0}</span>
+          </div>
+          <div className="text-3xl font-bold text-green-900 mt-2">{totalCustomers?.toLocaleString()}</div>
+        </div>
+        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-5 rounded-2xl border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-indigo-800 font-medium">📑 Services Today</span>
+          </div>
+          <div className="text-3xl font-bold text-indigo-900 mt-2">{todayServices ?? 0}</div>
+        </div>
+        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-5 rounded-2xl border border-yellow-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-yellow-800 font-medium">💰 Today Revenue</span>
+          </div>
+          <div className="text-3xl font-bold text-yellow-900 mt-2">{formatCurrency(todayRevenue)}</div>
+        </div>
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-5 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-orange-800 font-medium">📈 Period Revenue</span>
+          </div>
+          <div className="text-3xl font-bold text-orange-900 mt-2">{formatCurrency(monthlyRevenue)}</div>
+          <div className="text-xs flex items-center mt-1">
+            {revenueGrowthPercent >= 0 ? (
+              <span className="text-green-600 font-semibold bg-green-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↑ {revenueGrowthPercent}%</span>
+            ) : (
+              <span className="text-red-600 font-semibold bg-red-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↓ {Math.abs(revenueGrowthPercent)}%</span>
+            )}
+            <span className="text-orange-600">vs last month</span>
           </div>
         </div>
+        <div className="bg-gradient-to-br from-red-50 to-red-100 p-5 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-red-800 font-medium">💵 Period Profit</span>
+          </div>
+          <div className="text-3xl font-bold text-red-900 mt-2">{formatCurrency(netProfit)}</div>
+        </div>
+        <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-5 rounded-2xl border border-pink-200 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-start">
+          <div className="flex items-center justify-between w-full">
+            <span className="text-sm text-pink-800 font-medium">💳 Pending Payments</span>
+          </div>
+          <div className="text-3xl font-bold text-pink-900 mt-2">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
+          <div className="text-xs text-pink-600 mt-1">{health?.metrics?.pendingCustomers ?? 0} Customers</div>
+        </div>
+        {/* Extra card to fill grid if needed – but we have 8 items, grid will handle */}
+      </div>
 
-        {/* Global KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-blue-800 font-medium">🌍 Centres</div>
-              <div className="text-xs text-blue-600 bg-blue-200 px-2 py-0.5 rounded-full">+{newCentresThisMonth ?? 0}</div>
-            </div>
-            <div className="text-2xl font-bold text-blue-900 mt-1">{totalCentres}</div>
-          </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-2xl border border-purple-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-purple-800 font-medium">👥 Staff</div>
-              <div className="text-xs text-purple-600">{admins ?? 0} Admins</div>
-            </div>
-            <div className="text-2xl font-bold text-purple-900 mt-1">{totalStaff}</div>
-          </div>
-          <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-green-800 font-medium">👨‍👩‍👧 Customers</div>
-              <div className="text-xs text-green-600 bg-green-200 px-2 py-0.5 rounded-full">+{customerGrowth ?? 0}</div>
-            </div>
-            <div className="text-2xl font-bold text-green-900 mt-1">{totalCustomers?.toLocaleString()}</div>
-          </div>
-          <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-2xl border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="text-sm text-indigo-800 font-medium">📑 Services Today</div>
-            <div className="text-2xl font-bold text-indigo-900 mt-1">{todayServices ?? 0}</div>
-          </div>
-          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-2xl border border-yellow-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="text-sm text-yellow-800 font-medium">💰 Today Revenue</div>
-            <div className="text-2xl font-bold text-yellow-900 mt-1">{formatCurrency(todayRevenue)}</div>
-          </div>
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="text-sm text-orange-800 font-medium">📈 Period Revenue</div>
-            <div className="text-2xl font-bold text-orange-900 mt-1">{formatCurrency(monthlyRevenue)}</div>
-            <div className="text-xs flex items-center mt-1">
-              {revenueGrowthPercent >= 0 ? (
-                <span className="text-green-600 font-semibold bg-green-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↑ {revenueGrowthPercent}%</span>
-              ) : (
-                <span className="text-red-600 font-semibold bg-red-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↓ {Math.abs(revenueGrowthPercent)}%</span>
-              )}
-              <span className="text-orange-600">vs last month</span>
+      {/* Rest of the dashboard remains the same – just adjust max width removed */}
+
+      {/* Revenue Analytics + Centre Performance */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-semibold text-gray-700">📈 Revenue Analytics</h2>
+            <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setRevenueView("revenue")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  revenueView === "revenue" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Revenue
+              </button>
+              <button
+                onClick={() => setRevenueView("profit")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  revenueView === "profit" ? "bg-white text-green-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Profit
+              </button>
+              <button
+                onClick={() => setRevenueView("expenses")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  revenueView === "expenses" ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Expenses
+              </button>
             </div>
           </div>
-          <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="text-sm text-red-800 font-medium">💵 Period Profit</div>
-            <div className="text-2xl font-bold text-red-900 mt-1">{formatCurrency(netProfit)}</div>
-          </div>
-          <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-4 rounded-2xl border border-pink-200 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="text-sm text-pink-800 font-medium">💳 Pending Payments</div>
-            <div className="text-2xl font-bold text-pink-900 mt-1">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
-            <div className="text-xs text-pink-600">{health?.metrics?.pendingCustomers ?? 0} Customers</div>
-          </div>
+          <RevenueChart data={revenueChartData} view={revenueView} />
         </div>
 
-        {/* Revenue Analytics + Centre Performance */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-gray-700">📈 Revenue Analytics</h2>
-              <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
-                <button
-                  onClick={() => setRevenueView("revenue")}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                    revenueView === "revenue" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Revenue
-                </button>
-                <button
-                  onClick={() => setRevenueView("profit")}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                    revenueView === "profit" ? "bg-white text-green-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Profit
-                </button>
-                <button
-                  onClick={() => setRevenueView("expenses")}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                    revenueView === "expenses" ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Expenses
-                </button>
-              </div>
-            </div>
-            <RevenueChart data={revenueChartData} view={revenueView} />
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-            <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Centre Leaderboard</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {centreList.slice(0, 5).map((centre, idx) => (
-                    <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer transition-colors">
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
-                      </td>
-                      <td className="px-3 py-2 font-medium text-gray-800">{centre.name}</td>
-                      <td className="px-3 py-2 text-gray-600">{formatCurrency(centre.profit)}</td>
-                      <td className="px-3 py-2 text-gray-600">{centre.rating || 0}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Centre Health */}
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {centreList.map((centre) => {
-              const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
-              return (
-                <div key={centre.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-                  <div>
-                    <div className="font-medium text-gray-800">{centre.name}</div>
-                    <div className="text-sm mt-1">{status.icon} <span className="font-medium text-gray-700">{status.label}</span></div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-gray-800">{centre.rating || 0}</div>
-                    <div className="text-xs text-gray-500">Rating</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {health?.overallScore !== undefined && (
-            <div className="mt-4 text-sm text-gray-600 border-t pt-3 flex items-center justify-between">
-              <span>Overall Network Health Score</span>
-              <span className="font-bold text-lg text-gray-800 ml-2">{health.overallScore}/100</span>
-            </div>
-          )}
-        </div>
-
-        {/* Live Operations */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {pendingServices !== undefined && (
-            <div className="bg-red-50 p-4 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all">
-              <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
-              <div className="text-2xl font-bold text-red-900 mt-1">{pendingServices}</div>
-            </div>
-          )}
-          {todayServices !== undefined && (
-            <div className="bg-green-50 p-4 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all">
-              <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
-              <div className="text-2xl font-bold text-green-900 mt-1">{todayServices}</div>
-            </div>
-          )}
-          {delayedServices !== undefined && (
-            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all">
-              <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
-              <div className="text-2xl font-bold text-orange-900 mt-1">{delayedServices}</div>
-            </div>
-          )}
-          {inProgressServices !== undefined && (
-            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all">
-              <div className="text-sm text-blue-800 font-medium">📋 In Progress</div>
-              <div className="text-2xl font-bold text-blue-900 mt-1">{inProgressServices}</div>
-            </div>
-          )}
-        </div>
-
-        {/* Financial Health */}
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-              <div className="text-sm text-gray-600 mb-1">Cash Wallet</div>
-              <div className="text-xl font-bold text-gray-800">{formatCurrency(walletCash)}</div>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-              <div className="text-sm text-gray-600 mb-1">Bank</div>
-              <div className="text-xl font-bold text-gray-800">{formatCurrency(walletBank)}</div>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-              <div className="text-sm text-gray-600 mb-1">Digital</div>
-              <div className="text-xl font-bold text-gray-800">{formatCurrency(walletDigital)}</div>
-            </div>
-            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 hover:bg-indigo-100 transition-colors">
-              <div className="text-sm text-indigo-800 font-semibold mb-1">Total Wallets</div>
-              <div className="text-2xl font-bold text-indigo-900">{formatCurrency(walletTotal)}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Best & Worst Centres */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-            <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-                <div className="text-xs text-green-700 font-medium mb-1">Best Revenue</div>
-                <div className="font-bold text-gray-800 truncate">{best.revenue?.name || "N/A"}</div>
-                <div className="text-lg text-green-700">{formatCurrency(best.revenue?.value)}</div>
-              </div>
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <div className="text-xs text-blue-700 font-medium mb-1">Best Profit</div>
-                <div className="font-bold text-gray-800 truncate">{best.profit?.name || "N/A"}</div>
-                <div className="text-lg text-blue-700">{formatCurrency(best.profit?.value)}</div>
-              </div>
-              <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-2">
-                <div className="text-xs text-yellow-700 font-medium mb-1">Best Rating</div>
-                <div className="flex justify-between items-end">
-                  <div className="font-bold text-gray-800">{best.rating?.name || "N/A"}</div>
-                  <div className="text-lg text-yellow-700 font-bold">{best.rating?.value || 0} ⭐</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-            <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-                <div className="text-xs text-red-700 font-medium mb-1">Lowest Profit</div>
-                <div className="font-bold text-gray-800 truncate">{worst.revenue?.name || "N/A"}</div>
-                <div className="text-lg text-red-700">{formatCurrency(worst.revenue?.value)}</div>
-              </div>
-              <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-                <div className="text-xs text-red-700 font-medium mb-1">Highest Pending</div>
-                <div className="font-bold text-gray-800 truncate">{worst.pending?.name || "N/A"}</div>
-                <div className="text-lg text-red-700">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
-              </div>
-              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                <div className="text-xs text-orange-700 font-medium mb-1">Most Delayed</div>
-                <div className="font-bold text-gray-800 truncate">{worst.delayed?.name || "N/A"}</div>
-                <div className="text-lg text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
-              </div>
-              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                <div className="text-xs text-orange-700 font-medium mb-1">Most Complaints</div>
-                <div className="font-bold text-gray-800 truncate">{worst.complaints?.name || "N/A"}</div>
-                <div className="text-lg text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Top Staff & Teams */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <StaffPerformanceChart staffData={topStaffList} />
-
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-            <h2 className="text-lg font-semibold text-gray-700 mb-6">👥 Top Teams</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Profit</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expenses</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {topTeamsList.map((team, idx) => (
-                    <tr key={team.id || idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-3 py-4 whitespace-nowrap font-medium text-gray-900">{team.name}</td>
-                      <td className="px-3 py-4 whitespace-nowrap text-gray-600">{formatCurrency(team.revenue)}</td>
-                      <td className="px-3 py-4 whitespace-nowrap text-green-600 font-medium">{formatCurrency(team.profit || 0)}</td>
-                      <td className="px-3 py-4 whitespace-nowrap text-red-600">{formatCurrency(team.expenses || 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Notifications & Activity Feed */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-            <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-              <span className="mr-2">🔔</span> Action Required
-            </h2>
-            <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-              {notifications.length > 0 ? (
-                notifications.map((notif) => (
-                  <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
-                    notif.priority === "critical" ? "bg-red-50 border-red-500" :
-                    notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
-                  }`}>
-                    <div className="flex-1">
-                      <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
-                      <div className="text-gray-600 text-sm">{notif.message}</div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-            <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-              <span className="mr-2">🕒</span> Live Activity Feed
-            </h2>
-            <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-              {activities.length > 0 ? (
-                activities.map((activity) => (
-                  <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
-                    <span className="text-sm font-medium text-gray-800">{activity.action}</span>
-                    <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Map View */}
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
-          <MapView />
-        </div>
-
-        {/* Quick Actions */}
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
-          <div className="flex flex-wrap gap-3">
-            <button className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition shadow-md hover:shadow-lg flex items-center">
-              <span className="mr-1">➕</span> Create Centre
-            </button>
-            <button className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center">
-              <span className="mr-1">👤</span> Create Admin
-            </button>
-            <button className="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition shadow-md hover:shadow-lg flex items-center">
-              <span className="mr-1">📢</span> Broadcast
-            </button>
-            <button className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition shadow-md hover:shadow-lg flex items-center">
-              <span className="mr-1">📊</span> Global Report
-            </button>
-            <button className="px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition shadow-md hover:shadow-lg flex items-center">
-              <span className="mr-1">📤</span> Export Data
-            </button>
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Centre Leaderboard</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {centreList.slice(0, 5).map((centre, idx) => (
+                  <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer transition-colors">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
+                    </td>
+                    <td className="px-3 py-2 font-medium text-gray-800">{centre.name}</td>
+                    <td className="px-3 py-2 text-gray-600">{formatCurrency(centre.profit)}</td>
+                    <td className="px-3 py-2 text-gray-600">{centre.rating || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        </div>
+      </div>
+
+      {/* Centre Health */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {centreList.map((centre) => {
+            const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
+            return (
+              <div key={centre.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+                <div>
+                  <div className="font-medium text-gray-800">{centre.name}</div>
+                  <div className="text-sm mt-1">{status.icon} <span className="font-medium text-gray-700">{status.label}</span></div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-gray-800">{centre.rating || 0}</div>
+                  <div className="text-xs text-gray-500">Rating</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {health?.overallScore !== undefined && (
+          <div className="mt-4 text-sm text-gray-600 border-t pt-3 flex items-center justify-between">
+            <span>Overall Network Health Score</span>
+            <span className="font-bold text-lg text-gray-800 ml-2">{health.overallScore}/100</span>
+          </div>
+        )}
+      </div>
+
+      {/* Live Operations */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {pendingServices !== undefined && (
+          <div className="bg-red-50 p-4 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
+            <div className="text-2xl font-bold text-red-900 mt-1">{pendingServices}</div>
+          </div>
+        )}
+        {todayServices !== undefined && (
+          <div className="bg-green-50 p-4 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
+            <div className="text-2xl font-bold text-green-900 mt-1">{todayServices}</div>
+          </div>
+        )}
+        {delayedServices !== undefined && (
+          <div className="bg-orange-50 p-4 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
+            <div className="text-2xl font-bold text-orange-900 mt-1">{delayedServices}</div>
+          </div>
+        )}
+        {inProgressServices !== undefined && (
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-blue-800 font-medium">📋 In Progress</div>
+            <div className="text-2xl font-bold text-blue-900 mt-1">{inProgressServices}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Financial Health */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+            <div className="text-sm text-gray-600 mb-1">Cash Wallet</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletCash)}</div>
+          </div>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+            <div className="text-sm text-gray-600 mb-1">Bank</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletBank)}</div>
+          </div>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+            <div className="text-sm text-gray-600 mb-1">Digital</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletDigital)}</div>
+          </div>
+          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 hover:bg-indigo-100 transition-colors">
+            <div className="text-sm text-indigo-800 font-semibold mb-1">Total Wallets</div>
+            <div className="text-2xl font-bold text-indigo-900">{formatCurrency(walletTotal)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Best & Worst Centres */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+              <div className="text-xs text-green-700 font-medium mb-1">Best Revenue</div>
+              <div className="font-bold text-gray-800 truncate">{best.revenue?.name || "N/A"}</div>
+              <div className="text-lg text-green-700">{formatCurrency(best.revenue?.value)}</div>
+            </div>
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <div className="text-xs text-blue-700 font-medium mb-1">Best Profit</div>
+              <div className="font-bold text-gray-800 truncate">{best.profit?.name || "N/A"}</div>
+              <div className="text-lg text-blue-700">{formatCurrency(best.profit?.value)}</div>
+            </div>
+            <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-2">
+              <div className="text-xs text-yellow-700 font-medium mb-1">Best Rating</div>
+              <div className="flex justify-between items-end">
+                <div className="font-bold text-gray-800">{best.rating?.name || "N/A"}</div>
+                <div className="text-lg text-yellow-700 font-bold">{best.rating?.value || 0} ⭐</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <div className="text-xs text-red-700 font-medium mb-1">Lowest Profit</div>
+              <div className="font-bold text-gray-800 truncate">{worst.revenue?.name || "N/A"}</div>
+              <div className="text-lg text-red-700">{formatCurrency(worst.revenue?.value)}</div>
+            </div>
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <div className="text-xs text-red-700 font-medium mb-1">Highest Pending</div>
+              <div className="font-bold text-gray-800 truncate">{worst.pending?.name || "N/A"}</div>
+              <div className="text-lg text-red-700">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
+            </div>
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+              <div className="text-xs text-orange-700 font-medium mb-1">Most Delayed</div>
+              <div className="font-bold text-gray-800 truncate">{worst.delayed?.name || "N/A"}</div>
+              <div className="text-lg text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
+            </div>
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+              <div className="text-xs text-orange-700 font-medium mb-1">Most Complaints</div>
+              <div className="font-bold text-gray-800 truncate">{worst.complaints?.name || "N/A"}</div>
+              <div className="text-lg text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Staff & Teams */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <StaffPerformanceChart staffData={topStaffList} />
+
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-6">👥 Top Teams</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Profit</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expenses</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {topTeamsList.map((team, idx) => (
+                  <tr key={team.id || idx} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-4 whitespace-nowrap font-medium text-gray-900">{team.name}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-gray-600">{formatCurrency(team.revenue)}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-green-600 font-medium">{formatCurrency(team.profit || 0)}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-red-600">{formatCurrency(team.expenses || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Notifications & Activity Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+            <span className="mr-2">🔔</span> Action Required
+          </h2>
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+            {notifications.length > 0 ? (
+              notifications.map((notif) => (
+                <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
+                  notif.priority === "critical" ? "bg-red-50 border-red-500" :
+                  notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
+                }`}>
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
+                    <div className="text-gray-600 text-sm">{notif.message}</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+            <span className="mr-2">🕒</span> Live Activity Feed
+          </h2>
+          <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+            {activities.length > 0 ? (
+              activities.map((activity) => (
+                <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
+                  <span className="text-sm font-medium text-gray-800">{activity.action}</span>
+                  <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Map View */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
+        <MapView />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
+        <div className="flex flex-wrap gap-3">
+          <button className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition shadow-md hover:shadow-lg flex items-center">
+            <span className="mr-1">➕</span> Create Centre
+          </button>
+          <button className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center">
+            <span className="mr-1">👤</span> Create Admin
+          </button>
+          <button className="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition shadow-md hover:shadow-lg flex items-center">
+            <span className="mr-1">📢</span> Broadcast
+          </button>
+          <button className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition shadow-md hover:shadow-lg flex items-center">
+            <span className="mr-1">📊</span> Global Report
+          </button>
+          <button className="px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition shadow-md hover:shadow-lg flex items-center">
+            <span className="mr-1">📤</span> Export Data
+          </button>
         </div>
       </div>
     </div>
