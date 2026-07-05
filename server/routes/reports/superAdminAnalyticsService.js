@@ -321,7 +321,7 @@ async function fetchWalletAnalytics(client, dates) {
             SELECT type, COALESCE(SUM(balance), 0) as total_balance
             FROM wallets
             WHERE status = 'active'
-            GROUP BY type
+            GROUP BY wallet_type
         `),
 
         // 2. Transaction Flow (In/Out within the date range)
