@@ -340,10 +340,10 @@ const SuperadminDashboard = () => {
           <div className="text-sm text-yellow-800 font-medium">💰 Today's Revenue</div>
           <div className="text-2xl font-bold text-yellow-900">{formatCurrency(todayRevenue)}</div>
         </div>
-        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 col-span-1">
-          <div className="text-sm text-orange-800 font-medium">📈 Monthly Revenue</div>
-          <div className="text-2xl font-bold text-orange-900">{formatCurrency(monthlyRevenue)}</div>
-          <div className="text-xs text-orange-600">↑{revenueGrowthPercent ?? 0}%</div>
+        <div className="bg-red-50 p-4 rounded-xl border border-red-100 col-span-1">
+          <div className="text-sm text-red-800 font-medium">💵 Period Profit</div>
+          <div className="text-2xl font-bold text-red-900">{formatCurrency(netProfit)}</div>
+          <div className="text-xs text-red-600 mt-1">Selected date range</div>
         </div>
         <div className="bg-red-50 p-4 rounded-xl border border-red-100 col-span-1">
           <div className="text-sm text-red-800 font-medium">💵 Net Profit</div>

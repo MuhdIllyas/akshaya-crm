@@ -131,7 +131,8 @@ function buildDashboard(data) {
 async function fetchOrganisationStats(client, dates) {
     const { startDate, endDate } = dates;
 
-    const [revenueResult, expenseResult, entityCountsResult, operationsResult] = await Promise.all([
+    const [revenueResult, expenseResult, entityCountsResult, operationsResult, growthResult] = await Promise.all([
+        // 1. Revenue
         client.query(`
             SELECT 
                 COALESCE(SUM(total_charges), 0) as total_revenue, 
@@ -142,6 +143,7 @@ async function fetchOrganisationStats(client, dates) {
             AND created_at >= $1 AND created_at <= $2
         `, [startDate, endDate]),
 
+        // 2. Expenses
         client.query(`
             SELECT COALESCE(SUM(amount), 0) as total_expenses 
             FROM expenses 
@@ -150,16 +152,17 @@ async function fetchOrganisationStats(client, dates) {
             AND expense_date >= $1 AND expense_date <= $2
         `, [startDate, endDate]),
 
-        // 👇 FIXED: Explicitly counting Admins vs Staff, and counting unique Walk-in Phone Numbers!
+        // 3. Global Entity Counts (FIXED: Case insensitive status checks)
         client.query(`
             SELECT 
-                (SELECT COUNT(*) FROM centres WHERE status = 'active') as total_centres,
-                (SELECT COUNT(*) FROM staff WHERE status = 'active') as total_staff,
-                (SELECT COUNT(*) FROM staff WHERE status = 'active' AND role = 'admin') as total_admins,
-                (SELECT COUNT(*) FROM staff WHERE status = 'active' AND role = 'staff') as total_regular_staff,
+                (SELECT COUNT(*) FROM centres WHERE LOWER(status) = 'active') as total_centres,
+                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active') as total_staff,
+                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active' AND LOWER(role) = 'admin') as total_admins,
+                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active' AND LOWER(role) = 'staff') as total_regular_staff,
                 (SELECT COUNT(DISTINCT phone) FROM service_entries WHERE phone IS NOT NULL AND TRIM(phone) != '') as total_customers
         `),
 
+        // 4. Live Operations (Today)
         client.query(`
             SELECT 
                 COUNT(se.id) FILTER (WHERE LOWER(strak.status) IN ('pending')) as pending_services,
@@ -169,12 +172,43 @@ async function fetchOrganisationStats(client, dates) {
                 COALESCE(SUM(se.total_charges) FILTER (WHERE DATE(se.created_at) = CURRENT_DATE AND se.status = 'completed'), 0) as today_revenue
             FROM service_entries se
             LEFT JOIN service_tracking strak ON strak.service_entry_id = se.id
+        `),
+
+        // 5. NEW: Growth & Momentum Metrics
+        // Calculates metrics for "This Month" compared to "Last Month"
+        client.query(`
+            WITH ThisMonth AS (
+                SELECT COALESCE(SUM(total_charges), 0) as rev 
+                FROM service_entries 
+                WHERE status = 'completed' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+            ),
+            LastMonth AS (
+                SELECT COALESCE(SUM(total_charges), 0) as rev 
+                FROM service_entries 
+                WHERE status = 'completed' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+            )
+            SELECT 
+                (SELECT COUNT(*) FROM centres WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)) as new_centres,
+                (SELECT COUNT(DISTINCT phone) FROM service_entries WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) AND phone IS NOT NULL AND TRIM(phone) != '') as new_customers,
+                (SELECT rev FROM ThisMonth) as this_month_rev,
+                (SELECT rev FROM LastMonth) as last_month_rev
         `)
     ]);
 
+    // Financials
     const revenue = parseFloat(revenueResult.rows[0].total_revenue) || 0;
     const grossProfit = parseFloat(revenueResult.rows[0].gross_profit) || 0;
     const expenses = parseFloat(expenseResult.rows[0].total_expenses) || 0;
+
+    // Growth Math
+    const tmRev = parseFloat(growthResult.rows[0].this_month_rev) || 0;
+    const lmRev = parseFloat(growthResult.rows[0].last_month_rev) || 0;
+    let revGrowth = 0;
+    if (lmRev > 0) {
+        revGrowth = ((tmRev - lmRev) / lmRev) * 100;
+    } else if (tmRev > 0) {
+        revGrowth = 100; // 100% growth if last month was 0
+    }
 
     return {
         revenue,
@@ -182,18 +216,24 @@ async function fetchOrganisationStats(client, dates) {
         profit: grossProfit - expenses, 
         servicesCompleted: parseInt(revenueResult.rows[0].total_services, 10) || 0,
         
-        // 👇 FIXED: Sending the exact variables the React UI is asking for
+        // Accurate Demographics
         totalCentres: parseInt(entityCountsResult.rows[0].total_centres, 10) || 0,
         totalStaff: parseInt(entityCountsResult.rows[0].total_staff, 10) || 0,
         admins: parseInt(entityCountsResult.rows[0].total_admins, 10) || 0,
         staffCount: parseInt(entityCountsResult.rows[0].total_regular_staff, 10) || 0,
         totalCustomers: parseInt(entityCountsResult.rows[0].total_customers, 10) || 0,
 
+        // Live Operations
         todayRevenue: parseFloat(operationsResult.rows[0].today_revenue) || 0,
         todayServices: parseInt(operationsResult.rows[0].today_services, 10) || 0,
         pendingServices: parseInt(operationsResult.rows[0].pending_services, 10) || 0,
         inProgressServices: parseInt(operationsResult.rows[0].in_progress_services, 10) || 0,
-        delayedServices: parseInt(operationsResult.rows[0].delayed_services, 10) || 0
+        delayedServices: parseInt(operationsResult.rows[0].delayed_services, 10) || 0,
+
+        // NEW: Real Growth Data explicitly mapped for the UI
+        newCentresThisMonth: parseInt(growthResult.rows[0].new_centres, 10) || 0,
+        customerGrowth: parseInt(growthResult.rows[0].new_customers, 10) || 0,
+        revenueGrowthPercent: Math.round(revGrowth)
     };
 }
 
