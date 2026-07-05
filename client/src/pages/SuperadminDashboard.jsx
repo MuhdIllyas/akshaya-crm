@@ -743,16 +743,28 @@ const SuperadminDashboard = () => {
           >
             + Create Centre
           </button>
-          <button className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center">
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/centremanagement')} 
+            className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center"
+          >
             <span className="mr-1">👤</span> Create Admin
           </button>
-          <button className="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition shadow-md hover:shadow-lg flex items-center">
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/messenger')} 
+            className="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition shadow-md hover:shadow-lg flex items-center"
+          >
             <span className="mr-1">📢</span> Broadcast
           </button>
-          <button className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition shadow-md hover:shadow-lg flex items-center">
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/analytics')} 
+            className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition shadow-md hover:shadow-lg flex items-center"
+          >
             <span className="mr-1">📊</span> Global Report
           </button>
-          <button className="px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition shadow-md hover:shadow-lg flex items-center">
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/analytics')} 
+            className="px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition shadow-md hover:shadow-lg flex items-center"
+          >
             <span className="mr-1">📤</span> Export Data
           </button>
         </div>
