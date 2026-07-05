@@ -5,11 +5,13 @@ import {
   BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis,
   Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
+import { useNavigate } from "react-router-dom";
 
 // ==========================================
 // STAFF PERFORMANCE CHART (unchanged)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
+  const navigate = useNavigate();
   const [metric, setMetric] = useState('revenue');
 
   if (!staffData || staffData.length === 0) {
@@ -735,8 +737,11 @@ const SuperadminDashboard = () => {
       <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
-          <button className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition shadow-md hover:shadow-lg flex items-center">
-            <span className="mr-1">➕</span> Create Centre
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/centremanagement')} 
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition shadow-sm"
+          >
+            + Create Centre
           </button>
           <button className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center">
             <span className="mr-1">👤</span> Create Admin
