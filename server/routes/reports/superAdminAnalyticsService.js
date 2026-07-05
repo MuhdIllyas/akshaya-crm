@@ -68,7 +68,7 @@ function getDateContext(filters = {}) {
  * EXPORT
  * Main entry point for the SuperAdmin Executive Dashboard
  */
-const getSuperAdminDashboard = async (filters = {}) => {
+export const getSuperAdminDashboard = async (filters = {}) => {
     const modules = filters.modules ? filters.modules.split(',') : ['stats']; 
     const dates = getDateContext(filters);
     const client = await pool.connect();
