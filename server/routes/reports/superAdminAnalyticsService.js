@@ -540,9 +540,6 @@ async function fetchStaffAnalytics(client, dates) {
  * Creates a unified live feed of everything happening across the organization.
  */
 async function fetchRecentActivities(client) {
-    // Note: We often don't pass date filters here because a live feed 
-    // usually just wants the absolute latest 100 events regardless of the timeframe.
-
     const [
         servicesResult,
         expensesResult,
@@ -563,7 +560,7 @@ async function fetchRecentActivities(client) {
             FROM service_entries se
             JOIN staff st ON st.id = se.staff_id
             JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = category_id
+            JOIN services sv ON sv.id = se.category_id -- <-- FIXED: Added 'se.' prefix
             WHERE se.status = 'completed'
             ORDER BY se.created_at DESC LIMIT 25
         `),
@@ -664,8 +661,6 @@ async function fetchRecentActivities(client) {
     return {
         timeline,
         summary,
-        // Alerts and Achievements will eventually be hydrated by the Health Engine 
-        // passing data in, but we scaffold them here for the frontend.
         alerts: [], 
         achievements: [] 
     };
