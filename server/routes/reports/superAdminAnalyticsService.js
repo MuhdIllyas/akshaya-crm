@@ -366,6 +366,7 @@ async function fetchWalletAnalytics(client, dates) {
 
 /**
  * CENTRE LEADERBOARD
+ * Ranks centres by profitability, revenue, service volume, customer ratings, and operational bottlenecks.
  */
 async function fetchCentreLeaderboard(client, dates) {
     const { startDate, endDate } = dates;
@@ -376,7 +377,7 @@ async function fetchCentreLeaderboard(client, dates) {
                 c.id as centre_id, 
                 c.name as centre_name, 
                 COALESCE(SUM(se.total_charges), 0) as revenue,
-                COALESCE(SUM(se.service_charges), 0) as gross_profit, -- FIXED
+                COALESCE(SUM(se.service_charges), 0) as gross_profit,
                 COUNT(se.id) as services_completed
             FROM centres c
             LEFT JOIN staff st ON st.centre_id = c.id
@@ -390,17 +391,57 @@ async function fetchCentreLeaderboard(client, dates) {
                 centre_id, 
                 COALESCE(SUM(amount), 0) as expenses
             FROM expenses
-            WHERE status IN ('approved', 'auto_approved') -- FIXED
+            WHERE status IN ('approved', 'auto_approved')
                 AND (is_reversal IS NULL OR is_reversal = FALSE)
                 AND expense_date >= $1 AND expense_date <= $2
             GROUP BY centre_id
         ),
         CentreRatings AS (
-            SELECT c.id as centre_id, ROUND(AVG(sr.service_rating), 1) as avg_rating
+            SELECT 
+                c.id as centre_id, 
+                ROUND(AVG(sr.service_rating), 1) as avg_rating
             FROM centres c
             JOIN staff st ON st.centre_id = c.id
             JOIN service_reviews sr ON sr.staff_id = st.id
             WHERE sr.submitted_at >= $1 AND sr.submitted_at <= $2
+            GROUP BY c.id
+        ),
+        CentrePending AS (
+            SELECT 
+                c.id as centre_id,
+                COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as pending_amount
+            FROM centres c
+            JOIN staff st ON st.centre_id = c.id
+            JOIN service_entries se ON se.staff_id = st.id 
+                AND se.created_at >= $1 AND se.created_at <= $2
+            LEFT JOIN (
+                SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid 
+                FROM payments GROUP BY service_entry_id
+            ) sp ON sp.service_entry_id = se.id
+            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0
+            GROUP BY c.id
+        ),
+        CentreDelayed AS (
+            SELECT 
+                c.id as centre_id,
+                COUNT(se.id) as delayed_count
+            FROM centres c
+            JOIN staff st ON st.centre_id = c.id
+            JOIN service_entries se ON se.staff_id = st.id 
+                AND se.created_at >= $1 AND se.created_at <= $2
+            JOIN service_tracking strak ON strak.service_entry_id = se.id
+            WHERE LOWER(strak.status) = 'rejected'
+            GROUP BY c.id
+        ),
+        CentreComplaints AS (
+            SELECT 
+                c.id as centre_id,
+                COUNT(sr.id) as complaint_count
+            FROM centres c
+            JOIN staff st ON st.centre_id = c.id
+            JOIN service_reviews sr ON sr.staff_id = st.id 
+                AND sr.submitted_at >= $1 AND sr.submitted_at <= $2
+            WHERE sr.service_rating <= 2
             GROUP BY c.id
         )
         SELECT 
@@ -409,18 +450,23 @@ async function fetchCentreLeaderboard(client, dates) {
             cr.revenue,
             cr.services_completed,
             COALESCE(ce.expenses, 0) as expenses,
-            (cr.gross_profit - COALESCE(ce.expenses, 0)) as profit, -- FIXED
-            COALESCE(rt.avg_rating, 0) as rating
+            (cr.gross_profit - COALESCE(ce.expenses, 0)) as profit,
+            COALESCE(rt.avg_rating, 0) as rating,
+            COALESCE(cp.pending_amount, 0) as pending_amount,
+            COALESCE(cd.delayed_count, 0) as delayed_count,
+            COALESCE(cc.complaint_count, 0) as complaint_count
         FROM CentreRevenue cr
         LEFT JOIN CentreExpenses ce ON cr.centre_id = ce.centre_id
         LEFT JOIN CentreRatings rt ON cr.centre_id = rt.centre_id
+        LEFT JOIN CentrePending cp ON cr.centre_id = cp.centre_id
+        LEFT JOIN CentreDelayed cd ON cr.centre_id = cd.centre_id
+        LEFT JOIN CentreComplaints cc ON cr.centre_id = cc.centre_id
         WHERE cr.revenue > 0 OR COALESCE(ce.expenses, 0) > 0 
         ORDER BY profit DESC; 
     `;
 
     const result = await client.query(leaderboardQuery, [startDate, endDate]);
 
-    // Format the SQL output into clean JavaScript types AND calculate Health Status
     const formattedList = result.rows.map(row => {
         const revenue = parseFloat(row.revenue);
         const expenses = parseFloat(row.expenses);
@@ -428,26 +474,19 @@ async function fetchCentreLeaderboard(client, dates) {
         const rating = parseFloat(row.rating);
         const margin = revenue > 0 ? (profit / revenue) : 0;
 
-        // Smart Health Grading Algorithm
         let healthStatus = { label: "Healthy", icon: "🟢", color: "green" };
 
         if (revenue === 0 && expenses === 0) {
-            // Centre has done absolutely no business in this period
             healthStatus = { label: "Inactive", icon: "⚪", color: "gray" };
         } else if (profit < 0) {
-            // Centre is losing money
             healthStatus = { label: "Loss Making", icon: "🔴", color: "red" };
         } else if (rating > 0 && rating < 3.0) {
-            // Centre has terrible reviews
             healthStatus = { label: "Poor Rating", icon: "🔴", color: "red" };
         } else if (profit >= 0 && margin < 0.15) {
-            // Centre is profitable, but margin is very low (< 15%)
             healthStatus = { label: "Low Margin", icon: "🟡", color: "yellow" };
         } else if (rating >= 3.0 && rating < 4.0) {
-            // Centre is profitable, but reviews are just average
             healthStatus = { label: "Needs Improvement", icon: "🟡", color: "yellow" };
         } else {
-            // Centre is highly profitable with good ratings
             healthStatus = { label: "Excellent", icon: "🟢", color: "green" };
         }
 
@@ -459,14 +498,21 @@ async function fetchCentreLeaderboard(client, dates) {
             profit,
             servicesCompleted: parseInt(row.services_completed, 10),
             rating,
-            healthStatus // <-- We now inject the calculated health status here!
+            pendingAmount: parseFloat(row.pending_amount) || 0,
+            delayedCount: parseInt(row.delayed_count, 10) || 0,
+            complaintCount: parseInt(row.complaint_count, 10) || 0,
+            healthStatus
         };
     });
 
-    // Sorting out best and worst for UI cards
     const sortedByRevenue = [...formattedList].sort((a, b) => b.revenue - a.revenue);
     const sortedByProfit = [...formattedList].sort((a, b) => b.profit - a.profit);
     const sortedByRating = [...formattedList].sort((a, b) => b.rating - a.rating);
+    
+    // Sort specifically for worst attributes (Highest values at the top [0])
+    const sortedByPending = [...formattedList].sort((a, b) => b.pendingAmount - a.pendingAmount);
+    const sortedByDelayed = [...formattedList].sort((a, b) => b.delayedCount - a.delayedCount);
+    const sortedByComplaints = [...formattedList].sort((a, b) => b.complaintCount - a.complaintCount);
 
     return {
         fullList: formattedList,
@@ -479,6 +525,10 @@ async function fetchCentreLeaderboard(client, dates) {
         },
         worst: {
             revenue: { name: sortedByRevenue[sortedByRevenue.length - 1]?.name, value: sortedByRevenue[sortedByRevenue.length - 1]?.revenue },
+            // FIXED: Added the three missing values the UI expects
+            pending: { name: sortedByPending[0]?.name, value: sortedByPending[0]?.pendingAmount },
+            delayed: { name: sortedByDelayed[0]?.name, value: sortedByDelayed[0]?.delayedCount },
+            complaints: { name: sortedByComplaints[0]?.name, value: sortedByComplaints[0]?.complaintCount },
         }
     };
 }
