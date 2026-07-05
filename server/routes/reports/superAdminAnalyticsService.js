@@ -616,7 +616,7 @@ async function fetchRecentActivities(client) {
                 'wallet_transaction' as type,
                 wt.created_at,
                 wt.amount,
-                w.type || ' Wallet' as centre_name, 
+                w.wallet_type || ' Wallet' as centre_name, 
                 wt.type as staff_name,
                 'Wallet ' || wt.type as title,
                 wt.id as reference_id
