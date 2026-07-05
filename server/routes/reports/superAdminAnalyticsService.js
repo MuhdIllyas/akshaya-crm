@@ -704,25 +704,86 @@ async function fetchHealthAnalytics(client, dates) {
 }
 
 async function fetchSystemAlerts(client) {
-    const [negativeWallets, largePendingPayments, badReviews, stagnantServices] = await Promise.all([
-        client.query(`SELECT w.id, w.wallet_type, w.balance, c.name as centre_name FROM wallets w JOIN centres c ON c.id = w.centre_id WHERE w.balance < 0`),
+    const [
+        negativeWallets,
+        largePendingPayments,
+        badReviews,
+        stagnantServices
+    ] = await Promise.all([
         client.query(`
-            WITH ServicePayments AS ( SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid FROM payments GROUP BY service_entry_id )
-            SELECT se.id, (se.total_charges - COALESCE(sp.paid, 0)) as balance_amount, c.name as centre_name, sv.name as service_name
-            FROM service_entries se JOIN staff st ON st.id = se.staff_id JOIN centres c ON c.id = st.centre_id JOIN services sv ON sv.id = se.category_id
-            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 5000
+            SELECT w.id, w.wallet_type, w.balance, c.name as centre_name
+            FROM wallets w 
+            JOIN centres c ON c.id = w.centre_id
+            WHERE w.balance < 0
         `),
-        client.query(`SELECT sr.id, sr.service_rating, sr.customer_name, c.name as centre_name FROM service_reviews sr JOIN staff st ON st.id = sr.staff_id JOIN centres c ON c.id = st.centre_id WHERE sr.service_rating <= 2 AND sr.submitted_at >= NOW() - INTERVAL '7 days'`),
-        client.query(`SELECT se.id, c.name as centre_name, sv.name as service_name, se.created_at FROM service_entries se JOIN staff st ON st.id = se.staff_id JOIN centres c ON c.id = st.centre_id JOIN services sv ON sv.id = se.category_id WHERE se.status IN ('pending', 'processing') AND se.created_at < NOW() - INTERVAL '5 days'`)
+        client.query(`
+            WITH ServicePayments AS (
+                SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
+                FROM payments
+                -- 👇 FIXED
+                WHERE status = 'received' AND (is_reversal IS NULL OR is_reversal = FALSE)
+                GROUP BY service_entry_id
+            )
+            SELECT 
+                se.id, 
+                (se.total_charges - COALESCE(sp.paid, 0)) as balance_amount, 
+                c.name as centre_name, 
+                sv.name as service_name
+            FROM service_entries se
+            JOIN staff st ON st.id = se.staff_id
+            JOIN centres c ON c.id = st.centre_id
+            JOIN services sv ON sv.id = se.category_id
+            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
+            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 5000
+        `),
+        client.query(`
+            SELECT sr.id, sr.service_rating, sr.customer_name, c.name as centre_name
+            FROM service_reviews sr
+            JOIN staff st ON st.id = sr.staff_id
+            JOIN centres c ON c.id = st.centre_id
+            WHERE sr.service_rating <= 2 
+            AND sr.submitted_at >= NOW() - INTERVAL '7 days'
+        `),
+        client.query(`
+            SELECT se.id, c.name as centre_name, sv.name as service_name, se.created_at
+            FROM service_entries se
+            JOIN staff st ON st.id = se.staff_id
+            JOIN centres c ON c.id = st.centre_id
+            JOIN services sv ON sv.id = se.category_id
+            WHERE se.status IN ('pending', 'processing')
+            AND se.created_at < NOW() - INTERVAL '5 days'
+        `)
     ]);
 
     const alerts = [];
-    negativeWallets.rows.forEach(row => alerts.push({ id: `wallet_${row.id}`, priority: 'critical', title: 'Negative Wallet Balance', message: `${row.centre_name}'s ${row.wallet_type} wallet is overdrawn by ₹${Math.abs(row.balance)}.`, centre: row.centre_name, actionCode: 'VIEW_WALLET' }));
-    badReviews.rows.forEach(row => alerts.push({ id: `review_${row.id}`, priority: 'critical', title: 'Poor Customer Review', message: `${row.customer_name} gave ${row.service_rating} stars at ${row.centre_name}.`, centre: row.centre_name, actionCode: 'VIEW_REVIEW' }));
-    largePendingPayments.rows.forEach(row => alerts.push({ id: `payment_${row.id}`, priority: 'warning', title: 'High Pending Payment', message: `₹${row.balance_amount} pending for ${row.service_name} at ${row.centre_name}.`, centre: row.centre_name, actionCode: 'VIEW_SERVICE' }));
+
+    negativeWallets.rows.forEach(row => {
+        alerts.push({
+            id: `wallet_${row.id}`, priority: 'critical', title: 'Negative Wallet Balance',
+            message: `${row.centre_name}'s ${row.wallet_type} wallet is overdrawn by ₹${Math.abs(row.balance)}.`, centre: row.centre_name, actionCode: 'VIEW_WALLET'
+        });
+    });
+
+    badReviews.rows.forEach(row => {
+        alerts.push({
+            id: `review_${row.id}`, priority: 'critical', title: 'Poor Customer Review',
+            message: `${row.customer_name} gave ${row.service_rating} stars at ${row.centre_name}.`, centre: row.centre_name, actionCode: 'VIEW_REVIEW'
+        });
+    });
+
+    largePendingPayments.rows.forEach(row => {
+        alerts.push({
+            id: `payment_${row.id}`, priority: 'warning', title: 'High Pending Payment',
+            message: `₹${row.balance_amount} pending for ${row.service_name} at ${row.centre_name}.`, centre: row.centre_name, actionCode: 'VIEW_SERVICE'
+        });
+    });
+
     stagnantServices.rows.forEach(row => {
         const daysDelayed = Math.floor((new Date() - new Date(row.created_at)) / (1000 * 60 * 60 * 24));
-        alerts.push({ id: `stuck_${row.id}`, priority: 'warning', title: 'Service Delayed', message: `${row.service_name} at ${row.centre_name} has been pending for ${daysDelayed} days.`, centre: row.centre_name, actionCode: 'VIEW_SERVICE' });
+        alerts.push({
+            id: `stuck_${row.id}`, priority: 'warning', title: 'Service Delayed',
+            message: `${row.service_name} at ${row.centre_name} has been pending for ${daysDelayed} days.`, centre: row.centre_name, actionCode: 'VIEW_SERVICE'
+        });
     });
 
     alerts.sort((a, b) => {
@@ -730,5 +791,6 @@ async function fetchSystemAlerts(client) {
         if (a.priority === 'warning' && b.priority === 'critical') return 1;
         return 0;
     });
+
     return alerts;
 }
