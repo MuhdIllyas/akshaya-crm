@@ -135,17 +135,24 @@ const SuperadminDashboard = () => {
     }
     const max = Math.max(...revenueChartData.map(d => d.value), 1);
 
-    return (
-      // 1. Added overflow-x-auto so it scrolls if there are too many dates
-      // 2. Swapped space-x-2 for a smaller gap-1
-      <div className="w-full h-64 flex items-end gap-1 overflow-x-auto pb-2">
-        {revenueChartData.map((item, idx) => {
-          // Shorten date from "2026-05-11" to "05-11" so they don't overlap
-          const shortDate = item.label ? item.label.slice(5) : '';
+    // Helper to format the Postgres label into a readable string
+    const formatChartLabel = (label) => {
+        if (!label) return '';
+        if (label.length === 7) { 
+            // It's a month (e.g., "2026-05") -> Convert to "May 26"
+            const date = new Date(label + '-01');
+            return date.toLocaleString('default', { month: 'short', year: '2-digit' });
+        }
+        if (label.length === 10) {
+            // It's a day (e.g., "2026-05-11") -> Convert to "05-11"
+            return label.slice(5); 
+        }
+        return label;
+    };
 
-          return (
-            // 3. Added h-full to the wrapper so percentage heights work
-            // 4. Added min-w-[30px] so bars never shrink to invisibility
+    return (
+      <div className="w-full h-64 flex items-end gap-1 overflow-x-auto pb-2">
+        {revenueChartData.map((item, idx) => (
             <div key={item.label || idx} className="flex-1 min-w-[30px] flex flex-col justify-end items-center group relative h-full">
               
               {/* Tooltip */}
@@ -153,7 +160,7 @@ const SuperadminDashboard = () => {
                 {formatCurrency(item.value)}
               </div>
               
-              {/* Bar Wrapper - takes remaining vertical space */}
+              {/* Bar Wrapper */}
               <div className="w-full flex-1 flex items-end justify-center">
                 <div
                   className={`w-full rounded-t transition-all duration-500 ${
@@ -165,13 +172,12 @@ const SuperadminDashboard = () => {
                 ></div>
               </div>
 
-              {/* Date Label */}
+              {/* Dynamic Date Label */}
               <span className="text-[10px] text-gray-500 mt-2 whitespace-nowrap">
-                {shortDate}
+                {formatChartLabel(item.label)}
               </span>
             </div>
-          );
-        })}
+        ))}
       </div>
     );
   };

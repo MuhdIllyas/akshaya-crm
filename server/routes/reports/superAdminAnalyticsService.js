@@ -201,10 +201,14 @@ async function fetchOrganisationStats(client, dates) {
 
 /**
  * FETCH LAYER: FINANCIAL ENGINE
- * Gets raw financial data from the database.
  */
 async function fetchFinancialOverview(client, dates) {
     const { startDate, endDate } = dates;
+
+    // SMART GROUPING: If date range is > 60 days, group by month (YYYY-MM). Else, day (YYYY-MM-DD).
+    const diffTime = Math.abs(new Date(endDate) - new Date(startDate));
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const timeFormat = diffDays > 60 ? 'YYYY-MM' : 'YYYY-MM-DD';
 
     const [
         revenueBreakdownResult,
@@ -212,7 +216,6 @@ async function fetchFinancialOverview(client, dates) {
         revenueTrendResult,
         expenseTrendResult
     ] = await Promise.all([
-        // 1. Revenue by Service Category
         client.query(`
             SELECT sv.category_id, COALESCE(SUM(se.total_charges), 0) as total
             FROM service_entries se
@@ -223,7 +226,6 @@ async function fetchFinancialOverview(client, dates) {
             ORDER BY total DESC
         `, [startDate, endDate]),
 
-        // 2. Expenses by Category
         client.query(`
             SELECT category, COALESCE(SUM(amount), 0) as total
             FROM expenses
@@ -233,24 +235,23 @@ async function fetchFinancialOverview(client, dates) {
             ORDER BY total DESC
         `, [startDate, endDate]),
 
-        // 3. Daily Revenue Trend
+        // Using TO_CHAR to automatically group by our dynamic timeFormat
         client.query(`
-            SELECT DATE(created_at) as date, COALESCE(SUM(total_charges), 0) as total
+            SELECT TO_CHAR(created_at, '${timeFormat}') as date_label, COALESCE(SUM(total_charges), 0) as total
             FROM service_entries
             WHERE status = 'completed'
             AND created_at >= $1 AND created_at <= $2
-            GROUP BY DATE(created_at)
-            ORDER BY date ASC
+            GROUP BY TO_CHAR(created_at, '${timeFormat}')
+            ORDER BY date_label ASC
         `, [startDate, endDate]),
 
-        // 4. Daily Expense Trend
         client.query(`
-            SELECT DATE(expense_date) as date, COALESCE(SUM(amount), 0) as total
+            SELECT TO_CHAR(expense_date, '${timeFormat}') as date_label, COALESCE(SUM(amount), 0) as total
             FROM expenses
             WHERE status = 'approved'
             AND expense_date >= $1 AND expense_date <= $2
-            GROUP BY DATE(expense_date)
-            ORDER BY date ASC
+            GROUP BY TO_CHAR(expense_date, '${timeFormat}')
+            ORDER BY date_label ASC
         `, [startDate, endDate])
     ]);
 
@@ -264,52 +265,35 @@ async function fetchFinancialOverview(client, dates) {
 
 /**
  * CALCULATION LAYER
- * Transforms raw SQL data into ready-to-use business metrics.
  */
 function calculateFinancialMetrics(rawFinancial) {
-    // 1. Calculate Totals
     const totalRevenue = rawFinancial.revenueBreakdown.reduce((sum, item) => sum + parseFloat(item.total), 0);
     const totalExpenses = rawFinancial.expenseBreakdown.reduce((sum, item) => sum + parseFloat(item.total), 0);
     const netProfit = totalRevenue - totalExpenses;
-    
-    // 2. Calculate Margins safely
     const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(2) : 0;
 
-    // 3. Merge Trends for a single Chart (e.g., Recharts expects one array of objects)
     const trendMap = new Map();
 
-    // Initialize map with revenue
+    // The date_label is already perfectly formatted from Postgres!
     rawFinancial.revenueTrend.forEach(row => {
-        const dateStr = row.date.toISOString().split('T')[0];
-        trendMap.set(dateStr, { 
-            date: dateStr, 
-            revenue: parseFloat(row.total), 
-            expense: 0, 
-            profit: parseFloat(row.total) 
-        });
+        const dateStr = row.date_label; 
+        trendMap.set(dateStr, { date: dateStr, revenue: parseFloat(row.total), expense: 0, profit: parseFloat(row.total) });
     });
 
-    // Merge expenses into the map
     rawFinancial.expenseTrend.forEach(row => {
-        const dateStr = row.date.toISOString().split('T')[0];
+        const dateStr = row.date_label;
         if (trendMap.has(dateStr)) {
             const entry = trendMap.get(dateStr);
             entry.expense = parseFloat(row.total);
             entry.profit = entry.revenue - entry.expense;
         } else {
-            trendMap.set(dateStr, { 
-                date: dateStr, 
-                revenue: 0, 
-                expense: parseFloat(row.total), 
-                profit: -parseFloat(row.total) 
-            });
+            trendMap.set(dateStr, { date: dateStr, revenue: 0, expense: parseFloat(row.total), profit: -parseFloat(row.total) });
         }
     });
 
-    // Convert map to sorted array
-    const combinedTrend = Array.from(trendMap.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Sort alphabetically (which works perfectly for YYYY-MM and YYYY-MM-DD)
+    const combinedTrend = Array.from(trendMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
-    // ADDED: Constructing the exact chart shape React expects ({ label, value })
     const charts = {
         revenue: combinedTrend.map(t => ({ label: t.date, value: t.revenue })),
         profit: combinedTrend.map(t => ({ label: t.date, value: t.profit })),
@@ -317,18 +301,13 @@ function calculateFinancialMetrics(rawFinancial) {
     };
 
     return {
-        totals: {
-            revenue: totalRevenue,
-            expenses: totalExpenses,
-            profit: netProfit,
-            margin: parseFloat(profitMargin)
-        },
+        totals: { revenue: totalRevenue, expenses: totalExpenses, profit: netProfit, margin: parseFloat(profitMargin) },
         breakdowns: {
             revenue: rawFinancial.revenueBreakdown.map(r => ({ category: r.category, amount: parseFloat(r.total) })),
             expenses: rawFinancial.expenseBreakdown.map(e => ({ category: e.category, amount: parseFloat(e.total) }))
         },
         trends: combinedTrend,
-        charts // <-- ADDED: Passes to frontend
+        charts 
     };
 }
 
