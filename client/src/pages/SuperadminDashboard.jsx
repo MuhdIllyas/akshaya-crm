@@ -139,34 +139,37 @@ const SuperadminDashboard = () => {
     const formatChartLabel = (label) => {
         if (!label) return '';
         if (label.length === 7) { 
-            // It's a month (e.g., "2026-05") -> Convert to "May 26"
             const date = new Date(label + '-01');
             return date.toLocaleString('default', { month: 'short', year: '2-digit' });
         }
         if (label.length === 10) {
-            // It's a day (e.g., "2026-05-11") -> Convert to "05-11"
             return label.slice(5); 
         }
         return label;
     };
 
     return (
-      <div className="w-full h-64 flex items-end gap-1 overflow-x-auto pb-2">
+      // FIXED: Increased height to h-72 and added pt-12 (padding-top) 
+      // so the hover tooltip has room to display without getting clipped!
+      <div className="w-full h-72 flex items-end gap-1 overflow-x-auto pb-2 pt-12 scrollbar-thin scrollbar-thumb-gray-300">
         {revenueChartData.map((item, idx) => (
-            <div key={item.label || idx} className="flex-1 min-w-[30px] flex flex-col justify-end items-center group relative h-full">
+            <div key={item.label || idx} className="flex-1 min-w-[30px] flex flex-col justify-end items-center group relative h-full cursor-pointer">
               
-              {/* Tooltip */}
-              <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-gray-800 text-white text-[10px] py-1 px-2 rounded pointer-events-none transition-opacity whitespace-nowrap z-10">
-                {formatCurrency(item.value)}
+              {/* UPGRADED TOOLTIP */}
+              <div className="opacity-0 group-hover:opacity-100 absolute -top-12 bg-gray-900 text-white text-xs py-1.5 px-3 rounded pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-lg flex flex-col items-center">
+                <span className="font-bold">{formatCurrency(item.value)}</span>
+                <span className="text-[10px] text-gray-300">{formatChartLabel(item.label)}</span>
+                {/* Small downward arrow */}
+                <div className="absolute -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
               </div>
               
               {/* Bar Wrapper */}
               <div className="w-full flex-1 flex items-end justify-center">
                 <div
-                  className={`w-full rounded-t transition-all duration-500 ${
+                  className={`w-full rounded-t transition-all duration-300 ${
                     revenueView === 'profit' ? 'bg-green-500' :
-                    revenueView === 'expenses' ? 'bg-red-500' :
-                    'bg-blue-500'
+                    revenueView === 'expenses' ? 'bg-red-500 hover:bg-red-600' :
+                    'bg-blue-500 hover:bg-blue-600'
                   }`}
                   style={{ height: `${(item.value / max) * 100}%`, minHeight: '4px' }}
                 ></div>
