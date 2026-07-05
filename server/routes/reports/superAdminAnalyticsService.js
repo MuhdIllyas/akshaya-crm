@@ -416,7 +416,10 @@ async function fetchCentreLeaderboard(client, dates) {
                 AND se.created_at >= $1 AND se.created_at <= $2
             LEFT JOIN (
                 SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid 
-                FROM payments GROUP BY service_entry_id
+                FROM payments 
+                -- 👇 FIXED: Only count actual received money!
+                WHERE status = 'received' AND (is_reversal IS NULL OR is_reversal = FALSE)
+                GROUP BY service_entry_id
             ) sp ON sp.service_entry_id = se.id
             WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0
             GROUP BY c.id
@@ -508,8 +511,6 @@ async function fetchCentreLeaderboard(client, dates) {
     const sortedByRevenue = [...formattedList].sort((a, b) => b.revenue - a.revenue);
     const sortedByProfit = [...formattedList].sort((a, b) => b.profit - a.profit);
     const sortedByRating = [...formattedList].sort((a, b) => b.rating - a.rating);
-    
-    // Sort specifically for worst attributes (Highest values at the top [0])
     const sortedByPending = [...formattedList].sort((a, b) => b.pendingAmount - a.pendingAmount);
     const sortedByDelayed = [...formattedList].sort((a, b) => b.delayedCount - a.delayedCount);
     const sortedByComplaints = [...formattedList].sort((a, b) => b.complaintCount - a.complaintCount);
@@ -525,7 +526,6 @@ async function fetchCentreLeaderboard(client, dates) {
         },
         worst: {
             revenue: { name: sortedByRevenue[sortedByRevenue.length - 1]?.name, value: sortedByRevenue[sortedByRevenue.length - 1]?.revenue },
-            // FIXED: Added the three missing values the UI expects
             pending: { name: sortedByPending[0]?.name, value: sortedByPending[0]?.pendingAmount },
             delayed: { name: sortedByDelayed[0]?.name, value: sortedByDelayed[0]?.delayedCount },
             complaints: { name: sortedByComplaints[0]?.name, value: sortedByComplaints[0]?.complaintCount },
@@ -647,29 +647,59 @@ async function fetchTeamAnalytics(client, dates) {
 
 async function fetchHealthAnalytics(client, dates) {
     const { startDate, endDate } = dates;
+
     const [negativeWallets, pendingPayments, unassignedServices] = await Promise.all([
-        client.query(`SELECT w.wallet_type, w.balance, c.name as centre_name FROM wallets w JOIN centres c ON c.id = w.centre_id WHERE w.balance < 0`),
         client.query(`
-            WITH ServicePayments AS ( SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid FROM payments GROUP BY service_entry_id )
-            SELECT COUNT(se.id) as count, COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as total_value 
-            FROM service_entries se LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
-            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0 AND se.created_at >= $1 AND se.created_at <= $2
+            SELECT w.wallet_type, w.balance, c.name as centre_name 
+            FROM wallets w 
+            JOIN centres c ON c.id = w.centre_id 
+            WHERE w.balance < 0
+        `),
+        client.query(`
+            WITH ServicePayments AS (
+                SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
+                FROM payments
+                -- 👇 FIXED
+                WHERE status = 'received' AND (is_reversal IS NULL OR is_reversal = FALSE)
+                GROUP BY service_entry_id
+            )
+            SELECT 
+                COUNT(se.id) as count, 
+                COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as total_value 
+            FROM service_entries se
+            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
+            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0 
+            AND se.created_at >= $1 AND se.created_at <= $2
         `, [startDate, endDate]),
-        client.query(`SELECT COUNT(id) as count FROM service_entries WHERE status = 'pending' AND staff_id IS NULL`)
+        client.query(`
+            SELECT COUNT(id) as count 
+            FROM service_entries 
+            WHERE status = 'pending' AND staff_id IS NULL
+        `)
     ]);
 
     const warnings = [];
-    if (negativeWallets.rows.length > 0) warnings.push({ type: 'critical', message: `${negativeWallets.rows.length} wallets are in negative balance.` });
+    if (negativeWallets.rows.length > 0) {
+        warnings.push({ type: 'critical', message: `${negativeWallets.rows.length} wallets are in negative balance.` });
+    }
+    
     const pendingCount = parseInt(pendingPayments.rows[0].count, 10);
-    if (pendingCount > 50) warnings.push({ type: 'warning', message: `High volume of pending payments (${pendingCount}).` });
+    if (pendingCount > 50) {
+        warnings.push({ type: 'warning', message: `High volume of pending payments (${pendingCount}).` });
+    }
 
     let score = 100;
     score -= (negativeWallets.rows.length * 5);
     score -= (pendingCount > 50 ? 10 : 0);
 
     return {
-        overallScore: Math.max(0, score), alerts: warnings,
-        metrics: { negativeWallets: negativeWallets.rows.length, pendingPaymentValue: parseFloat(pendingPayments.rows[0].total_value), unassignedServices: parseInt(unassignedServices.rows[0].count, 10) }
+        overallScore: Math.max(0, score), 
+        alerts: warnings,
+        metrics: {
+            negativeWallets: negativeWallets.rows.length,
+            pendingPaymentValue: parseFloat(pendingPayments.rows[0].total_value),
+            unassignedServices: parseInt(unassignedServices.rows[0].count, 10)
+        }
     };
 }
 
