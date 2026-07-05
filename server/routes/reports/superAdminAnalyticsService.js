@@ -674,7 +674,8 @@ async function fetchRecentActivities(client) {
 async function fetchTeamAnalytics(client, dates) {
     const { startDate, endDate } = dates;
     
-    // Note: Replaced created_at with expense_date for expenses!
+    // We now route the JOIN through team_members (tm)
+    // and filter for active team members (tm.is_active = true)
     const query = `
         SELECT 
             t.id, 
@@ -685,7 +686,8 @@ async function fetchTeamAnalytics(client, dates) {
             COALESCE(SUM(se.total_charges), 0) as revenue
         FROM teams t
         JOIN centres c ON c.id = t.centre_id
-        LEFT JOIN staff st ON st.team_id = t.id
+        LEFT JOIN team_members tm ON tm.team_id = t.id AND tm.is_active = true
+        LEFT JOIN staff st ON st.id = tm.staff_id
         LEFT JOIN service_entries se ON se.staff_id = st.id 
             AND se.status = 'completed' 
             AND se.created_at >= $1 AND se.created_at <= $2
