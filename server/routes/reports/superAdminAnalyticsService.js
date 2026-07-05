@@ -719,13 +719,24 @@ async function fetchHealthAnalytics(client, dates) {
     const [negativeWallets, pendingPayments, unassignedServices] = await Promise.all([
         client.query(`
             SELECT w.wallet_type, w.balance, c.name as centre_name 
-            FROM wallets w JOIN centres c ON c.id = w.centre_id 
+            FROM wallets w 
+            JOIN centres c ON c.id = w.centre_id 
             WHERE w.balance < 0
         `),
+        // Dynamically calculate pending balance: total_charges - SUM(payments)
         client.query(`
-            SELECT COUNT(id) as count, COALESCE(SUM(balance_amount), 0) as total_value 
-            FROM service_entries 
-            WHERE payment_status = 'pending' AND created_at >= $1 AND created_at <= $2
+            WITH ServicePayments AS (
+                SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
+                FROM payments
+                GROUP BY service_entry_id
+            )
+            SELECT 
+                COUNT(se.id) as count, 
+                COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as total_value 
+            FROM service_entries se
+            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
+            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0 
+            AND se.created_at >= $1 AND se.created_at <= $2
         `, [startDate, endDate]),
         client.query(`
             SELECT COUNT(id) as count 
@@ -744,13 +755,12 @@ async function fetchHealthAnalytics(client, dates) {
         warnings.push({ type: 'warning', message: `High volume of pending payments (${pendingCount}).` });
     }
 
-    // A simple 1-100 score logic (starts at 100, drops for bad metrics)
     let score = 100;
     score -= (negativeWallets.rows.length * 5);
     score -= (pendingCount > 50 ? 10 : 0);
 
     return {
-        overallScore: Math.max(0, score), // Prevent negative score
+        overallScore: Math.max(0, score), 
         alerts: warnings,
         metrics: {
             negativeWallets: negativeWallets.rows.length,
@@ -765,7 +775,6 @@ async function fetchHealthAnalytics(client, dates) {
  * Proactively scans the CRM for operational bottlenecks and required actions.
  */
 async function fetchSystemAlerts(client) {
-    // Run all system health checks simultaneously
     const [
         negativeWallets,
         largePendingPayments,
@@ -779,16 +788,26 @@ async function fetchSystemAlerts(client) {
             JOIN centres c ON c.id = w.centre_id
             WHERE w.balance < 0
         `),
-        // 2. Pending payments over ₹5,000 (Adjust threshold as needed)
+        // 2. Pending payments over ₹5,000 using CTE calculation
         client.query(`
-            SELECT se.id, se.balance_amount, c.name as centre_name, sv.name as service_name
+            WITH ServicePayments AS (
+                SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
+                FROM payments
+                GROUP BY service_entry_id
+            )
+            SELECT 
+                se.id, 
+                (se.total_charges - COALESCE(sp.paid, 0)) as balance_amount, 
+                c.name as centre_name, 
+                sv.name as service_name
             FROM service_entries se
             JOIN staff st ON st.id = se.staff_id
             JOIN centres c ON c.id = st.centre_id
             JOIN services sv ON sv.id = se.category_id
-            WHERE se.payment_status = 'pending' AND se.balance_amount > 5000
+            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
+            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 5000
         `),
-        // 3. Bad reviews in the last 7 days (Requires immediate damage control)
+        // 3. Bad reviews in the last 7 days
         client.query(`
             SELECT sr.id, sr.service_rating, sr.customer_name, c.name as centre_name
             FROM service_reviews sr
@@ -811,19 +830,17 @@ async function fetchSystemAlerts(client) {
 
     const alerts = [];
 
-    // Map Wallet Alerts (Critical)
     negativeWallets.rows.forEach(row => {
         alerts.push({
             id: `wallet_${row.id}`,
             priority: 'critical',
             title: 'Negative Wallet Balance',
-            message: `${row.centre_name}'s ${row.type} wallet is overdrawn by ₹${Math.abs(row.balance)}.`,
+            message: `${row.centre_name}'s ${row.wallet_type} wallet is overdrawn by ₹${Math.abs(row.balance)}.`,
             centre: row.centre_name,
             actionCode: 'VIEW_WALLET'
         });
     });
 
-    // Map Review Alerts (Critical)
     badReviews.rows.forEach(row => {
         alerts.push({
             id: `review_${row.id}`,
@@ -835,7 +852,6 @@ async function fetchSystemAlerts(client) {
         });
     });
 
-    // Map Payment Alerts (Warning)
     largePendingPayments.rows.forEach(row => {
         alerts.push({
             id: `payment_${row.id}`,
@@ -847,7 +863,6 @@ async function fetchSystemAlerts(client) {
         });
     });
 
-    // Map Stagnant Service Alerts (Warning)
     stagnantServices.rows.forEach(row => {
         const daysDelayed = Math.floor((new Date() - new Date(row.created_at)) / (1000 * 60 * 60 * 24));
         alerts.push({
@@ -860,7 +875,6 @@ async function fetchSystemAlerts(client) {
         });
     });
 
-    // Sort so critical alerts appear at the top of the frontend list
     alerts.sort((a, b) => {
         if (a.priority === 'critical' && b.priority === 'warning') return -1;
         if (a.priority === 'warning' && b.priority === 'critical') return 1;
