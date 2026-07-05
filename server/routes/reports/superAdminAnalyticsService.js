@@ -321,10 +321,10 @@ async function fetchWalletAnalytics(client, dates) {
     const { startDate, endDate } = dates;
 
     const [balancesResult, flowResult] = await Promise.all([
+        // FIXED 1: Removed `WHERE status = 'active'` which was blocking the rows
         client.query(`
             SELECT wallet_type, COALESCE(SUM(balance), 0) as total_balance
             FROM wallets
-            WHERE status = 'active'
             GROUP BY wallet_type
         `),
         client.query(`
@@ -336,22 +336,33 @@ async function fetchWalletAnalytics(client, dates) {
     ]);
 
     const balances = { cash: 0, bank: 0, digital: 0, total: 0 };
+
     balancesResult.rows.forEach(row => {
-        const amount = parseFloat(row.total_balance);
-        const type = (row.wallet_type || "").toLowerCase(); 
-        if (balances[type] !== undefined) balances[type] = amount;
-        else balances[type] = amount; 
+        const amount = parseFloat(row.total_balance) || 0;
+        const type = (row.wallet_type || "").toLowerCase();
+
+        // FIXED 2: Replicated your exact bucket logic!
+        if (type === 'cash') {
+            balances.cash += amount;
+        } else if (type === 'bank') {
+            balances.bank += amount;
+        } else {
+            // Everything else (UPI, GPay, Card, etc.) gets bucketed into Digital
+            balances.digital += amount;
+        }
+        
         balances.total += amount;
     });
 
     const flow = { moneyIn: 0, moneyOut: 0, netFlow: 0 };
     flowResult.rows.forEach(row => {
-        const amount = parseFloat(row.total_amount);
+        const amount = parseFloat(row.total_amount) || 0;
         if (row.type === 'credit' || row.type === 'income') flow.moneyIn += amount;
         else if (row.type === 'debit' || row.type === 'expense') flow.moneyOut += amount;
     });
 
     flow.netFlow = flow.moneyIn - flow.moneyOut;
+    
     return { summary: balances, cashFlow: flow };
 }
 
