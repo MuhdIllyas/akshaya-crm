@@ -11,7 +11,6 @@ import { useNavigate } from "react-router-dom";
 // STAFF PERFORMANCE CHART (unchanged)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
-  const navigate = useNavigate();
   const [metric, setMetric] = useState('revenue');
 
   if (!staffData || staffData.length === 0) {
@@ -230,6 +229,7 @@ const RevenueChart = ({ data, view }) => {
 // MAIN DASHBOARD COMPONENT
 // ==========================================
 const SuperadminDashboard = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
