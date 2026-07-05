@@ -1,7 +1,96 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
+// ==========================================
+// NEW: STAFF PERFORMANCE CHART COMPONENT
+// ==========================================
+const StaffPerformanceChart = ({ staffData }) => {
+  const [metric, setMetric] = useState('revenue'); 
+
+  if (!staffData || staffData.length === 0) {
+    return <div className="text-gray-500 text-sm p-4">No staff data available</div>;
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+  };
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base mb-1">{data.name}</p>
+          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
+          <p className="text-blue-400 font-semibold">Revenue: {formatCurrency(data.revenue)}</p>
+          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex flex-col h-[400px]">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-700">👨‍💼 Top Staff Performers</h2>
+          <p className="text-xs text-gray-500">Ranked across all centres</p>
+        </div>
+        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+          <button
+            onClick={() => setMetric('revenue')}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+              metric === 'revenue' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Revenue
+          </button>
+          <button
+            onClick={() => setMetric('servicesCompleted')}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+              metric === 'servicesCompleted' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Applications
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 w-full min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+            <XAxis type="number" hide />
+            <YAxis 
+              dataKey="name" 
+              type="category" 
+              axisLine={false} 
+              tickLine={false}
+              tick={{ fontSize: 12, fill: '#4B5563' }}
+              width={120}
+            />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F3F4F6' }} />
+            <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000}>
+              {staffData.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={metric === 'revenue' ? '#3B82F6' : '#8B5CF6'} 
+                  className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// MAIN DASHBOARD COMPONENT
+// ==========================================
 const SuperadminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
@@ -80,48 +169,20 @@ const SuperadminDashboard = () => {
 
   // Direct access to pre‑computed fields
   const {
-    totalCentres,
-    totalStaff,
-    totalCustomers,
-    customerGrowth,
-    revenueGrowthPercent,
-    newCentresThisMonth,
-    todayRevenue,
-    todayServices,
-    pendingServices,
-    delayedServices,
-    inProgressServices,
-    admins,
-    staffCount
+    totalCentres, totalStaff, totalCustomers, customerGrowth, revenueGrowthPercent,
+    newCentresThisMonth, todayRevenue, todayServices, pendingServices, delayedServices,
+    inProgressServices, admins, staffCount
   } = stats;
 
-  const {
-    revenue: monthlyRevenue,
-    profit: netProfit,
-    expenses: monthlyExpenses
-  } = financials.totals || {};
-
-  const {
-    cash: walletCash,
-    bank: walletBank,
-    digital: walletDigital,
-    total: walletTotal
-  } = wallets.summary || {};
-
-  const {
-    averageRating: avgRating,
-    totalReviews
-  } = customers.summary || {};
+  const { revenue: monthlyRevenue, profit: netProfit } = financials.totals || {};
+  const { cash: walletCash, bank: walletBank, digital: walletDigital, total: walletTotal } = wallets.summary || {};
+  const { averageRating: avgRating, totalReviews } = customers.summary || {};
 
   const topStaffList = staff.topPerformers || [];
   const topTeamsList = teams.topTeams || [];
-
   const timeline = activity.timeline || [];
-
-  // Notifications are alerts directly
   const notifications = alerts;
 
-  // Activities – stable keys
   const activities = timeline.map(item => ({
     id: item.id || item.referenceId || `${item.type}-${item.createdAt}`,
     action: `${item.type}: ${item.title}`,
@@ -135,7 +196,6 @@ const SuperadminDashboard = () => {
     }
     const max = Math.max(...revenueChartData.map(d => d.value), 1);
 
-    // Helper to format the Postgres label into a readable string
     const formatChartLabel = (label) => {
         if (!label) return '';
         if (label.length === 7) { 
@@ -149,21 +209,16 @@ const SuperadminDashboard = () => {
     };
 
     return (
-      // FIXED: Increased height to h-72 and added pt-12 (padding-top) 
-      // so the hover tooltip has room to display without getting clipped!
       <div className="w-full h-72 flex items-end gap-1 overflow-x-auto pb-2 pt-12 scrollbar-thin scrollbar-thumb-gray-300">
         {revenueChartData.map((item, idx) => (
             <div key={item.label || idx} className="flex-1 min-w-[30px] flex flex-col justify-end items-center group relative h-full cursor-pointer">
               
-              {/* UPGRADED TOOLTIP */}
               <div className="opacity-0 group-hover:opacity-100 absolute -top-12 bg-gray-900 text-white text-xs py-1.5 px-3 rounded pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-lg flex flex-col items-center">
                 <span className="font-bold">{formatCurrency(item.value)}</span>
                 <span className="text-[10px] text-gray-300">{formatChartLabel(item.label)}</span>
-                {/* Small downward arrow */}
                 <div className="absolute -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
               </div>
               
-              {/* Bar Wrapper */}
               <div className="w-full flex-1 flex items-end justify-center">
                 <div
                   className={`w-full rounded-t transition-all duration-300 ${
@@ -175,7 +230,6 @@ const SuperadminDashboard = () => {
                 ></div>
               </div>
 
-              {/* Dynamic Date Label */}
               <span className="text-[10px] text-gray-500 mt-2 whitespace-nowrap">
                 {formatChartLabel(item.label)}
               </span>
@@ -185,7 +239,6 @@ const SuperadminDashboard = () => {
     );
   };
 
-  // Map view – unchanged, but uses centreList from backend
   const MapView = () => {
     return (
       <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
@@ -250,11 +303,6 @@ const SuperadminDashboard = () => {
           <div className="text-2xl font-bold text-pink-900">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
           <div className="text-xs text-pink-600">{health?.metrics?.pendingCustomers ?? 0} Customers</div>
         </div>
-        <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 col-span-2 md:col-span-1">
-          <div className="text-sm text-teal-800 font-medium">⭐ Average Rating</div>
-          <div className="text-2xl font-bold text-teal-900">{avgRating}</div>
-          <div className="text-xs text-teal-600">{totalReviews?.toLocaleString()} Reviews</div>
-        </div>
       </div>
 
       {/* Revenue Analytics + Centre Performance */}
@@ -294,9 +342,7 @@ const SuperadminDashboard = () => {
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Services</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
                 </tr>
               </thead>
@@ -307,9 +353,7 @@ const SuperadminDashboard = () => {
                       {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
                     </td>
                     <td className="px-3 py-2 font-medium">{centre.name}</td>
-                    <td className="px-3 py-2">{formatCurrency(centre.revenue)}</td>
                     <td className="px-3 py-2">{formatCurrency(centre.profit)}</td>
-                    <td className="px-3 py-2">{centre.servicesCompleted || 0}</td>
                     <td className="px-3 py-2">{centre.rating || 0}</td>
                   </tr>
                 ))}
@@ -326,13 +370,13 @@ const SuperadminDashboard = () => {
           {centreList.map((centre) => {
             const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
             return (
-              <div key={centre.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div key={centre.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
                 <div>
                   <div className="font-medium">{centre.name}</div>
-                  <div className="text-sm text-gray-600">{status.icon} {status.label}</div>
+                  <div className="text-sm mt-1">{status.icon} <span className="font-medium text-gray-700">{status.label}</span></div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold">{centre.rating || 0}</div>
+                  <div className="text-lg font-bold text-gray-800">{centre.rating || 0}</div>
                   <div className="text-xs text-gray-500">Rating</div>
                 </div>
               </div>
@@ -340,8 +384,8 @@ const SuperadminDashboard = () => {
           })}
         </div>
         {health?.overallScore !== undefined && (
-          <div className="mt-4 text-sm text-gray-600">
-            Overall Health Score: <span className="font-bold">{health.overallScore}/100</span>
+          <div className="mt-4 text-sm text-gray-600 border-t pt-3">
+            Overall Network Health Score: <span className="font-bold text-lg text-gray-800 ml-2">{health.overallScore}/100</span>
           </div>
         )}
       </div>
@@ -378,21 +422,21 @@ const SuperadminDashboard = () => {
       <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-50 p-3 rounded-lg">
-            <div className="text-sm text-gray-600">Cash Wallet</div>
-            <div className="text-xl font-bold">{formatCurrency(walletCash)}</div>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <div className="text-sm text-gray-600 mb-1">Cash Wallet</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletCash)}</div>
           </div>
-          <div className="bg-gray-50 p-3 rounded-lg">
-            <div className="text-sm text-gray-600">Bank</div>
-            <div className="text-xl font-bold">{formatCurrency(walletBank)}</div>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <div className="text-sm text-gray-600 mb-1">Bank</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletBank)}</div>
           </div>
-          <div className="bg-gray-50 p-3 rounded-lg">
-            <div className="text-sm text-gray-600">Digital</div>
-            <div className="text-xl font-bold">{formatCurrency(walletDigital)}</div>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <div className="text-sm text-gray-600 mb-1">Digital</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletDigital)}</div>
           </div>
-          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-            <div className="text-sm text-blue-800 font-semibold">Total Wallets</div>
-            <div className="text-xl font-bold text-blue-900">{formatCurrency(walletTotal)}</div>
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <div className="text-sm text-blue-800 font-semibold mb-1">Total Wallets</div>
+            <div className="text-2xl font-bold text-blue-900">{formatCurrency(walletTotal)}</div>
           </div>
         </div>
       </div>
@@ -401,47 +445,49 @@ const SuperadminDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-green-50 p-3 rounded-lg">
-              <div className="text-xs text-green-700">Best Revenue</div>
-              <div className="font-medium">{best.revenue?.name || "N/A"}</div>
-              <div className="text-sm">{formatCurrency(best.revenue?.value)}</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+              <div className="text-xs text-green-700 font-medium mb-1">Best Revenue</div>
+              <div className="font-bold text-gray-800 truncate">{best.revenue?.name || "N/A"}</div>
+              <div className="text-lg text-green-700">{formatCurrency(best.revenue?.value)}</div>
             </div>
-            <div className="bg-blue-50 p-3 rounded-lg">
-              <div className="text-xs text-blue-700">Best Profit</div>
-              <div className="font-medium">{best.profit?.name || "N/A"}</div>
-              <div className="text-sm">{formatCurrency(best.profit?.value)}</div>
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <div className="text-xs text-blue-700 font-medium mb-1">Best Profit</div>
+              <div className="font-bold text-gray-800 truncate">{best.profit?.name || "N/A"}</div>
+              <div className="text-lg text-blue-700">{formatCurrency(best.profit?.value)}</div>
             </div>
-            <div className="bg-yellow-50 p-3 rounded-lg">
-              <div className="text-xs text-yellow-700">Best Rating</div>
-              <div className="font-medium">{best.rating?.name || "N/A"}</div>
-              <div className="text-sm">{best.rating?.value || 0}</div>
+            <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-2">
+              <div className="text-xs text-yellow-700 font-medium mb-1">Best Rating</div>
+              <div className="flex justify-between items-end">
+                <div className="font-bold text-gray-800">{best.rating?.name || "N/A"}</div>
+                <div className="text-lg text-yellow-700 font-bold">{best.rating?.value || 0} ⭐</div>
+              </div>
             </div>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-red-50 p-3 rounded-lg">
-              <div className="text-xs text-red-700">Lowest Revenue</div>
-              <div className="font-medium">{worst.revenue?.name || "N/A"}</div>
-              <div className="text-sm">{formatCurrency(worst.revenue?.value)}</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <div className="text-xs text-red-700 font-medium mb-1">Lowest Profit</div>
+              <div className="font-bold text-gray-800 truncate">{worst.revenue?.name || "N/A"}</div>
+              <div className="text-lg text-red-700">{formatCurrency(worst.revenue?.value)}</div>
             </div>
-            <div className="bg-red-50 p-3 rounded-lg">
-              <div className="text-xs text-red-700">Highest Pending</div>
-              <div className="font-medium">{worst.pending?.name || "N/A"}</div>
-              <div className="text-sm">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <div className="text-xs text-red-700 font-medium mb-1">Highest Pending</div>
+              <div className="font-bold text-gray-800 truncate">{worst.pending?.name || "N/A"}</div>
+              <div className="text-lg text-red-700">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
             </div>
-            <div className="bg-red-50 p-3 rounded-lg">
-              <div className="text-xs text-red-700">Most Delayed</div>
-              <div className="font-medium">{worst.delayed?.name || "N/A"}</div>
-              <div className="text-sm">{worst.delayed?.value ?? "N/A"}</div>
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+              <div className="text-xs text-orange-700 font-medium mb-1">Most Delayed</div>
+              <div className="font-bold text-gray-800 truncate">{worst.delayed?.name || "N/A"}</div>
+              <div className="text-lg text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
             </div>
-            <div className="bg-red-50 p-3 rounded-lg">
-              <div className="text-xs text-red-700">Most Complaints</div>
-              <div className="font-medium">{worst.complaints?.name || "N/A"}</div>
-              <div className="text-sm">{worst.complaints?.value ?? "N/A"}</div>
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+              <div className="text-xs text-orange-700 font-medium mb-1">Most Complaints</div>
+              <div className="font-bold text-gray-800 truncate">{worst.complaints?.name || "N/A"}</div>
+              <div className="text-lg text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
             </div>
           </div>
         </div>
@@ -449,51 +495,29 @@ const SuperadminDashboard = () => {
 
       {/* Top Staff & Teams */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">👨‍💼 Top Staff</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Name</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Revenue</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Applications</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Rating</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topStaffList.map((staff, idx) => (
-                  <tr key={staff.id || idx} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium">{staff.name}</td>
-                    <td className="px-3 py-2">{formatCurrency(staff.revenue)}</td>
-                    <td className="px-3 py-2">{staff.servicesCompleted || 0}</td>
-                    <td className="px-3 py-2">{staff.rating || 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        
+        {/* NEW INTERACTIVE RECHARTS COMPONENT */}
+        <StaffPerformanceChart staffData={topStaffList} />
 
-        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">👥 Top Teams</h2>
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-6">👥 Top Teams</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Team</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Revenue</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Profit</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Expenses</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Profit</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expenses</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-200 bg-white">
                 {topTeamsList.map((team, idx) => (
-                  <tr key={team.id || idx} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium">{team.name}</td>
-                    <td className="px-3 py-2">{formatCurrency(team.revenue)}</td>
-                    <td className="px-3 py-2">{formatCurrency(team.profit || 0)}</td>
-                    <td className="px-3 py-2">{formatCurrency(team.expenses || 0)}</td>
+                  <tr key={team.id || idx} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-4 whitespace-nowrap font-medium text-gray-900">{team.name}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-gray-600">{formatCurrency(team.revenue)}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-green-600 font-medium">{formatCurrency(team.profit || 0)}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-red-600">{formatCurrency(team.expenses || 0)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -502,71 +526,69 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Notifications */}
-      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">🔔 Notifications</h2>
-        <div className="space-y-2">
-          {notifications.length > 0 ? (
-            notifications.map((notif) => (
-              <div key={notif.id} className={`p-3 rounded-lg flex items-center ${notif.priority === "critical" ? "bg-red-50" : notif.priority === "warning" ? "bg-yellow-50" : "bg-blue-50"}`}>
-                <span className="mr-2">{notif.priority === "critical" ? "🔴" : notif.priority === "warning" ? "🟠" : "🔵"}</span>
-                <span>{notif.message}</span>
-              </div>
-            ))
-          ) : (
-            <div className="text-gray-500 text-sm">No notifications</div>
-          )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Notifications */}
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+            <span className="mr-2">🔔</span> Action Required
+          </h2>
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+            {notifications.length > 0 ? (
+              notifications.map((notif) => (
+                <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
+                  notif.priority === "critical" ? "bg-red-50 border-red-500" : 
+                  notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
+                }`}>
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
+                    <div className="text-gray-600 text-sm">{notif.message}</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Recent Activities */}
-      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">🕒 Recent Activities</h2>
-        <div className="space-y-3">
-          {activities.length > 0 ? (
-            activities.map((activity) => (
-              <div key={activity.id} className="flex items-center justify-between border-b border-gray-100 pb-2">
-                <span>{activity.action}</span>
-                <span className="text-sm text-gray-500">{activity.time}</span>
-              </div>
-            ))
-          ) : (
-            <div className="text-gray-500 text-sm">No recent activities</div>
-          )}
+        {/* Recent Activities */}
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+            <span className="mr-2">🕒</span> Live Activity Feed
+          </h2>
+          <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+            {activities.length > 0 ? (
+              activities.map((activity) => (
+                <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
+                  <span className="text-sm font-medium text-gray-800">{activity.action}</span>
+                  <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Map View */}
-      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Locations</h2>
+      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
         <MapView />
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
+      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ Create Centre</button>
-          <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">+ Create Admin</button>
-          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">📢 Broadcast Notification</button>
-          <button className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition">🌐 Global Event</button>
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">📣 Global Campaign</button>
-          <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">📊 Financial Report</button>
-          <button className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">📤 Export Reports</button>
+          <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition shadow-sm">+ Create Centre</button>
+          <button className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition shadow-sm">+ Create Admin</button>
+          <button className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition shadow-sm">📢 Broadcast</button>
+          <button className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition shadow-sm">📊 Global Report</button>
+          <button className="px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition shadow-sm">📤 Export Data</button>
         </div>
       </div>
 
-      {/* AI Insights */}
-      {insights.length > 0 && (
-        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-200">
-          <h2 className="text-lg font-semibold text-indigo-800 mb-2">🤖 AI Insights</h2>
-          <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
-            {insights.map((insight, idx) => (
-              <li key={idx}>{insight}</li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 };
