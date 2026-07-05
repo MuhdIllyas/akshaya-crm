@@ -40,13 +40,12 @@ function getDateContext(filters = {}) {
             endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
             break;
         case 'financialYear':
-            // Assuming Indian Financial Year (April 1 to March 31)
             const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-            startDate = new Date(startYear, 3, 1); // April 1
-            endDate = new Date(startYear + 1, 2, 31, 23, 59, 59, 999); // March 31
+            startDate = new Date(startYear, 3, 1); 
+            endDate = new Date(startYear + 1, 2, 31, 23, 59, 59, 999); 
             break;
         case 'allTime':
-            startDate = new Date(2000, 0, 1); // Or your company's founding date
+            startDate = new Date(2000, 0, 1);
             endDate.setHours(23, 59, 59, 999);
             break;
         case 'custom':
@@ -66,10 +65,8 @@ function getDateContext(filters = {}) {
 
 /**
  * EXPORT
- * Main entry point for the SuperAdmin Executive Dashboard
  */
 export const getSuperAdminDashboard = async (filters = {}) => {
-    // FIXED: Safely parsing modules whether it comes as an array or a comma string from the API
     let modules = ['stats'];
     if (filters.modules) {
         modules = Array.isArray(filters.modules) ? filters.modules : filters.modules.split(',');
@@ -91,8 +88,6 @@ export const getSuperAdminDashboard = async (filters = {}) => {
         if (modules.includes('teams')) tasks.push(fetchTeamAnalytics(client, dates).then(r => data.teams = r));
         if (modules.includes('health')) tasks.push(fetchHealthAnalytics(client, dates).then(r => data.health = r));
         if (modules.includes('activity')) tasks.push(fetchRecentActivities(client).then(r => data.activity = r));
-        
-        // NEW: Alerts Module
         if (modules.includes('alerts')) tasks.push(fetchSystemAlerts(client).then(r => data.alerts = r));
 
         await Promise.all(tasks);
@@ -132,35 +127,31 @@ function buildDashboard(data) {
 
 /**
  * ORGANISATION ENGINE
- * Fetches top-level KPIs for the Executive Dashboard
  */
 async function fetchOrganisationStats(client, dates) {
     const { startDate, endDate } = dates;
 
-    const [
-        revenueResult,
-        expenseResult,
-        entityCountsResult,
-        operationsResult // <-- ADDED: For todayServices and pendingServices
-    ] = await Promise.all([
-        // 1. Revenue for the period
+    const [revenueResult, expenseResult, entityCountsResult, operationsResult] = await Promise.all([
+        // FIXED: Extracting gross_profit (service_charges) separate from total_revenue
         client.query(`
-            SELECT COALESCE(SUM(total_charges), 0) as total_revenue, 
-                   COUNT(id) as total_services 
+            SELECT 
+                COALESCE(SUM(total_charges), 0) as total_revenue, 
+                COALESCE(SUM(service_charges), 0) as gross_profit,
+                COUNT(id) as total_services 
             FROM service_entries 
             WHERE status = 'completed' 
             AND created_at >= $1 AND created_at <= $2
         `, [startDate, endDate]),
 
-        // 2. Expenses for the period
+        // FIXED: Added 'auto_approved' and is_reversal filters
         client.query(`
             SELECT COALESCE(SUM(amount), 0) as total_expenses 
             FROM expenses 
-            WHERE status = 'approved'
+            WHERE status IN ('approved', 'auto_approved')
+            AND (is_reversal IS NULL OR is_reversal = FALSE)
             AND expense_date >= $1 AND expense_date <= $2
         `, [startDate, endDate]),
 
-        // 3. Global Entity Counts (Usually lifetime totals, not filtered by date)
         client.query(`
             SELECT 
                 (SELECT COUNT(*) FROM centres WHERE status = 'active') as total_centres,
@@ -168,7 +159,7 @@ async function fetchOrganisationStats(client, dates) {
                 (SELECT COUNT(*) FROM customers) as total_customers
         `),
 
-        // 4. Live Operations (Required by React UI)
+        // FIXED: Applying the exact same gross profit logic to today's operations
         client.query(`
             SELECT 
                 COUNT(*) FILTER (WHERE status = 'pending') as pending_services,
@@ -179,19 +170,18 @@ async function fetchOrganisationStats(client, dates) {
         `)
     ]);
 
-    const revenue = parseFloat(revenueResult.rows[0].total_revenue);
-    const expenses = parseFloat(expenseResult.rows[0].total_expenses);
-    const profit = revenue - expenses;
+    const revenue = parseFloat(revenueResult.rows[0].total_revenue) || 0;
+    const grossProfit = parseFloat(revenueResult.rows[0].gross_profit) || 0;
+    const expenses = parseFloat(expenseResult.rows[0].total_expenses) || 0;
 
     return {
         revenue,
         expenses,
-        profit,
-        servicesCompleted: parseInt(revenueResult.rows[0].total_services, 10),
-        totalCentres: parseInt(entityCountsResult.rows[0].total_centres, 10),
-        totalStaff: parseInt(entityCountsResult.rows[0].total_staff, 10),
-        totalCustomers: parseInt(entityCountsResult.rows[0].total_customers, 10),
-        // ADDED fields for UI
+        profit: grossProfit - expenses, // FIXED: Net Profit = Service Charges - Expenses
+        servicesCompleted: parseInt(revenueResult.rows[0].total_services, 10) || 0,
+        totalCentres: parseInt(entityCountsResult.rows[0].total_centres, 10) || 0,
+        totalStaff: parseInt(entityCountsResult.rows[0].total_staff, 10) || 0,
+        totalCustomers: parseInt(entityCountsResult.rows[0].total_customers, 10) || 0,
         todayRevenue: parseFloat(operationsResult.rows[0].today_revenue) || 0,
         todayServices: parseInt(operationsResult.rows[0].today_services, 10) || 0,
         pendingServices: parseInt(operationsResult.rows[0].pending_services, 10) || 0,
@@ -204,18 +194,11 @@ async function fetchOrganisationStats(client, dates) {
  */
 async function fetchFinancialOverview(client, dates) {
     const { startDate, endDate } = dates;
-
-    // SMART GROUPING: If date range is > 60 days, group by month (YYYY-MM). Else, day (YYYY-MM-DD).
     const diffTime = Math.abs(new Date(endDate) - new Date(startDate));
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     const timeFormat = diffDays > 60 ? 'YYYY-MM' : 'YYYY-MM-DD';
 
-    const [
-        revenueBreakdownResult,
-        expenseBreakdownResult,
-        revenueTrendResult,
-        expenseTrendResult
-    ] = await Promise.all([
+    const [revenueBreakdownResult, expenseBreakdownResult, revenueTrendResult, expenseTrendResult] = await Promise.all([
         client.query(`
             SELECT sv.category_id, COALESCE(SUM(se.total_charges), 0) as total
             FROM service_entries se
@@ -226,18 +209,23 @@ async function fetchFinancialOverview(client, dates) {
             ORDER BY total DESC
         `, [startDate, endDate]),
 
+        // FIXED: Expenses Reversals and Auto Approved
         client.query(`
             SELECT category, COALESCE(SUM(amount), 0) as total
             FROM expenses
-            WHERE status = 'approved'
+            WHERE status IN ('approved', 'auto_approved')
+            AND (is_reversal IS NULL OR is_reversal = FALSE)
             AND expense_date >= $1 AND expense_date <= $2
             GROUP BY category
             ORDER BY total DESC
         `, [startDate, endDate]),
 
-        // Using TO_CHAR to automatically group by our dynamic timeFormat
+        // FIXED: Grabbing gross_profit (service_charges) alongside total_charges
         client.query(`
-            SELECT TO_CHAR(created_at, '${timeFormat}') as date_label, COALESCE(SUM(total_charges), 0) as total
+            SELECT 
+                TO_CHAR(created_at, '${timeFormat}') as date_label, 
+                COALESCE(SUM(total_charges), 0) as total_revenue,
+                COALESCE(SUM(service_charges), 0) as gross_profit
             FROM service_entries
             WHERE status = 'completed'
             AND created_at >= $1 AND created_at <= $2
@@ -245,10 +233,12 @@ async function fetchFinancialOverview(client, dates) {
             ORDER BY date_label ASC
         `, [startDate, endDate]),
 
+        // FIXED: Expenses Reversals and Auto Approved
         client.query(`
             SELECT TO_CHAR(expense_date, '${timeFormat}') as date_label, COALESCE(SUM(amount), 0) as total
             FROM expenses
-            WHERE status = 'approved'
+            WHERE status IN ('approved', 'auto_approved')
+            AND (is_reversal IS NULL OR is_reversal = FALSE)
             AND expense_date >= $1 AND expense_date <= $2
             GROUP BY TO_CHAR(expense_date, '${timeFormat}')
             ORDER BY date_label ASC
@@ -267,17 +257,25 @@ async function fetchFinancialOverview(client, dates) {
  * CALCULATION LAYER
  */
 function calculateFinancialMetrics(rawFinancial) {
-    const totalRevenue = rawFinancial.revenueBreakdown.reduce((sum, item) => sum + parseFloat(item.total), 0);
-    const totalExpenses = rawFinancial.expenseBreakdown.reduce((sum, item) => sum + parseFloat(item.total), 0);
-    const netProfit = totalRevenue - totalExpenses;
+    const totalRevenue = rawFinancial.revenueTrend.reduce((sum, item) => sum + parseFloat(item.total_revenue), 0);
+    const totalGrossProfit = rawFinancial.revenueTrend.reduce((sum, item) => sum + parseFloat(item.gross_profit), 0);
+    const totalExpenses = rawFinancial.expenseTrend.reduce((sum, item) => sum + parseFloat(item.total), 0);
+    
+    // FIXED: Net Profit = Service Charges - Expenses
+    const netProfit = totalGrossProfit - totalExpenses;
     const profitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(2) : 0;
 
     const trendMap = new Map();
 
-    // The date_label is already perfectly formatted from Postgres!
     rawFinancial.revenueTrend.forEach(row => {
         const dateStr = row.date_label; 
-        trendMap.set(dateStr, { date: dateStr, revenue: parseFloat(row.total), expense: 0, profit: parseFloat(row.total) });
+        trendMap.set(dateStr, { 
+            date: dateStr, 
+            revenue: parseFloat(row.total_revenue), 
+            expense: 0, 
+            grossProfit: parseFloat(row.gross_profit), // Track this for accurate chart rendering
+            profit: parseFloat(row.gross_profit) // Before expenses, profit = grossProfit
+        });
     });
 
     rawFinancial.expenseTrend.forEach(row => {
@@ -285,18 +283,19 @@ function calculateFinancialMetrics(rawFinancial) {
         if (trendMap.has(dateStr)) {
             const entry = trendMap.get(dateStr);
             entry.expense = parseFloat(row.total);
-            entry.profit = entry.revenue - entry.expense;
+            entry.profit = entry.grossProfit - entry.expense; // FIXED: Net Profit logic
         } else {
-            trendMap.set(dateStr, { date: dateStr, revenue: 0, expense: parseFloat(row.total), profit: -parseFloat(row.total) });
+            trendMap.set(dateStr, { 
+                date: dateStr, revenue: 0, expense: parseFloat(row.total), grossProfit: 0, profit: -parseFloat(row.total) 
+            });
         }
     });
 
-    // Sort alphabetically (which works perfectly for YYYY-MM and YYYY-MM-DD)
     const combinedTrend = Array.from(trendMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
     const charts = {
         revenue: combinedTrend.map(t => ({ label: t.date, value: t.revenue })),
-        profit: combinedTrend.map(t => ({ label: t.date, value: t.profit })),
+        profit: combinedTrend.map(t => ({ label: t.date, value: t.profit })), // Will now correctly look different!
         expenses: combinedTrend.map(t => ({ label: t.date, value: t.expense }))
     };
 
@@ -313,25 +312,17 @@ function calculateFinancialMetrics(rawFinancial) {
 
 /**
  * WALLET ENGINE
- * Tracks liquidity, current balances across payment modes, and transaction flow.
  */
 async function fetchWalletAnalytics(client, dates) {
     const { startDate, endDate } = dates;
 
-    const [
-        balancesResult,
-        flowResult
-    ] = await Promise.all([
-        // 1. Current Balances (Grouped by Wallet Type)
-        // Note: We don't use date filters here because balances are absolute current states.
+    const [balancesResult, flowResult] = await Promise.all([
         client.query(`
             SELECT wallet_type, COALESCE(SUM(balance), 0) as total_balance
             FROM wallets
             WHERE status = 'active'
             GROUP BY wallet_type
         `),
-
-        // 2. Transaction Flow (In/Out within the date range)
         client.query(`
             SELECT type, COALESCE(SUM(amount), 0) as total_amount
             FROM wallet_transactions
@@ -340,66 +331,39 @@ async function fetchWalletAnalytics(client, dates) {
         `, [startDate, endDate])
     ]);
 
-    // Format Balances
-    const balances = {
-        cash: 0,
-        bank: 0,
-        digital: 0,
-        total: 0
-    };
-
+    const balances = { cash: 0, bank: 0, digital: 0, total: 0 };
     balancesResult.rows.forEach(row => {
         const amount = parseFloat(row.total_balance);
-        const type = (row.wallet_type || "").toLowerCase(); // FIXED fallback mapping
-        
-        if (balances[type] !== undefined) {
-            balances[type] = amount;
-        } else {
-            balances[type] = amount; 
-        }
+        const type = (row.wallet_type || "").toLowerCase(); 
+        if (balances[type] !== undefined) balances[type] = amount;
+        else balances[type] = amount; 
         balances.total += amount;
     });
 
-    // Format Cash Flow
-    const flow = {
-        moneyIn: 0,
-        moneyOut: 0,
-        netFlow: 0
-    };
-
+    const flow = { moneyIn: 0, moneyOut: 0, netFlow: 0 };
     flowResult.rows.forEach(row => {
         const amount = parseFloat(row.total_amount);
-        // Adjust these strings based on your actual database ENUMs for transaction_type
-        if (row.type === 'credit' || row.type === 'income') {
-            flow.moneyIn += amount;
-        } else if (row.type === 'debit' || row.type === 'expense') {
-            flow.moneyOut += amount;
-        }
+        if (row.type === 'credit' || row.type === 'income') flow.moneyIn += amount;
+        else if (row.type === 'debit' || row.type === 'expense') flow.moneyOut += amount;
     });
 
     flow.netFlow = flow.moneyIn - flow.moneyOut;
-
-    return {
-        summary: balances,
-        cashFlow: flow
-    };
+    return { summary: balances, cashFlow: flow };
 }
 
 /**
  * CENTRE LEADERBOARD
- * Ranks centres by profitability, revenue, service volume, and customer ratings.
  */
 async function fetchCentreLeaderboard(client, dates) {
     const { startDate, endDate } = dates;
 
-    // We use CTEs (WITH clauses) to independently calculate revenue, expenses, 
-    // and ratings per centre, then join them together in one highly optimized query.
     const leaderboardQuery = `
         WITH CentreRevenue AS (
             SELECT 
                 c.id as centre_id, 
                 c.name as centre_name, 
-                COALESCE(SUM(se.total_charges), 0) as revenue, 
+                COALESCE(SUM(se.total_charges), 0) as revenue,
+                COALESCE(SUM(se.service_charges), 0) as gross_profit, -- FIXED
                 COUNT(se.id) as services_completed
             FROM centres c
             LEFT JOIN staff st ON st.centre_id = c.id
@@ -413,14 +377,13 @@ async function fetchCentreLeaderboard(client, dates) {
                 centre_id, 
                 COALESCE(SUM(amount), 0) as expenses
             FROM expenses
-            WHERE status = 'approved' 
+            WHERE status IN ('approved', 'auto_approved') -- FIXED
+                AND (is_reversal IS NULL OR is_reversal = FALSE)
                 AND expense_date >= $1 AND expense_date <= $2
             GROUP BY centre_id
         ),
         CentreRatings AS (
-            SELECT 
-                c.id as centre_id, 
-                ROUND(AVG(sr.service_rating), 1) as avg_rating
+            SELECT c.id as centre_id, ROUND(AVG(sr.service_rating), 1) as avg_rating
             FROM centres c
             JOIN staff st ON st.centre_id = c.id
             JOIN service_reviews sr ON sr.staff_id = st.id
@@ -433,18 +396,17 @@ async function fetchCentreLeaderboard(client, dates) {
             cr.revenue,
             cr.services_completed,
             COALESCE(ce.expenses, 0) as expenses,
-            (cr.revenue - COALESCE(ce.expenses, 0)) as profit,
+            (cr.gross_profit - COALESCE(ce.expenses, 0)) as profit, -- FIXED
             COALESCE(rt.avg_rating, 0) as rating
         FROM CentreRevenue cr
         LEFT JOIN CentreExpenses ce ON cr.centre_id = ce.centre_id
         LEFT JOIN CentreRatings rt ON cr.centre_id = rt.centre_id
-        WHERE cr.revenue > 0 OR COALESCE(ce.expenses, 0) > 0 -- Only show active centres
+        WHERE cr.revenue > 0 OR COALESCE(ce.expenses, 0) > 0 
         ORDER BY profit DESC; 
     `;
 
     const result = await client.query(leaderboardQuery, [startDate, endDate]);
 
-    // Format the SQL output into clean JavaScript types
     const formattedList = result.rows.map(row => ({
         id: row.id,
         name: row.name,
@@ -455,236 +417,105 @@ async function fetchCentreLeaderboard(client, dates) {
         rating: parseFloat(row.rating)
     }));
 
-    // ADDED: Sorting out best and worst for UI cards
     const sortedByRevenue = [...formattedList].sort((a, b) => b.revenue - a.revenue);
     const sortedByProfit = [...formattedList].sort((a, b) => b.profit - a.profit);
     const sortedByRating = [...formattedList].sort((a, b) => b.rating - a.rating);
-
-    const best = {
-        revenue: { name: sortedByRevenue[0]?.name, value: sortedByRevenue[0]?.revenue },
-        profit: { name: sortedByProfit[0]?.name, value: sortedByProfit[0]?.profit },
-        rating: { name: sortedByRating[0]?.name, value: sortedByRating[0]?.rating }
-    };
-    
-    const worst = {
-        revenue: { name: sortedByRevenue[sortedByRevenue.length - 1]?.name, value: sortedByRevenue[sortedByRevenue.length - 1]?.revenue },
-    };
 
     return {
         fullList: formattedList,
         topPerformers: formattedList.slice(0, 5),
         worstPerformers: [...formattedList].sort((a, b) => a.profit - b.profit).slice(0, 5),
-        best, // <-- ADDED
-        worst // <-- ADDED
+        best: {
+            revenue: { name: sortedByRevenue[0]?.name, value: sortedByRevenue[0]?.revenue },
+            profit: { name: sortedByProfit[0]?.name, value: sortedByProfit[0]?.profit },
+            rating: { name: sortedByRating[0]?.name, value: sortedByRating[0]?.rating }
+        },
+        worst: {
+            revenue: { name: sortedByRevenue[sortedByRevenue.length - 1]?.name, value: sortedByRevenue[sortedByRevenue.length - 1]?.revenue },
+        }
     };
 }
 
 /**
  * CUSTOMER ANALYTICS ENGINE
- * Tracks customer acquisition, review volume, and satisfaction.
  */
 async function fetchCustomerAnalytics(client, dates) {
     const { startDate, endDate } = dates;
-
-    const [
-        statsResult,
-        trendResult
-    ] = await Promise.all([
-        // 1. Overall Acquisition & Satisfaction in this period
+    const [statsResult, trendResult] = await Promise.all([
         client.query(`
             SELECT 
                 COUNT(*) as new_customers,
                 (SELECT COUNT(*) FROM service_reviews WHERE submitted_at >= $1 AND submitted_at <= $2) as total_reviews,
                 (SELECT ROUND(AVG(service_rating), 1) FROM service_reviews WHERE submitted_at >= $1 AND submitted_at <= $2) as avg_rating
-            FROM customers 
-            WHERE created_at >= $1 AND created_at <= $2
+            FROM customers WHERE created_at >= $1 AND created_at <= $2
         `, [startDate, endDate]),
-
-        // 2. Daily Registration Trend
         client.query(`
             SELECT DATE(created_at) as date, COUNT(*) as registrations
-            FROM customers
-            WHERE created_at >= $1 AND created_at <= $2
-            GROUP BY DATE(created_at)
-            ORDER BY date ASC
+            FROM customers WHERE created_at >= $1 AND created_at <= $2
+            GROUP BY DATE(created_at) ORDER BY date ASC
         `, [startDate, endDate])
     ]);
-
     return {
         summary: {
             newRegistrations: parseInt(statsResult.rows[0].new_customers, 10) || 0,
             totalReviews: parseInt(statsResult.rows[0].total_reviews, 10) || 0,
             averageRating: parseFloat(statsResult.rows[0].avg_rating) || 0
         },
-        registrationTrend: trendResult.rows.map(row => ({
-            date: row.date.toISOString().split('T')[0],
-            registrations: parseInt(row.registrations, 10)
-        }))
+        registrationTrend: trendResult.rows.map(row => ({ date: row.date.toISOString().split('T')[0], registrations: parseInt(row.registrations, 10) }))
     };
 }
 
 /**
  * STAFF ANALYTICS ENGINE
- * Ranks staff by productivity and revenue generation.
  */
 async function fetchStaffAnalytics(client, dates) {
     const { startDate, endDate } = dates;
-
-    // We rank staff by revenue generation. We also fetch their centre 
-    // so the SuperAdmin knows exactly where the top performers are located.
     const topStaffQuery = `
         SELECT 
-            st.id,
-            st.name as staff_name,
-            c.name as centre_name,
+            st.id, st.name as staff_name, c.name as centre_name,
             COUNT(se.id) as services_completed,
             COALESCE(SUM(se.total_charges), 0) as revenue_generated
         FROM staff st
         JOIN centres c ON st.centre_id = c.id
         JOIN service_entries se ON se.staff_id = st.id
-        WHERE se.status = 'completed' 
-          AND se.created_at >= $1 AND se.created_at <= $2
+        WHERE se.status = 'completed' AND se.created_at >= $1 AND se.created_at <= $2
         GROUP BY st.id, st.name, c.name
-        ORDER BY revenue_generated DESC
-        LIMIT 10
+        ORDER BY revenue_generated DESC LIMIT 10
     `;
-
     const result = await client.query(topStaffQuery, [startDate, endDate]);
-
     return {
         topPerformers: result.rows.map(row => ({
-            id: row.id,
-            name: row.staff_name,
-            centre: row.centre_name,
-            servicesCompleted: parseInt(row.services_completed, 10),
-            revenue: parseFloat(row.revenue_generated)
+            id: row.id, name: row.staff_name, centre: row.centre_name,
+            servicesCompleted: parseInt(row.services_completed, 10), revenue: parseFloat(row.revenue_generated)
         }))
     };
 }
 
 /**
  * ACTIVITY ENGINE
- * Creates a unified live feed of everything happening across the organization.
  */
 async function fetchRecentActivities(client) {
-    const [
-        servicesResult,
-        expensesResult,
-        reviewsResult,
-        customersResult,
-        walletsResult
-    ] = await Promise.all([
-        // 1. Completed Services
-        client.query(`
-            SELECT 
-                'service_completed' as type,
-                se.created_at,
-                se.total_charges as amount,
-                c.name as centre_name,
-                st.name as staff_name,
-                sv.name as title,
-                se.id as reference_id
-            FROM service_entries se
-            JOIN staff st ON st.id = se.staff_id
-            JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = se.category_id 
-            WHERE se.status = 'completed'
-            ORDER BY se.created_at DESC LIMIT 25
-        `),
-
-        // 2. Expenses Added
-        client.query(`
-            SELECT 
-                'expense_added' as type,
-                e.created_at,
-                e.amount,
-                c.name as centre_name,
-                'Admin' as staff_name,
-                e.category as title,
-                e.id as reference_id
-            FROM expenses e
-            JOIN centres c ON c.id = e.centre_id
-            ORDER BY e.created_at DESC LIMIT 25
-        `),
-
-        // 3. Customer Reviews
-        client.query(`
-            SELECT 
-                'customer_review' as type,
-                sr.submitted_at as created_at,
-                0 as amount,
-                c.name as centre_name,
-                st.name as staff_name,
-                'New Review: ' || sr.service_rating || ' Stars' as title,
-                sr.id as reference_id
-            FROM service_reviews sr
-            JOIN staff st ON st.id = sr.staff_id
-            JOIN centres c ON c.id = st.centre_id
-            ORDER BY sr.submitted_at DESC LIMIT 25
-        `),
-
-        // 4. New Customers
-        client.query(`
-            SELECT 
-                'customer_registered' as type,
-                created_at,
-                0 as amount,
-                'System' as centre_name,
-                'System' as staff_name,
-                name as title,
-                id as reference_id
-            FROM customers
-            ORDER BY created_at DESC LIMIT 25
-        `),
-
-        // 5. Wallet Transactions
-        client.query(`
-            SELECT 
-                'wallet_transaction' as type,
-                wt.created_at,
-                wt.amount,
-                w.wallet_type || ' Wallet' as centre_name, 
-                wt.type as staff_name,
-                'Wallet ' || wt.type as title,
-                wt.id as reference_id
-            FROM wallet_transactions wt
-            JOIN wallets w ON w.id = wt.wallet_id
-            ORDER BY wt.created_at DESC LIMIT 25
-        `)
+    const [servicesResult, expensesResult, reviewsResult, customersResult, walletsResult] = await Promise.all([
+        client.query(`SELECT 'service_completed' as type, se.created_at, se.total_charges as amount, c.name as centre_name, st.name as staff_name, sv.name as title, se.id as reference_id FROM service_entries se JOIN staff st ON st.id = se.staff_id JOIN centres c ON c.id = st.centre_id JOIN services sv ON sv.id = se.category_id WHERE se.status = 'completed' ORDER BY se.created_at DESC LIMIT 25`),
+        client.query(`SELECT 'expense_added' as type, e.created_at, e.amount, c.name as centre_name, 'Admin' as staff_name, e.category as title, e.id as reference_id FROM expenses e JOIN centres c ON c.id = e.centre_id ORDER BY e.created_at DESC LIMIT 25`),
+        client.query(`SELECT 'customer_review' as type, sr.submitted_at as created_at, 0 as amount, c.name as centre_name, st.name as staff_name, 'New Review: ' || sr.service_rating || ' Stars' as title, sr.id as reference_id FROM service_reviews sr JOIN staff st ON st.id = sr.staff_id JOIN centres c ON c.id = st.centre_id ORDER BY sr.submitted_at DESC LIMIT 25`),
+        client.query(`SELECT 'customer_registered' as type, created_at, 0 as amount, 'System' as centre_name, 'System' as staff_name, name as title, id as reference_id FROM customers ORDER BY created_at DESC LIMIT 25`),
+        client.query(`SELECT 'wallet_transaction' as type, wt.created_at, wt.amount, w.wallet_type || ' Wallet' as centre_name, wt.type as staff_name, 'Wallet ' || wt.type as title, wt.id as reference_id FROM wallet_transactions wt JOIN wallets w ON w.id = wt.wallet_id ORDER BY wt.created_at DESC LIMIT 25`)
     ]);
 
-    // Merge all the rows into a single array
-    const allActivities = [
-        ...servicesResult.rows,
-        ...expensesResult.rows,
-        ...reviewsResult.rows,
-        ...customersResult.rows,
-        ...walletsResult.rows
-    ];
-
-    // Filter out any corrupted rows where created_at is null
+    const allActivities = [...servicesResult.rows, ...expensesResult.rows, ...reviewsResult.rows, ...customersResult.rows, ...walletsResult.rows];
     const validActivities = allActivities.filter(act => act.created_at != null);
-
-    // Safely sort chronologically (newest first)
     validActivities.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // Safely map to the timeline using defensive parsing
     const timeline = validActivities.slice(0, 100).map(act => {
-        // Double-check the date is valid before calling toISOString()
         const safeDate = act.created_at ? new Date(act.created_at) : new Date();
-        
         return {
-            type: act.type,
-            title: act.title,
-            amount: parseFloat(act.amount) || 0,
-            centre: act.centre_name || 'Unknown',
-            staff: act.staff_name || 'System',
-            createdAt: safeDate.toISOString(),
-            referenceId: act.reference_id
+            type: act.type, title: act.title, amount: parseFloat(act.amount) || 0,
+            centre: act.centre_name || 'Unknown', staff: act.staff_name || 'System',
+            createdAt: safeDate.toISOString(), referenceId: act.reference_id
         };
     });
 
-    // Calculate Summary based on the pulled timeline
     const summary = {
         totalActivities: timeline.length,
         completedServices: timeline.filter(a => a.type === 'service_completed').length,
@@ -692,217 +523,79 @@ async function fetchRecentActivities(client) {
         reviewsReceived: timeline.filter(a => a.type === 'customer_review').length,
         newCustomers: timeline.filter(a => a.type === 'customer_registered').length
     };
-
-    return {
-        timeline,
-        summary,
-        alerts: [], 
-        achievements: [] 
-    };
+    return { timeline, summary, alerts: [], achievements: [] };
 }
 
 async function fetchTeamAnalytics(client, dates) {
     const { startDate, endDate } = dates;
-    
-    // We now route the JOIN through team_members (tm)
-    // and filter for active team members (tm.is_active = true)
     const query = `
         SELECT 
-            t.id, 
-            t.name as team_name, 
-            c.name as centre_name,
-            COUNT(DISTINCT st.id) as members,
-            COUNT(se.id) as services_completed,
+            t.id, t.name as team_name, c.name as centre_name,
+            COUNT(DISTINCT st.id) as members, COUNT(se.id) as services_completed,
             COALESCE(SUM(se.total_charges), 0) as revenue
         FROM teams t
         JOIN centres c ON c.id = t.centre_id
         LEFT JOIN team_members tm ON tm.team_id = t.id AND tm.is_active = true
         LEFT JOIN staff st ON st.id = tm.staff_id
-        LEFT JOIN service_entries se ON se.staff_id = st.id 
-            AND se.status = 'completed' 
-            AND se.created_at >= $1 AND se.created_at <= $2
-        GROUP BY t.id, t.name, c.name
-        ORDER BY revenue DESC
+        LEFT JOIN service_entries se ON se.staff_id = st.id AND se.status = 'completed' AND se.created_at >= $1 AND se.created_at <= $2
+        GROUP BY t.id, t.name, c.name ORDER BY revenue DESC
     `;
-    
     const result = await client.query(query, [startDate, endDate]);
-    
     const formatted = result.rows.map(r => ({
-        id: r.id,
-        name: r.team_name,
-        centre: r.centre_name,
-        members: parseInt(r.members, 10),
-        servicesCompleted: parseInt(r.services_completed, 10),
-        revenue: parseFloat(r.revenue)
+        id: r.id, name: r.team_name, centre: r.centre_name, members: parseInt(r.members, 10),
+        servicesCompleted: parseInt(r.services_completed, 10), revenue: parseFloat(r.revenue)
     }));
-
-    return {
-        topTeams: formatted.slice(0, 5),
-        worstTeams: [...formatted].sort((a, b) => a.revenue - b.revenue).slice(0, 5),
-        fullList: formatted
-    };
+    return { topTeams: formatted.slice(0, 5), worstTeams: [...formatted].sort((a, b) => a.revenue - b.revenue).slice(0, 5), fullList: formatted };
 }
 
 async function fetchHealthAnalytics(client, dates) {
     const { startDate, endDate } = dates;
-
     const [negativeWallets, pendingPayments, unassignedServices] = await Promise.all([
+        client.query(`SELECT w.wallet_type, w.balance, c.name as centre_name FROM wallets w JOIN centres c ON c.id = w.centre_id WHERE w.balance < 0`),
         client.query(`
-            SELECT w.wallet_type, w.balance, c.name as centre_name 
-            FROM wallets w 
-            JOIN centres c ON c.id = w.centre_id 
-            WHERE w.balance < 0
-        `),
-        // Dynamically calculate pending balance: total_charges - SUM(payments)
-        client.query(`
-            WITH ServicePayments AS (
-                SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
-                FROM payments
-                GROUP BY service_entry_id
-            )
-            SELECT 
-                COUNT(se.id) as count, 
-                COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as total_value 
-            FROM service_entries se
-            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
-            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0 
-            AND se.created_at >= $1 AND se.created_at <= $2
+            WITH ServicePayments AS ( SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid FROM payments GROUP BY service_entry_id )
+            SELECT COUNT(se.id) as count, COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as total_value 
+            FROM service_entries se LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
+            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0 AND se.created_at >= $1 AND se.created_at <= $2
         `, [startDate, endDate]),
-        client.query(`
-            SELECT COUNT(id) as count 
-            FROM service_entries 
-            WHERE status = 'pending' AND staff_id IS NULL
-        `)
+        client.query(`SELECT COUNT(id) as count FROM service_entries WHERE status = 'pending' AND staff_id IS NULL`)
     ]);
 
     const warnings = [];
-    if (negativeWallets.rows.length > 0) {
-        warnings.push({ type: 'critical', message: `${negativeWallets.rows.length} wallets are in negative balance.` });
-    }
-    
+    if (negativeWallets.rows.length > 0) warnings.push({ type: 'critical', message: `${negativeWallets.rows.length} wallets are in negative balance.` });
     const pendingCount = parseInt(pendingPayments.rows[0].count, 10);
-    if (pendingCount > 50) {
-        warnings.push({ type: 'warning', message: `High volume of pending payments (${pendingCount}).` });
-    }
+    if (pendingCount > 50) warnings.push({ type: 'warning', message: `High volume of pending payments (${pendingCount}).` });
 
     let score = 100;
     score -= (negativeWallets.rows.length * 5);
     score -= (pendingCount > 50 ? 10 : 0);
 
     return {
-        overallScore: Math.max(0, score), 
-        alerts: warnings,
-        metrics: {
-            negativeWallets: negativeWallets.rows.length,
-            pendingPaymentValue: parseFloat(pendingPayments.rows[0].total_value),
-            unassignedServices: parseInt(unassignedServices.rows[0].count, 10)
-        }
+        overallScore: Math.max(0, score), alerts: warnings,
+        metrics: { negativeWallets: negativeWallets.rows.length, pendingPaymentValue: parseFloat(pendingPayments.rows[0].total_value), unassignedServices: parseInt(unassignedServices.rows[0].count, 10) }
     };
 }
 
-/**
- * ALERT ENGINE
- * Proactively scans the CRM for operational bottlenecks and required actions.
- */
 async function fetchSystemAlerts(client) {
-    const [
-        negativeWallets,
-        largePendingPayments,
-        badReviews,
-        stagnantServices
-    ] = await Promise.all([
-        // 1. Wallets below 0
+    const [negativeWallets, largePendingPayments, badReviews, stagnantServices] = await Promise.all([
+        client.query(`SELECT w.id, w.wallet_type, w.balance, c.name as centre_name FROM wallets w JOIN centres c ON c.id = w.centre_id WHERE w.balance < 0`),
         client.query(`
-            SELECT w.id, w.wallet_type, w.balance, c.name as centre_name
-            FROM wallets w 
-            JOIN centres c ON c.id = w.centre_id
-            WHERE w.balance < 0
+            WITH ServicePayments AS ( SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid FROM payments GROUP BY service_entry_id )
+            SELECT se.id, (se.total_charges - COALESCE(sp.paid, 0)) as balance_amount, c.name as centre_name, sv.name as service_name
+            FROM service_entries se JOIN staff st ON st.id = se.staff_id JOIN centres c ON c.id = st.centre_id JOIN services sv ON sv.id = se.category_id
+            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 5000
         `),
-        // 2. Pending payments over ₹5,000 using CTE calculation
-        client.query(`
-            WITH ServicePayments AS (
-                SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
-                FROM payments
-                GROUP BY service_entry_id
-            )
-            SELECT 
-                se.id, 
-                (se.total_charges - COALESCE(sp.paid, 0)) as balance_amount, 
-                c.name as centre_name, 
-                sv.name as service_name
-            FROM service_entries se
-            JOIN staff st ON st.id = se.staff_id
-            JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = se.category_id
-            LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
-            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 5000
-        `),
-        // 3. Bad reviews in the last 7 days
-        client.query(`
-            SELECT sr.id, sr.service_rating, sr.customer_name, c.name as centre_name
-            FROM service_reviews sr
-            JOIN staff st ON st.id = sr.staff_id
-            JOIN centres c ON c.id = st.centre_id
-            WHERE sr.service_rating <= 2 
-            AND sr.submitted_at >= NOW() - INTERVAL '7 days'
-        `),
-        // 4. Services stuck for more than 5 days
-        client.query(`
-            SELECT se.id, c.name as centre_name, sv.name as service_name, se.created_at
-            FROM service_entries se
-            JOIN staff st ON st.id = se.staff_id
-            JOIN centres c ON c.id = st.centre_id
-            JOIN services sv ON sv.id = se.category_id
-            WHERE se.status IN ('pending', 'processing')
-            AND se.created_at < NOW() - INTERVAL '5 days'
-        `)
+        client.query(`SELECT sr.id, sr.service_rating, sr.customer_name, c.name as centre_name FROM service_reviews sr JOIN staff st ON st.id = sr.staff_id JOIN centres c ON c.id = st.centre_id WHERE sr.service_rating <= 2 AND sr.submitted_at >= NOW() - INTERVAL '7 days'`),
+        client.query(`SELECT se.id, c.name as centre_name, sv.name as service_name, se.created_at FROM service_entries se JOIN staff st ON st.id = se.staff_id JOIN centres c ON c.id = st.centre_id JOIN services sv ON sv.id = se.category_id WHERE se.status IN ('pending', 'processing') AND se.created_at < NOW() - INTERVAL '5 days'`)
     ]);
 
     const alerts = [];
-
-    negativeWallets.rows.forEach(row => {
-        alerts.push({
-            id: `wallet_${row.id}`,
-            priority: 'critical',
-            title: 'Negative Wallet Balance',
-            message: `${row.centre_name}'s ${row.wallet_type} wallet is overdrawn by ₹${Math.abs(row.balance)}.`,
-            centre: row.centre_name,
-            actionCode: 'VIEW_WALLET'
-        });
-    });
-
-    badReviews.rows.forEach(row => {
-        alerts.push({
-            id: `review_${row.id}`,
-            priority: 'critical',
-            title: 'Poor Customer Review',
-            message: `${row.customer_name} gave ${row.service_rating} stars at ${row.centre_name}.`,
-            centre: row.centre_name,
-            actionCode: 'VIEW_REVIEW'
-        });
-    });
-
-    largePendingPayments.rows.forEach(row => {
-        alerts.push({
-            id: `payment_${row.id}`,
-            priority: 'warning',
-            title: 'High Pending Payment',
-            message: `₹${row.balance_amount} pending for ${row.service_name} at ${row.centre_name}.`,
-            centre: row.centre_name,
-            actionCode: 'VIEW_SERVICE'
-        });
-    });
-
+    negativeWallets.rows.forEach(row => alerts.push({ id: `wallet_${row.id}`, priority: 'critical', title: 'Negative Wallet Balance', message: `${row.centre_name}'s ${row.wallet_type} wallet is overdrawn by ₹${Math.abs(row.balance)}.`, centre: row.centre_name, actionCode: 'VIEW_WALLET' }));
+    badReviews.rows.forEach(row => alerts.push({ id: `review_${row.id}`, priority: 'critical', title: 'Poor Customer Review', message: `${row.customer_name} gave ${row.service_rating} stars at ${row.centre_name}.`, centre: row.centre_name, actionCode: 'VIEW_REVIEW' }));
+    largePendingPayments.rows.forEach(row => alerts.push({ id: `payment_${row.id}`, priority: 'warning', title: 'High Pending Payment', message: `₹${row.balance_amount} pending for ${row.service_name} at ${row.centre_name}.`, centre: row.centre_name, actionCode: 'VIEW_SERVICE' }));
     stagnantServices.rows.forEach(row => {
         const daysDelayed = Math.floor((new Date() - new Date(row.created_at)) / (1000 * 60 * 60 * 24));
-        alerts.push({
-            id: `stuck_${row.id}`,
-            priority: 'warning',
-            title: 'Service Delayed',
-            message: `${row.service_name} at ${row.centre_name} has been pending for ${daysDelayed} days.`,
-            centre: row.centre_name,
-            actionCode: 'VIEW_SERVICE'
-        });
+        alerts.push({ id: `stuck_${row.id}`, priority: 'warning', title: 'Service Delayed', message: `${row.service_name} at ${row.centre_name} has been pending for ${daysDelayed} days.`, centre: row.centre_name, actionCode: 'VIEW_SERVICE' });
     });
 
     alerts.sort((a, b) => {
@@ -910,6 +603,5 @@ async function fetchSystemAlerts(client) {
         if (a.priority === 'warning' && b.priority === 'critical') return 1;
         return 0;
     });
-
     return alerts;
 }
