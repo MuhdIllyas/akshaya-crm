@@ -1,13 +1,12 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 // ==========================================
-// NEW: STAFF PERFORMANCE CHART COMPONENT (WITH 3 GRAPHS)
+// NEW: STAFF PERFORMANCE CHART COMPONENT (FIXED SCATTER PLOT)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
-  // 'revenue', 'servicesCompleted', or 'scatter'
   const [metric, setMetric] = useState('revenue'); 
 
   if (!staffData || staffData.length === 0) {
@@ -90,32 +89,28 @@ const StaffPerformanceChart = ({ staffData }) => {
       <div className="flex-1 w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           {metric === 'scatter' ? (
-            // THE THIRD GRAPH: SCATTER PLOT
-            import('recharts').then(({ ScatterChart, Scatter, CartesianGrid, ZAxis }) => (
-              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis 
-                  type="number" 
-                  dataKey="servicesCompleted" 
-                  name="Applications" 
-                  tick={{ fontSize: 12 }} 
-                  label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
-                />
-                <YAxis 
-                  type="number" 
-                  dataKey="revenue" 
-                  name="Revenue" 
-                  tickFormatter={(val) => `₹${(val/1000)}k`} 
-                  tick={{ fontSize: 12 }}
-                />
-                {/* ZAxis determines bubble size based on revenue */}
-                <ZAxis type="number" dataKey="revenue" range={[100, 500]} name="Volume" />
-                <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-                <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
-              </ScatterChart>
-            )).catch(() => <div className="text-center text-sm text-gray-500">Loading scatter chart...</div>) // Fallback while lazy loading
+            // FIXED: Standard JSX rendering for the Scatter Chart
+            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis 
+                type="number" 
+                dataKey="servicesCompleted" 
+                name="Applications" 
+                tick={{ fontSize: 12 }} 
+                label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
+              />
+              <YAxis 
+                type="number" 
+                dataKey="revenue" 
+                name="Revenue" 
+                tickFormatter={(val) => `₹${(val/1000)}k`} 
+                tick={{ fontSize: 12 }}
+              />
+              <ZAxis type="number" dataKey="revenue" range={[100, 500]} name="Volume" />
+              <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+              <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
+            </ScatterChart>
           ) : (
-            // THE ORIGINAL BAR CHARTS
             <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
               <XAxis type="number" hide />
               <YAxis 
