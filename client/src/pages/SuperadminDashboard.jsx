@@ -396,7 +396,7 @@ const SuperadminDashboard = () => {
         {/* 4. Services Completed Today */}
         <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-col justify-between shadow-sm">
           <div className="text-xs text-indigo-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Today's Svcs</span><span>📑</span>
+            <span className="truncate mr-1">Today's Services</span><span>📑</span>
           </div>
           <div className="text-lg xl:text-xl font-bold text-indigo-950">{todayServices ?? 0}</div>
           <div className="text-[10px] font-medium text-indigo-700 mt-1 truncate">
@@ -407,7 +407,7 @@ const SuperadminDashboard = () => {
         {/* 5. Today's Revenue */}
         <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-100 flex flex-col justify-between shadow-sm">
           <div className="text-xs text-yellow-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Today's Rev</span><span>💰</span>
+            <span className="truncate mr-1">Today's Revenue</span><span>💰</span>
           </div>
           <div className="text-lg xl:text-xl font-bold text-yellow-950 truncate">{formatCurrency(todayRevenue)}</div>
           <div className="text-[10px] font-medium text-yellow-700 mt-1 truncate">
@@ -418,7 +418,7 @@ const SuperadminDashboard = () => {
         {/* 6. Period Revenue */}
         <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 flex flex-col justify-between shadow-sm">
           <div className="text-xs text-orange-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Period Rev</span><span>📈</span>
+            <span className="truncate mr-1">Period Revenue</span><span>📈</span>
           </div>
           <div className="text-lg xl:text-xl font-bold text-orange-950 truncate">{formatCurrency(monthlyRevenue)}</div>
           <div className="text-[10px] mt-1 flex items-center truncate">
@@ -443,7 +443,7 @@ const SuperadminDashboard = () => {
         {/* 8. Pending Payments */}
         <div className="bg-pink-50 p-3 rounded-xl border border-pink-100 flex flex-col justify-between shadow-sm">
           <div className="text-xs text-pink-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Pending Pay</span><span>💳</span>
+            <span className="truncate mr-1">Pending Payments</span><span>💳</span>
           </div>
           <div className="text-lg xl:text-xl font-bold text-pink-950 truncate">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
           <div className="text-[10px] font-medium text-pink-700 mt-1 truncate">
