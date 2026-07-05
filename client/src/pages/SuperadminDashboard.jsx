@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import {
+  BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis,
+  Tooltip, ResponsiveContainer, Cell, Legend
+} from 'recharts';
 
 // ==========================================
-// NEW: STAFF PERFORMANCE CHART COMPONENT (FIXED SCATTER PLOT)
+// STAFF PERFORMANCE CHART (unchanged)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
-  const [metric, setMetric] = useState('revenue'); 
+  const [metric, setMetric] = useState('revenue');
 
   if (!staffData || staffData.length === 0) {
     return <div className="text-gray-500 text-sm p-4">No staff data available</div>;
@@ -17,7 +20,6 @@ const StaffPerformanceChart = ({ staffData }) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   };
 
-  // Tooltip for the Bar Charts
   const BarTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -33,7 +35,6 @@ const StaffPerformanceChart = ({ staffData }) => {
     return null;
   };
 
-  // Tooltip for the Scatter Plot
   const ScatterTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -50,7 +51,7 @@ const StaffPerformanceChart = ({ staffData }) => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex flex-col h-[450px]">
+    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col h-[450px] transition-all hover:shadow-xl">
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-700">👨‍💼 Top Staff Performers</h2>
@@ -89,21 +90,20 @@ const StaffPerformanceChart = ({ staffData }) => {
       <div className="flex-1 w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           {metric === 'scatter' ? (
-            // FIXED: Standard JSX rendering for the Scatter Chart
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis 
-                type="number" 
-                dataKey="servicesCompleted" 
-                name="Applications" 
-                tick={{ fontSize: 12 }} 
+              <XAxis
+                type="number"
+                dataKey="servicesCompleted"
+                name="Applications"
+                tick={{ fontSize: 12 }}
                 label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
               />
-              <YAxis 
-                type="number" 
-                dataKey="revenue" 
-                name="Revenue" 
-                tickFormatter={(val) => `₹${(val/1000)}k`} 
+              <YAxis
+                type="number"
+                dataKey="revenue"
+                name="Revenue"
+                tickFormatter={(val) => `₹${(val/1000)}k`}
                 tick={{ fontSize: 12 }}
               />
               <ZAxis type="number" dataKey="revenue" range={[100, 500]} name="Volume" />
@@ -113,10 +113,10 @@ const StaffPerformanceChart = ({ staffData }) => {
           ) : (
             <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
               <XAxis type="number" hide />
-              <YAxis 
-                dataKey="name" 
-                type="category" 
-                axisLine={false} 
+              <YAxis
+                dataKey="name"
+                type="category"
+                axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 12, fill: '#4B5563' }}
                 width={120}
@@ -124,9 +124,9 @@ const StaffPerformanceChart = ({ staffData }) => {
               <Tooltip content={<BarTooltip />} cursor={{ fill: '#F3F4F6' }} />
               <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000}>
                 {staffData.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={metric === 'revenue' ? '#3B82F6' : '#8B5CF6'} 
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={metric === 'revenue' ? '#3B82F6' : '#8B5CF6'}
                     className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
                   />
                 ))}
@@ -136,6 +136,92 @@ const StaffPerformanceChart = ({ staffData }) => {
         </ResponsiveContainer>
       </div>
     </div>
+  );
+};
+
+// ==========================================
+// REVENUE CHART COMPONENT (NEW – using Recharts)
+// ==========================================
+const RevenueChart = ({ data, view }) => {
+  if (!data || data.length === 0) {
+    return <div className="text-gray-500 text-sm p-4">No revenue data available</div>;
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  };
+
+  const formatLabel = (label) => {
+    if (!label) return '';
+    if (label.length === 7) {
+      const date = new Date(label + '-01');
+      return date.toLocaleString('default', { month: 'short', year: '2-digit' });
+    }
+    if (label.length === 10) return label.slice(5);
+    return label;
+  };
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const item = payload[0].payload;
+      return (
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base">{formatLabel(item.label)}</p>
+          <p className="text-blue-400 font-semibold">Value: {formatCurrency(item.value)}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Determine colour based on view
+  const getBarColor = () => {
+    if (view === 'profit') return '#22c55e';
+    if (view === 'expenses') return '#ef4444';
+    return '#3b82f6';
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis
+          dataKey="label"
+          tickFormatter={formatLabel}
+          tick={{ fontSize: 12, fill: '#6b7280' }}
+          axisLine={{ stroke: '#d1d5db' }}
+          tickLine={false}
+        />
+        <YAxis
+          tickFormatter={(val) => `₹${(val/1000)}k`}
+          tick={{ fontSize: 12, fill: '#6b7280' }}
+          axisLine={{ stroke: '#d1d5db' }}
+          tickLine={false}
+        />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
+        <Bar
+          dataKey="value"
+          fill={getBarColor()}
+          radius={[4, 4, 0, 0]}
+          barSize={data.length > 6 ? 30 : Math.min(60, 80 / data.length)} // dynamic bar width
+          animationDuration={800}
+        >
+          {data.map((entry, index) => (
+            <Cell
+              key={`cell-${index}`}
+              fill={`url(#revenueGradient)`}
+              className="hover:opacity-80 transition-opacity"
+            />
+          ))}
+        </Bar>
+        <defs>
+          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={getBarColor()} stopOpacity={0.9} />
+            <stop offset="100%" stopColor={getBarColor()} stopOpacity={0.4} />
+          </linearGradient>
+        </defs>
+      </BarChart>
+    </ResponsiveContainer>
   );
 };
 
@@ -189,12 +275,12 @@ const SuperadminDashboard = () => {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex items-center justify-center min-h-[400px]">
-        <svg className="animate-spin h-8 w-8 text-navy-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 flex items-center justify-center min-h-[400px]">
+        <svg className="animate-spin h-8 w-8 text-indigo-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <span className="text-gray-600">Loading Superadmin Dashboard...</span>
+        <span className="text-gray-600 font-medium">Loading Superadmin Dashboard...</span>
       </div>
     );
   }
@@ -240,56 +326,7 @@ const SuperadminDashboard = () => {
     time: new Date(item.createdAt).toLocaleString()
   }));
 
-  // Revenue chart component
-  const RevenueChart = () => {
-    if (!revenueChartData || revenueChartData.length === 0) {
-      return <div className="text-gray-500 text-sm">No data available</div>;
-    }
-    const max = Math.max(...revenueChartData.map(d => d.value), 1);
-
-    const formatChartLabel = (label) => {
-        if (!label) return '';
-        if (label.length === 7) { 
-            const date = new Date(label + '-01');
-            return date.toLocaleString('default', { month: 'short', year: '2-digit' });
-        }
-        if (label.length === 10) {
-            return label.slice(5); 
-        }
-        return label;
-    };
-
-    return (
-      <div className="w-full h-72 flex items-end gap-1 overflow-x-auto pb-2 pt-12 scrollbar-thin scrollbar-thumb-gray-300">
-        {revenueChartData.map((item, idx) => (
-            <div key={item.label || idx} className="flex-1 min-w-[30px] flex flex-col justify-end items-center group relative h-full cursor-pointer">
-              
-              <div className="opacity-0 group-hover:opacity-100 absolute -top-12 bg-gray-900 text-white text-xs py-1.5 px-3 rounded pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-lg flex flex-col items-center">
-                <span className="font-bold">{formatCurrency(item.value)}</span>
-                <span className="text-[10px] text-gray-300">{formatChartLabel(item.label)}</span>
-                <div className="absolute -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
-              </div>
-              
-              <div className="w-full flex-1 flex items-end justify-center">
-                <div
-                  className={`w-full rounded-t transition-all duration-300 ${
-                    revenueView === 'profit' ? 'bg-green-500' :
-                    revenueView === 'expenses' ? 'bg-red-500 hover:bg-red-600' :
-                    'bg-blue-500 hover:bg-blue-600'
-                  }`}
-                  style={{ height: `${(item.value / max) * 100}%`, minHeight: '4px' }}
-                ></div>
-              </div>
-
-              <span className="text-[10px] text-gray-500 mt-2 whitespace-nowrap">
-                {formatChartLabel(item.label)}
-              </span>
-            </div>
-        ))}
-      </div>
-    );
-  };
-
+  // MapView (unchanged)
   const MapView = () => {
     return (
       <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
@@ -311,343 +348,368 @@ const SuperadminDashboard = () => {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-8">
-      <h1 className="text-2xl font-bold text-gray-800">Superadmin Dashboard</h1>
+    <div className="bg-gray-50 min-h-screen p-6 space-y-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 tracking-tight">📊 Superadmin Dashboard</h1>
+          <div className="flex space-x-2">
+            <span className="px-4 py-2 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full shadow-sm">Last 12 months</span>
+          </div>
+        </div>
 
-      {/* Global KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 col-span-1">
-          <div className="text-sm text-blue-800 font-medium">🌍 Total Centres</div>
-          <div className="text-2xl font-bold text-blue-900">{totalCentres}</div>
-          <div className="text-xs text-blue-600">+{newCentresThisMonth ?? 0} this month</div>
-        </div>
-        <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 col-span-1">
-          <div className="text-sm text-purple-800 font-medium">👥 Total Staff</div>
-          <div className="text-2xl font-bold text-purple-900">{totalStaff}</div>
-          <div className="text-xs text-purple-600">{admins ?? 0} Admins, {staffCount ?? 0} Staff</div>
-        </div>
-        <div className="bg-green-50 p-4 rounded-xl border border-green-100 col-span-1">
-          <div className="text-sm text-green-800 font-medium">👨‍👩‍👧 Total Customers</div>
-          <div className="text-2xl font-bold text-green-900">{totalCustomers?.toLocaleString()}</div>
-          <div className="text-xs text-green-600">+{customerGrowth ?? 0} this month</div>
-        </div>
-        <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 col-span-1">
-          <div className="text-sm text-indigo-800 font-medium">📑 Services Completed Today</div>
-          <div className="text-2xl font-bold text-indigo-900">{todayServices ?? 0}</div>
-          <div className="text-xs text-indigo-600">Across all centres</div>
-        </div>
-        <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-1">
-          <div className="text-sm text-yellow-800 font-medium">💰 Today's Revenue</div>
-          <div className="text-2xl font-bold text-yellow-900">{formatCurrency(todayRevenue)}</div>
-        </div>
-        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 col-span-1">
-          <div className="text-sm text-orange-800 font-medium">📈 Period Revenue</div>
-          <div className="text-2xl font-bold text-orange-900">{formatCurrency(monthlyRevenue)}</div>
-          <div className="text-xs flex items-center mt-1">
-            {revenueGrowthPercent >= 0 ? (
+        {/* Global KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-blue-800 font-medium">🌍 Centres</div>
+              <div className="text-xs text-blue-600 bg-blue-200 px-2 py-0.5 rounded-full">+{newCentresThisMonth ?? 0}</div>
+            </div>
+            <div className="text-2xl font-bold text-blue-900 mt-1">{totalCentres}</div>
+          </div>
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-2xl border border-purple-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-purple-800 font-medium">👥 Staff</div>
+              <div className="text-xs text-purple-600">{admins ?? 0} Admins</div>
+            </div>
+            <div className="text-2xl font-bold text-purple-900 mt-1">{totalStaff}</div>
+          </div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-green-800 font-medium">👨‍👩‍👧 Customers</div>
+              <div className="text-xs text-green-600 bg-green-200 px-2 py-0.5 rounded-full">+{customerGrowth ?? 0}</div>
+            </div>
+            <div className="text-2xl font-bold text-green-900 mt-1">{totalCustomers?.toLocaleString()}</div>
+          </div>
+          <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-2xl border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="text-sm text-indigo-800 font-medium">📑 Services Today</div>
+            <div className="text-2xl font-bold text-indigo-900 mt-1">{todayServices ?? 0}</div>
+          </div>
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-2xl border border-yellow-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="text-sm text-yellow-800 font-medium">💰 Today Revenue</div>
+            <div className="text-2xl font-bold text-yellow-900 mt-1">{formatCurrency(todayRevenue)}</div>
+          </div>
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="text-sm text-orange-800 font-medium">📈 Period Revenue</div>
+            <div className="text-2xl font-bold text-orange-900 mt-1">{formatCurrency(monthlyRevenue)}</div>
+            <div className="text-xs flex items-center mt-1">
+              {revenueGrowthPercent >= 0 ? (
                 <span className="text-green-600 font-semibold bg-green-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↑ {revenueGrowthPercent}%</span>
-            ) : (
+              ) : (
                 <span className="text-red-600 font-semibold bg-red-100 px-1.5 py-0.5 rounded text-[10px] mr-1">↓ {Math.abs(revenueGrowthPercent)}%</span>
-            )}
-            <span className="text-orange-600">vs last month</span>
-          </div>
-        </div>
-        <div className="bg-red-50 p-4 rounded-xl border border-red-100 col-span-1">
-          <div className="text-sm text-red-800 font-medium">💵 Period Profit</div>
-          <div className="text-2xl font-bold text-red-900">{formatCurrency(netProfit)}</div>
-          <div className="text-xs text-red-600 mt-1">Selected date range</div>
-        </div>
-        <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 col-span-1">
-          <div className="text-sm text-pink-800 font-medium">💳 Pending Payments</div>
-          <div className="text-2xl font-bold text-pink-900">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
-          <div className="text-xs text-pink-600">{health?.metrics?.pendingCustomers ?? 0} Customers</div>
-        </div>
-      </div>
-
-      {/* Revenue Analytics + Centre Performance */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-4 rounded-xl shadow-md border border-gray-200">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-700">Revenue Analytics</h2>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setRevenueView("revenue")}
-                className={`px-3 py-1 text-sm rounded-full ${revenueView === "revenue" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
-              >
-                Revenue
-              </button>
-              <button
-                onClick={() => setRevenueView("profit")}
-                className={`px-3 py-1 text-sm rounded-full ${revenueView === "profit" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
-              >
-                Profit
-              </button>
-              <button
-                onClick={() => setRevenueView("expenses")}
-                className={`px-3 py-1 text-sm rounded-full ${revenueView === "expenses" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
-              >
-                Expenses
-              </button>
+              )}
+              <span className="text-orange-600">vs last month</span>
             </div>
           </div>
-          <RevenueChart />
-        </div>
-
-        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">Centre Performance Leaderboard</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {centreList.slice(0, 5).map((centre, idx) => (
-                  <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
-                    </td>
-                    <td className="px-3 py-2 font-medium">{centre.name}</td>
-                    <td className="px-3 py-2">{formatCurrency(centre.profit)}</td>
-                    <td className="px-3 py-2">{centre.rating || 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="text-sm text-red-800 font-medium">💵 Period Profit</div>
+            <div className="text-2xl font-bold text-red-900 mt-1">{formatCurrency(netProfit)}</div>
+          </div>
+          <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-4 rounded-2xl border border-pink-200 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="text-sm text-pink-800 font-medium">💳 Pending Payments</div>
+            <div className="text-2xl font-bold text-pink-900 mt-1">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
+            <div className="text-xs text-pink-600">{health?.metrics?.pendingCustomers ?? 0} Customers</div>
           </div>
         </div>
-      </div>
 
-      {/* Centre Health */}
-      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {centreList.map((centre) => {
-            const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
-            return (
-              <div key={centre.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <div>
-                  <div className="font-medium">{centre.name}</div>
-                  <div className="text-sm mt-1">{status.icon} <span className="font-medium text-gray-700">{status.label}</span></div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-gray-800">{centre.rating || 0}</div>
-                  <div className="text-xs text-gray-500">Rating</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {health?.overallScore !== undefined && (
-          <div className="mt-4 text-sm text-gray-600 border-t pt-3">
-            Overall Network Health Score: <span className="font-bold text-lg text-gray-800 ml-2">{health.overallScore}/100</span>
-          </div>
-        )}
-      </div>
-
-      {/* Live Operations */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {pendingServices !== undefined && (
-          <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-            <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
-            <div className="text-2xl font-bold text-red-900">{pendingServices}</div>
-          </div>
-        )}
-        {todayServices !== undefined && (
-          <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-            <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
-            <div className="text-2xl font-bold text-green-900">{todayServices}</div>
-          </div>
-        )}
-        {delayedServices !== undefined && (
-          <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-            <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
-            <div className="text-2xl font-bold text-orange-900">{delayedServices}</div>
-          </div>
-        )}
-        {inProgressServices !== undefined && (
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-            <div className="text-sm text-blue-800 font-medium">📋 Applications in Progress</div>
-            <div className="text-2xl font-bold text-blue-900">{inProgressServices}</div>
-          </div>
-        )}
-      </div>
-
-      {/* Financial Health */}
-      <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-            <div className="text-sm text-gray-600 mb-1">Cash Wallet</div>
-            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletCash)}</div>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-            <div className="text-sm text-gray-600 mb-1">Bank</div>
-            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletBank)}</div>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-            <div className="text-sm text-gray-600 mb-1">Digital</div>
-            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletDigital)}</div>
-          </div>
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-            <div className="text-sm text-blue-800 font-semibold mb-1">Total Wallets</div>
-            <div className="text-2xl font-bold text-blue-900">{formatCurrency(walletTotal)}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Best & Worst Centres */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-              <div className="text-xs text-green-700 font-medium mb-1">Best Revenue</div>
-              <div className="font-bold text-gray-800 truncate">{best.revenue?.name || "N/A"}</div>
-              <div className="text-lg text-green-700">{formatCurrency(best.revenue?.value)}</div>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-              <div className="text-xs text-blue-700 font-medium mb-1">Best Profit</div>
-              <div className="font-bold text-gray-800 truncate">{best.profit?.name || "N/A"}</div>
-              <div className="text-lg text-blue-700">{formatCurrency(best.profit?.value)}</div>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-2">
-              <div className="text-xs text-yellow-700 font-medium mb-1">Best Rating</div>
-              <div className="flex justify-between items-end">
-                <div className="font-bold text-gray-800">{best.rating?.name || "N/A"}</div>
-                <div className="text-lg text-yellow-700 font-bold">{best.rating?.value || 0} ⭐</div>
+        {/* Revenue Analytics + Centre Performance */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-700">📈 Revenue Analytics</h2>
+              <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setRevenueView("revenue")}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    revenueView === "revenue" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Revenue
+                </button>
+                <button
+                  onClick={() => setRevenueView("profit")}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    revenueView === "profit" ? "bg-white text-green-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Profit
+                </button>
+                <button
+                  onClick={() => setRevenueView("expenses")}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    revenueView === "expenses" ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Expenses
+                </button>
               </div>
             </div>
+            <RevenueChart data={revenueChartData} view={revenueView} />
           </div>
-        </div>
 
-        <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-              <div className="text-xs text-red-700 font-medium mb-1">Lowest Profit</div>
-              <div className="font-bold text-gray-800 truncate">{worst.revenue?.name || "N/A"}</div>
-              <div className="text-lg text-red-700">{formatCurrency(worst.revenue?.value)}</div>
-            </div>
-            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-              <div className="text-xs text-red-700 font-medium mb-1">Highest Pending</div>
-              <div className="font-bold text-gray-800 truncate">{worst.pending?.name || "N/A"}</div>
-              <div className="text-lg text-red-700">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-              <div className="text-xs text-orange-700 font-medium mb-1">Most Delayed</div>
-              <div className="font-bold text-gray-800 truncate">{worst.delayed?.name || "N/A"}</div>
-              <div className="text-lg text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-              <div className="text-xs text-orange-700 font-medium mb-1">Most Complaints</div>
-              <div className="font-bold text-gray-800 truncate">{worst.complaints?.name || "N/A"}</div>
-              <div className="text-lg text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Top Staff & Teams */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* NEW INTERACTIVE RECHARTS COMPONENT */}
-        <StaffPerformanceChart staffData={topStaffList} />
-
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-6">👥 Top Teams</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Profit</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expenses</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {topTeamsList.map((team, idx) => (
-                  <tr key={team.id || idx} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-4 whitespace-nowrap font-medium text-gray-900">{team.name}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-gray-600">{formatCurrency(team.revenue)}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-green-600 font-medium">{formatCurrency(team.profit || 0)}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-red-600">{formatCurrency(team.expenses || 0)}</td>
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Centre Leaderboard</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {centreList.slice(0, 5).map((centre, idx) => (
+                    <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer transition-colors">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
+                      </td>
+                      <td className="px-3 py-2 font-medium text-gray-800">{centre.name}</td>
+                      <td className="px-3 py-2 text-gray-600">{formatCurrency(centre.profit)}</td>
+                      <td className="px-3 py-2 text-gray-600">{centre.rating || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Notifications */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-            <span className="mr-2">🔔</span> Action Required
-          </h2>
-          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-            {notifications.length > 0 ? (
-              notifications.map((notif) => (
-                <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
-                  notif.priority === "critical" ? "bg-red-50 border-red-500" : 
-                  notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
-                }`}>
-                  <div className="flex-1">
-                    <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
-                    <div className="text-gray-600 text-sm">{notif.message}</div>
+        {/* Centre Health */}
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {centreList.map((centre) => {
+              const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
+              return (
+                <div key={centre.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+                  <div>
+                    <div className="font-medium text-gray-800">{centre.name}</div>
+                    <div className="text-sm mt-1">{status.icon} <span className="font-medium text-gray-700">{status.label}</span></div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-gray-800">{centre.rating || 0}</div>
+                    <div className="text-xs text-gray-500">Rating</div>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
-            )}
+              );
+            })}
+          </div>
+          {health?.overallScore !== undefined && (
+            <div className="mt-4 text-sm text-gray-600 border-t pt-3 flex items-center justify-between">
+              <span>Overall Network Health Score</span>
+              <span className="font-bold text-lg text-gray-800 ml-2">{health.overallScore}/100</span>
+            </div>
+          )}
+        </div>
+
+        {/* Live Operations */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {pendingServices !== undefined && (
+            <div className="bg-red-50 p-4 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all">
+              <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
+              <div className="text-2xl font-bold text-red-900 mt-1">{pendingServices}</div>
+            </div>
+          )}
+          {todayServices !== undefined && (
+            <div className="bg-green-50 p-4 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all">
+              <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
+              <div className="text-2xl font-bold text-green-900 mt-1">{todayServices}</div>
+            </div>
+          )}
+          {delayedServices !== undefined && (
+            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all">
+              <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
+              <div className="text-2xl font-bold text-orange-900 mt-1">{delayedServices}</div>
+            </div>
+          )}
+          {inProgressServices !== undefined && (
+            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all">
+              <div className="text-sm text-blue-800 font-medium">📋 In Progress</div>
+              <div className="text-2xl font-bold text-blue-900 mt-1">{inProgressServices}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Financial Health */}
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+              <div className="text-sm text-gray-600 mb-1">Cash Wallet</div>
+              <div className="text-xl font-bold text-gray-800">{formatCurrency(walletCash)}</div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+              <div className="text-sm text-gray-600 mb-1">Bank</div>
+              <div className="text-xl font-bold text-gray-800">{formatCurrency(walletBank)}</div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+              <div className="text-sm text-gray-600 mb-1">Digital</div>
+              <div className="text-xl font-bold text-gray-800">{formatCurrency(walletDigital)}</div>
+            </div>
+            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 hover:bg-indigo-100 transition-colors">
+              <div className="text-sm text-indigo-800 font-semibold mb-1">Total Wallets</div>
+              <div className="text-2xl font-bold text-indigo-900">{formatCurrency(walletTotal)}</div>
+            </div>
           </div>
         </div>
 
-        {/* Recent Activities */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-            <span className="mr-2">🕒</span> Live Activity Feed
-          </h2>
-          <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-            {activities.length > 0 ? (
-              activities.map((activity) => (
-                <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
-                  <span className="text-sm font-medium text-gray-800">{activity.action}</span>
-                  <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
+        {/* Best & Worst Centres */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+                <div className="text-xs text-green-700 font-medium mb-1">Best Revenue</div>
+                <div className="font-bold text-gray-800 truncate">{best.revenue?.name || "N/A"}</div>
+                <div className="text-lg text-green-700">{formatCurrency(best.revenue?.value)}</div>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <div className="text-xs text-blue-700 font-medium mb-1">Best Profit</div>
+                <div className="font-bold text-gray-800 truncate">{best.profit?.name || "N/A"}</div>
+                <div className="text-lg text-blue-700">{formatCurrency(best.profit?.value)}</div>
+              </div>
+              <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-2">
+                <div className="text-xs text-yellow-700 font-medium mb-1">Best Rating</div>
+                <div className="flex justify-between items-end">
+                  <div className="font-bold text-gray-800">{best.rating?.name || "N/A"}</div>
+                  <div className="text-lg text-yellow-700 font-bold">{best.rating?.value || 0} ⭐</div>
                 </div>
-              ))
-            ) : (
-              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
-            )}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+                <div className="text-xs text-red-700 font-medium mb-1">Lowest Profit</div>
+                <div className="font-bold text-gray-800 truncate">{worst.revenue?.name || "N/A"}</div>
+                <div className="text-lg text-red-700">{formatCurrency(worst.revenue?.value)}</div>
+              </div>
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+                <div className="text-xs text-red-700 font-medium mb-1">Highest Pending</div>
+                <div className="font-bold text-gray-800 truncate">{worst.pending?.name || "N/A"}</div>
+                <div className="text-lg text-red-700">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
+              </div>
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                <div className="text-xs text-orange-700 font-medium mb-1">Most Delayed</div>
+                <div className="font-bold text-gray-800 truncate">{worst.delayed?.name || "N/A"}</div>
+                <div className="text-lg text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
+              </div>
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                <div className="text-xs text-orange-700 font-medium mb-1">Most Complaints</div>
+                <div className="font-bold text-gray-800 truncate">{worst.complaints?.name || "N/A"}</div>
+                <div className="text-lg text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Staff & Teams */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <StaffPerformanceChart staffData={topStaffList} />
+
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-700 mb-6">👥 Top Teams</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Profit</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expenses</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {topTeamsList.map((team, idx) => (
+                    <tr key={team.id || idx} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-4 whitespace-nowrap font-medium text-gray-900">{team.name}</td>
+                      <td className="px-3 py-4 whitespace-nowrap text-gray-600">{formatCurrency(team.revenue)}</td>
+                      <td className="px-3 py-4 whitespace-nowrap text-green-600 font-medium">{formatCurrency(team.profit || 0)}</td>
+                      <td className="px-3 py-4 whitespace-nowrap text-red-600">{formatCurrency(team.expenses || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Notifications & Activity Feed */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+              <span className="mr-2">🔔</span> Action Required
+            </h2>
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+              {notifications.length > 0 ? (
+                notifications.map((notif) => (
+                  <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
+                    notif.priority === "critical" ? "bg-red-50 border-red-500" :
+                    notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
+                  }`}>
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
+                      <div className="text-gray-600 text-sm">{notif.message}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+              <span className="mr-2">🕒</span> Live Activity Feed
+            </h2>
+            <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+              {activities.length > 0 ? (
+                activities.map((activity) => (
+                  <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
+                    <span className="text-sm font-medium text-gray-800">{activity.action}</span>
+                    <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Map View */}
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
+          <MapView />
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
+          <div className="flex flex-wrap gap-3">
+            <button className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition shadow-md hover:shadow-lg flex items-center">
+              <span className="mr-1">➕</span> Create Centre
+            </button>
+            <button className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center">
+              <span className="mr-1">👤</span> Create Admin
+            </button>
+            <button className="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition shadow-md hover:shadow-lg flex items-center">
+              <span className="mr-1">📢</span> Broadcast
+            </button>
+            <button className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition shadow-md hover:shadow-lg flex items-center">
+              <span className="mr-1">📊</span> Global Report
+            </button>
+            <button className="px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition shadow-md hover:shadow-lg flex items-center">
+              <span className="mr-1">📤</span> Export Data
+            </button>
           </div>
         </div>
       </div>
-
-      {/* Map View */}
-      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
-        <MapView />
-      </div>
-
-      {/* Quick Actions */}
-      <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
-        <div className="flex flex-wrap gap-3">
-          <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition shadow-sm">+ Create Centre</button>
-          <button className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition shadow-sm">+ Create Admin</button>
-          <button className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition shadow-sm">📢 Broadcast</button>
-          <button className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition shadow-sm">📊 Global Report</button>
-          <button className="px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition shadow-sm">📤 Export Data</button>
-        </div>
-      </div>
-
     </div>
   );
 };
