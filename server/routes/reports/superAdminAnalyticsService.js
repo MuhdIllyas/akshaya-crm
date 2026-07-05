@@ -132,7 +132,7 @@ async function fetchOrganisationStats(client, dates) {
     const { startDate, endDate } = dates;
 
     const [revenueResult, expenseResult, entityCountsResult, operationsResult] = await Promise.all([
-        // FIXED: Extracting gross_profit (service_charges) separate from total_revenue
+        // 1. Revenue
         client.query(`
             SELECT 
                 COALESCE(SUM(total_charges), 0) as total_revenue, 
@@ -143,7 +143,7 @@ async function fetchOrganisationStats(client, dates) {
             AND created_at >= $1 AND created_at <= $2
         `, [startDate, endDate]),
 
-        // FIXED: Added 'auto_approved' and is_reversal filters
+        // 2. Expenses
         client.query(`
             SELECT COALESCE(SUM(amount), 0) as total_expenses 
             FROM expenses 
@@ -152,6 +152,7 @@ async function fetchOrganisationStats(client, dates) {
             AND expense_date >= $1 AND expense_date <= $2
         `, [startDate, endDate]),
 
+        // 3. Global Entity Counts
         client.query(`
             SELECT 
                 (SELECT COUNT(*) FROM centres WHERE status = 'active') as total_centres,
@@ -159,14 +160,16 @@ async function fetchOrganisationStats(client, dates) {
                 (SELECT COUNT(*) FROM customers) as total_customers
         `),
 
-        // FIXED: Applying the exact same gross profit logic to today's operations
+        // 4. Live Operations (FIXED: Now uses service_tracking perfectly matching Admin dashboard)
         client.query(`
             SELECT 
-                COUNT(*) FILTER (WHERE status = 'pending') as pending_services,
-                COUNT(*) FILTER (WHERE status = 'processing') as in_progress_services,
-                COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed') as today_services,
-                COALESCE(SUM(total_charges) FILTER (WHERE DATE(created_at) = CURRENT_DATE AND status = 'completed'), 0) as today_revenue
-            FROM service_entries
+                COUNT(se.id) FILTER (WHERE LOWER(strak.status) IN ('pending')) as pending_services,
+                COUNT(se.id) FILTER (WHERE LOWER(strak.status) IN ('processing', 'in_progress')) as in_progress_services,
+                COUNT(se.id) FILTER (WHERE LOWER(strak.status) = 'rejected') as delayed_services,
+                COUNT(se.id) FILTER (WHERE DATE(se.created_at) = CURRENT_DATE AND se.status = 'completed') as today_services,
+                COALESCE(SUM(se.total_charges) FILTER (WHERE DATE(se.created_at) = CURRENT_DATE AND se.status = 'completed'), 0) as today_revenue
+            FROM service_entries se
+            LEFT JOIN service_tracking strak ON strak.service_entry_id = se.id
         `)
     ]);
 
@@ -177,7 +180,7 @@ async function fetchOrganisationStats(client, dates) {
     return {
         revenue,
         expenses,
-        profit: grossProfit - expenses, // FIXED: Net Profit = Service Charges - Expenses
+        profit: grossProfit - expenses, 
         servicesCompleted: parseInt(revenueResult.rows[0].total_services, 10) || 0,
         totalCentres: parseInt(entityCountsResult.rows[0].total_centres, 10) || 0,
         totalStaff: parseInt(entityCountsResult.rows[0].total_staff, 10) || 0,
@@ -185,7 +188,8 @@ async function fetchOrganisationStats(client, dates) {
         todayRevenue: parseFloat(operationsResult.rows[0].today_revenue) || 0,
         todayServices: parseInt(operationsResult.rows[0].today_services, 10) || 0,
         pendingServices: parseInt(operationsResult.rows[0].pending_services, 10) || 0,
-        inProgressServices: parseInt(operationsResult.rows[0].in_progress_services, 10) || 0
+        inProgressServices: parseInt(operationsResult.rows[0].in_progress_services, 10) || 0,
+        delayedServices: parseInt(operationsResult.rows[0].delayed_services, 10) || 0 // <-- Added this for your UI!
     };
 }
 
