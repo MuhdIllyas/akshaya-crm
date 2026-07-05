@@ -716,7 +716,7 @@ async function fetchHealthAnalytics(client, dates) {
 
     const [negativeWallets, pendingPayments, unassignedServices] = await Promise.all([
         client.query(`
-            SELECT w.type, w.balance, c.name as centre_name 
+            SELECT w.wallet_type, w.balance, c.name as centre_name 
             FROM wallets w JOIN centres c ON c.id = w.centre_id 
             WHERE w.balance < 0
         `),
