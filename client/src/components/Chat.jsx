@@ -1008,8 +1008,8 @@ const Chat = ({
                 onChange={(e) => setSelectedTemplate(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2"
               >
-                <option value="reengagement_message">Re‑engagement</option>
-                <option value="reengage_vkpadi">Re‑engagement</option>
+                <option value="reengagement_message">Re‑engagement-Pkyr</option>
+                <option value="reengage_vkpadi">Re‑engagement-VKP</option>
                 <option value="application_update">Application Update</option>
                 {/* Add more templates as needed */}
               </select>
