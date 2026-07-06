@@ -190,14 +190,14 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
       return;
     }
 
-    // 1. Fetch the correct Communication Account
+    // 1. Fetch the correct Communication Account (NOW INCLUDES channel_id)
     let accountQuery;
     if (conversation.communication_account_id) {
-      accountQuery = await client.query(`SELECT * FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
+      accountQuery = await client.query(`SELECT access_token, base_url, channel_id, name FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
     } else if (conversation.centre_id) {
-      // Fallback: Check if the centre has an account mapped
       accountQuery = await client.query(`
-        SELECT ca.* FROM communication_accounts ca 
+        SELECT ca.access_token, ca.base_url, ca.channel_id, ca.name 
+        FROM communication_accounts ca 
         JOIN centres c ON c.communication_account_id = ca.id 
         WHERE c.id = $1 AND ca.is_active = true
       `, [conversation.centre_id]);
@@ -222,31 +222,34 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
       console.log(`Outside 24h window for ${formattedPhone}, sending template instead.`);
       const customerName = conversation.name ? conversation.name.replace('Chat with ', '') : 'Customer';
       
-      // Look up their mapped re-engagement template (or fallback)
       const tplQuery = await client.query(`SELECT provider_template_name FROM communication_template_mappings WHERE communication_account_id = $1 AND event_key = 'reengagement_message'`, [account.id]);
       const templateName = tplQuery.rows.length > 0 ? tplQuery.rows[0].provider_template_name : "reengagement_message";
 
       payload = {
         to: formattedPhone,
-        channel_id: account.channel_id,
+        channel_id: account.channel_id, // 👈 THE MAGIC ROUTING KEY
         type: 'template',
         template: {
           name: templateName,
           language: { code: 'en', policy: 'deterministic' },
-          components: [{ type: 'body', parameters: [{ type: 'text', text: customerName }] }]
+          components: [
+            { type: 'header' }, // Ensure uniform structure
+            { type: 'body', parameters: [{ type: 'text', text: customerName }] }
+          ]
         }
       };
     } else {
       // WITHIN 24H WINDOW: Send standard free-form text or files
       let textBody = message || "";
       if (fileUrl) {
-        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5000'; // Or APP_URL
+        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
         const fullFileUrl = `${baseUrl}${fileUrl}`;
         textBody = `📎 ${fileName || 'File'} shared: ${fullFileUrl}\n\n${message || ''}`;
       }
 
       payload = {
         to: formattedPhone,
+        channel_id: account.channel_id, // 👈 THE MAGIC ROUTING KEY
         type: 'text',
         text: { body: textBody }
       };
@@ -292,11 +295,7 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
   try {
     await client.query("BEGIN");
 
-    // Fetch conversation & account routing
-    const convRes = await client.query(
-      `SELECT * FROM chat_conversations WHERE id = $1 AND channel = 'whatsapp'`,
-      [conversationId]
-    );
+    const convRes = await client.query(`SELECT * FROM chat_conversations WHERE id = $1 AND channel = 'whatsapp'`, [conversationId]);
     if (!convRes.rows.length) throw new Error("WhatsApp conversation not found");
     const conversation = convRes.rows[0];
 
@@ -305,10 +304,11 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
 
     let accountQuery;
     if (conversation.communication_account_id) {
-      accountQuery = await client.query(`SELECT * FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
+      accountQuery = await client.query(`SELECT access_token, base_url, channel_id FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
     } else {
       accountQuery = await client.query(`
-        SELECT ca.* FROM communication_accounts ca 
+        SELECT ca.access_token, ca.base_url, ca.channel_id 
+        FROM communication_accounts ca 
         JOIN centres c ON c.communication_account_id = ca.id 
         WHERE c.id = $1 AND ca.is_active = true
       `, [conversation.centre_id]);
@@ -316,20 +316,20 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
 
     if (!accountQuery.rows.length) throw new Error("No active WhatsApp account mapped to this conversation.");
     const account = accountQuery.rows[0];
-
     const formattedPhone = to.startsWith('+91') ? to : `+91${to.replace(/^\+91/, '')}`;
 
     const payload = {
       to: formattedPhone,
-      channel_id: account.channel_id,
+      channel_id: account.channel_id, // 👈 THE MAGIC ROUTING KEY
       type: 'template',
       template: {
         name: templateName,
         language: { code: 'en', policy: 'deterministic' },
         components: [
+          { type: 'header' },
           {
             type: 'body',
-            parameters: params.map(p => ({ type: 'text', text: String(p) }))
+            parameters: params.map(p => ({ type: 'text', text: String(p || '-') }))
           }
         ]
       }
@@ -339,7 +339,6 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
       headers: { Authorization: `Bearer ${account.access_token}`, 'Content-Type': 'application/json' }
     });
 
-    // Save history
     const savedMsg = await client.query(
       `INSERT INTO chat_messages
        (conversation_id, sender_type, sender_id, message, message_type, direction, created_at)
@@ -349,12 +348,9 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
     );
 
     await client.query("COMMIT");
-
-    if (io) {
-      io.to(`conversation:${conversationId}`).emit("new_message", savedMsg.rows[0]);
-    }
-
+    if (io) io.to(`conversation:${conversationId}`).emit("new_message", savedMsg.rows[0]);
     return { success: true, messageId: savedMsg.rows[0].id };
+
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Manual template send error:", err.message);

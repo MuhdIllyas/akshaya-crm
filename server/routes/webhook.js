@@ -88,18 +88,37 @@ router.post('/whatsapp', async (req, res) => {
     // ===============================
     // 🔍 FIND ACCOUNTS AND CUSTOMERS
     // ===============================
+    
+    // Aggressively hunt for how Libromi identified the receiver
+    let incomingChannelId = body.channel_id || body.data?.channel_id || null;
+    let fallbackRecipientPhone = recipientPhone || body.to || body.data?.to || null;
+
     let communicationAccountId = null;
-    if (recipientPhone) {
-        const formattedRecipient = recipientPhone.startsWith('+') ? recipientPhone : `+${recipientPhone}`;
+
+    // First try: Match by exact channel_id (Most accurate for Libromi)
+    if (incomingChannelId) {
         const accountQuery = await pool.query(
-            `SELECT id FROM communication_accounts WHERE phone_number = $1 OR phone_number = $2 LIMIT 1`,
-            [formattedRecipient, recipientPhone]
+            `SELECT id FROM communication_accounts WHERE channel_id = $1 LIMIT 1`,
+            [String(incomingChannelId)]
         );
         if (accountQuery.rows.length > 0) {
             communicationAccountId = accountQuery.rows[0].id;
         }
     }
 
+    // Second try: Fallback to matching by the phone number
+    if (!communicationAccountId && fallbackRecipientPhone) {
+        const formattedRecipient = fallbackRecipientPhone.startsWith('+') ? fallbackRecipientPhone : `+${fallbackRecipientPhone}`;
+        const accountQuery = await pool.query(
+            `SELECT id FROM communication_accounts WHERE phone_number = $1 OR phone_number = $2 LIMIT 1`,
+            [formattedRecipient, fallbackRecipientPhone]
+        );
+        if (accountQuery.rows.length > 0) {
+            communicationAccountId = accountQuery.rows[0].id;
+        }
+    }
+
+    // Find the customer who sent the message
     const customerQuery = await pool.query(
         `SELECT id, name FROM customers WHERE primary_phone = $1 OR primary_phone = $2 LIMIT 1`,
         [from, from.replace('+', '')]
