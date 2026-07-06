@@ -53,11 +53,12 @@ export const triggerNotification = async ({ eventKey, centreId, customerPhone, t
     // 4. Construct the Payload
     const payload = {
       to: formattedPhone,
+      channel_id: account.channel_id,
       type: 'template',
       template: {
         name: template.provider_template_name,
-        language: { code: template.language_code || 'en' },
-        components: componentsToUse // 👈 Uses our dynamic components
+        language: { code: "en" , policy: "deterministic" },
+        components: componentsToUse 
       }
     };
 

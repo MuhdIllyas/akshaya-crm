@@ -228,6 +228,7 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
 
       payload = {
         to: formattedPhone,
+        channel_id: account.channel_id,
         type: 'template',
         template: {
           name: templateName,
@@ -320,6 +321,7 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
 
     const payload = {
       to: formattedPhone,
+      channel_id: account.channel_id,
       type: 'template',
       template: {
         name: templateName,
