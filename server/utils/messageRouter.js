@@ -1,7 +1,8 @@
 import pool from "../db.js";
 import axios from 'axios';
 import { addStaffToConversation } from './conversationService.js';
-import { isWithin24Hours } from './whatsappWindow.js'; // Note: Adjusted import path if it's in the same folder
+import { isWithin24Hours } from './whatsappWindow.js'; 
+import { triggerNotification } from "./communication/notificationEngine.js";
 
 /**
  * Helper: Get last customer message time for a conversation
@@ -178,97 +179,74 @@ export async function sendMessage({
 }
 
 /**
- * 🚀 MULTI-TENANT WHATSAPP SENDER
- * Dynamically fetches credentials for this specific conversation.
+ * 🚀 MULTI-TENANT WHATSAPP SENDER (Text Messages)
+ * If 24h window is closed, it delegates to the Notification Engine.
  */
 async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) {
   const client = await pool.connect();
   try {
     const to = conversation.phone_number;
-    if (!to) {
-      console.error('No phone number for WhatsApp conversation');
-      return;
+    if (!to) return;
+
+    // 1. Check 24-Hour Customer Service Window
+    const lastCustomerTime = await getLastCustomerMessageTime(conversation.id);
+    const within24h = isWithin24Hours(lastCustomerTime);
+
+    if (!within24h) {
+      // 🔴 OUTSIDE 24H WINDOW: Delegate entirely to the Notification Engine!
+      console.log(`Outside 24h window for ${to}, routing via Notification Engine.`);
+      const customerName = conversation.name ? conversation.name.replace(/Chat with |WhatsApp /ig, '').trim() : 'Customer';
+      
+      await triggerNotification({
+        eventKey: 'reengagement_message',
+        centreId: conversation.centre_id,
+        customerPhone: to,
+        templateParams: [customerName]
+      });
+
+      return; // Stop execution here. The engine handled the Libromi API call!
     }
 
-    // 1. Fetch the correct Communication Account (NOW INCLUDES channel_id)
+    // 🟢 WITHIN 24H WINDOW: Standard Text/File Send (Not a Template)
     let accountQuery;
     if (conversation.communication_account_id) {
-      accountQuery = await client.query(`SELECT access_token, base_url, channel_id, name FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
+      accountQuery = await client.query(`SELECT id, access_token, base_url, channel_id, name FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
     } else if (conversation.centre_id) {
       accountQuery = await client.query(`
-        SELECT ca.access_token, ca.base_url, ca.channel_id, ca.name 
+        SELECT ca.id, ca.access_token, ca.base_url, ca.channel_id, ca.name 
         FROM communication_accounts ca 
         JOIN centres c ON c.communication_account_id = ca.id 
         WHERE c.id = $1 AND ca.is_active = true
       `, [conversation.centre_id]);
     }
 
-    if (!accountQuery || accountQuery.rows.length === 0) {
-      console.warn(`[Message Router] No active WhatsApp account found for Conversation ${conversation.id}.`);
-      return;
-    }
-
+    if (!accountQuery || accountQuery.rows.length === 0) return;
+    
     const account = accountQuery.rows[0];
     const formattedPhone = to.startsWith('+91') ? to : `+91${to.replace(/^\+91/, '')}`;
 
-    // 2. Check 24-Hour Customer Service Window
-    const lastCustomerTime = await getLastCustomerMessageTime(conversation.id);
-    const within24h = isWithin24Hours(lastCustomerTime);
-
-    let payload;
-
-    if (!within24h) {
-      // OUTSIDE 24H WINDOW: Force a Re-engagement Template
-      console.log(`Outside 24h window for ${formattedPhone}, sending template instead.`);
-      const customerName = conversation.name ? conversation.name.replace('Chat with ', '') : 'Customer';
-      
-      const tplQuery = await client.query(`SELECT provider_template_name FROM communication_template_mappings WHERE communication_account_id = $1 AND event_key = $2`, [account.id, selectedTemplate]);
-    
-      // Use the mapped template name, or fall back to what the frontend sent just in case
-      const finalTemplateName = tplQuery.rows.length > 0 ? tplQuery.rows[0].provider_template_name : templateName;
-
-      const payload = {
-        to: formattedPhone,
-        channel_id: account.channel_id,
-        type: 'template',
-        template: {
-          name: finalTemplateName, 
-          language: { code: 'en', policy: 'deterministic' },
-          components: [
-            { type: 'header' },
-            {
-              type: 'body',
-              parameters: params.map(p => ({ type: 'text', text: String(p || '-') }))
-            }
-          ]
-        }
-      };
-    } else {
-      // WITHIN 24H WINDOW: Send standard free-form text or files
-      let textBody = message || "";
-      if (fileUrl) {
-        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
-        const fullFileUrl = `${baseUrl}${fileUrl}`;
-        textBody = `📎 ${fileName || 'File'} shared: ${fullFileUrl}\n\n${message || ''}`;
-      }
-
-      payload = {
-        to: formattedPhone,
-        channel_id: account.channel_id, // 👈 THE MAGIC ROUTING KEY
-        type: 'text',
-        text: { body: textBody }
-      };
+    let textBody = message || "";
+    if (fileUrl) {
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
+      const fullFileUrl = `${baseUrl}${fileUrl}`;
+      textBody = `📎 ${fileName || 'File'} shared: ${fullFileUrl}\n\n${message || ''}`;
     }
 
-    // 3. Dispatch the dynamic request
+    const payload = {
+      to: formattedPhone,
+      channel_id: account.channel_id,
+      type: 'text',
+      text: { body: textBody }
+    };
+
     await axios.post(`${account.base_url}/messages`, payload, {
       headers: { Authorization: `Bearer ${account.access_token}`, 'Content-Type': 'application/json' }
     });
 
-    console.log(`✅ WhatsApp outgoing sent to ${formattedPhone} via Account: ${account.name}`);
+    console.log(`✅ WhatsApp text sent to ${formattedPhone} via Account: ${account.name}`);
 
   } catch (err) {
-    console.error('❌ Failed to send WhatsApp reply:', err.response?.data || err.message);
+    console.error('❌ Failed to send WhatsApp text:', err.response?.data || err.message);
   } finally {
     client.release();
   }
@@ -293,7 +271,8 @@ export async function sendSystemMessage(conversationId, message, io, taskId = nu
 }
 
 /**
- * Manually send a WhatsApp template (used by API route)
+ * 🚀 MANUAL TEMPLATE ROUTER
+ * Takes the frontend request, routes it through the Notification Engine, and updates the UI.
  */
 export async function sendManualWhatsAppTemplate({ conversationId, templateName, params = [], io }) {
   const client = await pool.connect();
@@ -304,50 +283,21 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
     if (!convRes.rows.length) throw new Error("WhatsApp conversation not found");
     const conversation = convRes.rows[0];
 
-    const to = conversation.phone_number;
-    if (!to) throw new Error("No phone number for this conversation");
-
-    let accountQuery;
-    if (conversation.communication_account_id) {
-      accountQuery = await client.query(`
-        SELECT id, access_token, base_url, channel_id, name 
-        FROM communication_accounts 
-        WHERE id = $1 AND is_active = true
-      `, [conversation.communication_account_id]);
-    } else if (conversation.centre_id) {
-      accountQuery = await client.query(`
-        SELECT ca.id, ca.access_token, ca.base_url, ca.channel_id, ca.name 
-        FROM communication_accounts ca 
-        JOIN centres c ON c.communication_account_id = ca.id 
-        WHERE c.id = $1 AND ca.is_active = true
-      `, [conversation.centre_id]);
-    }
-
-    if (!accountQuery.rows.length) throw new Error("No active WhatsApp account mapped to this conversation.");
-    const account = accountQuery.rows[0];
-    const formattedPhone = to.startsWith('+91') ? to : `+91${to.replace(/^\+91/, '')}`;
-
-    const payload = {
-      to: formattedPhone,
-      channel_id: account.channel_id, // 👈 THE MAGIC ROUTING KEY
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: 'en', policy: 'deterministic' },
-        components: [
-          { type: 'header' },
-          {
-            type: 'body',
-            parameters: params.map(p => ({ type: 'text', text: String(p || '-') }))
-          }
-        ]
-      }
-    };
-
-    await axios.post(`${account.base_url}/messages`, payload, {
-      headers: { Authorization: `Bearer ${account.access_token}`, 'Content-Type': 'application/json' }
+    // 🔴 1. Delegate the API heavy lifting to the Notification Engine!
+    // templateName here is the abstract event key (e.g., 'reengagement_message') from the React frontend
+    const result = await triggerNotification({
+      eventKey: templateName,
+      centreId: conversation.centre_id,
+      customerPhone: conversation.phone_number,
+      templateParams: params
     });
 
+    if (!result.success) {
+      // If the engine fails (e.g., template not mapped), throw the exact error back to the frontend UI
+      throw new Error(result.error?.error || result.reason || "Failed to route template through Notification Engine");
+    }
+
+    // 🟢 2. If the engine succeeded, save the visual record to the chat database
     const savedMsg = await client.query(
       `INSERT INTO chat_messages
        (conversation_id, sender_type, sender_id, message, message_type, direction, created_at)
@@ -357,7 +307,10 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
     );
 
     await client.query("COMMIT");
+    
+    // 3. Emit the socket event so the bubble appears instantly for the staff
     if (io) io.to(`conversation:${conversationId}`).emit("new_message", savedMsg.rows[0]);
+    
     return { success: true, messageId: savedMsg.rows[0].id };
 
   } catch (err) {
