@@ -189,6 +189,24 @@ const Chat = ({
     return displayName || 'Unknown Chat';
   }, [activeConversation, currentUser.id]);
 
+  // Auto-fill the customer's name when the Template Modal opens!
+  useEffect(() => {
+    if (showTemplateModal && activeConversation) {
+      let defaultName = getConversationDisplayName();
+      
+      // Strip out CRM prefixes to get just the clean name
+      defaultName = defaultName.replace(/WhatsApp /i, '').replace(/Chat with /i, '').trim();
+
+      // If the name is just a raw phone number, leave it blank
+      if (/^\+?\d+$/.test(defaultName.replace(/[\s-]/g, ''))) {
+        defaultName = ''; 
+      }
+
+      setTemplateParams(defaultName);
+      setSelectedTemplate("reengagement_message"); // Always default to re-engagement
+    }
+  }, [showTemplateModal, activeConversation, getConversationDisplayName]);
+
   const isUserOnline = useCallback((userId) => {
     return onlineUsers.has(String(userId));
   }, [onlineUsers]);
@@ -1006,12 +1024,11 @@ const Chat = ({
               <select
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
+                className="w-full border rounded-lg px-3 py-2 bg-gray-50"
               >
-                <option value="reengagement_message">Re‑engagement-Pkyr</option>
-                <option value="reengage_vkpadi">Re‑engagement-VKP</option>
-                <option value="application_update">Application Update</option>
-                {/* Add more templates as needed */}
+                {/* Now using abstract keys. Backend handles the centre mapping! */}
+                <option value="reengagement_message">Re‑engagement (Auto-Mapped)</option>
+                <option value="application_update">Application Update (Auto-Mapped)</option>
               </select>
             </div>
             <div className="mb-4">

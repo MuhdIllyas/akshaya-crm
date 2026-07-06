@@ -222,19 +222,24 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
       console.log(`Outside 24h window for ${formattedPhone}, sending template instead.`);
       const customerName = conversation.name ? conversation.name.replace('Chat with ', '') : 'Customer';
       
-      const tplQuery = await client.query(`SELECT provider_template_name FROM communication_template_mappings WHERE communication_account_id = $1 AND event_key = 'reengagement_message'`, [account.id]);
-      const templateName = tplQuery.rows.length > 0 ? tplQuery.rows[0].provider_template_name : "reengagement_message";
+      const tplQuery = await client.query(`SELECT provider_template_name FROM communication_template_mappings WHERE communication_account_id = $1 AND event_key = $2`, [account.id, selectedTemplate]);
+    
+      // Use the mapped template name, or fall back to what the frontend sent just in case
+      const finalTemplateName = tplQuery.rows.length > 0 ? tplQuery.rows[0].provider_template_name : templateName;
 
-      payload = {
+      const payload = {
         to: formattedPhone,
-        channel_id: account.channel_id, // 👈 THE MAGIC ROUTING KEY
+        channel_id: account.channel_id,
         type: 'template',
         template: {
-          name: templateName,
+          name: finalTemplateName, 
           language: { code: 'en', policy: 'deterministic' },
           components: [
-            { type: 'header' }, // Ensure uniform structure
-            { type: 'body', parameters: [{ type: 'text', text: customerName }] }
+            { type: 'header' },
+            {
+              type: 'body',
+              parameters: params.map(p => ({ type: 'text', text: String(p || '-') }))
+            }
           ]
         }
       };
