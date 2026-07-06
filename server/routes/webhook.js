@@ -26,7 +26,6 @@ router.post('/whatsapp', async (req, res) => {
   try {
     const body = req.body;
     console.log("🔥 LIBROMI WEBHOOK HIT");
-    // console.log("📩 RAW BODY:", JSON.stringify(body, null, 2)); // Uncomment if you need to deeply debug the payload
 
     let from = null;
     let text = null;
@@ -88,37 +87,42 @@ router.post('/whatsapp', async (req, res) => {
     // ===============================
     // 🔍 FIND ACCOUNTS AND CUSTOMERS
     // ===============================
-    
-    // Aggressively hunt for how Libromi identified the receiver
-    let incomingChannelId = body.channel_id || body.data?.channel_id || null;
-    let fallbackRecipientPhone = recipientPhone || body.to || body.data?.to || null;
-
     let communicationAccountId = null;
+    let centreId = null;
 
-    // First try: Match by exact channel_id (Most accurate for Libromi)
+    // First try: Aggressively hunt for the channel_id (Best for Libromi)
+    let incomingChannelId = body.channel_id || body.data?.channel_id || null;
+    
     if (incomingChannelId) {
         const accountQuery = await pool.query(
-            `SELECT id FROM communication_accounts WHERE channel_id = $1 LIMIT 1`,
+            `SELECT ca.id, c.id as centre_id 
+             FROM communication_accounts ca
+             LEFT JOIN centres c ON c.communication_account_id = ca.id
+             WHERE ca.channel_id = $1 LIMIT 1`,
             [String(incomingChannelId)]
         );
         if (accountQuery.rows.length > 0) {
             communicationAccountId = accountQuery.rows[0].id;
+            centreId = accountQuery.rows[0].centre_id;
         }
     }
 
-    // Second try: Fallback to matching by the phone number
-    if (!communicationAccountId && fallbackRecipientPhone) {
-        const formattedRecipient = fallbackRecipientPhone.startsWith('+') ? fallbackRecipientPhone : `+${fallbackRecipientPhone}`;
+    // Fallback: Match by the receiver's phone number
+    if (!communicationAccountId && recipientPhone) {
+        const formattedRecipient = recipientPhone.startsWith('+') ? recipientPhone : `+${recipientPhone}`;
         const accountQuery = await pool.query(
-            `SELECT id FROM communication_accounts WHERE phone_number = $1 OR phone_number = $2 LIMIT 1`,
-            [formattedRecipient, fallbackRecipientPhone]
+            `SELECT ca.id, c.id as centre_id 
+             FROM communication_accounts ca
+             LEFT JOIN centres c ON c.communication_account_id = ca.id
+             WHERE ca.phone_number = $1 OR ca.phone_number = $2 LIMIT 1`,
+            [formattedRecipient, recipientPhone]
         );
         if (accountQuery.rows.length > 0) {
             communicationAccountId = accountQuery.rows[0].id;
+            centreId = accountQuery.rows[0].centre_id;
         }
     }
 
-    // Find the customer who sent the message
     const customerQuery = await pool.query(
         `SELECT id, name FROM customers WHERE primary_phone = $1 OR primary_phone = $2 LIMIT 1`,
         [from, from.replace('+', '')]
@@ -136,18 +140,19 @@ router.post('/whatsapp', async (req, res) => {
       customer_id: customerId,
       phone_number: from,
       communication_account_id: communicationAccountId,
+      centre_id: centreId, // 🔥 Pass Centre ID so the Admin gets automatically added to new chats!
       name: `WhatsApp - ${customerName}`,
       is_group: false,
     });
 
     // ===============================
-    // 💾 SAVE MESSAGE & EMIT SOCKET
+    // 💾 SAVE MESSAGE
     // ===============================
     const io = req.app.get('io') || req.io;
 
     await sendMessage({
       conversation_id: conversation.id,
-      sender_id: customerId, // Will associate with customer if they exist
+      sender_id: customerId, 
       sender_type: 'customer',
       message: text,
       message_type: 'text',
@@ -155,6 +160,33 @@ router.post('/whatsapp', async (req, res) => {
       io: io,
       external_message_id: message_id
     });
+
+    // ===============================
+    // 🔔 PUSH NOTIFICATION TO STAFF UI
+    // ===============================
+    if (io && conversation.id) {
+      // Find all staff who have access to this conversation
+      const participantsRes = await pool.query(
+        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
+        [conversation.id]
+      );
+
+      participantsRes.rows.forEach(p => {
+        // 1. Tell DashboardLayout to bump the red badge number (Unread Count)
+        io.to(`user:${p.staff_id}`).emit('unread_update', {
+          conversationId: conversation.id
+        });
+        
+        // 2. Tell MessengerPage to update the text snippet in the sidebar list (Latest Message Preview)
+        io.to(`user:${p.staff_id}`).emit('conversation_updated', {
+          conversationId: conversation.id,
+          lastMessage: text,
+          lastMessageSenderId: customerId,
+          lastMessageSender: customerName,
+          time: new Date().toISOString()
+        });
+      });
+    }
 
     console.log(`✅ Message safely routed and saved from ${from}: "${text.substring(0, 20)}..."`);
 
