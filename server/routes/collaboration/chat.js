@@ -238,6 +238,7 @@ router.post("/conversation", authenticateToken, async (req, res) => {
     let finalName = name || context_name;
     let participantIds = null;
     let finalIsGroup = is_group;
+    let commAccountId = null; // 🔥 NEW: Variable to hold the tenant ID
 
     // Determine if this is a WhatsApp conversation
     const isWhatsApp = channel === 'whatsapp';
@@ -247,6 +248,17 @@ router.post("/conversation", authenticateToken, async (req, res) => {
       const phone = finalPhoneNumber;
       if (!phone) {
         return res.status(400).json({ error: "Phone number is required for WhatsApp conversation" });
+      }
+
+      // 🔥 NEW: Fetch the specific Communication Account ID for this Centre
+      const accountRes = await pool.query(
+        `SELECT communication_account_id FROM centres WHERE id = $1`,
+        [centreId]
+      );
+      commAccountId = accountRes.rows[0]?.communication_account_id;
+
+      if (!commAccountId) {
+        return res.status(400).json({ error: "No WhatsApp account is linked to your centre." });
       }
 
       // ⭐ Do NOT create a customer record. Just store the phone number and name in the conversation.
@@ -281,7 +293,8 @@ router.post("/conversation", authenticateToken, async (req, res) => {
       created_by: userId,
       name: finalName,
       is_group: finalIsGroup,
-      participant_ids: participantIds
+      participant_ids: participantIds,
+      communication_account_id: commAccountId // 🔥 PASSING THE TENANT ID HERE
     });
 
     // Add participants if needed (resolveConversation might have added them, but ensure)

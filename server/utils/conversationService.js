@@ -33,14 +33,15 @@ export async function resolveConversation({
   context_id = null,
   customer_id = null,
   phone_number = null,
-  centre_id,
-  created_by,
+  centre_id = null,
+  created_by = null,
   name = null,
   is_group = false,
-  participant_ids = null,  // For direct staff chats - array of staff IDs
-  communication_account_id = null // 🔥 NEW: Required for Multi-Tenant WhatsApp routing
+  participant_ids = null,
+  communication_account_id = null
 }) {
   let conversation;
+  let externalContactId = null;
 
   /* =========================
      1. FIND EXISTING DIRECT STAFF CHAT
@@ -90,9 +91,10 @@ export async function resolveConversation({
   }
 
   /* =========================
-     3. FIND EXISTING CUSTOMER CONVERSATION
+     3. FIND EXISTING GENERIC CUSTOMER CONVERSATION (Non-WhatsApp)
   ========================= */
-  if (context_type === "customer" && customer_id) {
+  // 🔥 Modified: Force WhatsApp traffic to skip this and use the tenant-isolated block below
+  if (channel !== "whatsapp" && context_type === "customer" && customer_id) {
     const res = await pool.query(
       `SELECT * FROM chat_conversations
        WHERE channel = $1 AND context_type = $2 AND customer_id = $3
@@ -107,17 +109,47 @@ export async function resolveConversation({
   }
 
   /* =========================
-     4. WHATSAPP FALLBACK (By phone AND communication account)
+     4. 🔥 THE NEW MULTI-TENANT WHATSAPP RESOLVER 🔥
   ========================= */
-  if (channel === "whatsapp" && phone_number) {
+  if (channel === "whatsapp" && phone_number && communication_account_id) {
+    
+    // A. Attempt to find the specific local contact for this Centre's WhatsApp account
+    let ecRes = await pool.query(
+      `SELECT id FROM external_contacts 
+       WHERE communication_account_id = $1 AND phone_number = $2 LIMIT 1`,
+      [communication_account_id, phone_number]
+    );
+
+    if (ecRes.rows.length > 0) {
+      externalContactId = ecRes.rows[0].id;
+    } else {
+      // B. Contact doesn't exist for this account. Create it.
+      // Try to map it to a global customer profile if we don't already have the customer_id
+      let targetCustomerId = customer_id;
+      if (!targetCustomerId) {
+        const custMatch = await pool.query(
+          `SELECT id FROM customers WHERE primary_phone = $1 OR primary_phone = $2 LIMIT 1`, 
+          [phone_number, phone_number.replace('+', '')]
+        );
+        if (custMatch.rows.length > 0) targetCustomerId = custMatch.rows[0].id;
+      }
+
+      const insertEc = await pool.query(
+        `INSERT INTO external_contacts (customer_id, communication_account_id, centre_id, phone_number, created_at)
+         VALUES ($1, $2, $3, $4, NOW()) RETURNING id`,
+        [targetCustomerId, communication_account_id, centre_id, phone_number]
+      );
+      externalContactId = insertEc.rows[0].id;
+    }
+
+    // C. Find the specific conversation tied to this External Contact
     const res = await pool.query(
       `SELECT * FROM chat_conversations
        WHERE channel = 'whatsapp' 
-         AND phone_number = $1
-         AND (communication_account_id = $2 OR communication_account_id IS NULL)
-       AND status != 'deleted'
+         AND external_contact_id = $1
+         AND status != 'deleted'
        LIMIT 1`,
-      [phone_number, communication_account_id]
+      [externalContactId]
     );
 
     if (res.rows.length) {
@@ -151,8 +183,8 @@ export async function resolveConversation({
   const insertRes = await pool.query(
     `INSERT INTO chat_conversations
     (name, is_group, channel, context_type, context_id, centre_id, 
-     customer_id, phone_number, created_by, assigned_staff_id, communication_account_id, status, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'active',NOW())
+     customer_id, phone_number, created_by, assigned_staff_id, communication_account_id, external_contact_id, status, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',NOW())
     RETURNING *`,
     [
       conversationName,
@@ -165,7 +197,8 @@ export async function resolveConversation({
       phone_number,
       created_by,
       (channel === 'whatsapp' ? created_by : null),
-      communication_account_id // 🔥 Multi-Tenant Link
+      communication_account_id,
+      externalContactId // 🔥 Embeds the isolated contact identity
     ]
   );
 
@@ -198,7 +231,7 @@ export async function resolveConversation({
     if (conversation.assigned_staff_id) await addStaffToConversation(conversation.id, conversation.assigned_staff_id);
   }
 
-  // 🔥 NEW: Automatically add Centre Admin as a reviewer to external chats
+  // Automatically add Centre Admin as a reviewer to external chats
   if ((channel === "whatsapp" || channel === "portal") && centre_id) {
     const adminRes = await pool.query(`SELECT admin_id FROM centres WHERE id = $1`, [centre_id]);
     if (adminRes.rows.length > 0 && adminRes.rows[0].admin_id) {
