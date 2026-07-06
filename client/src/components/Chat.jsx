@@ -1028,7 +1028,6 @@ const Chat = ({
               >
                 {/* Now using abstract keys. Backend handles the centre mapping! */}
                 <option value="reengagement_message">Re‑engagement (Auto-Mapped)</option>
-                <option value="application_update">Application Update (Auto-Mapped)</option>
               </select>
             </div>
             <div className="mb-4">
