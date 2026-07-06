@@ -1009,6 +1009,7 @@ const Chat = ({
                 className="w-full border rounded-lg px-3 py-2"
               >
                 <option value="reengagement_message">Re‑engagement</option>
+                <option value="reengage_vkpadi">Re‑engagement</option>
                 <option value="application_update">Application Update</option>
                 {/* Add more templates as needed */}
               </select>
