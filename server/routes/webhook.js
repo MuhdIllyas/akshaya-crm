@@ -171,15 +171,14 @@ router.post('/whatsapp', async (req, res) => {
         [conversation.id]
       );
 
-      console.log("Participants:", participantsRes.rows);
       participantsRes.rows.forEach(p => {
         // 1. Tell DashboardLayout to bump the red badge number (Unread Count)
-        io.to(`user:${p.staff_id}`).emit('unread_update', {
+        io.to(`staff:${p.staff_id}`).emit('unread_update', {
           conversationId: conversation.id
         });
         
         // 2. Tell MessengerPage to update the text snippet in the sidebar list (Latest Message Preview)
-        io.to(`user:${p.staff_id}`).emit('conversation_updated', {
+        io.to(`staff:${p.staff_id}`).emit('conversation_updated', {
           conversationId: conversation.id,
           lastMessage: text,
           lastMessageSenderId: customerId,
