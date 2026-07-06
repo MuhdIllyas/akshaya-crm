@@ -309,10 +309,14 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
 
     let accountQuery;
     if (conversation.communication_account_id) {
-      accountQuery = await client.query(`SELECT access_token, base_url, channel_id FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
-    } else {
       accountQuery = await client.query(`
-        SELECT ca.access_token, ca.base_url, ca.channel_id 
+        SELECT id, access_token, base_url, channel_id, name 
+        FROM communication_accounts 
+        WHERE id = $1 AND is_active = true
+      `, [conversation.communication_account_id]);
+    } else if (conversation.centre_id) {
+      accountQuery = await client.query(`
+        SELECT ca.id, ca.access_token, ca.base_url, ca.channel_id, ca.name 
         FROM communication_accounts ca 
         JOIN centres c ON c.communication_account_id = ca.id 
         WHERE c.id = $1 AND ca.is_active = true
