@@ -27,7 +27,7 @@ const authenticateSuperadmin = (req, res, next) => {
 router.get('/accounts', authenticateSuperadmin, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, phone_number, is_active FROM communication_accounts ORDER BY id ASC`
+      `SELECT id, name, phone_number, is_active, channel_id FROM communication_accounts ORDER BY id ASC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -38,17 +38,17 @@ router.get('/accounts', authenticateSuperadmin, async (req, res) => {
 
 // POST create a new communication account
 router.post('/accounts', authenticateSuperadmin, async (req, res) => {
-  const { name, phone_number, access_token } = req.body;
-  
-  if (!name || !phone_number || !access_token) {
-    return res.status(400).json({ error: 'Name, phone number, and access token are required' });
+  const { name, phone_number, access_token, channel_id } = req.body;
+
+  if (!name || !phone_number || !access_token || !channel_id) {
+    return res.status(400).json({ error: 'Name, phone number, access token, and channel ID are required' });
   }
 
   try {
     const result = await pool.query(
-      `INSERT INTO communication_accounts (name, phone_number, access_token, is_active) 
-       VALUES ($1, $2, $3, true) RETURNING id, name, phone_number, is_active`,
-      [name, phone_number, access_token]
+      `INSERT INTO communication_accounts (name, phone_number, access_token, is_active, channel_id) 
+       VALUES ($1, $2, $3, true, $4) RETURNING id, name, phone_number, is_active, channel_id`,
+      [name, phone_number, access_token, channel_id]
     );
     res.status(201).json({ message: 'Account created', account: result.rows[0] });
   } catch (err) {
@@ -63,10 +63,10 @@ router.post('/accounts', authenticateSuperadmin, async (req, res) => {
 // PUT update an existing communication account
 router.put('/accounts/:id', authenticateSuperadmin, async (req, res) => {
   const { id } = req.params;
-  const { name, phone_number, access_token } = req.body;
+  const { name, phone_number, access_token, channel_id } = req.body;
 
-  if (!name || !phone_number) {
-    return res.status(400).json({ error: 'Name and phone number are required' });
+  if (!name || !phone_number || !channel_id) {
+    return res.status(400).json({ error: 'Name, phone number, and channel ID are required' });
   }
 
   try {
@@ -77,20 +77,20 @@ router.put('/accounts/:id', authenticateSuperadmin, async (req, res) => {
     if (access_token && access_token.trim() !== "") {
       query = `
         UPDATE communication_accounts 
-        SET name = $1, phone_number = $2, access_token = $3 
-        WHERE id = $4 
-        RETURNING id, name, phone_number, is_active
+        SET name = $1, phone_number = $2, access_token = $3, channel_id = $4
+        WHERE id = $5 
+        RETURNING id, name, phone_number, is_active, channel_id
       `;
-      values = [name, phone_number, access_token, id];
+      values = [name, phone_number, access_token, channel_id, id];
     } else {
       // If no token is provided, update only name and phone, leaving the token untouched
       query = `
         UPDATE communication_accounts 
-        SET name = $1, phone_number = $2 
-        WHERE id = $3 
-        RETURNING id, name, phone_number, is_active
+        SET name = $1, phone_number = $2, channel_id = $3
+        WHERE id = $4 
+        RETURNING id, name, phone_number, is_active, channel_id
       `;
-      values = [name, phone_number, id];
+      values = [name, phone_number, channel_id, id];
     }
 
     const result = await pool.query(query, values);
