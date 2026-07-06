@@ -171,6 +171,7 @@ router.post('/whatsapp', async (req, res) => {
         [conversation.id]
       );
 
+      console.log(participantsRes.rows); //to check participants
       participantsRes.rows.forEach(p => {
         // 1. Tell DashboardLayout to bump the red badge number (Unread Count)
         io.to(`user:${p.staff_id}`).emit('unread_update', {
