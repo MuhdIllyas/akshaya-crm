@@ -597,6 +597,14 @@ const MessengerPage = ({ user }) => {
 
     socket.on("conversation_updated", (data) => {
       setConversations(prev => {
+        // 🔥 FIX 1: If this is a brand new WhatsApp chat that just came in from the webhook, 
+        // fetch it from the database so it appears in the sidebar!
+        const exists = prev.some(c => c.id === data.conversationId);
+        if (!exists) {
+          fetchConversations();
+          return prev;
+        }
+
         const updated = prev.map(conv =>
           conv.id === data.conversationId
             ? {
@@ -607,12 +615,33 @@ const MessengerPage = ({ user }) => {
               last_message_sender: data.lastMessageSender,
               last_message_at: data.time,
               time: data.time,
-              unread: data.unread
+              // 🔥 FIX 2: Safely preserve the unread count if the webhook didn't send a specific number
+              unread: data.unread !== undefined ? data.unread : conv.unread
             }
             : conv
         );
         return updated.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
       });
+    });
+
+    socket.on("unread_update", (data) => {
+      // 🔥 FIX 3: If the webhook just sends a ping without a number, manually fetch the fresh count!
+      if (data.unread !== undefined) {
+        setConversations(prev => prev.map(conv =>
+          conv.id === data.conversationId
+            ? { ...conv, unread: data.unread }
+            : conv
+        ));
+      } else {
+        // Trigger a background fetch for this specific conversation's unread count
+        fetchConversationUnreadCount(data.conversationId).then(count => {
+          setConversations(prev => prev.map(conv =>
+            conv.id === data.conversationId
+              ? { ...conv, unread: count }
+              : conv
+          ));
+        });
+      }
     });
 
     socket.on("typing", (data) => {
