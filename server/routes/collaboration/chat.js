@@ -88,14 +88,17 @@ const checkConversationAccess = async (conversationId, userId) => {
 };
 
 const canReplyToWhatsApp = async (conversationId, userId, userRole) => {
+  // Admins always have access
   if (userRole === 'admin' || userRole === 'superadmin') return true;
   
+  // 🔥 UPDATED: If the staff member is a participant in this chat, let them reply!
   const result = await pool.query(
-    `SELECT assigned_staff_id FROM chat_conversations WHERE id = $1`,
-    [conversationId]
+    `SELECT 1 FROM chat_participants 
+     WHERE conversation_id = $1 AND staff_id = $2`,
+    [conversationId, userId]
   );
   
-  return result.rows[0]?.assigned_staff_id === userId;
+  return result.rows.length > 0;
 };
 
 const getAvatarColor = (id) => {
