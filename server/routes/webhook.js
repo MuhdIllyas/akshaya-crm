@@ -161,50 +161,6 @@ router.post('/whatsapp', async (req, res) => {
       external_message_id: message_id
     });
 
-    // ===============================
-    // 🔔 PUSH NOTIFICATION TO STAFF UI
-    // ===============================
-    if (io && conversation.id) {
-      // Find all staff who have access to this conversation
-      const participantsRes = await pool.query(
-        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
-        [conversation.id]
-      );
-
-      // We must use a for...of loop here to safely await the DB queries inside
-      for (const p of participantsRes.rows) {
-        
-        // 🔥 FIX: Calculate the exact unread count for this specific staff member
-        const unreadRes = await pool.query(`
-          SELECT COUNT(*) as count
-          FROM chat_messages m
-          LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
-          WHERE m.conversation_id = $2 
-            AND (m.sender_id != $1 OR m.sender_id IS NULL) 
-            AND r.id IS NULL
-            AND m.is_deleted = false
-        `, [p.staff_id, conversation.id]);
-
-        const unreadCount = parseInt(unreadRes.rows[0].count) || 0;
-
-        // 1. Tell DashboardLayout to bump the red badge number (Unread Count)
-        io.to(`user:${p.staff_id}`).emit('unread_update', {
-          conversationId: conversation.id,
-          unread: unreadCount // 👈 The missing puzzle piece
-        });
-        
-        // 2. Tell MessengerPage to update the text snippet in the sidebar list
-        io.to(`user:${p.staff_id}`).emit('conversation_updated', {
-          conversationId: conversation.id,
-          lastMessage: text,
-          lastMessageSenderId: customerId,
-          lastMessageSender: customerName,
-          time: new Date().toISOString(),
-          unread: unreadCount // 👈 Ensures the sidebar UI gets the number too
-        });
-      }
-    }
-
     console.log(`✅ Message safely routed and saved from ${from}: "${text.substring(0, 20)}..."`);
 
   } catch (err) {

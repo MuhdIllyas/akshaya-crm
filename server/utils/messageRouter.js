@@ -159,6 +159,50 @@ export async function sendMessage({
       io.to(`conversation:${conversation_id}`).emit("new_message", completeMessage);
     }
 
+    // ==========================================
+    // 🌟 GLOBAL PUSH NOTIFICATION TO SIDEBARS 🌟
+    // ==========================================
+    try {
+      // 1. Get all staff participants for this chat
+      const participantsRes = await pool.query(
+        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
+        [conversation_id]
+      );
+
+      for (const p of participantsRes.rows) {
+        // 2. Calculate exact unread count (Including WhatsApp NULL senders)
+        const unreadRes = await pool.query(`
+          SELECT COUNT(*) as count
+          FROM chat_messages m
+          LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
+          WHERE m.conversation_id = $2 
+            AND (m.sender_id != $1 OR m.sender_id IS NULL)
+            AND r.id IS NULL
+            AND m.is_deleted = false
+        `, [p.staff_id, conversation_id]);
+
+        const unreadCount = parseInt(unreadRes.rows[0].count) || 0;
+
+        // 3. Emit directly to the user's global room so the Dashboard and Sidebar instantly catch it!
+        if (io) {
+          io.to(`user:${p.staff_id}`).emit('unread_update', {
+            conversationId: conversation_id,
+            unread: unreadCount
+          });
+
+          io.to(`user:${p.staff_id}`).emit('conversation_updated', {
+            conversationId: conversation_id,
+            lastMessage: message || 'Attachment',
+            lastMessageSenderId: sender_id,
+            time: savedMsg.rows[0].created_at,
+            unread: unreadCount
+          });
+        }
+      }
+    } catch (pushErr) {
+      console.error("Error pushing global notification:", pushErr);
+    }
+
     /* =========================
        9. WHATSAPP SEND (Outgoing Only)
     ========================= */
