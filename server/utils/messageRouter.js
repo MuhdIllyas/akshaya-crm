@@ -194,7 +194,7 @@ export async function sendMessage({
             conversationId: conversation_id,
             lastMessage: message || 'Attachment',
             lastMessageSenderId: sender_id,
-            time: savedMsg.rows[0].created_at,
+            time: completeMessage.created_at, 
             unread: unreadCount
           });
         }
