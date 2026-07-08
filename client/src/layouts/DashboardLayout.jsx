@@ -69,60 +69,50 @@ const DashboardLayout = () => {
     if (!token || !currentUserId) return;
 
     console.log("Setting up socket connection for dashboard...");
-    
-    // Connect socket
     connectSocket(token);
 
-    socket.on("connect", () => {
+    // 🔥 FIX 1: Create named functions for listeners to prevent wiping out MessengerPage's listeners
+    const handleConnect = () => {
       console.log("Dashboard socket connected");
-      socket.emit("join", {
-        staffId: currentUserId
-      });
+      socket.emit("join", { staffId: currentUserId });
       setSocketConnected(true);
-      // Fetch fresh unread counts on reconnect
       fetchAllUnreadCounts();
-    });
+    };
 
-    // Listen for unread count updates
-    socket.on("unread_update", (data) => {
-      console.log("Unread update received:", data);
-      // Refetch all unread counts to get accurate totals
+    const handleUnreadUpdate = (data) => {
+      console.log("Unread update received in dashboard:", data);
       fetchAllUnreadCounts();
-    });
+    };
 
-    // Listen for new messages to update unread count
-    socket.on("new_message", (msg) => {
+    const handleNewMessage = (msg) => {
       const isCurrentUser = String(msg.sender_id) === String(currentUserId);
-      console.log("New message received:", msg.message, "Is current user:", isCurrentUser);
-      
       if (!isCurrentUser) {
-        // Refetch all unread counts when new message arrives from others
-        console.log("New message from others, refreshing unread count...");
         fetchAllUnreadCounts();
       }
-    });
+    };
 
-    // Listen for messages read to update unread count
-    socket.on("messages_read", (data) => {
-      console.log("Messages read event received:", data);
-      // Refetch all unread counts when messages are read
+    const handleMessagesRead = (data) => {
       fetchAllUnreadCounts();
-    });
+    };
 
-    socket.on("disconnect", () => {
-      console.log("Dashboard socket disconnected");
+    const handleDisconnect = () => {
       setSocketConnected(false);
-    });
+    };
 
-    // Cleanup
+    // Attach listeners
+    socket.on("connect", handleConnect);
+    socket.on("unread_update", handleUnreadUpdate);
+    socket.on("new_message", handleNewMessage);
+    socket.on("messages_read", handleMessagesRead);
+    socket.on("disconnect", handleDisconnect);
+
+    // Cleanup ONLY these specific functions, leaving MessengerPage untouched!
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("unread_update");
-      socket.off("new_message");
-      socket.off("messages_read");
-      // Don't disconnect socket here as other components might use it
-      // disconnectSocket();
+      socket.off("connect", handleConnect);
+      socket.off("unread_update", handleUnreadUpdate);
+      socket.off("new_message", handleNewMessage);
+      socket.off("messages_read", handleMessagesRead);
+      socket.off("disconnect", handleDisconnect);
     };
   }, [token, currentUserId]);
 
@@ -140,20 +130,6 @@ const DashboardLayout = () => {
     
     return () => clearInterval(interval);
   }, [token, socketConnected, initialLoadDone]);
-
-  // Reset count when visiting messenger
-  useEffect(() => {
-    if (location.pathname.includes('/messenger')) {
-      console.log("Visiting messenger, resetting unread count...");
-      setUnreadCount(0);
-    } else {
-      // When leaving messenger, refresh counts after a short delay
-      const timer = setTimeout(() => {
-        fetchAllUnreadCounts();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [location.pathname]);
 
   // Updated Role-based navigation configuration with MessengerIconWithBadge
   const roleNavigation = {
