@@ -597,6 +597,14 @@ const MessengerPage = ({ user }) => {
 
     socket.on("conversation_updated", (data) => {
       setConversations(prev => {
+        // 🔥 FIX 1: If this is a brand new WhatsApp chat that just came in from the webhook, 
+        // fetch it from the database so it instantly appears in the sidebar!
+        const exists = prev.some(c => c.id === data.conversationId);
+        if (!exists) {
+          fetchConversations();
+          return prev;
+        }
+
         const updated = prev.map(conv =>
           conv.id === data.conversationId
             ? {
@@ -607,7 +615,8 @@ const MessengerPage = ({ user }) => {
               last_message_sender: data.lastMessageSender,
               last_message_at: data.time,
               time: data.time,
-              unread: data.unread
+              // 🔥 FIX 2: Safely preserve the unread count if a payload forgets to include it
+              unread: data.unread !== undefined ? data.unread : conv.unread
             }
             : conv
         );
@@ -673,12 +682,23 @@ const MessengerPage = ({ user }) => {
     });
 
     socket.on("unread_update", (data) => {
-      // Update specific conversation unread count
-      setConversations(prev => prev.map(conv =>
-        conv.id === data.conversationId
-          ? { ...conv, unread: data.unread }
-          : conv
-      ));
+      // 🔥 FIX 3: Read the exact unread number sent by the newly updated Webhook!
+      if (data.unread !== undefined) {
+        setConversations(prev => prev.map(conv =>
+          conv.id === data.conversationId
+            ? { ...conv, unread: data.unread }
+            : conv
+        ));
+      } else {
+        // Ultimate fallback: If it's missing, fetch it quietly in the background
+        fetchConversationUnreadCount(data.conversationId).then(count => {
+          setConversations(prev => prev.map(conv =>
+            conv.id === data.conversationId
+              ? { ...conv, unread: count }
+              : conv
+          ));
+        });
+      }
     });
 
     socket.on("user_online", (data) => {
