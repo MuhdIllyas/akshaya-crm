@@ -180,7 +180,7 @@ router.post('/whatsapp', async (req, res) => {
           FROM chat_messages m
           LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
           WHERE m.conversation_id = $2 
-            AND m.sender_id != $1
+            AND (m.sender_id != $1 OR m.sender_id IS NULL) 
             AND r.id IS NULL
             AND m.is_deleted = false
         `, [p.staff_id, conversation.id]);

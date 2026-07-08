@@ -876,13 +876,11 @@ router.get("/unread/all", authenticateToken, async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT 
-        c.id as conversation_id,
-        COUNT(m.id) as unread_count
+      SELECT c.id as conversation_id, COUNT(m.id) as unread_count
       FROM chat_conversations c
       JOIN chat_participants p ON c.id = p.conversation_id
-      LEFT JOIN chat_messages m ON c.id = m.conversation_id
-        AND m.sender_id != $1
+      JOIN chat_messages m ON c.id = m.conversation_id
+        AND (m.sender_id != $1 OR m.sender_id IS NULL) -- 🔥 FIX: Count NULL senders!
         AND m.is_deleted = false
         AND NOT EXISTS (
           SELECT 1 FROM chat_message_reads r
@@ -921,7 +919,7 @@ router.get("/unread/:conversationId", authenticateToken, async (req, res) => {
       FROM chat_messages m
       LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
       WHERE m.conversation_id = $2 
-        AND m.sender_id != $1
+        AND (m.sender_id != $1 OR m.sender_id IS NULL) -- 🔥 FIX: Count NULL senders!
         AND r.id IS NULL
         AND m.is_deleted = false
       `,
