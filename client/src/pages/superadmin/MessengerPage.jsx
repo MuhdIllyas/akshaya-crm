@@ -596,18 +596,18 @@ const MessengerPage = ({ user }) => {
     });
 
     socket.on("conversation_updated", (data) => {
-      // 🚨 TRIPWIRE 2: The Conversation Update Log
       console.log("📥 [Frontend] RECEIVED conversation update", data);
 
       setConversations(prev => {
-        const exists = prev.some(c => c.id === data.conversationId);
+        // 🔥 FIX: Use String() to prevent Type Mismatch bugs!
+        const exists = prev.some(c => String(c.id) === String(data.conversationId));
         if (!exists) {
           fetchConversations();
           return prev;
         }
 
         const updated = prev.map(conv =>
-          conv.id === data.conversationId
+          String(conv.id) === String(data.conversationId) // 🔥 FIX
             ? {
               ...conv,
               last_message: data.lastMessage,
@@ -682,19 +682,18 @@ const MessengerPage = ({ user }) => {
     });
 
     socket.on("unread_update", (data) => {
-      // 🚨 TRIPWIRE 3: The Unread Badge Log
       console.log("📥 [Frontend] RECEIVED unread_update", data);
 
       if (data.unread !== undefined) {
         setConversations(prev => prev.map(conv =>
-          conv.id === data.conversationId
+          String(conv.id) === String(data.conversationId) // 🔥 FIX
             ? { ...conv, unread: data.unread }
             : conv
         ));
       } else {
         fetchConversationUnreadCount(data.conversationId).then(count => {
           setConversations(prev => prev.map(conv =>
-            conv.id === data.conversationId
+            String(conv.id) === String(data.conversationId) // 🔥 FIX
               ? { ...conv, unread: count }
               : conv
           ));
