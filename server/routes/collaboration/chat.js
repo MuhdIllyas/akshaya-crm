@@ -541,7 +541,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
 });
 
 /* ================================
-   SEND MESSAGE
+   SEND MESSAGE (Smart Auto-Join)
 ================================ */
 
 router.post("/message", authenticateToken, upload.single("file"), async (req, res) => {
@@ -549,24 +549,44 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
     const { conversation_id, message, message_type } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
-    const hasAccess = await checkConversationAccess(conversation_id, userId);
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Not a participant in this conversation" });
-    }
-    
-    const conversation = await pool.query(
-      `SELECT channel, assigned_staff_id FROM chat_conversations WHERE id = $1`,
+    const userCentreId = req.user.centre_id;
+
+    // 1. Get the conversation details to verify Centre ownership
+    const convRes = await pool.query(
+      `SELECT centre_id, channel FROM chat_conversations WHERE id = $1`,
       [conversation_id]
     );
-    
-    if (conversation.rows[0]?.channel === 'whatsapp') {
-      const canReply = await canReplyToWhatsApp(conversation_id, userId, userRole);
-      if (!canReply) {
-        return res.status(403).json({ error: "Only assigned staff can reply to WhatsApp messages" });
+
+    if (convRes.rows.length === 0) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    const conversation = convRes.rows[0];
+
+    // 2. Security Check: Prevent staff from messaging other centres' customers
+    if (userRole !== 'superadmin' && conversation.centre_id !== userCentreId) {
+       return res.status(403).json({ error: "This conversation belongs to another centre." });
+    }
+
+    // 3. Participant Check & Auto-Join (The Magic Fix)
+    if (userRole === 'staff') {
+      const participantCheck = await pool.query(
+        `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+        [conversation_id, userId]
+      );
+
+      // If the staff member isn't in the DB yet, auto-enroll them so they can reply!
+      if (participantCheck.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+           VALUES ($1, $2, 'staff', 'member', NOW())
+           ON CONFLICT DO NOTHING`,
+          [conversation_id, userId]
+        );
       }
     }
 
+    // 4. Send the message to the central router (which handles Libromi internally)
     const savedMessage = await sendMessage({
       conversation_id,
       sender_id: userId,

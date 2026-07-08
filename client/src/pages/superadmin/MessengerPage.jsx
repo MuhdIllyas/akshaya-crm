@@ -1016,7 +1016,7 @@ const MessengerPage = ({ user }) => {
           context_type: "customer",
           context_identifier: phoneNumber,
           context_name: customerName || phoneNumber,
-          participants: [] // no staff participants initially? Actually, the staff will be added automatically.
+          participants: [currentUser.id] // no staff participants initially? Actually, the staff will be added automatically.
           // We might need to add the current user as participant? The backend should handle.
         };
       } else {
