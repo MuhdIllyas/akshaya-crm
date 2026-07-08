@@ -169,21 +169,23 @@ export async function sendMessage({
         [conversation_id]
       );
 
-      for (const p of participantsRes.rows) {
-        // 2. Calculate exact unread count (Including WhatsApp NULL senders)
+    for (const p of participantsRes.rows) {
+        // 🔥 FIX: Your brilliant sender_type logic
         const unreadRes = await pool.query(`
           SELECT COUNT(*) as count
           FROM chat_messages m
           LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
           WHERE m.conversation_id = $2 
-            AND (m.sender_id != $1 OR m.sender_id IS NULL)
+            AND m.sender_type != 'staff' 
             AND r.id IS NULL
             AND m.is_deleted = false
         `, [p.staff_id, conversation_id]);
 
         const unreadCount = parseInt(unreadRes.rows[0].count) || 0;
 
-        // 3. Emit directly to the user's global room so the Dashboard and Sidebar instantly catch it!
+        // 🚨 TRIPWIRE 1: The Backend Log
+        console.log(`📡 [Backend] Emit unread to user:${p.staff_id} | Count: ${unreadCount}`);
+
         if (io) {
           io.to(`user:${p.staff_id}`).emit('unread_update', {
             conversationId: conversation_id,
@@ -194,13 +196,14 @@ export async function sendMessage({
             conversationId: conversation_id,
             lastMessage: message || 'Attachment',
             lastMessageSenderId: sender_id,
-            time: completeMessage.created_at, 
+            // Fallback just in case completeMessage was missing a name (Bug 3)
+            lastMessageSender: completeMessage?.sender_name || 'Customer', 
+            time: completeMessage.created_at,
             unread: unreadCount
           });
         }
-      }
-    } catch (pushErr) {
-      console.error("Error pushing global notification:", pushErr);
+      }} catch (err) {
+      console.error("Error emitting unread updates:", err);
     }
 
     /* =========================

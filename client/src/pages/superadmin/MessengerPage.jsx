@@ -596,9 +596,10 @@ const MessengerPage = ({ user }) => {
     });
 
     socket.on("conversation_updated", (data) => {
+      // 🚨 TRIPWIRE 2: The Conversation Update Log
+      console.log("📥 [Frontend] RECEIVED conversation update", data);
+
       setConversations(prev => {
-        // 🔥 FIX 1: If this is a brand new WhatsApp chat that just came in from the webhook, 
-        // fetch it from the database so it instantly appears in the sidebar!
         const exists = prev.some(c => c.id === data.conversationId);
         if (!exists) {
           fetchConversations();
@@ -615,7 +616,6 @@ const MessengerPage = ({ user }) => {
               last_message_sender: data.lastMessageSender,
               last_message_at: data.time,
               time: data.time,
-              // 🔥 FIX 2: Safely preserve the unread count if a payload forgets to include it
               unread: data.unread !== undefined ? data.unread : conv.unread
             }
             : conv
@@ -682,7 +682,9 @@ const MessengerPage = ({ user }) => {
     });
 
     socket.on("unread_update", (data) => {
-      // 🔥 FIX 3: Read the exact unread number sent by the newly updated Webhook!
+      // 🚨 TRIPWIRE 3: The Unread Badge Log
+      console.log("📥 [Frontend] RECEIVED unread_update", data);
+
       if (data.unread !== undefined) {
         setConversations(prev => prev.map(conv =>
           conv.id === data.conversationId
@@ -690,7 +692,6 @@ const MessengerPage = ({ user }) => {
             : conv
         ));
       } else {
-        // Ultimate fallback: If it's missing, fetch it quietly in the background
         fetchConversationUnreadCount(data.conversationId).then(count => {
           setConversations(prev => prev.map(conv =>
             conv.id === data.conversationId
