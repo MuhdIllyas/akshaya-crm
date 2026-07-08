@@ -139,32 +139,15 @@ io.on("connection", (socket) => {
      JOIN USER ROOMS
   ========================== */
 
-  socket.join(`staff:${user.id}`);
+  // 🔥 CHANGED 'staff:' to 'user:' so it matches your React frontend!
+  socket.join(`user:${user.id}`);
 
   if (user.centre_id) {
     socket.join(`centre:${user.centre_id}`);
   }
 
   console.log(
-    `👤 Staff ${user.id} joined rooms: staff:${user.id}, centre:${user.centre_id}`
-  );
-
-  /* ==========================
-     BROADCAST USER ONLINE
-  ========================== */
-
-  socket.to(`centre:${user.centre_id}`).emit("user_online", {
-    userId: user.id
-  });
-
-  socket.join(`staff:${user.id}`);
-
-  if (user.centre_id) {
-    socket.join(`centre:${user.centre_id}`);
-  }
-
-  console.log(
-    `👤 Staff ${user.id} joined rooms: staff:${user.id}, centre:${user.centre_id}`
+    `👤 User ${user.id} joined rooms: user:${user.id}, centre:${user.centre_id}`
   );
 
   /* ==========================
