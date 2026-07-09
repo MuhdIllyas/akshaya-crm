@@ -185,6 +185,12 @@ export async function sendMessage({
 
         // 🚨 TRIPWIRE 1: The Backend Log
         console.log(`📡 [Backend] Emit unread to user:${p.staff_id} | Count: ${unreadCount}`);
+        console.log({
+  staff: p.staff_id,
+  conversation: conversation_id,
+  unreadCount,
+  senderType: sender_type
+});
 
         if (io) {
           io.to(`user:${p.staff_id}`).emit('unread_update', {
