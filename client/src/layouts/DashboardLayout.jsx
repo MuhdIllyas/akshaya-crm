@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from "react-router-dom";
+import { socket } from '@/services/socket';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
