@@ -686,18 +686,10 @@ const MessengerPage = ({ user }) => {
 
       if (data.unread !== undefined) {
         setConversations(prev => prev.map(conv =>
-          String(conv.id) === String(data.conversationId) // 🔥 FIX
+          String(conv.id) === String(data.conversationId)
             ? { ...conv, unread: data.unread }
             : conv
         ));
-      } else {
-        fetchConversationUnreadCount(data.conversationId).then(count => {
-          setConversations(prev => prev.map(conv =>
-            String(conv.id) === String(data.conversationId) // 🔥 FIX
-              ? { ...conv, unread: count }
-              : conv
-          ));
-        });
       }
     });
 

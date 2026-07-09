@@ -272,27 +272,16 @@ const Chat = ({
 
   // Join conversation room when active
   useEffect(() => {
-    if (!socket.connected || !activeConversation?.id) return;
+    if (!socket?.connected || !activeConversation?.id) return;
+    
     console.log("Joining conversation:", activeConversation.id);
     socket.emit("join_conversation", activeConversation.id);
+    
     return () => {
       console.log("Leaving conversation:", activeConversation.id);
       socket.emit("leave_conversation", activeConversation.id);
-      if (isTyping) {
-        fetch(`${API_BASE_URL}/api/chat/typing`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify({
-            conversation_id: activeConversation.id,
-            isTyping: false
-          })
-        }).catch(err => console.error("Error clearing typing status:", err));
-      }
     };
-  }, [activeConversation?.id, isTyping, API_BASE_URL]);
+  }, [activeConversation?.id]);
 
   // Listen for socket events
   useEffect(() => {
