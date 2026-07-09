@@ -69,7 +69,6 @@ const DashboardLayout = () => {
     if (!token || !currentUserId) return;
 
     console.log("Setting up socket connection for dashboard...");
-    connectSocket(token);
 
     // 🔥 FIX 1: Create named functions for listeners to prevent wiping out MessengerPage's listeners
     const handleConnect = () => {
@@ -99,12 +98,15 @@ const DashboardLayout = () => {
       setSocketConnected(false);
     };
 
-    // Attach listeners
+    // Attach listeners FIRST
     socket.on("connect", handleConnect);
     socket.on("unread_update", handleUnreadUpdate);
     socket.on("new_message", handleNewMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("disconnect", handleDisconnect);
+
+    // Connect LAST
+    connectSocket(token);
 
     // Cleanup ONLY these specific functions, leaving MessengerPage untouched!
     return () => {
