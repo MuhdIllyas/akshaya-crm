@@ -4,7 +4,7 @@ import { FiUser, FiPhone, FiHash, FiPlus, FiCheckCircle, FiXCircle, FiChevronDow
 import { toast } from 'react-toastify';
 import { getServices, createToken, getTokens, getCampaignHistory, getActiveCampaigns, getStaff, assignStaffToToken } from '/src/services/serviceService';
 // Import centralized socket and connection function
-import { socket, connectSocket } from '@/services/socket';
+import { socket } from '@/services/socket';
 
 const AdminTokenManagement = () => {
   const [formData, setFormData] = useState({
@@ -35,49 +35,21 @@ const AdminTokenManagement = () => {
   const userId = localStorage.getItem('id');
   const centreId = localStorage.getItem('centre_id');
 
-  // --- Socket connection setup using centralized socket ---
+  // --- Socket global error listener ---
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('No token found for socket connection');
-      return;
-    }
-
-    // Connect if not already connected
-    if (!socket.connected) {
-      connectSocket(token);
-    }
-
-    // Handler for successful connection
-    const onConnect = () => {
-      console.log('AdminTokenManagement: Socket connected successfully');
-      if (centreId) {
-        socket.emit('joinCentre', centreId);
-        console.log('AdminTokenManagement: Joined centre room:', centreId);
+    const onConnectError = (error) => {
+      console.error('AdminTokenManagement: Socket connection error:', error.message);
+      if (error.message === 'Socket authentication failed') {
+        toast.error('Session expired. Please login again.');
       }
     };
 
-    // Handler for connection errors
-    const onConnectError = (error) => {
-      console.error('AdminTokenManagement: Socket connection error:', error.message);
-      toast.error('Failed to connect to real-time notifications.');
-    };
-
-    // Attach listeners
-    socket.on('connect', onConnect);
     socket.on('connect_error', onConnectError);
 
-    // If socket is already connected, join centre immediately
-    if (socket.connected && centreId) {
-      socket.emit('joinCentre', centreId);
-    }
-
-    // Cleanup on unmount – only remove these listeners, do NOT disconnect the shared socket
     return () => {
-      socket.off('connect', onConnect);
       socket.off('connect_error', onConnectError);
     };
-  }, [centreId]);
+  }, []);
 
   // --- Socket event listeners for token updates ---
   useEffect(() => {

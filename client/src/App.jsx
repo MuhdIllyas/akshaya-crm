@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { connectSocket, disconnectSocket } from "@/services/socket";
 import DashboardLayout from "./layouts/DashboardLayout";
 import AdminDashboard from "./pages/AdminDashboard";
 import StaffTasks from "./pages/staff/StaffTasks";
@@ -93,9 +94,10 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
         }
         
         setIsAuthenticated(true);
+        connectSocket(token); // Connect socket after successful verification
       } catch (err) {
         console.warn("ProtectedRoute: Token verification failed - Session expired");
-        // Don't show toast here - will be handled by Login page via state
+        disconnectSocket(); // Disconnect socket on failed verification
         setIsAuthenticated(false);
       }
     };

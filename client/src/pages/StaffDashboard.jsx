@@ -14,7 +14,7 @@ import { getWalletsForCentre } from '@/services/walletService';
 import { postAttendance } from '/src/services/salaryService';
 import QuickServiceModal from '@/components/QuickServiceModal';
 import api from '@/services/serviceService';
-import { socket, connectSocket } from '@/services/socket';
+import { socket } from '@/services/socket';
 
 // Helper functions
 const formatCurrency = (amount) => {
@@ -92,8 +92,6 @@ const StaffDashboard = () => {
     totalReviews: 0,
   });
 
-  const hasJoinedCentre = useRef(false);
-
   // Cancel modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTokenData, setCancelTokenData] = useState(null);
@@ -146,39 +144,21 @@ const StaffDashboard = () => {
   const formatCurrentDate = (date) =>
     date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  // --- Socket setup (unchanged) ---
+  // --- Socket global listeners ---
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    if (!socket.connected) connectSocket(token);
-
-    const onConnect = () => {
-      if (centreId && !hasJoinedCentre.current) {
-        socket.emit('joinCentre', centreId);
-        hasJoinedCentre.current = true;
-      }
-    };
-
     const onConnectError = (error) => {
       if (error.message === 'Socket authentication failed') {
         toast.error('Session expired. Please login again.');
       }
     };
 
-    socket.on('connect', onConnect);
     socket.on('connect_error', onConnectError);
 
-    if (socket.connected && centreId && !hasJoinedCentre.current) {
-      socket.emit('joinCentre', centreId);
-      hasJoinedCentre.current = true;
-    }
-
     return () => {
-      socket.off('connect', onConnect);
       socket.off('connect_error', onConnectError);
     };
-  }, [centreId]);
+  }, []);
+
 
   // --- Refresh tokens (unchanged) ---
   const refreshTokens = useCallback(async () => {

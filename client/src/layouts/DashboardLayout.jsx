@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { socket, connectSocket, disconnectSocket } from "@/services/socket";
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -68,12 +67,10 @@ const DashboardLayout = () => {
   useEffect(() => {
     if (!token || !currentUserId) return;
 
-    console.log("Setting up socket connection for dashboard...");
+    console.log("Setting up socket listeners for dashboard...");
 
-    // Create named functions for listeners to prevent wiping out MessengerPage's listeners
     const handleConnect = () => {
       console.log("Dashboard socket connected");
-      socket.emit("join", { staffId: currentUserId });
       setSocketConnected(true);
       fetchAllUnreadCounts();
     };
@@ -98,22 +95,19 @@ const DashboardLayout = () => {
       setSocketConnected(false);
     };
 
-    // Attach listeners FIRST
+    // Attach listeners
     socket.on("connect", handleConnect);
     socket.on("unread_update", handleUnreadUpdate);
     socket.on("new_message", handleNewMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("disconnect", handleDisconnect);
 
-    // 🔥 FIX 2: Check if socket is already connected to avoid missing the 'connect' event
+    // If socket is already connected when this component mounts, run logic manually
     if (socket.connected) {
-      console.log("Socket was already connected, manually triggering connection handler...");
       handleConnect();
-    } else {
-      connectSocket(token);
     }
 
-    // Cleanup ONLY these specific functions, leaving MessengerPage untouched!
+    // Cleanup ONLY these specific functions
     return () => {
       socket.off("connect", handleConnect);
       socket.off("unread_update", handleUnreadUpdate);
