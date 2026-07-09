@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from 'url';
 import { resolveConversation, addParticipantsToConversation } from '../../utils/conversationService.js';
-import { sendMessage } from '../../utils/messageRouter.js';
+import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -880,7 +880,7 @@ router.get("/unread/all", authenticateToken, async (req, res) => {
       FROM chat_conversations c
       JOIN chat_participants p ON c.id = p.conversation_id
       JOIN chat_messages m ON c.id = m.conversation_id
-        AND (m.sender_id != $1 OR m.sender_id IS NULL) -- 🔥 FIX: Count NULL senders!
+        AND (m.sender_id IS NULL OR m.sender_id <> $1) -- 🔥 PERFECT LOGIC SYNC
         AND m.is_deleted = false
         AND NOT EXISTS (
           SELECT 1 FROM chat_message_reads r
@@ -913,23 +913,13 @@ router.get("/unread/:conversationId", authenticateToken, async (req, res) => {
     const { conversationId } = req.params;
     const userId = req.user.id;
 
-    const result = await pool.query(
-      `
-      SELECT COUNT(*) as count
-      FROM chat_messages m
-      LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
-      WHERE m.conversation_id = $2 
-        AND (m.sender_id != $1 OR m.sender_id IS NULL) -- 🔥 FIX: Count NULL senders!
-        AND r.id IS NULL
-        AND m.is_deleted = false
-      `,
-      [userId, conversationId]
-    );
+    // 🔥 Use the central helper!
+    const unreadCount = await getUnreadCount(userId, conversationId);
 
-    res.json({ unread: parseInt(result.rows[0].count) });
+    res.json({ unread: unreadCount });
   } catch (err) {
-    console.error("Fetch unread count error:", err);
-    res.status(500).json({ error: "Failed to fetch unread count", details: err.message });
+    console.error("Fetch unread error:", err);
+    res.status(500).json({ error: "Failed to fetch unread count" });
   }
 });
 

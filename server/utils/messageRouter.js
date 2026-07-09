@@ -18,6 +18,33 @@ async function getLastCustomerMessageTime(conversationId) {
 }
 
 /**
+ * 🧮 Centralized Unread Count Calculator
+ * Guarantees every part of the app uses the exact same unread logic.
+ */
+export async function getUnreadCount(staffId, conversationId) {
+  const result = await pool.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM chat_messages m
+    LEFT JOIN chat_message_reads r
+      ON m.id = r.message_id
+     AND r.staff_id = $1
+    WHERE
+      m.conversation_id = $2
+      AND (
+        m.sender_id IS NULL
+        OR m.sender_id <> $1
+      )
+      AND r.id IS NULL
+      AND m.is_deleted = false
+    `,
+    [staffId, conversationId]
+  );
+
+  return Number(result.rows[0].count) || 0;
+}
+
+/**
  * Central Message Router
  */
 export async function sendMessage({
@@ -163,53 +190,38 @@ export async function sendMessage({
     // 🌟 GLOBAL PUSH NOTIFICATION TO SIDEBARS 🌟
     // ==========================================
     try {
-      // 1. Get all staff participants for this chat
       const participantsRes = await pool.query(
         `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
         [conversation_id]
       );
 
-    for (const p of participantsRes.rows) {
-        // 🔥 FIX: Your brilliant sender_type logic
-        const unreadRes = await pool.query(`
-          SELECT COUNT(*) as count
-          FROM chat_messages m
-          LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
-          WHERE m.conversation_id = $2 
-            AND m.sender_type != 'staff' 
-            AND r.id IS NULL
-            AND m.is_deleted = false
-        `, [p.staff_id, conversation_id]);
+      // Normalize ID to prevent strict equality (===) bugs in React
+      const safeConvId = Number(conversation_id);
 
-        const unreadCount = parseInt(unreadRes.rows[0].count) || 0;
+      for (const p of participantsRes.rows) {
+        // 🔥 Use our centralized helper!
+        const unreadCount = await getUnreadCount(p.staff_id, safeConvId);
 
-        // 🚨 TRIPWIRE 1: The Backend Log
-        console.log(`📡 [Backend] Emit unread to user:${p.staff_id} | Count: ${unreadCount}`);
-        console.log({
-  staff: p.staff_id,
-  conversation: conversation_id,
-  unreadCount,
-  senderType: sender_type
-});
+        console.log(`📡 [Backend] Emit unread to user:${p.staff_id} | Conv: ${safeConvId} | Count: ${unreadCount}`);
 
         if (io) {
           io.to(`user:${p.staff_id}`).emit('unread_update', {
-            conversationId: conversation_id,
+            conversationId: safeConvId,
             unread: unreadCount
           });
 
           io.to(`user:${p.staff_id}`).emit('conversation_updated', {
-            conversationId: conversation_id,
+            conversationId: safeConvId,
             lastMessage: message || 'Attachment',
             lastMessageSenderId: sender_id,
-            // Fallback just in case completeMessage was missing a name (Bug 3)
-            lastMessageSender: completeMessage?.sender_name || 'Customer', 
+            lastMessageSender: completeMessage?.sender_name || 'Customer',
             time: completeMessage.created_at,
             unread: unreadCount
           });
         }
-      }} catch (err) {
-      console.error("Error emitting unread updates:", err);
+      }
+    } catch (pushErr) {
+      console.error("❌ [Socket] Error pushing global notification:", pushErr);
     }
 
     /* =========================
