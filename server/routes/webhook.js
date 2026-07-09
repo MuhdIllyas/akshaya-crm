@@ -28,9 +28,9 @@ router.post('/whatsapp', async (req, res) => {
     console.log("🔥 LIBROMI WEBHOOK HIT");
 
     let from = null;
-    let text = null;
     let message_id = null;
     let recipientPhone = null;
+    let msgObject = null;
 
     // ===============================
     // 🔥 FORMAT 1: META / WHATSAPP CLOUD STYLE
@@ -43,10 +43,9 @@ router.post('/whatsapp', async (req, res) => {
 
         const messages = value?.messages;
         if (messages && messages.length > 0) {
-          const msg = messages[0];
-          from = msg.from;
-          text = extractText(msg);
-          message_id = msg.id;
+          msgObject = messages[0];
+          from = msgObject.from;
+          message_id = msgObject.id;
         }
       }
     }
@@ -54,18 +53,66 @@ router.post('/whatsapp', async (req, res) => {
     // 🔥 FORMAT 2: Flat / Alternative Libromi Structures
     // ===============================
     else if (body.messages && Array.isArray(body.messages)) {
-      const msg = body.messages[0];
-      from = msg.from;
-      text = extractText(msg);
-      message_id = msg.id;
+      msgObject = body.messages[0];
+      from = msgObject.from;
+      message_id = msgObject.id;
     } else if (body.data) {
+      msgObject = body.data;
       from = body.data.from || body.data.phone || body.data.sender;
-      text = extractText(body.data);
       message_id = body.data.id;
     } else if (body.from) {
+      msgObject = body;
       from = body.from;
-      text = extractText(body);
       message_id = body.message_id || body.id;
+    }
+
+    // ===============================
+    // 📸 PARSE NATIVE MEDIA & TEXT
+    // ===============================
+    let messageText = "";
+    let messageType = "text";
+    let fileUrl = null;
+    let fileName = null;
+
+    if (msgObject) {
+      switch (msgObject.type) {
+        case "text":
+          messageText = extractText(msgObject) || "";
+          messageType = "text";
+          break;
+          
+        case "image":
+          messageType = "image";
+          fileUrl = msgObject.image?.id || msgObject.image?.link || msgObject.link;
+          messageText = msgObject.image?.caption || msgObject.caption || "";
+          fileName = "Image.jpeg";
+          break;
+          
+        case "document":
+          messageType = "document";
+          fileUrl = msgObject.document?.id || msgObject.document?.link || msgObject.link;
+          fileName = msgObject.document?.filename || "Document.pdf";
+          messageText = msgObject.document?.caption || msgObject.caption || "";
+          break;
+
+        case "video":
+          messageType = "video";
+          fileUrl = msgObject.video?.id || msgObject.video?.link || msgObject.link;
+          messageText = msgObject.video?.caption || msgObject.caption || "";
+          fileName = "Video.mp4";
+          break;
+
+        case "audio":
+          messageType = "audio";
+          fileUrl = msgObject.audio?.id || msgObject.audio?.link || msgObject.link;
+          fileName = "VoiceNote.ogg";
+          break;
+          
+        default:
+          // Fallback for interactive buttons, locations, or unknown types
+          messageText = extractText(msgObject) || "Unsupported message type received.";
+          messageType = "text";
+      }
     }
 
     // ===============================
@@ -77,10 +124,10 @@ router.post('/whatsapp', async (req, res) => {
     }
 
     // ===============================
-    // ❌ VALIDATION 
+    // ❌ VALIDATION (Must have Text OR Media)
     // ===============================
-    if (!from || !text) {
-      console.log(`⚠️ Webhook Ignored. It was likely a read/delivery receipt. (From: ${from}, Text: ${text})`);
+    if (!from || (!messageText && !fileUrl)) {
+      console.log(`⚠️ Webhook Ignored. It was likely a read/delivery receipt. (From: ${from})`);
       return; 
     }
 
@@ -90,7 +137,6 @@ router.post('/whatsapp', async (req, res) => {
     let communicationAccountId = null;
     let centreId = null;
 
-    // First try: Aggressively hunt for the channel_id (Best for Libromi)
     let incomingChannelId = body.channel_id || body.data?.channel_id || null;
     
     if (incomingChannelId) {
@@ -107,7 +153,6 @@ router.post('/whatsapp', async (req, res) => {
         }
     }
 
-    // Fallback: Match by the receiver's phone number
     if (!communicationAccountId && recipientPhone) {
         const formattedRecipient = recipientPhone.startsWith('+') ? recipientPhone : `+${recipientPhone}`;
         const accountQuery = await pool.query(
@@ -140,7 +185,7 @@ router.post('/whatsapp', async (req, res) => {
       customer_id: customerId,
       phone_number: from,
       communication_account_id: communicationAccountId,
-      centre_id: centreId, // 🔥 Pass Centre ID so the Admin gets automatically added to new chats!
+      centre_id: centreId, 
       name: `WhatsApp - ${customerName}`,
       is_group: false,
     });
@@ -154,14 +199,17 @@ router.post('/whatsapp', async (req, res) => {
       conversation_id: conversation.id,
       sender_id: customerId, 
       sender_type: 'customer',
-      message: text,
-      message_type: 'text',
+      message: messageText,
+      message_type: messageType,
       direction: 'incoming',
       io: io,
-      external_message_id: message_id
+      external_message_id: message_id,
+      // Pass the media properties to the router!
+      incoming_file_url: fileUrl,
+      incoming_file_name: fileName
     });
 
-    console.log(`✅ Message safely routed and saved from ${from}: "${text.substring(0, 20)}..."`);
+    console.log(`✅ Message safely routed. Type: [${messageType}]. Text: "${messageText.substring(0, 20)}..."`);
 
   } catch (err) {
     console.error('❌ WhatsApp webhook processing error:', err);

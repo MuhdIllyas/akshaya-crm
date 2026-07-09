@@ -56,18 +56,17 @@ export async function sendMessage({
   file = null,
   io = null,
   direction = null,
-  external_message_id = null
+  external_message_id = null,
+  incoming_file_url = null, 
+  incoming_file_name = null 
 }) {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    /* =========================
-       1. FILE HANDLING
-    ========================= */
-    let fileUrl = null;
-    let fileName = null;
+    let fileUrl = incoming_file_url || null; 
+    let fileName = incoming_file_name || null; 
     let fileSize = null;
 
     if (file) {
@@ -244,8 +243,7 @@ export async function sendMessage({
 }
 
 /**
- * 🚀 MULTI-TENANT WHATSAPP SENDER (Text Messages)
- * If 24h window is closed, it delegates to the Notification Engine.
+ * 🚀 MULTI-TENANT WHATSAPP SENDER (Native Media Support)
  */
 async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) {
   const client = await pool.connect();
@@ -258,7 +256,6 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
     const within24h = isWithin24Hours(lastCustomerTime);
 
     if (!within24h) {
-      // 🔴 OUTSIDE 24H WINDOW: Delegate entirely to the Notification Engine!
       console.log(`Outside 24h window for ${to}, routing via Notification Engine.`);
       const customerName = conversation.name ? conversation.name.replace(/Chat with |WhatsApp /ig, '').trim() : 'Customer';
       
@@ -268,11 +265,10 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
         customerPhone: to,
         templateParams: [customerName]
       });
-
-      return; // Stop execution here. The engine handled the Libromi API call!
+      return; 
     }
 
-    // 🟢 WITHIN 24H WINDOW: Standard Text/File Send (Not a Template)
+    // 2. Fetch Account Credentials
     let accountQuery;
     if (conversation.communication_account_id) {
       accountQuery = await client.query(`SELECT id, access_token, base_url, channel_id, name FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
@@ -290,28 +286,59 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
     const account = accountQuery.rows[0];
     const formattedPhone = to.startsWith('+91') ? to : `+91${to.replace(/^\+91/, '')}`;
 
-    let textBody = message || "";
-    if (fileUrl) {
-      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
-      const fullFileUrl = `${baseUrl}${fileUrl}`;
-      textBody = `📎 ${fileName || 'File'} shared: ${fullFileUrl}\n\n${message || ''}`;
-    }
-
-    const payload = {
+    // 3. Construct Native Media Payload
+    let payload = {
       to: formattedPhone,
       channel_id: account.channel_id,
-      type: 'text',
-      text: { body: textBody }
     };
 
+    if (fileUrl) {
+      // ⚠️ IMPORTANT: Libromi requires a PUBLIC URL to download the file from your server.
+      // Make sure VITE_API_URL or a dedicated BACKEND_URL environment variable is set to your staging/prod domain.
+      const baseUrl = process.env.BACKEND_URL || process.env.FRONTEND_URL || 'https://staging-api.akshayasahayi.com';
+      
+      // Prevent double slashes
+      const safeBase = baseUrl.replace(/\/$/, '');
+      const safePath = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+      const fullFileUrl = `${safeBase}${safePath}`;
+
+      // Detect File Type
+      const ext = fileName ? fileName.split('.').pop().toLowerCase() : '';
+      
+      if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+        payload.type = 'image';
+        payload.image = { link: fullFileUrl };
+        if (message) payload.image.caption = message; // Add text as caption!
+      } 
+      else if (['mp4', '3gp'].includes(ext)) {
+        payload.type = 'video';
+        payload.video = { link: fullFileUrl };
+        if (message) payload.video.caption = message;
+      } 
+      else if (['mp3', 'wav', 'ogg', 'aac'].includes(ext)) {
+        payload.type = 'audio';
+        payload.audio = { link: fullFileUrl };
+        // Audio usually doesn't support captions in WhatsApp API
+      } 
+      else {
+        payload.type = 'document';
+        payload.document = { link: fullFileUrl, filename: fileName || 'Document' };
+        if (message) payload.document.caption = message; 
+      }
+    } else {
+      payload.type = 'text';
+      payload.text = { body: message || "" };
+    }
+
+    // 4. Send to Libromi
     await axios.post(`${account.base_url}/messages`, payload, {
       headers: { Authorization: `Bearer ${account.access_token}`, 'Content-Type': 'application/json' }
     });
 
-    console.log(`✅ WhatsApp text sent to ${formattedPhone} via Account: ${account.name}`);
+    console.log(`✅ WhatsApp ${payload.type} sent to ${formattedPhone} via Account: ${account.name}`);
 
   } catch (err) {
-    console.error('❌ Failed to send WhatsApp text:', err.response?.data || err.message);
+    console.error(`❌ Failed to send WhatsApp media:`, err.response?.data || err.message);
   } finally {
     client.release();
   }
