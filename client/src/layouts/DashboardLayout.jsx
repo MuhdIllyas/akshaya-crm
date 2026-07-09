@@ -70,7 +70,7 @@ const DashboardLayout = () => {
 
     console.log("Setting up socket connection for dashboard...");
 
-    // 🔥 FIX 1: Create named functions for listeners to prevent wiping out MessengerPage's listeners
+    // Create named functions for listeners to prevent wiping out MessengerPage's listeners
     const handleConnect = () => {
       console.log("Dashboard socket connected");
       socket.emit("join", { staffId: currentUserId });
@@ -105,8 +105,13 @@ const DashboardLayout = () => {
     socket.on("messages_read", handleMessagesRead);
     socket.on("disconnect", handleDisconnect);
 
-    // Connect LAST
-    connectSocket(token);
+    // 🔥 FIX 2: Check if socket is already connected to avoid missing the 'connect' event
+    if (socket.connected) {
+      console.log("Socket was already connected, manually triggering connection handler...");
+      handleConnect();
+    } else {
+      connectSocket(token);
+    }
 
     // Cleanup ONLY these specific functions, leaving MessengerPage untouched!
     return () => {
