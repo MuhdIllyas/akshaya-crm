@@ -785,7 +785,12 @@ const Chat = ({
                           ) : msg.isFile ? (
                             <div
                               className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-                              onClick={() => msg.fileUrl && window.open(msg.fileUrl, '_blank')}
+                              onClick={() => {
+                                if (msg.fileUrl) {
+                                  const fullUrl = msg.fileUrl.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`;
+                                  window.open(fullUrl, '_blank');
+                                }
+                              }}
                             >
                               {msg.messageType === 'image' ? (
                                 <>

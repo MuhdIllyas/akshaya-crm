@@ -2005,7 +2005,12 @@ const MessengerPage = ({ user }) => {
                 key={file.id}
                 whileHover={{ x: 5 }}
                 className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition"
-                onClick={() => window.open(file.fileUrl, '_blank')}
+                onClick={() => {
+                  if (file.fileUrl) {
+                    const fullUrl = file.fileUrl.startsWith('http') ? file.fileUrl : `${API_BASE_URL}${file.fileUrl}`;
+                    window.open(fullUrl, '_blank');
+                  }
+                }}
               >
                 <div className="bg-gray-100 p-2 rounded-lg mr-3">
                   {file.messageType === 'image' ? (
