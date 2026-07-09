@@ -717,6 +717,14 @@ const MessengerPage = ({ user }) => {
       fetchConversations();
     };
 
+    const handleConversationDeleted = (data) => {
+      setConversations(prev => prev.filter(c => String(c.id) !== String(data.conversationId)));
+      setActiveConversation(prevActive => {
+        if (prevActive && String(prevActive.id) === String(data.conversationId)) return null;
+        return prevActive;
+      });
+    };
+
     // Attach listeners safely
     socket.on("connect", handleConnect);
     socket.on("online_users", handleOnlineUsers);
@@ -732,6 +740,7 @@ const MessengerPage = ({ user }) => {
     socket.on("new_conversation", handleNewConversation);
     socket.on("added_to_conversation", handleAddedToConversation);
     socket.on("message_deleted", handleMessageDeleted);
+    socket.on("conversation_deleted", handleConversationDeleted);
 
     // 🔥 FIX 2: Manually trigger if the global socket is already connected!
     if (socket.connected) {
@@ -754,6 +763,7 @@ const MessengerPage = ({ user }) => {
       socket.off("new_conversation", handleNewConversation);
       socket.off("added_to_conversation", handleAddedToConversation);
       socket.off("message_deleted", handleMessageDeleted);
+      socket.off("conversation_deleted", handleConversationDeleted);
       
       // Removed disconnectSocket() completely!
     };
@@ -1109,6 +1119,30 @@ const MessengerPage = ({ user }) => {
     } catch (err) {
       console.error('Error deleting message:', err);
       toast.error('Failed to delete message');
+    }
+  };
+
+  // ============== DELETE ENTIRE CONVERSATION ==============
+  const handleDeleteConversation = async (conversationId) => {
+    if (!window.confirm("Are you sure you want to delete this entire conversation? This action cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${conversationId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) throw new Error('Failed to delete conversation');
+
+      toast.success('Conversation deleted successfully');
+
+      // Instantly remove it from the sidebar and clear the active view
+      setConversations(prev => prev.filter(c => String(c.id) !== String(conversationId)));
+      setActiveConversation(null);
+
+    } catch (err) {
+      console.error('Error deleting conversation:', err);
+      toast.error('Failed to delete conversation');
     }
   };
 
@@ -2492,6 +2526,7 @@ const MessengerPage = ({ user }) => {
                   allTasks={tasks}
                   onTaskStatusUpdate={handleServiceTaskStatusUpdate}
                   onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
+                  onDeleteConversation={handleDeleteConversation}
                 />
               </div>
             ) : activeView === "activity" ? (<div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>) : activeView === "calendar" ? (<div className="h-full overflow-y-auto">{renderCalendarView()}</div>) : activeView === "files" ? (<div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>) : activeView === "tasks" ? (<div className="h-full overflow-y-auto">{renderTasksView()}</div>) : activeView === "schedules" ? (<div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>) : (<div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>)}

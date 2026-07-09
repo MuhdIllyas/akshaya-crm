@@ -129,7 +129,8 @@ const Chat = ({
   serviceEntryId = null,
   allTasks = [],
   onTaskStatusUpdate = null,
-  onNormalTaskStatusUpdate = null
+  onNormalTaskStatusUpdate = null,
+  onDeleteConversation = null
 }) => {
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -692,7 +693,13 @@ const Chat = ({
                 <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
                   <FiInfo className="mr-3" /> View Details
                 </button>
-                <button className="flex items-center w-full p-3 text-sm text-red-500 hover:bg-gray-50">
+                <button 
+                  onClick={() => {
+                    setIsMoreMenuOpen(false); // Close the menu
+                    if (onDeleteConversation) onDeleteConversation(activeConversation.id);
+                  }}
+                  className="flex items-center w-full p-3 text-sm text-red-500 hover:bg-gray-50"
+                >
                   <FiTrash2 className="mr-3" /> Delete Conversation
                 </button>
               </motion.div>
