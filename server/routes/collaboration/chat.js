@@ -923,4 +923,47 @@ router.get("/unread/:conversationId", authenticateToken, async (req, res) => {
   }
 });
 
+/* ================================
+   DELETE ENTIRE CONVERSATION
+================================ */
+
+router.delete("/conversation/:conversationId", authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Security check: Only participants or admins can delete
+    const hasAccess = await checkConversationAccess(conversationId, userId);
+    if (!hasAccess && userRole !== 'superadmin' && userRole !== 'admin') {
+      return res.status(403).json({ error: "Not authorized to delete this conversation" });
+    }
+
+    // 🔥 Soft Delete: Update status to 'deleted' so it vanishes from the GET /conversations query
+    await pool.query(
+      `UPDATE chat_conversations SET status = 'deleted', updated_at = NOW() WHERE id = $1`,
+      [conversationId]
+    );
+
+    // Tell all connected staff participants to instantly remove it from their UI
+    const io = req.io;
+    if (io) {
+       const participantsRes = await pool.query(
+        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
+        [conversationId]
+      );
+      for (const p of participantsRes.rows) {
+        io.to(`user:${p.staff_id}`).emit('conversation_deleted', { 
+          conversationId: parseInt(conversationId) 
+        });
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete conversation error:", err);
+    res.status(500).json({ error: "Failed to delete conversation", details: err.message });
+  }
+});
+
 export default router;
