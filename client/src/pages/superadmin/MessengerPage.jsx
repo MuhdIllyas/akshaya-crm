@@ -1142,10 +1142,11 @@ const MessengerPage = ({ user }) => {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error('Failed to update task');
-      // Update the tasks state
+      
+      // 🔥 FIX 1: Wrap in String() to prevent Type Mismatch bugs!
       setTasks(prevTasks =>
         prevTasks.map(t =>
-          t.id === taskId ? { ...t, status: newStatus } : t
+          String(t.id) === String(taskId) ? { ...t, status: newStatus } : t
         )
       );
       toast.success(`Task marked as ${newStatus}`);
@@ -1169,28 +1170,27 @@ const MessengerPage = ({ user }) => {
       });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-      // Update the tasks state (so the task list is in sync)
       await fetchTasks();
       toast.success(`Task marked as ${newStatus}`);
 
-      // Update the local messages state to change the JSON of this task-card message
+      // 🔥 FIX 2: Update the new 'live_task_data' directly instead of trying to JSON.parse
       setMessages(prev => {
         const convId = activeConversation?.id;
         if (!convId || !prev[convId]) return prev;
+        
         const updated = prev[convId].map(msg => {
           if (msg.messageType === 'task') {
-            try {
-              const taskData = JSON.parse(msg.text);
-              if (taskData.task_id === taskId) {
-                return {
-                  ...msg,
-                  text: JSON.stringify({ ...taskData, status: newStatus }),
-                };
-              }
-            } catch {}
+            // Check if this message belongs to the task we just updated
+            if (String(msg.text) === String(taskId) || (msg.live_task_data && String(msg.live_task_data.id) === String(taskId))) {
+              return {
+                ...msg,
+                live_task_data: { ...(msg.live_task_data || {}), status: newStatus }
+              };
+            }
           }
           return msg;
         });
+        
         return { ...prev, [convId]: updated };
       });
     } catch (err) {
