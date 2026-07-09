@@ -907,11 +907,12 @@ const MessengerPage = ({ user }) => {
   const handleSendMessage = async (message, file, optimisticMessage = null) => {
     if ((!message?.trim() && !file) || !activeConversation) return;
 
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}-${Math.random().toString(36).substring(2, 15)}`;
+    // 🔥 FIX 1: Safely grab the exact temp ID passed from Chat.jsx
+    const actualTempId = optimisticMessage?.tempId || `temp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 
     const optimisticMsg = optimisticMessage || {
-      id: tempId,
-      tempId: tempId,
+      id: actualTempId,
+      tempId: actualTempId,
       sender: 'You',
       senderId: currentUser.id,
       text: message || (file ? (file.type?.startsWith('image/') ? '📷 Image' : '📎 File') : ''),
@@ -928,7 +929,7 @@ const MessengerPage = ({ user }) => {
 
     setMessages(prev => {
       const currentMessages = prev[activeConversation.id] || [];
-      const exists = currentMessages.some(m => m.tempId === tempId || m.id === tempId);
+      const exists = currentMessages.some(m => m.tempId === actualTempId || m.id === actualTempId);
       if (exists) return prev;
       return {
         ...prev,
@@ -955,7 +956,6 @@ const MessengerPage = ({ user }) => {
         }, 200);
       }
 
-      // ALWAYS use the chat message endpoint
       const onSendMessage = `${API_BASE_URL}/api/chat/message`;
 
       const res = await fetch(onSendMessage, {
@@ -969,11 +969,22 @@ const MessengerPage = ({ user }) => {
 
       const newMsg = await res.json();
       
-      // Rest of the function remains unchanged...
-      // [keep all the existing code after this point]
+      // 🔥 FIX 2: Delete the optimistic (blurred) message on SUCCESS!
+      // The real message is arriving via Socket.io simultaneously.
+      setMessages(prev => ({
+        ...prev,
+        [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
+      }));
       
     } catch (err) {
-      // error handling...
+      console.error("Upload error:", err);
+      toast.error("Failed to send message or file");
+      
+      // 🔥 FIX 3: Clean up the stuck message if the server rejects the file size!
+      setMessages(prev => ({
+        ...prev,
+        [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
+      }));
     } finally {
       if (file) setIsUploading(false);
     }
