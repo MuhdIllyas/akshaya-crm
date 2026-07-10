@@ -27,61 +27,63 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
   try {
     let downloadUrl = directLink;
 
-    // 1. If we only have an ID, we must ask the API for the real download URL
+    // 1. Resolve ID to URL if necessary
     if (!downloadUrl && mediaId) {
       const cleanBase = baseUrl.replace(/\/messages\/?$/, '');
-      console.log(`[Webhook] Resolving media URL for ID: ${mediaId} using base: ${cleanBase}`);
-      
       const endpointsToTry = [
-        `${cleanBase}/media/${mediaId}`,              // Standard Libromi Media Endpoint
-        `${cleanBase}/${mediaId}`,                    // Alternative Root Endpoint
-        `https://graph.facebook.com/v18.0/${mediaId}` // Meta Graph API Fallback
+        `${cleanBase}/media/${mediaId}`,              
+        `${cleanBase}/${mediaId}`,                    
+        `https://graph.facebook.com/v18.0/${mediaId}` 
       ];
 
       for (const endpoint of endpointsToTry) {
         try {
-          console.log(`[Webhook] Trying endpoint: ${endpoint}`);
-          const res = await axios.get(endpoint, { 
-            headers: { Authorization: `Bearer ${accessToken}` } 
-          });
-          
+          const res = await axios.get(endpoint, { headers: { Authorization: `Bearer ${accessToken}` } });
           if (res.data && (res.data.url || res.data.link)) {
             downloadUrl = res.data.url || res.data.link;
-            console.log(`[Webhook] Success! Found download URL: ${downloadUrl}`);
             break; 
           }
-        } catch (e) {
-          console.log(`[Webhook] Endpoint ${endpoint} failed: ${e.response?.status || e.message}`);
-        }
+        } catch (e) { /* Ignore and try next */ }
       }
     }
 
-    if (!downloadUrl) {
-      throw new Error("Could not find a valid download URL after trying all API endpoints.");
-    }
+    if (!downloadUrl) throw new Error("Could not find a valid download URL.");
 
-    console.log(`[Webhook] Downloading binary data from: ${downloadUrl.substring(0, 80)}...`);
+    console.log(`[Webhook] Downloading media from: ${downloadUrl.substring(0, 60)}...`);
 
-    // 2. Download the binary data (Smart Try/Catch for Meta Hashed URLs)
-    let response;
+    let responseStream;
+    
+    // 🔥 THE FIX: Handle WhatsApp CDN Redirects manually!
+    // Axios strips Auth headers on cross-domain redirects (causing 401s).
+    // We force Axios to stop at the redirect, grab the new URL, and fetch it securely.
     try {
-      console.log(`[Webhook] Attempting download WITH auth token...`);
-      response = await axios.get(downloadUrl, {
+      const initialReq = await axios.get(downloadUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
-        responseType: 'stream' // CRITICAL for saving files safely
+        maxRedirects: 0, // Stop at the 302 Redirect
+        responseType: 'stream'
       });
-    } catch (authErr) {
-      console.log(`[Webhook] Auth download failed (${authErr.response?.status}). Attempting raw download (using URL hash)...`);
-      // Meta lookaside URLs with &hash= often reject 3rd party tokens. Download raw.
-      response = await axios.get(downloadUrl, {
-        responseType: 'stream' 
-      });
+      responseStream = initialReq.data;
+    } catch (err) {
+      if (err.response && [301, 302, 303, 307, 308].includes(err.response.status)) {
+        const redirectUrl = err.response.headers.location;
+        console.log(`[Webhook] Following Meta CDN redirect...`);
+        
+        // The CDN URL already contains the auth hash in the link itself, 
+        // so we fetch it without the Bearer token to avoid cross-origin rejections.
+        const cdnReq = await axios.get(redirectUrl, {
+          responseType: 'stream'
+        });
+        responseStream = cdnReq.data;
+      } else {
+        console.error(`[Webhook] Media API Error:`, err.response?.status);
+        throw err;
+      }
     }
 
     // 3. Determine extension and generate a safe filename
     let ext = '';
     if (mimeType) {
-      ext = '.' + mimeType.split('/')[1].split(';')[0]; // e.g., 'image/jpeg' -> '.jpeg'
+      ext = '.' + mimeType.split('/')[1].split(';')[0]; 
     } else if (filenameHint) {
       ext = path.extname(filenameHint);
     }
@@ -92,7 +94,7 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
 
     // 4. Save to your local disk
     const writer = fs.createWriteStream(filePath);
-    response.data.pipe(writer);
+    responseStream.pipe(writer);
 
     await new Promise((resolve, reject) => {
       writer.on('finish', resolve);
