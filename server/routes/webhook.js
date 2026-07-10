@@ -26,12 +26,6 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 async function downloadWhatsAppMedia(mediaId, accessToken, baseUrl, mimeType, filenameHint) {
   try {
     console.log(`[Webhook] Fetching media URL for ID: ${mediaId}`);
-
-    console.log("========== MEDIA DOWNLOAD ==========");
-    console.log("Media ID:", mediaId);
-    console.log("Base URL:", baseUrl);
-    console.log("Final URL:", `${baseUrl}/${mediaId}`);
-    console.log("====================================");
     
     // 1. Get the actual media URL from Meta/Libromi
     const mediaUrlRes = await axios.get(`${baseUrl}/${mediaId}`, {
@@ -72,13 +66,8 @@ async function downloadWhatsAppMedia(mediaId, accessToken, baseUrl, mimeType, fi
     // 5. Return the local relative path for the database
     return `/uploads/chat/${uniqueFilename}`;
 
-  } catch (err) {
-    console.log("========== DOWNLOAD ERROR ==========");
-    console.log("Status:", err.response?.status);
-    console.log("Response:", err.response?.data);
-    console.log("Message:", err.message);
-    console.log("====================================");
-
+  } catch (error) {
+    console.error(`[Webhook] Failed to download WhatsApp media ${mediaId}:`, error.message);
     return null;
   }
 }
@@ -291,22 +280,9 @@ router.post('/whatsapp', async (req, res) => {
             messageText += "\n\n[Failed to download media attachment]";
           }
         }
-      } catch(error){
-
-console.log("MEDIA DOWNLOAD FAILED");
-
-console.log("Status:",
-error.response?.status);
-
-console.log("Data:",
-error.response?.data);
-
-console.log("URL:",
-`${baseUrl}/${mediaId}`);
-
-return null;
-
-}
+      } catch (err) {
+        console.error("Error retrieving account data for media download:", err);
+      }
     }
 
     const customerQuery = await pool.query(
