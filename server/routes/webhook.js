@@ -280,9 +280,22 @@ router.post('/whatsapp', async (req, res) => {
             messageText += "\n\n[Failed to download media attachment]";
           }
         }
-      } catch (err) {
-        console.error("Error retrieving account data for media download:", err);
-      }
+      } catch(error){
+
+console.log("MEDIA DOWNLOAD FAILED");
+
+console.log("Status:",
+error.response?.status);
+
+console.log("Data:",
+error.response?.data);
+
+console.log("URL:",
+`${baseUrl}/${mediaId}`);
+
+return null;
+
+}
     }
 
     const customerQuery = await pool.query(
