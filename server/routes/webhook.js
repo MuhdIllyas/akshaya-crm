@@ -52,32 +52,24 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
     console.log(`[Webhook] Downloading media from: ${downloadUrl.substring(0, 60)}...`);
 
     let responseStream;
-    
-    // 🔥 THE FIX: Handle WhatsApp CDN Redirects manually!
-    // Axios strips Auth headers on cross-domain redirects (causing 401s).
-    // We force Axios to stop at the redirect, grab the new URL, and fetch it securely.
+
+    // 🔥 THE FIX: Try RAW Signed URL first!
+    // Meta's lookaside URLs with &hash= are pre-signed. Adding an Auth header modifies 
+    // the request and breaks the signature, causing the 401 Unauthorized.
     try {
-      const initialReq = await axios.get(downloadUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        maxRedirects: 0, // Stop at the 302 Redirect
+      console.log(`[Webhook] Attempting raw download (pre-signed URL)...`);
+      const rawReq = await axios.get(downloadUrl, {
         responseType: 'stream'
       });
-      responseStream = initialReq.data;
-    } catch (err) {
-      if (err.response && [301, 302, 303, 307, 308].includes(err.response.status)) {
-        const redirectUrl = err.response.headers.location;
-        console.log(`[Webhook] Following Meta CDN redirect...`);
-        
-        // The CDN URL already contains the auth hash in the link itself, 
-        // so we fetch it without the Bearer token to avoid cross-origin rejections.
-        const cdnReq = await axios.get(redirectUrl, {
-          responseType: 'stream'
-        });
-        responseStream = cdnReq.data;
-      } else {
-        console.error(`[Webhook] Media API Error:`, err.response?.status);
-        throw err;
-      }
+      responseStream = rawReq.data;
+    } catch (rawErr) {
+      console.log(`[Webhook] Raw download failed (${rawErr.response?.status}). Attempting WITH auth token...`);
+      // Fallback: If it wasn't pre-signed, try with the Bearer token
+      const authReq = await axios.get(downloadUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        responseType: 'stream'
+      });
+      responseStream = authReq.data;
     }
 
     // 3. Determine extension and generate a safe filename
@@ -101,9 +93,9 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
       writer.on('error', reject);
     });
 
+    // 🔥 ADDED THE REQUESTED LOGS HERE:
     console.log("LOCAL FILE SAVED:", filePath);
-    console.log("RETURNING:", `/uploads/chat/${uniqueFilename}`); 
-    console.log(`[Webhook] Successfully saved media to ${filePath}`);
+    console.log("RETURNING:", `/uploads/chat/${uniqueFilename}`);
 
     // 5. Return the local relative path for the database
     return `/uploads/chat/${uniqueFilename}`;
