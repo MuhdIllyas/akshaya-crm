@@ -101,6 +101,8 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
       writer.on('error', reject);
     });
 
+    console.log("LOCAL FILE SAVED:", filePath);
+    console.log("RETURNING:", `/uploads/chat/${uniqueFilename}`); 
     console.log(`[Webhook] Successfully saved media to ${filePath}`);
 
     // 5. Return the local relative path for the database
