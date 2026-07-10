@@ -29,39 +29,33 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
 
     // 1. If we only have an ID, we must ask the API for the real download URL
     if (!downloadUrl && mediaId) {
-      // 🔥 FIX: Remove '/messages' from the end of the baseUrl so we hit the root API properly
-      const cleanBase = baseUrl.replace(/\/messages\/?$/, '');
-      console.log(`[Webhook] Resolving media URL for ID: ${mediaId} using base: ${cleanBase}`);
+      console.log(`[Webhook] Resolving media URL for ID: ${mediaId}`);
       
-      const endpointsToTry = [
-        `${cleanBase}/media/${mediaId}`,              // Standard Libromi Media Endpoint
-        `${cleanBase}/${mediaId}`,                    // Alternative Root Endpoint
-        `https://graph.facebook.com/v18.0/${mediaId}` // Meta Graph API Fallback
-      ];
-
-      for (const endpoint of endpointsToTry) {
+      // Attempt 1: Standard Meta Endpoint / Libromi Root
+      try {
+        const res1 = await axios.get(`${baseUrl}/${mediaId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        downloadUrl = res1.data.url;
+      } catch (e1) {
+        // Attempt 2: Libromi Specific /media/ Endpoint
         try {
-          console.log(`[Webhook] Trying endpoint: ${endpoint}`);
-          const res = await axios.get(endpoint, { 
-            headers: { Authorization: `Bearer ${accessToken}` } 
-          });
-          
-          if (res.data && (res.data.url || res.data.link)) {
-            downloadUrl = res.data.url || res.data.link;
-            console.log(`[Webhook] Success! Found download URL: ${downloadUrl}`);
-            break; // Stop looking, we found it!
+          const res2 = await axios.get(`${baseUrl}/media/${mediaId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+          downloadUrl = res2.data.url;
+        } catch (e2) {
+          // Attempt 3: Direct Meta Graph API Fallback
+          try {
+            const res3 = await axios.get(`https://graph.facebook.com/v18.0/${mediaId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+            downloadUrl = res3.data.url;
+          } catch (e3) {
+            console.error(`[Webhook] All API attempts to resolve Media ID ${mediaId} failed.`);
+            throw new Error("Could not resolve media download URL.");
           }
-        } catch (e) {
-          console.log(`[Webhook] Endpoint ${endpoint} failed: ${e.response?.status || e.message}`);
         }
       }
     }
 
-    if (!downloadUrl) {
-      throw new Error("Could not find a valid download URL after trying all API endpoints.");
-    }
+    if (!downloadUrl) throw new Error("No download URL obtained");
 
-    console.log(`[Webhook] Downloading binary data from: ${downloadUrl}`);
+    console.log(`[Webhook] Downloading binary from: ${downloadUrl}`);
 
     // 2. Download the binary data
     const response = await axios.get(downloadUrl, {
@@ -76,7 +70,7 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
     } else if (filenameHint) {
       ext = path.extname(filenameHint);
     }
-    if (!ext) ext = '.bin'; // Fallback if extension is utterly unknown
+    if (!ext) ext = '.bin'; // Fallback if utterly unknown
     
     const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
     const filePath = path.join(UPLOAD_DIR, uniqueFilename);
