@@ -293,36 +293,36 @@ async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) 
     };
 
     if (fileUrl) {
-      // ⚠️ IMPORTANT: Libromi requires a PUBLIC URL to download the file from your server.
-      // Make sure VITE_API_URL or a dedicated BACKEND_URL environment variable is set to your staging/prod domain.
-      const baseUrl = process.env.BACKEND_URL || process.env.FRONTEND_URL || 'https://staging-api.akshayasahayi.com';
-      
-      // Prevent double slashes
+      // Create a publicly accessible URL for Libromi/Meta to download from your server
+      const baseUrl = process.env.VITE_API_URL || 'https://staging-api.akshayasahayi.com';
       const safeBase = baseUrl.replace(/\/$/, '');
       const safePath = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
-      const fullFileUrl = `${safeBase}${safePath}`;
+      const fullPublicUrl = `${safeBase}${safePath}`;
 
       // Detect File Type
       const ext = fileName ? fileName.split('.').pop().toLowerCase() : '';
       
       if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
         payload.type = 'image';
-        payload.image = { link: fullFileUrl };
-        if (message) payload.image.caption = message; // Add text as caption!
+        payload.image = { link: fullPublicUrl };
+        if (message) payload.image.caption = message;
       } 
       else if (['mp4', '3gp'].includes(ext)) {
         payload.type = 'video';
-        payload.video = { link: fullFileUrl };
+        payload.video = { link: fullPublicUrl };
         if (message) payload.video.caption = message;
       } 
       else if (['mp3', 'wav', 'ogg', 'aac'].includes(ext)) {
         payload.type = 'audio';
-        payload.audio = { link: fullFileUrl };
-        // Audio usually doesn't support captions in WhatsApp API
+        payload.audio = { link: fullPublicUrl };
       } 
       else {
+        // 🔥 ALL PDFs AND DOCUMENTS MUST GO HERE
         payload.type = 'document';
-        payload.document = { link: fullFileUrl, filename: fileName || 'Document' };
+        payload.document = { 
+          link: fullPublicUrl, 
+          filename: fileName || 'Document.pdf' 
+        };
         if (message) payload.document.caption = message; 
       }
     } else {
