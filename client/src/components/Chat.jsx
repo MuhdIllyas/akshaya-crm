@@ -157,40 +157,6 @@ const Chat = ({
 
   const currentMessages = messages[activeConversation?.id] || [];
 
-  // 🔒 SECURE DOWNLOAD HELPER
-  const handleSecureDownload = async (url, fileName, e) => {
-    if (e) e.stopPropagation();
-    if (!url) return;
-    
-    const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
-    
-    try {
-      if (fullUrl.includes(API_BASE_URL)) {
-        toast.info("Downloading file...");
-        const res = await fetch(fullUrl, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
-        
-        if (!res.ok) throw new Error("Unauthorized or file not found");
-        
-        const blob = await res.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = fileName || 'download';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-      } else {
-        window.open(fullUrl, '_blank'); // External WhatsApp media link
-      }
-    } catch (err) {
-      console.error("Download error:", err);
-      toast.error("Failed to download file securely.");
-    }
-  };
-
   // Compute if 24h window is open
   const isWithinWindow = isWithin24Hours(lastCustomerMessageTime);
 
@@ -826,7 +792,12 @@ const Chat = ({
                           ) : msg.isFile ? (
                             <div
                               className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-                              onClick={(e) => handleSecureDownload(msg.fileUrl, msg.fileName, e)}
+                              onClick={() => {
+                                if (msg.fileUrl) {
+                                  const fullUrl = msg.fileUrl.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`;
+                                  window.open(fullUrl, '_blank');
+                                }
+                              }}
                             >
                               {msg.messageType === 'image' ? (
                                 <>
