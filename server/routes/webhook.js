@@ -29,7 +29,6 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
 
     // 1. If we only have an ID, we must ask the API for the real download URL
     if (!downloadUrl && mediaId) {
-      // 🔥 FIX: Remove '/messages' from the end of the baseUrl so we hit the root API properly
       const cleanBase = baseUrl.replace(/\/messages\/?$/, '');
       console.log(`[Webhook] Resolving media URL for ID: ${mediaId} using base: ${cleanBase}`);
       
@@ -49,7 +48,7 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
           if (res.data && (res.data.url || res.data.link)) {
             downloadUrl = res.data.url || res.data.link;
             console.log(`[Webhook] Success! Found download URL: ${downloadUrl}`);
-            break; // Stop looking, we found it!
+            break; 
           }
         } catch (e) {
           console.log(`[Webhook] Endpoint ${endpoint} failed: ${e.response?.status || e.message}`);
@@ -61,13 +60,23 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
       throw new Error("Could not find a valid download URL after trying all API endpoints.");
     }
 
-    console.log(`[Webhook] Downloading binary data from: ${downloadUrl}`);
+    console.log(`[Webhook] Downloading binary data from: ${downloadUrl.substring(0, 80)}...`);
 
-    // 2. Download the binary data
-    const response = await axios.get(downloadUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      responseType: 'stream' // CRITICAL for saving files safely
-    });
+    // 2. Download the binary data (Smart Try/Catch for Meta Hashed URLs)
+    let response;
+    try {
+      console.log(`[Webhook] Attempting download WITH auth token...`);
+      response = await axios.get(downloadUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        responseType: 'stream' // CRITICAL for saving files safely
+      });
+    } catch (authErr) {
+      console.log(`[Webhook] Auth download failed (${authErr.response?.status}). Attempting raw download (using URL hash)...`);
+      // Meta lookaside URLs with &hash= often reject 3rd party tokens. Download raw.
+      response = await axios.get(downloadUrl, {
+        responseType: 'stream' 
+      });
+    }
 
     // 3. Determine extension and generate a safe filename
     let ext = '';
@@ -76,7 +85,7 @@ async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, 
     } else if (filenameHint) {
       ext = path.extname(filenameHint);
     }
-    if (!ext) ext = '.bin'; // Fallback if extension is utterly unknown
+    if (!ext) ext = '.bin'; 
     
     const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
     const filePath = path.join(UPLOAD_DIR, uniqueFilename);
@@ -121,11 +130,7 @@ router.post('/whatsapp', async (req, res) => {
 
   try {
     const body = req.body;
-    console.log("🔥 LIBROMI WEBHOOK HIT");
     
-    // 👇 ADD THIS EXACT LINE RIGHT HERE 👇
-    console.log("🔥 RAW PAYLOAD:", JSON.stringify(body, null, 2));
-
     let from = null;
     let message_id = null;
     let recipientPhone = null;
@@ -186,7 +191,8 @@ router.post('/whatsapp', async (req, res) => {
         case "image":
           messageType = "image";
           mediaIdToDownload = msgObject.image?.id;
-          directLink = msgObject.image?.link || msgObject.link;
+          // 🔥 FIX: Check for .url first!
+          directLink = msgObject.image?.url || msgObject.image?.link || msgObject.url || msgObject.link;
           mimeTypeHint = msgObject.image?.mime_type || "image/jpeg";
           messageText = msgObject.image?.caption || msgObject.caption || "";
           fileName = "Image.jpeg";
@@ -195,7 +201,7 @@ router.post('/whatsapp', async (req, res) => {
         case "document":
           messageType = "document";
           mediaIdToDownload = msgObject.document?.id;
-          directLink = msgObject.document?.link || msgObject.link;
+          directLink = msgObject.document?.url || msgObject.document?.link || msgObject.url || msgObject.link;
           mimeTypeHint = msgObject.document?.mime_type || "application/pdf";
           fileName = msgObject.document?.filename || "Document.pdf";
           messageText = msgObject.document?.caption || msgObject.caption || "";
@@ -204,7 +210,7 @@ router.post('/whatsapp', async (req, res) => {
         case "video":
           messageType = "video";
           mediaIdToDownload = msgObject.video?.id;
-          directLink = msgObject.video?.link || msgObject.link;
+          directLink = msgObject.video?.url || msgObject.video?.link || msgObject.url || msgObject.link;
           mimeTypeHint = msgObject.video?.mime_type || "video/mp4";
           messageText = msgObject.video?.caption || msgObject.caption || "";
           fileName = "Video.mp4";
@@ -213,7 +219,7 @@ router.post('/whatsapp', async (req, res) => {
         case "audio":
           messageType = "audio";
           mediaIdToDownload = msgObject.audio?.id;
-          directLink = msgObject.audio?.link || msgObject.link;
+          directLink = msgObject.audio?.url || msgObject.audio?.link || msgObject.url || msgObject.link;
           mimeTypeHint = msgObject.audio?.mime_type || "audio/ogg";
           fileName = "VoiceNote.ogg";
           break;
@@ -299,10 +305,8 @@ router.post('/whatsapp', async (req, res) => {
           );
           
           if (localPath) {
-            fileUrl = localPath; // ✅ e.g. "/uploads/chat/12345.pdf"
+            fileUrl = localPath; 
           } else if (directLink) {
-            // Ultimate fallback: If download failed, but Libromi provided a direct link, 
-            // save the direct link so it isn't NULL!
             fileUrl = directLink; 
             messageText += "\n[Media saved as external link]";
           } else {
