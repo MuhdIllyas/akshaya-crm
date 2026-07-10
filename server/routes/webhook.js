@@ -21,38 +21,61 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 // ===============================
-// 📥 DOWNLOAD MEDIA HELPER
+// 📥 BULLETPROOF MEDIA DOWNLOADER
 // ===============================
-async function downloadWhatsAppMedia(mediaId, accessToken, baseUrl, mimeType, filenameHint) {
+async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, mimeType, filenameHint) {
   try {
-    console.log(`[Webhook] Fetching media URL for ID: ${mediaId}`);
-    
-    // 1. Get the actual media URL from Meta/Libromi
-    const mediaUrlRes = await axios.get(`${baseUrl}/${mediaId}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    
-    const downloadUrl = mediaUrlRes.data.url;
-    if (!downloadUrl) throw new Error("No download URL returned for media ID");
+    let downloadUrl = directLink;
+
+    // 1. If we only have an ID, we must ask the API for the real download URL
+    if (!downloadUrl && mediaId) {
+      console.log(`[Webhook] Resolving media URL for ID: ${mediaId}`);
+      
+      // Attempt 1: Standard Meta Endpoint / Libromi Root
+      try {
+        const res1 = await axios.get(`${baseUrl}/${mediaId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        downloadUrl = res1.data.url;
+      } catch (e1) {
+        // Attempt 2: Libromi Specific /media/ Endpoint
+        try {
+          const res2 = await axios.get(`${baseUrl}/media/${mediaId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+          downloadUrl = res2.data.url;
+        } catch (e2) {
+          // Attempt 3: Direct Meta Graph API Fallback
+          try {
+            const res3 = await axios.get(`https://graph.facebook.com/v18.0/${mediaId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+            downloadUrl = res3.data.url;
+          } catch (e3) {
+            console.error(`[Webhook] All API attempts to resolve Media ID ${mediaId} failed.`);
+            throw new Error("Could not resolve media download URL.");
+          }
+        }
+      }
+    }
+
+    if (!downloadUrl) throw new Error("No download URL obtained");
+
+    console.log(`[Webhook] Downloading binary from: ${downloadUrl}`);
 
     // 2. Download the binary data
     const response = await axios.get(downloadUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
-      responseType: 'stream'
+      responseType: 'stream' // CRITICAL for saving files safely
     });
 
-    // 3. Determine extension and filename
+    // 3. Determine extension and generate a safe filename
     let ext = '';
     if (mimeType) {
       ext = '.' + mimeType.split('/')[1].split(';')[0]; // e.g., 'image/jpeg' -> '.jpeg'
     } else if (filenameHint) {
       ext = path.extname(filenameHint);
     }
+    if (!ext) ext = '.bin'; // Fallback if utterly unknown
     
     const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
     const filePath = path.join(UPLOAD_DIR, uniqueFilename);
 
-    // 4. Save to disk
+    // 4. Save to your local disk
     const writer = fs.createWriteStream(filePath);
     response.data.pipe(writer);
 
@@ -67,7 +90,7 @@ async function downloadWhatsAppMedia(mediaId, accessToken, baseUrl, mimeType, fi
     return `/uploads/chat/${uniqueFilename}`;
 
   } catch (error) {
-    console.error(`[Webhook] Failed to download WhatsApp media ${mediaId}:`, error.message);
+    console.error(`[Webhook] Failed to download WhatsApp media:`, error.message);
     return null;
   }
 }
@@ -92,8 +115,7 @@ router.post('/whatsapp', async (req, res) => {
 
   try {
     const body = req.body;
-    console.log("🔥 LIBROMI WEBHOOK HIT");
-
+    
     let from = null;
     let message_id = null;
     let recipientPhone = null;
@@ -141,6 +163,7 @@ router.post('/whatsapp', async (req, res) => {
     let fileUrl = null;
     let fileName = null;
     let mediaIdToDownload = null;
+    let directLink = null;
     let mimeTypeHint = null;
 
     if (msgObject) {
@@ -153,45 +176,36 @@ router.post('/whatsapp', async (req, res) => {
         case "image":
           messageType = "image";
           mediaIdToDownload = msgObject.image?.id;
+          directLink = msgObject.image?.link || msgObject.link;
           mimeTypeHint = msgObject.image?.mime_type || "image/jpeg";
           messageText = msgObject.image?.caption || msgObject.caption || "";
           fileName = "Image.jpeg";
-          // Fallback if there is a direct public link but no ID
-          if (!mediaIdToDownload && (msgObject.image?.link || msgObject.link)) {
-            fileUrl = msgObject.image?.link || msgObject.link;
-          }
           break;
           
         case "document":
           messageType = "document";
           mediaIdToDownload = msgObject.document?.id;
+          directLink = msgObject.document?.link || msgObject.link;
           mimeTypeHint = msgObject.document?.mime_type || "application/pdf";
           fileName = msgObject.document?.filename || "Document.pdf";
           messageText = msgObject.document?.caption || msgObject.caption || "";
-          if (!mediaIdToDownload && (msgObject.document?.link || msgObject.link)) {
-            fileUrl = msgObject.document?.link || msgObject.link;
-          }
           break;
 
         case "video":
           messageType = "video";
           mediaIdToDownload = msgObject.video?.id;
+          directLink = msgObject.video?.link || msgObject.link;
           mimeTypeHint = msgObject.video?.mime_type || "video/mp4";
           messageText = msgObject.video?.caption || msgObject.caption || "";
           fileName = "Video.mp4";
-          if (!mediaIdToDownload && (msgObject.video?.link || msgObject.link)) {
-            fileUrl = msgObject.video?.link || msgObject.link;
-          }
           break;
 
         case "audio":
           messageType = "audio";
           mediaIdToDownload = msgObject.audio?.id;
+          directLink = msgObject.audio?.link || msgObject.link;
           mimeTypeHint = msgObject.audio?.mime_type || "audio/ogg";
           fileName = "VoiceNote.ogg";
-          if (!mediaIdToDownload && (msgObject.audio?.link || msgObject.link)) {
-            fileUrl = msgObject.audio?.link || msgObject.link;
-          }
           break;
           
         default:
@@ -211,8 +225,7 @@ router.post('/whatsapp', async (req, res) => {
     // ===============================
     // ❌ VALIDATION (Must have Text OR Media)
     // ===============================
-    if (!from || (!messageText && !fileUrl && !mediaIdToDownload)) {
-      console.log(`⚠️ Webhook Ignored. It was likely a read/delivery receipt. (From: ${from})`);
+    if (!from || (!messageText && !directLink && !mediaIdToDownload)) {
       return; 
     }
 
@@ -256,7 +269,7 @@ router.post('/whatsapp', async (req, res) => {
     // ===============================
     // ⬇️ EXECUTE MEDIA DOWNLOAD
     // ===============================
-    if (mediaIdToDownload && communicationAccountId) {
+    if ((mediaIdToDownload || directLink) && communicationAccountId) {
       try {
         const accountData = await pool.query(
           `SELECT access_token, base_url FROM communication_accounts WHERE id = $1`,
@@ -268,6 +281,7 @@ router.post('/whatsapp', async (req, res) => {
           
           const localPath = await downloadWhatsAppMedia(
             mediaIdToDownload, 
+            directLink,
             access_token, 
             base_url, 
             mimeTypeHint, 
@@ -276,8 +290,13 @@ router.post('/whatsapp', async (req, res) => {
           
           if (localPath) {
             fileUrl = localPath; // ✅ e.g. "/uploads/chat/12345.pdf"
+          } else if (directLink) {
+            // Ultimate fallback: If download failed, but Libromi provided a direct link, 
+            // save the direct link so it isn't NULL!
+            fileUrl = directLink; 
+            messageText += "\n[Media saved as external link]";
           } else {
-            messageText += "\n\n[Failed to download media attachment]";
+            messageText += "\n[Failed to download media attachment]";
           }
         }
       } catch (err) {
@@ -321,7 +340,6 @@ router.post('/whatsapp', async (req, res) => {
       direction: 'incoming',
       io: io,
       external_message_id: message_id,
-      // ✅ Pass the successfully downloaded file properties to the router!
       incoming_file_url: fileUrl,
       incoming_file_name: fileName
     });
