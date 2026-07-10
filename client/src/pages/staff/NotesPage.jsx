@@ -344,8 +344,7 @@ const KeepCard = ({ note, cardStyle, navigate }) => {
 
         {note.related_service_entry_id && (
           <button
-            // CHANGE THIS LINE:
-            onClick={() => navigate(`/dashboard/staff/track_service/${note.related_service_tracking_id}`)}
+            onClick={() => navigate(`/dashboard/staff/track_service/${note.related_service_entry_id}`)}
             className="p-1.5 bg-white/40 hover:bg-white rounded-lg border border-black/5 text-gray-700 hover:text-indigo-600 transition opacity-0 group-hover:opacity-100 shadow-sm shrink-0"
             title={`Open File Tracker for ${note.customer_name || 'Customer'}`}
           >

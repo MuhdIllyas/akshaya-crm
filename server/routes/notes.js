@@ -35,9 +35,7 @@ router.get('/all', authenticateToken, async (req, res) => {
     // Base query: Join notes with creator's name and the related service entry details
     let query = `
       SELECT 
-        n.id, n.title, n.content, n.visibility, n.created_at, 
-        n.related_service_entry_id, 
-        n.related_service_tracking_id, /* <-- ADD THIS LINE */
+        n.id, n.title, n.content, n.visibility, n.created_at, n.related_service_entry_id,
         s.name AS creator_name,
         se.customer_name,
         se.token_id,
