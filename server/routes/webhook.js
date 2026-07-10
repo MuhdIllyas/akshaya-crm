@@ -26,6 +26,12 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 async function downloadWhatsAppMedia(mediaId, accessToken, baseUrl, mimeType, filenameHint) {
   try {
     console.log(`[Webhook] Fetching media URL for ID: ${mediaId}`);
+
+    console.log("========== MEDIA DOWNLOAD ==========");
+    console.log("Media ID:", mediaId);
+    console.log("Base URL:", baseUrl);
+    console.log("Final URL:", `${baseUrl}/${mediaId}`);
+    console.log("====================================");
     
     // 1. Get the actual media URL from Meta/Libromi
     const mediaUrlRes = await axios.get(`${baseUrl}/${mediaId}`, {
@@ -66,8 +72,13 @@ async function downloadWhatsAppMedia(mediaId, accessToken, baseUrl, mimeType, fi
     // 5. Return the local relative path for the database
     return `/uploads/chat/${uniqueFilename}`;
 
-  } catch (error) {
-    console.error(`[Webhook] Failed to download WhatsApp media ${mediaId}:`, error.message);
+  } catch (err) {
+    console.log("========== DOWNLOAD ERROR ==========");
+    console.log("Status:", err.response?.status);
+    console.log("Response:", err.response?.data);
+    console.log("Message:", err.message);
+    console.log("====================================");
+
     return null;
   }
 }
