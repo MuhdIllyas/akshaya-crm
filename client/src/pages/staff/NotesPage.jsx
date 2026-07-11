@@ -166,7 +166,7 @@ const NotesPage = () => {
           <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
             <FiMessageCircle className="h-5 w-5" />
           </div>
-          <h1 className="text-lg font-bold text-slate-800 tracking-tight">Akshaya Keep</h1>
+          <h1 className="text-lg font-bold text-slate-800 tracking-tight">Akshaya Keep Notes</h1>
         </div>
 
         <div className="relative flex-1 min-w-[180px] max-w-xl mx-2 sm:mx-4">
