@@ -160,6 +160,15 @@ const DashboardLayout = () => {
     return () => clearInterval(interval);
   }, [token, socketConnected, initialLoadDone]);
 
+  // 🔥 Instantly clear the badge when they open the page
+  useEffect(() => {
+    if (location.pathname.includes('/notes')) {
+      setUnreadNotesCount(0);
+      // We also trigger a fetch just to sync the backend
+      fetchUnreadNotesCount(); 
+    }
+  }, [location.pathname]);
+
   // Updated Role-based navigation configuration with MessengerIconWithBadge
   const roleNavigation = {
     superadmin: [

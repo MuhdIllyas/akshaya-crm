@@ -210,23 +210,8 @@ router.post("/", async (req, res) => {
     await client.query("COMMIT");
 
     // 🔥 3. TRIGGER SOCKET EVENTS FOR REAL-TIME BADGE UPDATES
-    try {
-      // Alert specifically mentioned users
-      if (Array.isArray(mentions) && mentions.length > 0) {
-        mentions.forEach(staffId => {
-          io.to(`user_${staffId}`).emit('unread_notes_update', { type: 'mention' });
-        });
-      }
-
-      // Alert the centre or everyone based on visibility
-      if (visibility === 'centre') {
-        io.to(`centre_${req.user.centre_id}`).emit('unread_notes_update', { type: 'centre' });
-      } else if (visibility === 'global') {
-        io.emit('unread_notes_update', { type: 'global' });
-      }
-    } catch (socketErr) {
-      console.error("Failed to emit socket event for notes:", socketErr);
-    }
+    // Broadcast a global ping. The frontend will hear it, ask the database for its specific count, and update instantly.
+    io.emit('unread_notes_update');
 
     res.status(201).json(note);
   } catch (err) {
