@@ -619,7 +619,7 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
       )}
 
       {/* Content with @mentions highlighted */}
-      <div className="text-sm text-gray-800 break-words leading-relaxed whitespace-pre-wrap flex-1">
+      <div className="text-sm text-gray-800 wrap-break-word leading-relaxed whitespace-pre-wrap flex-1">
         {renderContent(note.content)}
       </div>
 
