@@ -227,12 +227,12 @@ const NotesPage = () => {
                   <span className="text-xs text-gray-400 font-medium">Visibility:</span>
                   <select
                     value={noteVisibility}
-                    onChange={(e) => setNoteVisibility(e.target.value)}  // Fixed typo
+                    onChange={(e) => setNoteVisibility(e.target.value)} 
                     className="text-xs bg-gray-50 border border-gray-200 rounded-md px-2 py-1 text-gray-700 outline-none"
                   >
-                    <option value="centre">Centre Only</option>
-                    <option value="global">Global (All Centres)</option>
+                    <option value="centre">Centre View</option>
                     <option value="private">Private (Only Me)</option>
+                    <option value="mentioned_only">Mentions Only</option>
                   </select>
                 </div>
 
