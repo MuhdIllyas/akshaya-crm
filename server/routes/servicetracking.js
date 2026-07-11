@@ -1084,7 +1084,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
             OR sr.booking_id = (SELECT customer_service_id FROM service_entries WHERE id = st.service_entry_id)
           )
         AND sr.is_submitted = true
-      WHERE st.id = $1
+      WHERE st.id = $1 OR st.service_entry_id = $1
+      ORDER BY CASE WHEN st.id = $1 THEN 1 ELSE 2 END
+      LIMIT 1
     `;
     
     const trackingResult = await client.query(trackingQuery, [parseInt(id)]);
