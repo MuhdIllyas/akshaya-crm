@@ -4,7 +4,7 @@ import {
   FiSearch, FiMessageCircle, FiAtSign, FiClock, FiUser,
   FiExternalLink, FiLock, FiGlobe, FiMapPin, FiCheck,
   FiCornerDownLeft, FiPaperclip, FiBookmark, FiAlertCircle,
-  FiEdit2, FiTrash2, FiX, FiSave, FiFilter
+  FiEdit2, FiTrash2, FiX, FiSave, FiPin, FiFilter, FiEye
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { MentionsInput, Mention } from 'react-mentions';
@@ -18,9 +18,8 @@ const NotesPage = () => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'alpha'
+  const [sortBy, setSortBy] = useState('newest');
 
-  // Note Creator State (Expandable)
   const [isCreating, setIsCreating] = useState(false);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteContent, setNoteContent] = useState('');
@@ -33,7 +32,6 @@ const NotesPage = () => {
   const currentUserRole = localStorage.getItem('role')?.trim()?.toLowerCase();
   const centreId = localStorage.getItem('centre_id');
 
-  // Load staff & fetch notes
   useEffect(() => {
     const loadStaff = async () => {
       try {
@@ -98,7 +96,6 @@ const NotesPage = () => {
     callback(staffList.filter(s => s.display.toLowerCase().includes(query.toLowerCase())));
   };
 
-  // Card style mapping (updated pastels)
   const getKeepCardStyle = (note) => {
     if (parseInt(note.is_mentioned) > 0) {
       return 'bg-emerald-50 border-emerald-200 text-emerald-800 shadow-sm hover:shadow-md';
@@ -113,7 +110,6 @@ const NotesPage = () => {
     }
   };
 
-  // Filter & sort notes
   const processedNotes = useMemo(() => {
     let filtered = notes.filter(note => {
       if (!searchQuery) return true;
@@ -126,7 +122,6 @@ const NotesPage = () => {
       );
     });
 
-    // Sorting
     const sortFn = (a, b) => {
       switch (sortBy) {
         case 'newest':
@@ -143,21 +138,29 @@ const NotesPage = () => {
     return filtered;
   }, [notes, searchQuery, sortBy]);
 
-  // Separate pinned (mentions) and others
+  // ===== SPLIT VIEW: Mentions, Private, Centre =====
   const boardSections = useMemo(() => {
-    const pinned = [];
-    const others = [];
+    const mentioned = [];
+    const privateNotes = [];
+    const centreNotes = [];
     processedNotes.forEach(n => {
-      if (parseInt(n.is_mentioned) > 0) pinned.push(n);
-      else others.push(n);
+      if (parseInt(n.is_mentioned) > 0) {
+        mentioned.push(n);
+      } else {
+        if (n.visibility === 'private') {
+          privateNotes.push(n);
+        } else {
+          centreNotes.push(n);
+        }
+      }
     });
-    return { pinned, others };
+    return { mentioned, private: privateNotes, centre: centreNotes };
   }, [processedNotes]);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-16 text-gray-700">
 
-      {/* ===== TOP NAV BAR (KEEP STYLE) ===== */}
+      {/* ===== TOP NAV BAR ===== */}
       <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 z-40 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
@@ -166,7 +169,6 @@ const NotesPage = () => {
           <h1 className="text-lg font-bold text-slate-800 tracking-tight">Akshaya Keep</h1>
         </div>
 
-        {/* Search Bar with Clear Button */}
         <div className="relative flex-1 min-w-[180px] max-w-xl mx-2 sm:mx-4">
           <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
@@ -187,7 +189,6 @@ const NotesPage = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Sort Dropdown */}
           <div className="hidden sm:flex items-center gap-1 text-sm">
             <FiFilter className="text-gray-400" />
             <select
@@ -307,60 +308,55 @@ const NotesPage = () => {
           </div>
         )}
 
-        {/* ===== BOARD SECTIONS ===== */}
+        {/* ===== THREE SECTIONS SPLIT VIEW ===== */}
         {!loading && (
           <div className="space-y-10">
-            {/* Pinned Section */}
-            {boardSections.pinned.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 pl-1">
-                  <FiPin className="text-emerald-500" /> Pinned for You
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {boardSections.pinned.map(note => (
-                    <KeepCard
-                      key={note.id}
-                      note={note}
-                      cardStyle={getKeepCardStyle(note)}
-                      navigate={navigate}
-                      refreshBoard={fetchNotes}
-                      currentUserId={currentUserId}
-                      currentUserRole={currentUserRole}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* 1. MENTIONS */}
+            <Section
+              title="Mentions"
+              icon={<FiAtSign className="text-emerald-500" />}
+              notes={boardSections.mentioned}
+              cardStyleGetter={getKeepCardStyle}
+              navigate={navigate}
+              refreshBoard={fetchNotes}
+              currentUserId={currentUserId}
+              currentUserRole={currentUserRole}
+            />
 
-            {/* Others Section */}
-            <div>
-              {boardSections.pinned.length > 0 && (
-                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 pl-1 border-t border-gray-200 pt-6">
-                  All Notes
-                </div>
-              )}
-              {boardSections.others.length === 0 && boardSections.pinned.length === 0 ? (
+            {/* 2. PRIVATE */}
+            <Section
+              title="Private"
+              icon={<FiLock className="text-rose-500" />}
+              notes={boardSections.private}
+              cardStyleGetter={getKeepCardStyle}
+              navigate={navigate}
+              refreshBoard={fetchNotes}
+              currentUserId={currentUserId}
+              currentUserRole={currentUserRole}
+            />
+
+            {/* 3. CENTRE */}
+            <Section
+              title="Centre"
+              icon={<FiMapPin className="text-amber-500" />}
+              notes={boardSections.centre}
+              cardStyleGetter={getKeepCardStyle}
+              navigate={navigate}
+              refreshBoard={fetchNotes}
+              currentUserId={currentUserId}
+              currentUserRole={currentUserRole}
+            />
+
+            {/* Empty state when all sections are empty */}
+            {boardSections.mentioned.length === 0 &&
+              boardSections.private.length === 0 &&
+              boardSections.centre.length === 0 && (
                 <div className="text-center py-20 border-2 border-dashed border-gray-200 rounded-3xl max-w-md mx-auto">
                   <FiMessageCircle className="mx-auto h-16 w-16 text-gray-300 mb-4" />
                   <p className="font-semibold text-gray-400 text-lg">Board is empty</p>
                   <p className="text-sm text-gray-400 mt-1">Start by pinning a note above.</p>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {boardSections.others.map(note => (
-                    <KeepCard
-                      key={note.id}
-                      note={note}
-                      cardStyle={getKeepCardStyle(note)}
-                      navigate={navigate}
-                      refreshBoard={fetchNotes}
-                      currentUserId={currentUserId}
-                      currentUserRole={currentUserRole}
-                    />
-                  ))}
-                </div>
               )}
-            </div>
           </div>
         )}
       </div>
@@ -369,7 +365,38 @@ const NotesPage = () => {
 };
 
 // ----------------------------------------------------------------------
-//  KEEP CARD COMPONENT (with Edit & Delete)
+//  SECTION COMPONENT – renders a group of notes with a header
+// ----------------------------------------------------------------------
+const Section = ({ title, icon, notes, cardStyleGetter, navigate, refreshBoard, currentUserId, currentUserRole }) => {
+  if (notes.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 pl-1">
+        {icon}
+        <span>{title}</span>
+        <span className="ml-1 text-[10px] bg-gray-200 rounded-full px-2 py-0.5 text-gray-600">{notes.length}</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        {notes.map(note => (
+          <KeepCard
+            key={note.id}
+            note={note}
+            cardStyle={cardStyleGetter(note)}
+            navigate={navigate}
+            refreshBoard={refreshBoard}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ----------------------------------------------------------------------
+//  KEEP CARD – displays a single note with edit/delete actions
+//  and highlighted @mentions (bold + colour)
 // ----------------------------------------------------------------------
 const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, currentUserRole }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -483,6 +510,24 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
     ? <FiAtSign className="h-3.5 w-3.5" title="Mentions only" />
     : <FiMapPin className="h-3.5 w-3.5" title="Centre view" />;
 
+  // Helper to render content with bold/coloured @mentions
+  const renderContent = (text) => {
+    if (!text) return null;
+    // Split by @word (alphanumeric + underscore)
+    const parts = text.split(/(@\w+)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('@')) {
+        // This is a mention – render it bold and with a distinct colour (e.g., indigo)
+        return (
+          <span key={index} className="font-bold text-indigo-700 bg-indigo-100/50 px-1 rounded">
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
     <motion.div
       layout
@@ -518,17 +563,9 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
         <span className="text-gray-400 shrink-0 mt-0.5">{visibilityIcon}</span>
       </div>
 
-      {/* Content with @mentions highlighted */}
+      {/* Content with @mentions highlighted (bold + coloured) */}
       <div className="text-sm text-gray-800 break-words leading-relaxed whitespace-pre-wrap flex-1">
-        {note.content?.split(/(@\w+)/g).map((chunk, i) =>
-          chunk.startsWith('@') ? (
-            <span key={i} className="font-medium bg-white/60 px-1 rounded text-indigo-700">
-              {chunk}
-            </span>
-          ) : (
-            chunk
-          )
-        )}
+        {renderContent(note.content)}
       </div>
 
       {/* Footer */}
