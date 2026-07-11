@@ -613,7 +613,7 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
       {note.linked_service_name && (
         <div className="mb-2">
           <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-[10px] px-2 py-0.5 rounded-md font-medium border border-indigo-100/50">
-            <FiBookmark className="h-3 w-3" /> {note.linked_service_name} SOP
+            <FiBookmark className="h-3 w-3" /> {note.linked_service_name}
           </span>
         </div>
       )}
