@@ -37,7 +37,9 @@ const NotesPage = () => {
       try {
         if (!centreId) return;
         const response = await getStaff(centreId);
-        setStaffList(response.data.map(s => ({ id: s.id, display: s.name })));
+        const formattedStaff = response.data.map(s => ({ id: s.id, display: s.name }));
+        // 🔥 Add "All Staff" to the very top of the list
+        setStaffList([{ id: 'all', display: 'All Staff' }, ...formattedStaff]);
       } catch (err) {
         console.error('Failed to load staff for mentions', err);
       }
@@ -82,12 +84,24 @@ const NotesPage = () => {
     e.preventDefault();
     if (!noteContent.trim()) return;
 
+    // 🔥 EXPAND @ALL INTO REAL STAFF IDs
+    let finalMentions = [...noteMentions];
+    if (finalMentions.includes('all')) {
+      // Get every real staff ID from the list
+      const allStaffIds = staffList
+        .filter(s => s.id !== 'all')
+        .map(s => parseInt(s.id));
+      
+      // Combine them and remove duplicates (in case they tagged @all AND a specific person)
+      finalMentions = [...new Set([...finalMentions.filter(id => id !== 'all'), ...allStaffIds])];
+    }
+
     try {
       await createNote({
         title: noteTitle.trim() || 'General Note',
         content: noteContent.trim(),
         visibility: noteVisibility,
-        mentions: noteMentions,
+        mentions: finalMentions, // 🔥 Use the expanded list here
         centre_id: centreId,
         created_by: currentUserId
       });
@@ -243,7 +257,8 @@ const NotesPage = () => {
               value={noteContent}
               onChange={(e, newValue, newPlainText, mentions) => {
                 setNoteContent(newValue);
-                setNoteMentions(mentions.map(m => parseInt(m.id)));
+                // 🔥 Prevent parseInt from breaking the 'all' string
+                setNoteMentions(mentions.map(m => m.id === 'all' ? 'all' : parseInt(m.id)));
               }}
               onFocus={() => setIsCreating(true)}
               placeholder="Take a note... Use @ to tag a staff member"
