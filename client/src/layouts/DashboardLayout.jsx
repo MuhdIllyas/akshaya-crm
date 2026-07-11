@@ -13,6 +13,7 @@ const DashboardLayout = () => {
   
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadNotesCount, setUnreadNotesCount] = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
@@ -57,10 +58,27 @@ const DashboardLayout = () => {
     }
   };
 
+  // Fetch unread notes count
+  const fetchUnreadNotesCount = async () => {
+    if (!token) return;
+    try {
+      // Fix route path depending on how your Axios instance is set up, normally:
+      const res = await fetch(`${API_BASE_URL}/api/notes/unread`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch unread notes');
+      const data = await res.json();
+      setUnreadNotesCount(data.count);
+    } catch (err) {
+      console.error('Error fetching unread notes:', err);
+    }
+  };
+
   // Initial fetch on component mount
   useEffect(() => {
     if (token && currentUserId) {
       fetchAllUnreadCounts();
+      fetchUnreadNotesCount();
     }
   }, [token, currentUserId]);
 
@@ -74,6 +92,12 @@ const DashboardLayout = () => {
       console.log("Dashboard socket connected");
       setSocketConnected(true);
       fetchAllUnreadCounts();
+      fetchUnreadNotesCount();
+    };
+
+    const handleUnreadNotesUpdate = () => {
+      console.log("New note event received!");
+      fetchUnreadNotesCount(); // 🔥 Add this
     };
 
     const handleUnreadUpdate = (data) => {
@@ -99,6 +123,7 @@ const DashboardLayout = () => {
     // Attach listeners
     socket.on("connect", handleConnect);
     socket.on("unread_update", handleUnreadUpdate);
+    socket.on("unread_notes_update", handleUnreadNotesUpdate);
     socket.on("new_message", handleNewMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("disconnect", handleDisconnect);
@@ -112,6 +137,7 @@ const DashboardLayout = () => {
     return () => {
       socket.off("connect", handleConnect);
       socket.off("unread_update", handleUnreadUpdate);
+      socket.off("unread_notes_update", handleUnreadNotesUpdate);
       socket.off("new_message", handleNewMessage);
       socket.off("messages_read", handleMessagesRead);
       socket.off("disconnect", handleDisconnect);
@@ -127,6 +153,7 @@ const DashboardLayout = () => {
       if (!socketConnected || !initialLoadDone) {
         console.log("Polling for unread counts...");
         fetchAllUnreadCounts();
+        fetchUnreadNotesCount();
       }
     }, 15000); // Poll every 15 seconds as fallback
     
@@ -174,7 +201,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff", label: "My Dashboard", icon: DashboardIcon },
       { path: "/dashboard/staff/calendar", label: "Calendar", icon: CalendarIcon },
       { path: "/dashboard/staff/tasks", label: "My Tasks", icon: TasksIcon },
-      { path: "/dashboard/staff/notes", label: "Notes", icon: NotesIcon },
+      { path: "/dashboard/staff/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/staff/performance", label: "Performance", icon: ChartIcon },
       { path: "/dashboard/staff/attendance", label: "Salary & Attendance", icon: SalaryAttendanceIcon },
       { path: "/dashboard/staff/service_entry", label: "Service Entry", icon: ServiceEntryIcon },
@@ -276,6 +303,7 @@ const DashboardLayout = () => {
               const isActive = activePath === item.path;
               const IconComponent = item.icon;
               const isMessenger = item.label === "Messenger";
+              const isNotes = item.label === "Notes";
               
               return (
                 <Link 
@@ -297,7 +325,7 @@ const DashboardLayout = () => {
                     <IconComponent 
                       isActive={isActive} 
                       isCollapsed={isCollapsed} 
-                      unreadCount={isMessenger ? unreadCount : 0}
+                      unreadCount={isMessenger ? unreadCount : (isNotes ? unreadNotesCount : 0)}
                     />
                   </div>
                   {!isCollapsed && (
@@ -307,15 +335,26 @@ const DashboardLayout = () => {
                       {item.label}
                     </span>
                   )}
+
                   {/* Enhanced Tooltip */}
                   {isCollapsed && (
                     <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-10 shadow-lg">
                       {item.label}
+                      
+                      {/* Messenger Badge */}
                       {isMessenger && unreadCount > 0 && (
                         <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
                           {unreadCount > 99 ? '99+' : unreadCount}
                         </span>
                       )}
+                      
+                      {/* 🔥 ADDED: Notes Badge */}
+                      {isNotes && unreadNotesCount > 0 && (
+                        <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
+                          {unreadNotesCount > 99 ? '99+' : unreadNotesCount}
+                        </span>
+                      )}
+
                       <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-gray-900 border-transparent"></div>
                     </div>
                   )}
@@ -501,6 +540,29 @@ const MessengerIconWithBadge = ({ isActive = false, isCollapsed = false, unreadC
       viewBox="0 0 24 24"
     >
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+    </svg>
+    {unreadCount > 0 && (
+      <span className={`absolute ${
+        isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
+      } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
+      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+        {unreadCount > 99 ? '99+' : unreadCount}
+      </span>
+    )}
+  </div>
+);
+
+// Notes Icon with Badge
+const NotesIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount = 0 }) => (
+  <div className="relative inline-block">
+    <svg 
+      className={isCollapsed ? "w-6 h-6" : "w-5 h-5"} 
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24"
+    >
+      {/* This is the exact path from your NotesIcon */}
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8" />
     </svg>
     {unreadCount > 0 && (
       <span className={`absolute ${
