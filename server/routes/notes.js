@@ -269,13 +269,16 @@ router.put("/:id", async (req, res) => {
 
 // --- 6. Delete a Note ---
 router.delete("/:id", async (req, res) => {
-
-  if (isNaN(parseInt(req.params.id, 10))) {
+  const noteId = parseInt(req.params.id, 10);
+  
+  if (isNaN(noteId)) {
     return res.status(400).json({ error: "Invalid note ID" });
   }
 
+  const client = await pool.connect();
+  
   try {
-    const noteCheck = await pool.query("SELECT * FROM notes WHERE id = $1", [req.params.id]);
+    const noteCheck = await client.query("SELECT * FROM notes WHERE id = $1", [noteId]);
 
     if (!noteCheck.rows.length) {
       return res.status(404).json({ error: "Note not found" });
@@ -291,11 +294,23 @@ router.delete("/:id", async (req, res) => {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
-    await pool.query("DELETE FROM notes WHERE id = $1", [req.params.id]);
+    // 🔥 Use a transaction to safely delete child records first
+    await client.query("BEGIN");
+    
+    // 1. Delete associated mentions first to prevent Foreign Key constraint errors
+    await client.query("DELETE FROM note_mentions WHERE note_id = $1", [noteId]);
+    
+    // 2. Now safe to delete the main note
+    await client.query("DELETE FROM notes WHERE id = $1", [noteId]);
+    
+    await client.query("COMMIT");
     res.json({ success: true, message: "Note deleted successfully" });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: "Failed to delete note" });
+  } finally {
+    client.release();
   }
 });
 

@@ -319,6 +319,7 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
   const [editContent, setEditContent] = useState(note.content || '');
   const [editVisibility, setEditVisibility] = useState(note.visibility || 'centre');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Check if current user has permission to edit/delete
   const canModify = currentUserId === note.created_by || currentUserRole === 'admin' || currentUserRole === 'superadmin';
@@ -327,12 +328,22 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
     if (!window.confirm("Are you sure you want to delete this note? This cannot be undone.")) return;
     
     try {
+      setIsDeleting(true); // Disable button
       const notesUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'notes');
       await api.delete(`/${note.id}`, { baseURL: notesUrl });
+      
       toast.success("Note deleted");
       refreshBoard();
     } catch (error) {
-      toast.error("Failed to delete note");
+      // 🔥 If the error is 404, the note is already gone. Treat it as a success!
+      if (error.response && error.response.status === 404) {
+        toast.success("Note deleted");
+        refreshBoard(); 
+      } else {
+        toast.error("Failed to delete note");
+      }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
