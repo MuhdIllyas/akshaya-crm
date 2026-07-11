@@ -4,7 +4,7 @@ import {
   FiSearch, FiMessageCircle, FiAtSign, FiClock, FiUser,
   FiExternalLink, FiLock, FiGlobe, FiMapPin, FiCheck,
   FiCornerDownLeft, FiPaperclip, FiBookmark, FiAlertCircle,
-  FiEdit2, FiTrash2, FiX, FiSave, FiPin, FiFilter
+  FiEdit2, FiTrash2, FiX, FiSave, FiFilter
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { MentionsInput, Mention } from 'react-mentions';
