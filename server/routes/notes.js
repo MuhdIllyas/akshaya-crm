@@ -35,7 +35,9 @@ router.get('/all', authenticateToken, async (req, res) => {
     // Base query: Join notes with creator's name and the related service entry details
     let query = `
       SELECT 
-        n.id, n.title, n.content, n.visibility, n.created_at, n.related_service_entry_id,
+        n.id, n.title, n.content, n.visibility, n.created_at, 
+        n.related_service_entry_id,
+        n.related_service_tracking_id, /* 🔥 ADD THIS LINE 🔥 */
         s.name AS creator_name,
         se.customer_name,
         se.token_id,
@@ -148,6 +150,11 @@ router.post("/", async (req, res) => {
 
 // --- 3. Get Notes by Customer ID ---
 router.get("/customer/:id", async (req, res) => {
+  
+  if (isNaN(parseInt(req.params.id, 10))) {
+    return res.status(400).json({ error: "Invalid customer ID" });
+  }
+
   try {
     const result = await pool.query(
       `
@@ -181,6 +188,11 @@ router.get("/customer/:id", async (req, res) => {
 
 // --- 4. Get Notes by Service Entry ID ---
 router.get("/service-entry/:id", async (req, res) => {
+
+  if (isNaN(parseInt(req.params.id, 10))) {
+    return res.status(400).json({ error: "Invalid service entry ID" });
+  }
+
   try {
     const result = await pool.query(
       `
@@ -214,6 +226,11 @@ router.get("/service-entry/:id", async (req, res) => {
 
 // --- 5. Update a Note ---
 router.put("/:id", async (req, res) => {
+
+  if (isNaN(parseInt(req.params.id, 10))) {
+    return res.status(400).json({ error: "Invalid note ID" });
+  }
+
   try {
     const noteCheck = await pool.query("SELECT * FROM notes WHERE id = $1", [req.params.id]);
 
@@ -252,6 +269,11 @@ router.put("/:id", async (req, res) => {
 
 // --- 6. Delete a Note ---
 router.delete("/:id", async (req, res) => {
+
+  if (isNaN(parseInt(req.params.id, 10))) {
+    return res.status(400).json({ error: "Invalid note ID" });
+  }
+
   try {
     const noteCheck = await pool.query("SELECT * FROM notes WHERE id = $1", [req.params.id]);
 
