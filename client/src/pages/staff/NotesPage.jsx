@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiSearch, FiMessageCircle, FiAtSign, FiClock, FiUser,
   FiExternalLink, FiLock, FiGlobe, FiMapPin, FiCheck,
-  FiCornerDownLeft, FiPaperclip, FiBookmark, FiAlertCircle
+  FiCornerDownLeft, FiPaperclip, FiBookmark, FiAlertCircle,
+  FiEdit2, FiTrash2, FiX, FiSave
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { MentionsInput, Mention } from 'react-mentions';
@@ -28,6 +29,7 @@ const NotesPage = () => {
   const creatorRef = useRef(null);
 
   const currentUserId = parseInt(localStorage.getItem('id'));
+  const currentUserRole = localStorage.getItem('role')?.trim()?.toLowerCase();
   const centreId = localStorage.getItem('centre_id');
 
   // Load staff suggestions for @mentions
@@ -273,7 +275,11 @@ const NotesPage = () => {
                   <FiBookmark className="text-emerald-500" /> Pinned Notes (Your Mentions)
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
-                  {boardSections.pinned.map(note => <KeepCard key={note.id} note={note} cardStyle={getKeepCardStyle(note)} navigate={navigate} />)}
+                  {boardSections.pinned.map(note => <KeepCard key={note.id} note={note} cardStyle={getKeepCardStyle(note)} navigate={navigate}
+                  refreshBoard={fetchNotes}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
+                   />)}
                 </div>
               </div>
             )}
@@ -305,19 +311,117 @@ const NotesPage = () => {
 };
 
 // ----------------------------------------------------------------------
-//  COMPACT GOOGLE KEEP CARD MODULE
+//  COMPACT GOOGLE KEEP CARD MODULE (WITH EDIT & DELETE)
 // ----------------------------------------------------------------------
-const KeepCard = ({ note, cardStyle, navigate }) => {
+const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, currentUserRole }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(note.title || '');
+  const [editContent, setEditContent] = useState(note.content || '');
+  const [editVisibility, setEditVisibility] = useState(note.visibility || 'centre');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check if current user has permission to edit/delete
+  const canModify = currentUserId === note.created_by || currentUserRole === 'admin' || currentUserRole === 'superadmin';
+
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this note? This cannot be undone.")) return;
+    
+    try {
+      const notesUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'notes');
+      await api.delete(`/${note.id}`, { baseURL: notesUrl });
+      toast.success("Note deleted");
+      refreshBoard();
+    } catch (error) {
+      toast.error("Failed to delete note");
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!editContent.trim()) {
+      toast.error("Note content cannot be empty");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const notesUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'notes');
+      await api.put(`/${note.id}`, {
+        title: editTitle.trim(),
+        content: editContent.trim(),
+        visibility: editVisibility
+      }, { baseURL: notesUrl });
+      
+      toast.success("Note updated");
+      setIsEditing(false);
+      refreshBoard();
+    } catch (error) {
+      toast.error("Failed to update note");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <motion.div layout className={`border p-3 rounded-xl shadow-md flex flex-col group relative ${cardStyle} bg-white ring-2 ring-indigo-400 z-10`}>
+        <input
+          type="text"
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          placeholder="Title"
+          className="font-bold text-sm text-gray-900 bg-transparent border-b border-black/10 focus:border-indigo-500 outline-none pb-1 mb-2 w-full"
+        />
+        <textarea
+          value={editContent}
+          onChange={(e) => setEditContent(e.target.value)}
+          className="text-xs text-gray-800 bg-transparent outline-none w-full resize-none min-h-[80px]"
+          autoFocus
+        />
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/10">
+          <select
+            value={editVisibility}
+            onChange={(e) => setEditVisibility(e.target.value)}
+            className="text-[10px] bg-white/50 border border-black/10 rounded px-1 py-0.5 outline-none text-gray-700"
+          >
+            <option value="centre">Centre</option>
+            <option value="global">Global</option>
+            <option value="private">Private</option>
+          </select>
+          <div className="flex gap-2">
+            <button onClick={() => setIsEditing(false)} className="p-1.5 text-gray-500 hover:bg-black/5 rounded-md transition" title="Cancel">
+              <FiX className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={handleUpdate} disabled={isSubmitting} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-md transition disabled:opacity-50" title="Save">
+              <FiSave className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       layout
       whileHover={{ y: -1, boxShadow: "0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15)" }}
       className={`border p-4 rounded-xl shadow-[0_1px_2px_0_rgba(60,64,67,0.3)] transition-all flex flex-col justify-between min-h-[140px] group relative ${cardStyle}`}
     >
+      {/* Quick Action Overlay (Top Right) */}
+      {canModify && (
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button onClick={() => setIsEditing(true)} className="p-1.5 bg-white/80 hover:bg-white rounded-lg shadow-sm text-gray-600 hover:text-indigo-600 border border-black/5 transition" title="Edit Note">
+            <FiEdit2 className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={handleDelete} className="p-1.5 bg-white/80 hover:bg-white rounded-lg shadow-sm text-gray-600 hover:text-red-600 border border-black/5 transition" title="Delete Note">
+            <FiTrash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <div>
         {/* Title Block */}
         <div className="flex justify-between items-start mb-2 gap-2">
-          <h4 className="font-bold text-sm text-gray-900 leading-tight truncate flex-1">{note.title || 'General Note'}</h4>
+          <h4 className="font-bold text-sm text-gray-900 leading-tight truncate flex-1 pr-12">{note.title || 'General Note'}</h4>
           <div className="opacity-40 shrink-0 mt-0.5">
             {note.visibility === 'private' ? <FiLock className="h-3.5 w-3.5" /> : note.visibility === 'global' ? <FiGlobe className="h-3.5 w-3.5" /> : <FiMapPin className="h-3.5 w-3.5" />}
           </div>
@@ -342,7 +446,7 @@ const KeepCard = ({ note, cardStyle, navigate }) => {
           </p>
         </div>
 
-        {/* STRICT VALIDATION: Only render if related_service_entry_id exists AND is not the string "null" */}
+        {/* Strict Check for valid related_service_entry_id */}
         {note.related_service_entry_id && note.related_service_entry_id !== "null" && (
           <button
             onClick={() => navigate(`/dashboard/staff/track_service/${note.related_service_entry_id}`)}
