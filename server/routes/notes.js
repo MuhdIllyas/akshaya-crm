@@ -37,7 +37,8 @@ router.get('/all', authenticateToken, async (req, res) => {
       SELECT 
         n.id, n.title, n.content, n.visibility, n.created_at, 
         n.related_service_entry_id,
-        n.related_service_tracking_id, /* 🔥 ADD THIS LINE 🔥 */
+        n.related_service_tracking_id, 
+        n.created_by, 
         s.name AS creator_name,
         se.customer_name,
         se.token_id,

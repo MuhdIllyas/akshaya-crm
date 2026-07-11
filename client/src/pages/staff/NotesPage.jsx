@@ -537,7 +537,7 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
     >
       {/* Action buttons - appear on hover */}
       {canModify && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity duration-200">
           <button
             onClick={() => setIsEditing(true)}
             className="p-1.5 bg-white/80 hover:bg-white rounded-lg shadow-sm text-gray-600 hover:text-indigo-600 border border-gray-200/50 transition"
