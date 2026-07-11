@@ -510,20 +510,29 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
     ? <FiAtSign className="h-3.5 w-3.5" title="Mentions only" />
     : <FiMapPin className="h-3.5 w-3.5" title="Centre view" />;
 
-  // Helper to render content with bold/coloured @mentions
+  // Helper to render content with bold/coloured @mentions (Hides the ID)
   const renderContent = (text) => {
     if (!text) return null;
-    // Split by @word (alphanumeric + underscore)
-    const parts = text.split(/(@\w+)/g);
+    
+    // Regex to detect the react-mentions format: @[Display Name](id)
+    const parts = text.split(/(@\[.*?\]\(\d+\))/g);
+    
     return parts.map((part, index) => {
-      if (part.startsWith('@')) {
-        // This is a mention – render it bold and with a distinct colour (e.g., indigo)
+      const match = part.match(/@\[(.*?)\]\((\d+)\)/);
+      
+      if (match) {
+        // match[1] is the Staff Name, match[2] is the ID (which we ignore)
         return (
-          <span key={index} className="font-bold text-indigo-700 bg-indigo-100/50 px-1 rounded">
-            {part}
+          <span 
+            key={index} 
+            className="font-bold text-indigo-700 bg-indigo-100/60 px-1.5 py-0.5 rounded-md mx-0.5"
+          >
+            @{match[1]}
           </span>
         );
       }
+      
+      // Return normal text for non-mentions
       return part;
     });
   };
