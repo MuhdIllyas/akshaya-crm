@@ -45,6 +45,17 @@ const NotesPage = () => {
     loadStaff();
     fetchNotes();
 
+    // 🔥 Tell the backend we are looking at the notes board right now
+    const markAsViewed = async () => {
+      try {
+        const notesUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'notes');
+        await api.post('/mark-viewed', {}, { baseURL: notesUrl });
+      } catch (err) {
+        console.error("Failed to mark notes as viewed", err);
+      }
+    };
+    markAsViewed();
+
     const handleOutsideClick = (e) => {
       if (creatorRef.current && !creatorRef.current.contains(e.target)) {
         setIsCreating(false);
