@@ -432,9 +432,16 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
       <div>
         {/* Title Block */}
         <div className="flex justify-between items-start mb-2 gap-2">
-          <h4 className="font-bold text-sm text-gray-900 leading-tight truncate flex-1 pr-12">{note.title || 'General Note'}</h4>
+          <h4 className="font-bold text-sm text-gray-900 leading-tight truncate flex-1">{note.title || 'General Note'}</h4>
           <div className="opacity-40 shrink-0 mt-0.5">
-            {note.visibility === 'private' ? <FiLock className="h-3.5 w-3.5" /> : note.visibility === 'global' ? <FiGlobe className="h-3.5 w-3.5" /> : <FiMapPin className="h-3.5 w-3.5" />}
+            {/* 🔥 UPDATED ICON LOGIC HERE */}
+            {note.visibility === 'private' ? (
+              <FiLock className="h-3.5 w-3.5" title="Private" />
+            ) : note.visibility === 'mentioned_only' ? (
+              <FiAtSign className="h-3.5 w-3.5" title="Mentions Only" />
+            ) : (
+              <FiMapPin className="h-3.5 w-3.5" title="Centre View" />
+            )}
           </div>
         </div>
 
