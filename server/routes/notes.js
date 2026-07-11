@@ -109,14 +109,17 @@ router.get('/all', authenticateToken, async (req, res) => {
         n.id, n.title, n.content, n.visibility, n.created_at, 
         n.related_service_entry_id,
         n.related_service_tracking_id, 
+        n.related_service_id, 
         n.created_by, 
         s.name AS creator_name,
         se.customer_name,
         se.token_id,
+        srv.name AS linked_service_name, 
         (SELECT COUNT(*) FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1) as is_mentioned
       FROM notes n
       LEFT JOIN staff s ON n.created_by = s.id
       LEFT JOIN service_entries se ON n.related_service_entry_id = se.id
+      LEFT JOIN services srv ON n.related_service_id = srv.id 
       WHERE 1=1
     `;
     

@@ -26,6 +26,9 @@ const NotesPage = () => {
   const [noteVisibility, setNoteVisibility] = useState('centre');
   const [noteMentions, setNoteMentions] = useState([]);
   const [staffList, setStaffList] = useState([]);
+  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [servicesList, setServicesList] = useState([]);
+
   const creatorRef = useRef(null);
 
   const currentUserId = parseInt(localStorage.getItem('id'));
@@ -33,18 +36,21 @@ const NotesPage = () => {
   const centreId = localStorage.getItem('centre_id');
 
   useEffect(() => {
-    const loadStaff = async () => {
+    const loadData = async () => {
       try {
         if (!centreId) return;
         const response = await getStaff(centreId);
         const formattedStaff = response.data.map(s => ({ id: s.id, display: s.name }));
-        // 🔥 Add "All Staff" to the very top of the list
         setStaffList([{ id: 'all', display: 'All Staff' }, ...formattedStaff]);
+
+        // 🔥 ADDED: Fetch services for the dropdown
+        const servicesRes = await api.get('/services'); 
+        setServicesList(servicesRes.data || []);
       } catch (err) {
-        console.error('Failed to load staff for mentions', err);
+        console.error('Failed to load data', err);
       }
     };
-    loadStaff();
+    loadData();
     fetchNotes();
 
     // 🔥 Tell the backend we are looking at the notes board right now
@@ -96,19 +102,21 @@ const NotesPage = () => {
       finalMentions = [...new Set([...finalMentions.filter(id => id !== 'all'), ...allStaffIds])];
     }
 
-    try {
+  try {
       await createNote({
         title: noteTitle.trim() || 'General Note',
         content: noteContent.trim(),
         visibility: noteVisibility,
-        mentions: finalMentions, // 🔥 Use the expanded list here
+        mentions: finalMentions,
         centre_id: centreId,
-        created_by: currentUserId
+        created_by: currentUserId,
+        related_service_id: selectedServiceId ? parseInt(selectedServiceId) : null 
       });
       toast.success('Note pinned to board');
       setNoteTitle('');
       setNoteContent('');
       setNoteMentions([]);
+      setSelectedServiceId(''); 
       setIsCreating(false);
       fetchNotes();
     } catch (err) {
@@ -305,6 +313,21 @@ const NotesPage = () => {
                     <option value="mentioned_only">@ Mentions</option>
                   </select>
                 </div>
+
+                  {/* 🔥Service Link Dropdown */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 font-medium">Link to:</span>
+                    <select
+                      value={selectedServiceId}
+                      onChange={(e) => setSelectedServiceId(e.target.value)}
+                      className="text-xs bg-indigo-50/50 border border-indigo-100 rounded-lg px-2 py-1.5 text-indigo-700 outline-none max-w-[150px] truncate"
+                    >
+                      <option value="">General Note</option>
+                      {servicesList.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
                 <div className="flex items-center gap-2">
                   <button
@@ -585,6 +608,15 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
         </h4>
         <span className="text-gray-400 shrink-0 mt-0.5">{visibilityIcon}</span>
       </div>
+
+      {/* 🔥 ADDED: Service Knowledge Base Badge */}
+      {note.linked_service_name && (
+        <div className="mb-2">
+          <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-[10px] px-2 py-0.5 rounded-md font-medium border border-indigo-100/50">
+            <FiBookmark className="h-3 w-3" /> {note.linked_service_name} SOP
+          </span>
+        </div>
+      )}
 
       {/* Content with @mentions highlighted */}
       <div className="text-sm text-gray-800 break-words leading-relaxed whitespace-pre-wrap flex-1">
