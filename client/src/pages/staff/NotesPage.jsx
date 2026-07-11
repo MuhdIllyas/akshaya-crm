@@ -535,26 +535,6 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
       transition={{ type: 'spring', stiffness: 300 }}
       className={`border p-4 rounded-xl shadow-sm hover:shadow-lg transition-all flex flex-col justify-between min-h-[150px] group relative ${cardStyle}`}
     >
-      {/* Action buttons - appear on hover */}
-      {canModify && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity duration-200">
-          <button
-            onClick={() => setIsEditing(true)}
-            className="p-1.5 bg-white/80 hover:bg-white rounded-lg shadow-sm text-gray-600 hover:text-indigo-600 border border-gray-200/50 transition"
-            title="Edit note"
-          >
-            <FiEdit2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={handleDelete}
-            className="p-1.5 bg-white/80 hover:bg-white rounded-lg shadow-sm text-gray-600 hover:text-rose-600 border border-gray-200/50 transition"
-            title="Delete note"
-          >
-            <FiTrash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex justify-between items-start gap-2 mb-2">
         <h4 className="font-semibold text-sm text-gray-900 leading-tight truncate flex-1">
@@ -563,13 +543,15 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
         <span className="text-gray-400 shrink-0 mt-0.5">{visibilityIcon}</span>
       </div>
 
-      {/* Content with @mentions highlighted (bold + coloured) */}
+      {/* Content with @mentions highlighted */}
       <div className="text-sm text-gray-800 break-words leading-relaxed whitespace-pre-wrap flex-1">
         {renderContent(note.content)}
       </div>
 
-      {/* Footer */}
-      <div className="mt-4 pt-3 border-t border-gray-200/50 flex items-center justify-between">
+      {/* Footer (Actions moved here) */}
+      <div className="mt-4 pt-3 border-t border-gray-200/50 flex items-end justify-between">
+        
+        {/* Left Side: Creator & Time */}
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-gray-700 flex items-center gap-1">
             <FiUser className="opacity-40 h-3 w-3" />
@@ -582,15 +564,37 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
           </p>
         </div>
 
-        {note.related_service_entry_id && note.related_service_entry_id !== 'null' && (
-          <button
-            onClick={() => navigate(`/dashboard/staff/track_service/${note.related_service_entry_id}`)}
-            className="p-1.5 bg-white/60 hover:bg-white rounded-lg border border-gray-200/50 text-gray-600 hover:text-indigo-600 transition opacity-0 group-hover:opacity-100 shadow-sm shrink-0 ml-2"
-            title={`Open service for ${note.customer_name || 'Customer'}`}
-          >
-            <FiExternalLink className="h-3.5 w-3.5" />
-          </button>
-        )}
+        {/* Right Side: Action Buttons */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {canModify && (
+            <>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="p-1.5 bg-white/60 hover:bg-white rounded-lg border border-gray-200/50 text-gray-600 hover:text-indigo-600 transition shadow-sm"
+                title="Edit note"
+              >
+                <FiEdit2 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={handleDelete}
+                className="p-1.5 bg-white/60 hover:bg-white rounded-lg border border-gray-200/50 text-gray-600 hover:text-rose-600 transition shadow-sm"
+                title="Delete note"
+              >
+                <FiTrash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+
+          {note.related_service_entry_id && note.related_service_entry_id !== 'null' && (
+            <button
+              onClick={() => navigate(`/dashboard/staff/track_service/${note.related_service_entry_id}`)}
+              className="p-1.5 bg-white/60 hover:bg-white rounded-lg border border-gray-200/50 text-gray-600 hover:text-indigo-600 transition shadow-sm"
+              title={`Open service for ${note.customer_name || 'Customer'}`}
+            >
+              <FiExternalLink className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );
