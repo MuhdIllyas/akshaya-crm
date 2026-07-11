@@ -342,7 +342,8 @@ const KeepCard = ({ note, cardStyle, navigate }) => {
           </p>
         </div>
 
-        {note.related_service_entry_id && (
+        {/* STRICT VALIDATION: Only render if related_service_entry_id exists AND is not the string "null" */}
+        {note.related_service_entry_id && note.related_service_entry_id !== "null" && (
           <button
             onClick={() => navigate(`/dashboard/staff/track_service/${note.related_service_entry_id}`)}
             className="p-1.5 bg-white/40 hover:bg-white rounded-lg border border-black/5 text-gray-700 hover:text-indigo-600 transition opacity-0 group-hover:opacity-100 shadow-sm shrink-0"
