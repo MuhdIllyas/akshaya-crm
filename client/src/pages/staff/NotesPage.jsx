@@ -540,20 +540,28 @@ const KeepCard = ({ note, cardStyle, navigate, refreshBoard, currentUserId, curr
   const renderContent = (text) => {
     if (!text) return null;
     
-    // Regex to detect the react-mentions format: @[Display Name](id)
-    const parts = text.split(/(@\[.*?\]\(\d+\))/g);
+    // 🔥 FIX: Changed \d+ to \w+ to allow the word "all" to match
+    const parts = text.split(/(@\[.*?\]\(\w+\))/g);
     
     return parts.map((part, index) => {
-      const match = part.match(/@\[(.*?)\]\((\d+)\)/);
+      const match = part.match(/@\[(.*?)\]\((\w+)\)/);
       
       if (match) {
-        // match[1] is the Staff Name, match[2] is the ID (which we ignore)
+        const name = match[1];
+        const id = match[2];
+        const isAllStaff = id === 'all';
+        
         return (
           <span 
             key={index} 
-            className="font-bold text-indigo-700 bg-indigo-100/60 px-1.5 py-0.5 rounded-md mx-0.5"
+            // Give @All Staff a red/rose colour, and standard staff the indigo colour
+            className={`font-bold px-1.5 py-0.5 rounded-md mx-0.5 ${
+              isAllStaff 
+                ? 'text-rose-700 bg-rose-100/80 border border-rose-200' 
+                : 'text-indigo-700 bg-indigo-100/60 border border-indigo-200/50'
+            }`}
           >
-            @{match[1]}
+            @{name}
           </span>
         );
       }
