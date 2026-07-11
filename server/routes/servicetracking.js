@@ -942,6 +942,10 @@ router.post('/entries/:id/notify', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { message } = req.body;
 
+  if (isNaN(parseInt(id, 10))) {
+    return res.status(400).json({ error: 'Invalid tracking ID provided.' });
+  }
+
   console.log('servicetracking.js: Received notify payload:', JSON.stringify({ id, message }, null, 2));
 
   const client = await pool.connect();
@@ -1040,6 +1044,11 @@ router.post('/entries/:id/notify', authenticateToken, async (req, res) => {
  */
 router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
+
+  if (isNaN(parseInt(id, 10))) {
+    return res.status(400).json({ error: 'Invalid tracking ID provided.' });
+  }
+
   const client = await pool.connect();
   
   try {
@@ -1696,6 +1705,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { applicationNumber, status, assignedTo, currentStep, estimatedDelivery, averageTime, notes, aadhaar, email, priority } = req.body;
 
+  if (isNaN(parseInt(id, 10))) {
+    return res.status(400).json({ error: 'Invalid tracking ID provided.' });
+  }
+  
   console.log('servicetracking.js: Received update payload:', JSON.stringify({ id, applicationNumber, status, assignedTo, currentStep, estimatedDelivery, averageTime, notes, aadhaar, email, priority }, null, 2));
 
   const client = await pool.connect();
@@ -2129,6 +2142,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
 router.put('/entries/:id/update-status', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
+
+  if (isNaN(parseInt(id, 10))) {
+    return res.status(400).json({ error: 'Invalid tracking ID provided.' });
+  }
 
   console.log('servicetracking.js: Received status update payload:', JSON.stringify({ id, status }, null, 2));
 
