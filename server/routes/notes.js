@@ -27,41 +27,68 @@ const authenticateToken = (req, res, next) => {
 // Apply middleware to all routes in this file
 router.use(authenticateToken);
 
-// 🔥 2. NEW ROUTE: GET /api/notes/unread - Count new/unread notes
+// 🔥 1. NEW ROUTE: Reset the counter when the user opens the page
+router.post('/mark-viewed', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    // Update the timestamp to right now
+    await client.query(
+      `UPDATE staff SET last_notes_viewed = NOW() WHERE id = $1`,
+      [req.user.id]
+    );
+    
+    // Fire a socket event so the Dashboard layout clears the red badge instantly
+    io.to(`user_${req.user.id}`).emit('unread_notes_update', { type: 'read' });
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating view timestamp:', err);
+    res.status(500).json({ error: 'Failed to update view timestamp' });
+  } finally {
+    client.release();
+  }
+});
+
+// 🔥 2. UPDATED ROUTE: Count notes created AFTER the user's last_notes_viewed timestamp
 router.get('/unread', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const { centre_id, id: userId, role } = req.user;
     
-    // Count notes created in the last 24 hours OR notes where the user was mentioned
-    let query = `
-      SELECT COUNT(DISTINCT n.id) as unread_count
-      FROM notes n
-      LEFT JOIN staff s ON n.created_by = s.id
-      WHERE n.created_by != $1 
-      AND n.created_at >= NOW() - INTERVAL '24 hours'
-      AND (
-        n.visibility = 'global' 
-        OR (n.visibility = 'centre' AND s.centre_id = $2)
-        OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
-      )
-    `;
-    
-    // Superadmins see global and their own mentions
+    let query;
+    let values;
+
     if (role === 'superadmin') {
       query = `
         SELECT COUNT(DISTINCT n.id) as unread_count
         FROM notes n
+        CROSS JOIN (SELECT COALESCE(last_notes_viewed, '2000-01-01'::timestamp) as last_viewed FROM staff WHERE id = $1) as curr_user
         WHERE n.created_by != $1
-        AND n.created_at >= NOW() - INTERVAL '24 hours'
+        AND n.created_at > curr_user.last_viewed
         AND (
           n.visibility = 'global'
           OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
         )
       `;
+      values = [userId];
+    } else {
+      query = `
+        SELECT COUNT(DISTINCT n.id) as unread_count
+        FROM notes n
+        CROSS JOIN (SELECT COALESCE(last_notes_viewed, '2000-01-01'::timestamp) as last_viewed FROM staff WHERE id = $1) as curr_user
+        LEFT JOIN staff s ON n.created_by = s.id
+        WHERE n.created_by != $1 
+        AND n.created_at > curr_user.last_viewed
+        AND (
+          n.visibility = 'global' 
+          OR (n.visibility = 'centre' AND s.centre_id = $2)
+          OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+        )
+      `;
+      values = [userId, centre_id];
     }
 
-    const result = await client.query(query, [userId, centre_id]);
+    const result = await client.query(query, values);
     res.json({ count: parseInt(result.rows[0].unread_count) || 0 });
   } catch (err) {
     console.error('Error fetching unread notes count:', err);
@@ -70,7 +97,6 @@ router.get('/unread', authenticateToken, async (req, res) => {
     client.release();
   }
 });
-
 
 // GET /api/notes/all - Fetch all notes for the centre
 router.get('/all', authenticateToken, async (req, res) => {
