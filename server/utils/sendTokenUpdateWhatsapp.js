@@ -1,23 +1,45 @@
-import { triggerNotification } from './communication/notificationEngine.js';
+import axios from 'axios';
+
+// Libromi configuration
+const LIBROMI_ACCESS_TOKEN = process.env.LIBROMI_ACCESS_TOKEN;
+const LIBROMI_PHONE_NUMBER = process.env.LIBROMI_PHONE_NUMBER;
+
+const LIBROMI_BASE_URL =
+  process.env.LIBROMI_BASE_URL || 'https://wa-api.cloud/api/v1';
+
+// Approved WhatsApp template name
+const TEMPLATE_NAME = 'campaigns';
 
 const sendTokenUpdateWhatsApp = async ({
   customerName,
   phone,
   tokenNumber,
   status,
-  assignedStaff,
-  centreId 
+  assignedStaff
 }) => {
   try {
-    // Validate phone
-    if (!phone) {
-      console.warn('sendTokenUpdateWhatsApp: Missing phone number');
-      return { success: false, error: 'Missing phone number' };
+    // Validate credentials
+    if (!LIBROMI_ACCESS_TOKEN || !LIBROMI_PHONE_NUMBER) {
+      console.warn(
+        'sendTokenUpdateWhatsApp: Missing Libromi credentials'
+      );
+
+      return {
+        success: false,
+        error: 'Missing Libromi credentials'
+      };
     }
 
-    if (!centreId) {
-      console.warn('sendTokenUpdateWhatsApp: Missing centreId');
-      return { success: false, error: 'Missing centreId' };
+    // Validate phone
+    if (!phone) {
+      console.warn(
+        'sendTokenUpdateWhatsApp: Missing phone number'
+      );
+
+      return {
+        success: false,
+        error: 'Missing phone number'
+      };
     }
 
     // Format phone number
@@ -25,38 +47,75 @@ const sendTokenUpdateWhatsApp = async ({
       ? phone
       : `+91${phone.replace(/^\+91/, '')}`;
 
-    // Ensure these parameters match what Meta expects for this template
-    const templateParams = [
-      customerName || 'Customer',
-      tokenNumber || 'N/A',
-      status || 'Pending',
-      assignedStaff || 'Waiting for Assignment'
-    ];
+    // Send WhatsApp template
+    const response = await axios.post(
+      `${LIBROMI_BASE_URL}/messages`,
+      {
+        to: formattedPhone,
+        type: 'template',
 
-    // 🔥 DISPATCH VIA CENTRAL ENGINE
-    const response = await triggerNotification({
-      eventKey: 'token_generated', 
-      centreId: centreId,
-      customerPhone: formattedPhone,
-      templateParams: templateParams
-    });
+        template: {
+          name: TEMPLATE_NAME,
 
-    if (!response.success) {
-      throw new Error(response.error || response.reason);
-    }
+          language: {
+            code: 'en',
+            policy: 'deterministic'
+          },
 
-    console.log(`Token WhatsApp sent successfully to ${formattedPhone}`);
+          components: [
+            {
+              type: 'body',
+
+              parameters: [
+                {
+                  type: 'text',
+                  text: customerName || 'Customer'
+                },
+                {
+                  type: 'text',
+                  text: tokenNumber || 'N/A'
+                },
+                {
+                  type: 'text',
+                  text: status || 'Pending'
+                },
+                {
+                  type: 'text',
+                  text:
+                    assignedStaff ||
+                    'Waiting for Assignment'
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${LIBROMI_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log(
+      `Token WhatsApp sent successfully to ${formattedPhone}`,
+      response.data
+    );
 
     return {
       success: true,
       data: response.data
     };
   } catch (err) {
-    console.error('sendTokenUpdateWhatsApp error:', err.message);
+    console.error(
+      'sendTokenUpdateWhatsApp error:',
+      err.response?.data || err.message
+    );
 
     return {
       success: false,
-      error: err.message
+      error: err.response?.data || err.message
     };
   }
 };
