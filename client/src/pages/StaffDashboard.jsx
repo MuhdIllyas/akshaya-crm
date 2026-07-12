@@ -136,10 +136,10 @@ const StaffDashboard = () => {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
-      // Use native fetch to bypass the Axios /servicemanagement base URL
+      // Explicitly pass the staffId to force the backend to return ONLY this user's data
       const [statsRes, entriesRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/stats`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking`, { headers })
+        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/stats?staff=${staffId}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/entries?staff=${staffId}&limit=100`, { headers })
       ]);
 
       if (!statsRes.ok) throw new Error('Failed to fetch tracking stats');
@@ -150,13 +150,13 @@ const StaffDashboard = () => {
 
       setTrackingStats(statsData || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
       
-      // Ensure we extract the array properly based on the response format
-      const entries = Array.isArray(entriesData) ? entriesData : (entriesData?.data || []);
+      // The /entries endpoint wraps the array inside a 'data' property
+      const entries = entriesData.data || [];
       setTrackingEntries(entries);
     } catch (err) {
       console.error('Error fetching tracking data:', err);
     }
-  }, []);
+  }, [staffId]); // Added staffId to dependencies
 
   // Update clock every minute
   useEffect(() => {
