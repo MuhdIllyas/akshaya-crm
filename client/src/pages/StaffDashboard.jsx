@@ -761,7 +761,7 @@ const StaffDashboard = () => {
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            ✨ Gave the Recent Activity feed a massive glow-up! 💅 Now you can track services instantly with the new 'Details' button! 🔍🕒
+            💅 You can now track all your assigned Applications seamlessly 🎯, and instantly update Notes on the fly! 📝🚀
           </div>
         </div>
       </div>
