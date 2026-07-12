@@ -133,14 +133,25 @@ const StaffDashboard = () => {
 
   const fetchTrackingData = useCallback(async () => {
     try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Use native fetch to bypass the Axios /servicemanagement base URL
       const [statsRes, entriesRes] = await Promise.all([
-        api.get('/servicetracking/stats'),
-        api.get('/servicetracking') 
+        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/stats`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking`, { headers })
       ]);
-      setTrackingStats(statsRes.data || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
+
+      if (!statsRes.ok) throw new Error('Failed to fetch tracking stats');
+      if (!entriesRes.ok) throw new Error('Failed to fetch tracking entries');
+
+      const statsData = await statsRes.json();
+      const entriesData = await entriesRes.json();
+
+      setTrackingStats(statsData || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
       
       // Ensure we extract the array properly based on the response format
-      const entries = Array.isArray(entriesRes.data) ? entriesRes.data : (entriesRes.data?.data || []);
+      const entries = Array.isArray(entriesData) ? entriesData : (entriesData?.data || []);
       setTrackingEntries(entries);
     } catch (err) {
       console.error('Error fetching tracking data:', err);
