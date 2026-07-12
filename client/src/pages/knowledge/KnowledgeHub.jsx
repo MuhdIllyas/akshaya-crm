@@ -18,10 +18,272 @@ import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 
 // =====================================================================
-// MOCK DATA (same as before)
+// FULL MOCK DATA
 // =====================================================================
-const DATA = { /* ... (same as previous) ... */ };
-const STAFF_SUGGESTIONS = [ /* ... */ ];
+const DATA = {
+  stats: {
+    discussions: 145,
+    articles: 48,
+    announcements: 18,
+    trainings: 27,
+    openQuestions: 13,
+    unreadMentions: 3,
+  },
+  governmentUpdates: [
+    { id: 1, title: 'New Passport Verification SOP – Effective 1st April', date: '2 hours ago', type: 'circular', priority: 'high' },
+    { id: 2, title: 'Aadhaar Enrolment Guidelines Updated', date: 'Yesterday', type: 'order', priority: 'medium' },
+    { id: 3, title: 'Ration Card Portability Scheme Announced', date: '3 days ago', type: 'circular', priority: 'high' },
+  ],
+  trending: [
+    { name: 'Passport Delay', count: 23 },
+    { name: 'Income Certificate', count: 18 },
+    { name: 'Ration Card', count: 14 },
+    { name: 'Aadhaar', count: 12 },
+    { name: 'Police Verification', count: 9 },
+  ],
+  announcements: [
+    { pinned: true, title: 'Office Closed on 26th Jan', time: '2 hours ago', category: 'centre' },
+    { pinned: true, title: 'New Circular: Passport SOP Updated', time: '5 hours ago', category: 'government' },
+    { pinned: false, title: 'CRM Software Update v2.4.1', time: '1 day ago', category: 'software' },
+    { pinned: false, title: 'Training Session on eDistrict', time: '3 days ago', category: 'training' },
+  ],
+  discussions: [
+    {
+      id: 1,
+      type: 'question',
+      title: 'Passport Police Verification Delay',
+      preview: 'Customer reported that police verification is taking more than 15 days...',
+      tags: ['Passport', 'Urgent', 'Police'],
+      replies: 12,
+      views: 142,
+      lastReply: '2 hours ago',
+      author: 'Admin',
+      solved: true,
+      service: 'Passport',
+      customer: 'Muhammed',
+      applicationNumber: 'A10293',
+      trackingStatus: 'Police Verification – Pending',
+    },
+    {
+      id: 2,
+      type: 'question',
+      title: 'Income Certificate Rejected – Missing Signature',
+      preview: 'The eDistrict portal rejected the application citing missing officer signature...',
+      tags: ['eDistrict', 'Income Certificate'],
+      replies: 8,
+      views: 89,
+      lastReply: 'Yesterday',
+      author: 'Rahul K',
+      solved: false,
+      service: 'eDistrict',
+      customer: 'Sreelakshmi',
+      applicationNumber: 'E202456',
+      trackingStatus: 'Rejected – Resubmission needed',
+    },
+    {
+      id: 3,
+      type: 'bug',
+      title: 'CRM: Service Entry Form Not Submitting',
+      preview: 'When trying to save a new service entry, the form hangs and shows a 500 error...',
+      tags: ['CRM', 'Bug', 'Developer'],
+      replies: 3,
+      views: 34,
+      lastReply: '3 hours ago',
+      author: 'Dev Team',
+      solved: false,
+      service: 'CRM',
+      customer: null,
+      applicationNumber: null,
+      trackingStatus: null,
+    },
+    {
+      id: 4,
+      type: 'idea',
+      title: 'Suggestion: Bulk Upload for Service Entries',
+      preview: 'It would save a lot of time if we could import services via CSV or Excel...',
+      tags: ['Feature Request', 'Productivity'],
+      replies: 5,
+      views: 56,
+      lastReply: '1 day ago',
+      author: 'Sneha M',
+      solved: false,
+      service: 'CRM',
+      customer: null,
+      applicationNumber: null,
+      trackingStatus: null,
+    },
+    {
+      id: 5,
+      type: 'announcement',
+      title: 'New Government Order on Ration Card Portability',
+      preview: 'The Ministry has issued a new order allowing inter-state portability of ration cards...',
+      tags: ['Ration Card', 'Government Order'],
+      replies: 2,
+      views: 203,
+      lastReply: '4 days ago',
+      author: 'Govt Desk',
+      solved: false,
+      service: 'Ration Card',
+      customer: null,
+      applicationNumber: null,
+      trackingStatus: null,
+    },
+  ],
+  popular: [
+    { id: 6, title: 'How to Apply for Aadhaar Correction Online', replies: 34, views: 512, tags: ['Aadhaar', 'Guide'] },
+    { id: 7, title: 'Passport Tatkal vs Normal – Which is Faster?', replies: 28, views: 401, tags: ['Passport', 'FAQ'] },
+    { id: 8, title: 'Income Tax Return Filing for FY 2025-26', replies: 19, views: 298, tags: ['Finance', 'ITR'] },
+  ],
+  myMentions: [
+    { title: 'Passport Police Verification Delay', time: '2 mins ago', excerpt: '@you please check the status...' },
+    { title: 'Income Certificate Rejected', time: 'Yesterday', excerpt: '@you can you resubmit with the corrected signature?' },
+  ],
+  drafts: [
+    { title: 'Draft: Aadhaar Update Process', updated: '2 days ago' },
+    { title: 'Draft: New Service Onboarding', updated: '5 days ago' },
+  ],
+  articles: [
+    {
+      id: 1,
+      title: 'Passport Application SOP – Complete Guide',
+      desc: 'Step-by-step standard operating procedure for passport applications...',
+      category: 'Passport',
+      updated: '2 days ago',
+      readingTime: '8 min',
+      author: 'Admin',
+    },
+    {
+      id: 2,
+      title: 'Income Certificate – How to Apply on eDistrict',
+      desc: 'Detailed guide with screenshots for applying income certificate online...',
+      category: 'eDistrict',
+      updated: '1 week ago',
+      readingTime: '6 min',
+      author: 'Rahul K',
+    },
+    {
+      id: 3,
+      title: 'Ration Card Portability – New Rules Explained',
+      desc: 'Everything you need to know about the new inter-state portability scheme...',
+      category: 'Ration Card',
+      updated: '3 days ago',
+      readingTime: '5 min',
+      author: 'Govt Desk',
+    },
+    {
+      id: 4,
+      title: 'Kerala PSC – One Time Registration Process',
+      desc: 'How to register on the Kerala PSC portal for various exams...',
+      category: 'Kerala PSC',
+      updated: '2 weeks ago',
+      readingTime: '4 min',
+      author: 'Training Team',
+    },
+  ],
+  allTags: [
+    { name: 'Passport', count: 23 },
+    { name: 'Aadhaar', count: 18 },
+    { name: 'Finance', count: 44 },
+    { name: 'Training', count: 17 },
+    { name: 'eDistrict', count: 12 },
+    { name: 'Ration Card', count: 14 },
+    { name: 'Government Order', count: 9 },
+    { name: 'CRM', count: 21 },
+    { name: 'Bug', count: 8 },
+    { name: 'Feature Request', count: 15 },
+  ],
+  training: [
+    { id: 1, title: 'Passport Services – Complete Training', type: 'Video', duration: '45 min', modules: 6, updated: '1 week ago', service: 'Passport' },
+    { id: 2, title: 'Aadhaar Update & Correction', type: 'PDF + Quiz', duration: '30 min', modules: 4, updated: '2 weeks ago', service: 'Aadhaar' },
+    { id: 3, title: 'eDistrict Portal Masterclass', type: 'Video + PDF', duration: '60 min', modules: 8, updated: '3 days ago', service: 'eDistrict' },
+  ],
+  discussionDetail: {
+    id: 1,
+    title: 'Passport Police Verification Delay',
+    solved: true,
+    type: 'question',
+    tags: ['Passport', 'Urgent', 'Police'],
+    service: 'Passport',
+    customer: 'Muhammed',
+    applicationNumber: 'A10293',
+    trackingStatus: 'Police Verification – Pending',
+    relatedServiceEntries: [
+      { id: 101, date: '2026-01-10', status: 'completed' },
+      { id: 102, date: '2026-01-15', status: 'pending' },
+    ],
+    author: 'Admin',
+    created: 'Yesterday',
+    views: 142,
+    replies: 18,
+    followers: 25,
+    status: 'Solved',
+    priority: 'High',
+    category: 'Question',
+    description: `We have a customer who applied for a passport renewal on 10th Jan. The police verification was scheduled on 15th Jan, but the verification officer has not visited yet. The customer has been calling the police station daily but no response.
+
+We need guidance on how to escalate this issue. The customer's travel date is approaching (5th Feb) and they are very anxious.
+
+Steps we've tried:
+1. Called the police station – no response
+2. Visited the station – officer not available
+3. Raised a complaint on the passport portal – no update yet
+
+Please suggest any other escalation channels or contacts.`,
+    attachments: ['PDF_Verification.pdf', 'Screenshot_Status.png'],
+    repliesList: [
+      {
+        id: 1,
+        author: 'Sneha M',
+        time: '1 hour ago',
+        best: true,
+        content: 'I faced a similar issue last month. What worked for me was contacting the DCP office directly. They have a dedicated passport cell. Here\'s the number: 0484-2567890. Also, you can file a grievance on the CPGRAMS portal – they respond within 48 hours.'
+      },
+      {
+        id: 2,
+        author: 'Rahul K',
+        time: '2 hours ago',
+        best: false,
+        content: 'Additionally, you can ask the customer to check the status on the Passport Seva app. Sometimes the verification officer\'s contact details are available there. Also, try sending a formal email to the SP office with all the details.'
+      },
+      {
+        id: 3,
+        author: 'Admin',
+        time: '3 hours ago',
+        best: false,
+        content: 'Thanks for the suggestions. I\'ll try the DCP office first thing tomorrow. Will update here once we get a resolution.'
+      },
+    ],
+    similar: [
+      { title: 'Police Verification Not Updating on Portal', replies: 7 },
+      { title: 'Passport Application Stuck – No Verification', replies: 12 },
+      { title: 'How to Expedite Police Verification?', replies: 5 },
+    ]
+  },
+  categories: [
+    { id: 'questions', label: 'Questions', icon: FiMessageSquare, color: '#6366f1' },
+    { id: 'ideas', label: 'Ideas', icon: FiZap, color: '#f59e0b' },
+    { id: 'announcements', label: 'Announcements', icon: FiBell, color: '#ef4444' },
+    { id: 'training', label: 'Training', icon: FiAward, color: '#10b981' },
+    { id: 'problems', label: 'Problems', icon: FiAlertCircle, color: '#eab308' },
+    { id: 'bugs', label: 'Bugs', icon: FiAlertCircle, color: '#f97316' },
+    { id: 'government_orders', label: 'Government Orders', icon: FiFileText, color: '#8b5cf6' },
+    { id: 'guides', label: 'Guides', icon: FiBook, color: '#06b6d4' },
+  ],
+  activityFeed: [
+    { id: 1, type: 'solved', user: 'Admin', target: 'Passport Police Verification Delay', time: '10 mins ago' },
+    { id: 2, type: 'article', user: 'Shafi', target: 'Aadhaar Correction SOP', time: '1 hour ago' },
+    { id: 3, type: 'circular', user: 'Govt Desk', target: 'Ration Card Portability Order', time: '3 hours ago' },
+    { id: 4, type: 'update', user: 'Training Team', target: 'eDistrict Masterclass', time: 'Yesterday' },
+  ],
+};
+
+const STAFF_SUGGESTIONS = [
+  { id: 1, display: 'Admin' },
+  { id: 2, display: 'Sneha M' },
+  { id: 3, display: 'Rahul K' },
+  { id: 4, display: 'Dev Team' },
+  { id: 5, display: 'Govt Desk' },
+];
 
 // =====================================================================
 // HELPER COMPONENTS (Tailwind only)
