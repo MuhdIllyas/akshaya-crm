@@ -116,6 +116,11 @@ const StaffDashboard = () => {
     return date.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
+  // Application Tracking State
+  const [trackingStats, setTrackingStats] = useState({ total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
+  const [trackingEntries, setTrackingEntries] = useState([]);
+  const [statView, setStatView] = useState('tokens'); 
+
   // --- Welcome banner state ---
   const [currentTime, setCurrentTime] = useState(new Date());
   const staffName = localStorage.getItem('username') || 'Staff';
@@ -125,6 +130,22 @@ const StaffDashboard = () => {
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'ST';
+
+  const fetchTrackingData = useCallback(async () => {
+    try {
+      const [statsRes, entriesRes] = await Promise.all([
+        api.get('/servicetracking/stats'),
+        api.get('/servicetracking') 
+      ]);
+      setTrackingStats(statsRes.data || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
+      
+      // Ensure we extract the array properly based on the response format
+      const entries = Array.isArray(entriesRes.data) ? entriesRes.data : (entriesRes.data?.data || []);
+      setTrackingEntries(entries);
+    } catch (err) {
+      console.error('Error fetching tracking data:', err);
+    }
+  }, []);
 
   // Update clock every minute
   useEffect(() => {
@@ -298,7 +319,8 @@ const StaffDashboard = () => {
         await Promise.all([
           getCategories().then(res => setCategories(res.data || [])),
           refreshTokens(),
-          fetchWorkspaceInit()
+          fetchWorkspaceInit(),
+          fetchTrackingData()
         ]);
         
       } catch (err) {
@@ -924,13 +946,34 @@ const StaffDashboard = () => {
             )}
           </div>
 
-          {/* Stats Row - Token Metrics */}
+          {/* Stats Toggle Header */}
+          <div className="flex items-center justify-between mb-4 mt-2">
+            <h3 className="text-lg font-bold text-gray-900">Overview Metrics</h3>
+            <div className="bg-gray-100 p-1 rounded-lg inline-flex">
+              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
+              <button onClick={() => setStatView('applications')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Applications</button>
+            </div>
+          </div>
+
+          {/* Stats Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-            <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
-            <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
-            <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
-            <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
-            <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
+            {statView === 'tokens' ? (
+              <>
+                <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
+                <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
+                <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
+                <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
+                <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
+              </>
+            ) : (
+              <>
+                <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-gray-600" />
+                <StatCard title="Pending" value={trackingStats.pending || 0} icon={FiClock} color="bg-amber-500" />
+                <StatCard title="In Progress" value={trackingStats.in_progress || 0} icon={FiPlayCircle} color="bg-blue-500" />
+                <StatCard title="Completed" value={trackingStats.completed || 0} icon={FiCheckCircle} color="bg-green-500" />
+                <StatCard title="Delayed" value={trackingStats.delayed || 0} icon={FiAlertCircle} color="bg-rose-500" />
+              </>
+            )}
           </div>
 
           {/* Two‑Column Layout */}
@@ -957,6 +1000,11 @@ const StaffDashboard = () => {
                     <FiPlayCircle className="h-4 w-4" />
                     My Online Work
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
+                  </button>
+                  <button onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-purple-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                    <FiTarget className="h-4 w-4" />
+                    Applications
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{trackingStats.total || 0}</span>
                   </button>
                 </div>
 
@@ -1114,6 +1162,58 @@ const StaffDashboard = () => {
                             </div>
                             <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
                               <FiPlayCircle className="h-4 w-4" /> Start
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                
+                  {/* TAB 4: APPLICATIONS TRACKING */}
+                  {workspaceTab === 'applications' && (
+                    <div className="space-y-3">
+                      {trackingEntries.length === 0 ? (
+                        <div className="text-center py-16 text-gray-400">
+                          <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
+                          <p className="font-medium">No active applications being tracked</p>
+                        </div>
+                      ) : (
+                        trackingEntries.map(app => (
+                          <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group">
+                            <div className="flex items-center gap-4 min-w-0">
+                              <div className="w-10 h-10 bg-purple-50 text-purple-700 border border-purple-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">
+                                {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <h4 className="font-bold text-gray-900 text-sm truncate">{app.customer_name}</h4>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                    app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                                    app.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                    app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                    app.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
+                                    app.status === 'resubmit' ? 'bg-orange-100 text-orange-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {app.status?.replace('_', ' ')}
+                                  </span>
+                                  <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">
+                                    {app.progress}%
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-500 truncate">
+                                  {app.service_name} • <span className="font-medium">{app.current_step || 'Submitted'}</span>
+                                </p>
+                                <p className="text-[10px] text-gray-400 mt-1 font-mono">
+                                  Last updated: {new Date(app.updated_at).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
+                              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
+                            >
+                              <FiBarChart2 className="h-4 w-4" /> Track
                             </button>
                           </div>
                         ))
