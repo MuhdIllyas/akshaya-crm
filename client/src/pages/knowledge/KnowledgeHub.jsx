@@ -8,15 +8,18 @@ import {
   FiChevronDown, FiCornerDownLeft, FiEdit2, FiTrash2, FiSave,
   FiExternalLink, FiLock, FiMapPin, FiGlobe, FiHeart, FiZap,
   FiThumbsUp, FiThumbsDown, FiLoader, FiInfo,
-  FiMenu, FiSettings, FiFile, FiLayers, FiFolder
+  FiMenu, FiSettings, FiFile, FiLayers, FiFolder,
+  FiMoreHorizontal, FiShare2, FiUserPlus, FiRefreshCw,
+  FiArchive, FiClipboard, FiVideo, FiFileText, FiLifeBuoy,
+  FiUsers, FiBriefcase, FiTarget, FiCheckSquare, FiMessageCircle as FiMessageCircleOutline,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 
-// ---------------------------------------------------------------------
-// MOCK DATA – Replace with API calls
-// ---------------------------------------------------------------------
+// =====================================================================
+// MOCK DATA – Extended with CRM context & activity
+// =====================================================================
 const DATA = {
   stats: {
     discussions: 145,
@@ -24,7 +27,13 @@ const DATA = {
     announcements: 18,
     trainings: 27,
     openQuestions: 13,
+    unreadMentions: 3,
   },
+  governmentUpdates: [
+    { id: 1, title: 'New Passport Verification SOP – Effective 1st April', date: '2 hours ago', type: 'circular', priority: 'high' },
+    { id: 2, title: 'Aadhaar Enrolment Guidelines Updated', date: 'Yesterday', type: 'order', priority: 'medium' },
+    { id: 3, title: 'Ration Card Portability Scheme Announced', date: '3 days ago', type: 'circular', priority: 'high' },
+  ],
   trending: [
     { name: 'Passport Delay', count: 23 },
     { name: 'Income Certificate', count: 18 },
@@ -33,10 +42,10 @@ const DATA = {
     { name: 'Police Verification', count: 9 },
   ],
   announcements: [
-    { pinned: true, title: 'Office Closed on 26th Jan', time: '2 hours ago' },
-    { pinned: true, title: 'New Circular: Passport SOP Updated', time: '5 hours ago' },
-    { pinned: false, title: 'CRM Software Update v2.4.1', time: '1 day ago' },
-    { pinned: false, title: 'Training Session on eDistrict', time: '3 days ago' },
+    { pinned: true, title: 'Office Closed on 26th Jan', time: '2 hours ago', category: 'centre' },
+    { pinned: true, title: 'New Circular: Passport SOP Updated', time: '5 hours ago', category: 'government' },
+    { pinned: false, title: 'CRM Software Update v2.4.1', time: '1 day ago', category: 'software' },
+    { pinned: false, title: 'Training Session on eDistrict', time: '3 days ago', category: 'training' },
   ],
   discussions: [
     {
@@ -51,6 +60,9 @@ const DATA = {
       author: 'Admin',
       solved: true,
       service: 'Passport',
+      customer: 'Muhammed',
+      applicationNumber: 'A10293',
+      trackingStatus: 'Police Verification – Pending',
     },
     {
       id: 2,
@@ -64,6 +76,9 @@ const DATA = {
       author: 'Rahul K',
       solved: false,
       service: 'eDistrict',
+      customer: 'Sreelakshmi',
+      applicationNumber: 'E202456',
+      trackingStatus: 'Rejected – Resubmission needed',
     },
     {
       id: 3,
@@ -77,6 +92,9 @@ const DATA = {
       author: 'Dev Team',
       solved: false,
       service: 'CRM',
+      customer: null,
+      applicationNumber: null,
+      trackingStatus: null,
     },
     {
       id: 4,
@@ -90,6 +108,9 @@ const DATA = {
       author: 'Sneha M',
       solved: false,
       service: 'CRM',
+      customer: null,
+      applicationNumber: null,
+      trackingStatus: null,
     },
     {
       id: 5,
@@ -103,6 +124,9 @@ const DATA = {
       author: 'Govt Desk',
       solved: false,
       service: 'Ration Card',
+      customer: null,
+      applicationNumber: null,
+      trackingStatus: null,
     },
   ],
   popular: [
@@ -169,9 +193,9 @@ const DATA = {
     { name: 'Feature Request', count: 15 },
   ],
   training: [
-    { id: 1, title: 'Passport Services – Complete Training', type: 'Video', duration: '45 min', modules: 6, updated: '1 week ago' },
-    { id: 2, title: 'Aadhaar Update & Correction', type: 'PDF + Quiz', duration: '30 min', modules: 4, updated: '2 weeks ago' },
-    { id: 3, title: 'eDistrict Portal Masterclass', type: 'Video + PDF', duration: '60 min', modules: 8, updated: '3 days ago' },
+    { id: 1, title: 'Passport Services – Complete Training', type: 'Video', duration: '45 min', modules: 6, updated: '1 week ago', service: 'Passport' },
+    { id: 2, title: 'Aadhaar Update & Correction', type: 'PDF + Quiz', duration: '30 min', modules: 4, updated: '2 weeks ago', service: 'Aadhaar' },
+    { id: 3, title: 'eDistrict Portal Masterclass', type: 'Video + PDF', duration: '60 min', modules: 8, updated: '3 days ago', service: 'eDistrict' },
   ],
   discussionDetail: {
     id: 1,
@@ -180,6 +204,13 @@ const DATA = {
     type: 'question',
     tags: ['Passport', 'Urgent', 'Police'],
     service: 'Passport',
+    customer: 'Muhammed',
+    applicationNumber: 'A10293',
+    trackingStatus: 'Police Verification – Pending',
+    relatedServiceEntries: [
+      { id: 101, date: '2026-01-10', status: 'completed' },
+      { id: 102, date: '2026-01-15', status: 'pending' },
+    ],
     author: 'Admin',
     created: 'Yesterday',
     views: 142,
@@ -229,18 +260,23 @@ Please suggest any other escalation channels or contacts.`,
     ]
   },
   categories: [
-    { id: 'questions', label: 'Questions', icon: 'fa-circle-question', color: '#6366f1' },
-    { id: 'ideas', label: 'Ideas', icon: 'fa-lightbulb', color: '#f59e0b' },
+    { id: 'questions', label: 'Questions', icon: FiMessageSquare, color: '#6366f1' },
+    { id: 'ideas', label: 'Ideas', icon: FiZap, color: '#f59e0b' },
     { id: 'announcements', label: 'Announcements', icon: FiBell, color: '#ef4444' },
     { id: 'training', label: 'Training', icon: FiAward, color: '#10b981' },
-    { id: 'problems', label: 'Problems', icon: 'fa-triangle-exclamation', color: '#eab308' },
-    { id: 'bugs', label: 'Bugs', icon: 'fa-bug', color: '#f97316' },
-    { id: 'government_orders', label: 'Government Orders', icon: 'fa-file-lines', color: '#8b5cf6' },
-    { id: 'guides', label: 'Guides', icon: 'fa-book', color: '#06b6d4' },
-  ]
+    { id: 'problems', label: 'Problems', icon: FiAlertCircle, color: '#eab308' },
+    { id: 'bugs', label: 'Bugs', icon: FiAlertCircle, color: '#f97316' },
+    { id: 'government_orders', label: 'Government Orders', icon: FiFileText, color: '#8b5cf6' },
+    { id: 'guides', label: 'Guides', icon: FiBook, color: '#06b6d4' },
+  ],
+  activityFeed: [
+    { id: 1, type: 'solved', user: 'Admin', target: 'Passport Police Verification Delay', time: '10 mins ago' },
+    { id: 2, type: 'article', user: 'Shafi', target: 'Aadhaar Correction SOP', time: '1 hour ago' },
+    { id: 3, type: 'circular', user: 'Govt Desk', target: 'Ration Card Portability Order', time: '3 hours ago' },
+    { id: 4, type: 'update', user: 'Training Team', target: 'eDistrict Masterclass', time: 'Yesterday' },
+  ],
 };
 
-// Staff suggestions for @mentions
 const STAFF_SUGGESTIONS = [
   { id: 1, display: 'Admin' },
   { id: 2, display: 'Sneha M' },
@@ -249,21 +285,25 @@ const STAFF_SUGGESTIONS = [
   { id: 5, display: 'Govt Desk' },
 ];
 
-// ---------------------------------------------------------------------
+// =====================================================================
 // HELPER COMPONENTS
-// ---------------------------------------------------------------------
+// =====================================================================
 
-// Sidebar Navigation
+// Sidebar (Redesigned)
 const Sidebar = ({ active, onNavigate }) => {
-  const navItems = [
+  const mainNav = [
     { id: 'home', label: 'Home', icon: FiHome },
     { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: DATA.stats.discussions },
     { id: 'knowledge', label: 'Knowledge Base', icon: FiBook, count: DATA.stats.articles },
+    { id: 'learning', label: 'Learning Center', icon: FiAward, count: DATA.stats.trainings },
     { id: 'announcements', label: 'Announcements', icon: FiBell, count: DATA.stats.announcements },
-    { id: 'training', label: 'Training', icon: FiAward, count: DATA.stats.trainings },
-    { id: 'tags', label: 'Tags', icon: FiTag },
+  ];
+
+  const workspaceItems = [
+    { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: DATA.stats.unreadMentions },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
-    { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: 3 },
+    { id: 'drafts', label: 'Drafts', icon: FiFile, count: DATA.drafts.length },
+    { id: 'following', label: 'Following', icon: FiUserPlus },
     { id: 'history', label: 'History', icon: FiClock },
   ];
 
@@ -272,11 +312,11 @@ const Sidebar = ({ active, onNavigate }) => {
       <div className="sidebar-brand">
         <div className="brand-icon"><FiZap className="h-5 w-5" /></div>
         <h1>Knowledge Hub</h1>
-        <span className="badge">v2.0</span>
+        <span className="badge">v3.0</span>
       </div>
       <div className="sidebar-nav">
         <div className="nav-label">💡 Knowledge Hub</div>
-        {navItems.map(item => (
+        {mainNav.map(item => (
           <a
             key={item.id}
             className={`nav-link ${active === item.id ? 'active' : ''}`}
@@ -287,6 +327,29 @@ const Sidebar = ({ active, onNavigate }) => {
             {item.count && <span className="count">{item.count}</span>}
           </a>
         ))}
+
+        <div className="nav-label" style={{ marginTop: 16 }}>⭐ My Workspace</div>
+        {workspaceItems.map(item => (
+          <a
+            key={item.id}
+            className={`nav-link ${active === item.id ? 'active' : ''}`}
+            onClick={() => onNavigate(item.id)}
+          >
+            <item.icon className="h-4 w-4" />
+            {item.label}
+            {item.count && <span className="count">{item.count}</span>}
+          </a>
+        ))}
+
+        <div className="nav-label" style={{ marginTop: 16 }}>🏷 Tags</div>
+        <a
+          className={`nav-link ${active === 'tags' ? 'active' : ''}`}
+          onClick={() => onNavigate('tags')}
+        >
+          <FiTag className="h-4 w-4" />
+          Tags
+          <span className="count">{DATA.allTags.length}</span>
+        </a>
       </div>
       <div className="sidebar-footer">
         <div className="avatar">A</div>
@@ -302,7 +365,7 @@ const Sidebar = ({ active, onNavigate }) => {
   );
 };
 
-// Top Bar with Global Search
+// Top Bar (unchanged)
 const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar }) => {
   const inputRef = useRef(null);
 
@@ -327,7 +390,7 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar }) => {
         <input
           ref={inputRef}
           type="text"
-          placeholder="Ask Knowledge Hub..."
+          placeholder="Ask Knowledge Hub (e.g., 'How to correct Aadhaar DOB?')"
           value={query}
           onChange={(e) => onSearch(e.target.value)}
         />
@@ -343,6 +406,7 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar }) => {
         </button>
         <button onClick={() => onNavigate('mentions')} title="Mentions">
           <FiAtSign className="h-5 w-5" />
+          {DATA.stats.unreadMentions > 0 && <span className="dot" style={{ right: 4 }}></span>}
         </button>
       </div>
     </div>
@@ -371,19 +435,28 @@ const TrendingTags = ({ tags, onTagClick }) => (
   </div>
 );
 
-// Announcement Item
-const AnnouncementItem = ({ announcement, onClick }) => (
-  <div className="announce-item" onClick={onClick}>
-    {announcement.pinned ? <FiHeart className="pin" /> : <span style={{ width: 18 }}></span>}
-    <div className="content">
-      <div className="title">{announcement.title}</div>
-      <div className="time">{announcement.time}</div>
+// Announcement Item with category badge
+const AnnouncementItem = ({ announcement, onClick }) => {
+  const categoryColors = {
+    government: 'bg-red-100 text-red-700',
+    centre: 'bg-blue-100 text-blue-700',
+    software: 'bg-green-100 text-green-700',
+    training: 'bg-purple-100 text-purple-700',
+  };
+  const color = categoryColors[announcement.category] || 'bg-gray-100 text-gray-700';
+  return (
+    <div className="announce-item" onClick={onClick}>
+      {announcement.pinned ? <FiHeart className="pin" /> : <span style={{ width: 18 }}></span>}
+      <div className="content">
+        <div className="title">{announcement.title}</div>
+        <div className="time">{announcement.time}</div>
+      </div>
+      <span className={`pinned-badge ${color}`}>{announcement.category}</span>
     </div>
-    {announcement.pinned && <span className="pinned-badge">Pinned</span>}
-  </div>
-);
+  );
+};
 
-// Discussion Card (used in lists)
+// Discussion Card with CRM context
 const DiscussionCard = ({ discussion, onClick }) => {
   const typeIcons = {
     question: FiMessageSquare,
@@ -423,6 +496,18 @@ const DiscussionCard = ({ discussion, onClick }) => {
             )}
           </div>
           <div className="preview">{discussion.preview}</div>
+          {/* CRM Context */}
+          <div className="crm-context">
+            {discussion.customer && (
+              <span><FiUser className="h-3 w-3" /> {discussion.customer}</span>
+            )}
+            {discussion.applicationNumber && (
+              <span><FiFile className="h-3 w-3" /> {discussion.applicationNumber}</span>
+            )}
+            {discussion.trackingStatus && (
+              <span><FiTarget className="h-3 w-3" /> {discussion.trackingStatus}</span>
+            )}
+          </div>
         </div>
       </div>
       <div className="bottom">
@@ -452,17 +537,67 @@ const ArticleCard = ({ article, onClick }) => (
   </div>
 );
 
-// ---------------------------------------------------------------------
-// MAIN KNOWLEDGE HUB COMPONENT
-// ---------------------------------------------------------------------
+// Activity Feed
+const ActivityFeed = ({ activities }) => (
+  <div className="activity-feed">
+    <h3><FiRefreshCw className="h-4 w-4" /> Recent Activity</h3>
+    {activities.map(act => (
+      <div key={act.id} className="activity-item">
+        <span className="activity-icon">
+          {act.type === 'solved' && <FiCheckCircle className="text-emerald-500" />}
+          {act.type === 'article' && <FiFileText className="text-blue-500" />}
+          {act.type === 'circular' && <FiFile className="text-purple-500" />}
+          {act.type === 'update' && <FiTrendingUp className="text-amber-500" />}
+        </span>
+        <span className="activity-text">
+          <strong>{act.user}</strong> {act.type === 'solved' ? 'solved' : act.type === 'article' ? 'updated article' : act.type === 'circular' ? 'added circular' : 'updated'} <span className="highlight">{act.target}</span>
+          <span className="activity-time">{act.time}</span>
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
+// Convert Dropdown
+const ConvertDropdown = ({ onConvert }) => {
+  const [open, setOpen] = useState(false);
+  const options = [
+    { label: 'Article', icon: FiBook, action: 'article' },
+    { label: 'Task', icon: FiCheckSquare, action: 'task' },
+    { label: 'Note', icon: FiFileText, action: 'note' },
+    { label: 'Announcement', icon: FiBell, action: 'announcement' },
+    { label: 'Training Material', icon: FiVideo, action: 'training' },
+  ];
+  return (
+    <div className="convert-dropdown">
+      <button onClick={() => setOpen(!open)} className="convert-btn">
+        <FiMoreHorizontal className="h-4 w-4" /> Convert
+      </button>
+      {open && (
+        <div className="dropdown-menu">
+          {options.map(opt => (
+            <div key={opt.action} className="dropdown-item" onClick={() => { onConvert(opt.action); setOpen(false); }}>
+              <opt.icon className="h-4 w-4" /> {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =====================================================================
+// MAIN KNOWLEDGE HUB
+// =====================================================================
 const KnowledgeHub = () => {
   const [page, setPage] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDiscussionId, setSelectedDiscussionId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showAIAnswer, setShowAIAnswer] = useState(false);
 
-  // For create discussion form
+  // Create discussion state
   const [newDiscussion, setNewDiscussion] = useState({
     title: '',
     content: '',
@@ -475,7 +610,6 @@ const KnowledgeHub = () => {
   });
   const [tagInput, setTagInput] = useState('');
 
-  // Navigation
   const navigateTo = (target, id = null) => {
     if (target === 'discussion-detail' && id) {
       setPage('discussion-detail');
@@ -493,6 +627,8 @@ const KnowledgeHub = () => {
     setSearchQuery(query);
     if (query.trim()) {
       setPage('search');
+      // Simulate AI answer for demo
+      setShowAIAnswer(query.toLowerCase().includes('aadhaar') || query.toLowerCase().includes('dob'));
     } else {
       setPage('home');
     }
@@ -505,25 +641,18 @@ const KnowledgeHub = () => {
 
   const openDiscussionDetail = (id) => navigateTo('discussion-detail', id);
 
-  // Create discussion modal handlers
   const addTag = () => {
     if (tagInput.trim() && !newDiscussion.tags.includes(tagInput.trim())) {
-      setNewDiscussion(prev => ({
-        ...prev,
-        tags: [...prev.tags, tagInput.trim()]
-      }));
+      setNewDiscussion(prev => ({ ...prev, tags: [...prev.tags, tagInput.trim()] }));
       setTagInput('');
     }
   };
   const removeTag = (tag) => {
-    setNewDiscussion(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag)
-    }));
+    setNewDiscussion(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
   };
+
   const handleCreateSubmit = (e) => {
     e.preventDefault();
-    // In real app, send to API
     toast.success('Discussion created successfully!');
     setShowCreateModal(false);
     setNewDiscussion({
@@ -537,13 +666,10 @@ const KnowledgeHub = () => {
       attachments: [],
     });
     setTagInput('');
-    // Refresh discussions list (mock)
   };
 
-  // Toggle mobile sidebar
   const toggleMobileSidebar = () => setMobileSidebarOpen(prev => !prev);
 
-  // Render page content based on current page
   const renderPage = () => {
     switch (page) {
       case 'home':
@@ -554,20 +680,26 @@ const KnowledgeHub = () => {
         return <DiscussionDetailPage discussionId={selectedDiscussionId} navigateTo={navigateTo} />;
       case 'knowledge':
         return <KnowledgePage navigateTo={navigateTo} />;
+      case 'learning':
+        return <LearningPage navigateTo={navigateTo} />;
       case 'announcements':
         return <AnnouncementsPage navigateTo={navigateTo} />;
-      case 'training':
-        return <TrainingPage navigateTo={navigateTo} />;
       case 'tags':
         return <TagsPage navigateTo={navigateTo} handleTagClick={handleTagClick} />;
       case 'bookmarks':
         return <BookmarksPage />;
       case 'mentions':
         return <MentionsPage navigateTo={navigateTo} />;
+      case 'drafts':
+        return <DraftsPage navigateTo={navigateTo} />;
+      case 'following':
+        return <FollowingPage />;
+      case 'history':
+        return <HistoryPage />;
       case 'notifications':
         return <NotificationsPage />;
       case 'search':
-        return <SearchPage query={searchQuery} navigateTo={navigateTo} openDiscussion={openDiscussionDetail} />;
+        return <SearchPage query={searchQuery} navigateTo={navigateTo} openDiscussion={openDiscussionDetail} showAIAnswer={showAIAnswer} />;
       default:
         return <HomePage navigateTo={navigateTo} handleTagClick={handleTagClick} openDiscussion={openDiscussionDetail} />;
     }
@@ -575,47 +707,28 @@ const KnowledgeHub = () => {
 
   return (
     <div className="main-wrap">
-      {/* Sidebar - Desktop */}
       <Sidebar active={page} onNavigate={navigateTo} />
-
-      {/* Main Content */}
       <div className="main-content">
-        <TopBar
-          onSearch={handleSearch}
-          query={searchQuery}
-          onNavigate={navigateTo}
-          toggleMobileSidebar={toggleMobileSidebar}
-        />
-
-        <div className="page-content">
-          {renderPage()}
-        </div>
+        <TopBar onSearch={handleSearch} query={searchQuery} onNavigate={navigateTo} toggleMobileSidebar={toggleMobileSidebar} />
+        <div className="page-content">{renderPage()}</div>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
       {mobileSidebarOpen && (
         <div className="mobile-sidebar open" onClick={() => setMobileSidebarOpen(false)}>
           <div className="inner" onClick={e => e.stopPropagation()}>
             <div className="mobile-sidebar-header">
-              <div className="brand">
-                <FiZap className="h-5 w-5" />
-                <span>Knowledge Hub</span>
-              </div>
-              <button onClick={() => setMobileSidebarOpen(false)}>
-                <FiX className="h-5 w-5" />
-              </button>
+              <div className="brand"><FiZap className="h-5 w-5" /><span>Knowledge Hub</span></div>
+              <button onClick={() => setMobileSidebarOpen(false)}><FiX className="h-5 w-5" /></button>
             </div>
             <Sidebar active={page} onNavigate={navigateTo} />
           </div>
         </div>
       )}
 
-      {/* Floating Action Button */}
       <button className="fab" onClick={() => setShowCreateModal(true)}>
         <FiPlus className="h-6 w-6" />
       </button>
 
-      {/* Create Discussion Modal */}
       <AnimatePresence>
         {showCreateModal && (
           <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
@@ -628,20 +741,12 @@ const KnowledgeHub = () => {
             >
               <div className="modal-header">
                 <h2>Create Discussion</h2>
-                <button className="close" onClick={() => setShowCreateModal(false)}>
-                  <FiX className="h-5 w-5" />
-                </button>
+                <button className="close" onClick={() => setShowCreateModal(false)}><FiX className="h-5 w-5" /></button>
               </div>
               <form onSubmit={handleCreateSubmit}>
                 <div className="form-group">
                   <label>Title *</label>
-                  <input
-                    type="text"
-                    value={newDiscussion.title}
-                    onChange={e => setNewDiscussion(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="What's your question or idea?"
-                    required
-                  />
+                  <input type="text" value={newDiscussion.title} onChange={e => setNewDiscussion(prev => ({ ...prev, title: e.target.value }))} placeholder="What's your question or idea?" required />
                 </div>
                 <div className="form-group">
                   <label>Description</label>
@@ -654,102 +759,52 @@ const KnowledgeHub = () => {
                       control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '80px' },
                       highlighter: { padding: '0.65rem' },
                       input: { padding: '0.65rem', border: 'none', outline: 'none' },
-                      suggestions: {
-                        list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100 },
-                        item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' }
-                      }
+                      suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100 }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
                     }}
                   >
-                    <Mention
-                      trigger="@"
-                      data={STAFF_SUGGESTIONS}
-                      markup="@[__display__](__id__)"
-                      displayTransform={(id, display) => `@${display}`}
-                    />
+                    <Mention trigger="@" data={STAFF_SUGGESTIONS} markup="@[__display__](__id__)" displayTransform={(id, display) => `@${display}`} />
                   </MentionsInput>
                 </div>
-
                 <div className="form-row">
                   <div className="form-group">
                     <label>Category</label>
-                    <select
-                      value={newDiscussion.category}
-                      onChange={e => setNewDiscussion(prev => ({ ...prev, category: e.target.value }))}
-                    >
-                      {DATA.categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.label}</option>
-                      ))}
+                    <select value={newDiscussion.category} onChange={e => setNewDiscussion(prev => ({ ...prev, category: e.target.value }))}>
+                      {DATA.categories.map(cat => (<option key={cat.id} value={cat.id}>{cat.label}</option>))}
                     </select>
                   </div>
                   <div className="form-group">
                     <label>Priority</label>
-                    <select
-                      value={newDiscussion.priority}
-                      onChange={e => setNewDiscussion(prev => ({ ...prev, priority: e.target.value }))}
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                      <option value="critical">Critical</option>
+                    <select value={newDiscussion.priority} onChange={e => setNewDiscussion(prev => ({ ...prev, priority: e.target.value }))}>
+                      <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option>
                     </select>
                   </div>
                 </div>
-
                 <div className="form-row">
                   <div className="form-group">
                     <label>Related To</label>
-                    <select
-                      value={newDiscussion.relatedTo}
-                      onChange={e => setNewDiscussion(prev => ({ ...prev, relatedTo: e.target.value }))}
-                    >
-                      <option value="none">None</option>
-                      <option value="customer">Customer</option>
-                      <option value="service">Service</option>
-                      <option value="task">Task</option>
-                      <option value="team">Team</option>
+                    <select value={newDiscussion.relatedTo} onChange={e => setNewDiscussion(prev => ({ ...prev, relatedTo: e.target.value }))}>
+                      <option value="none">None</option><option value="customer">Customer</option><option value="service">Service</option><option value="task">Task</option><option value="team">Team</option>
                     </select>
                   </div>
                   <div className="form-group">
                     <label>Visibility</label>
-                    <select
-                      value={newDiscussion.visibility}
-                      onChange={e => setNewDiscussion(prev => ({ ...prev, visibility: e.target.value }))}
-                    >
-                      <option value="everyone">Everyone</option>
-                      <option value="centre">Centre</option>
-                      <option value="private">Private</option>
-                      <option value="admins">Admins</option>
+                    <select value={newDiscussion.visibility} onChange={e => setNewDiscussion(prev => ({ ...prev, visibility: e.target.value }))}>
+                      <option value="everyone">Everyone</option><option value="centre">Centre</option><option value="private">Private</option><option value="admins">Admins</option>
                     </select>
                   </div>
                 </div>
-
                 <div className="form-group">
                   <label>Tags</label>
                   <div className="tag-input-wrap">
-                    {newDiscussion.tags.map(tag => (
-                      <span key={tag} className="tag-pill">
-                        {tag} <FiX className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} />
-                      </span>
-                    ))}
-                    <input
-                      type="text"
-                      value={tagInput}
-                      onChange={e => setTagInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-                      placeholder="Add a tag..."
-                    />
+                    {newDiscussion.tags.map(tag => (<span key={tag} className="tag-pill">{tag} <FiX className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} /></span>))}
+                    <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} placeholder="Add a tag..." />
                     <button type="button" onClick={addTag} className="add-tag-btn">Add</button>
                   </div>
                 </div>
-
                 <div className="form-group">
                   <label>Attach Files</label>
-                  <div className="file-drop-zone">
-                    <FiPaperclip className="h-6 w-6" />
-                    <p>Click or drag files to upload</p>
-                  </div>
+                  <div className="file-drop-zone"><FiPaperclip className="h-6 w-6" /><p>Click or drag files to upload</p></div>
                 </div>
-
                 <div className="form-actions">
                   <button type="button" className="btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
                   <button type="submit" className="btn-primary">Publish</button>
@@ -763,71 +818,75 @@ const KnowledgeHub = () => {
   );
 };
 
-// ---------------------------------------------------------------------
+// =====================================================================
 // PAGE COMPONENTS
-// ---------------------------------------------------------------------
+// =====================================================================
 
-// Home Page
+// Home Page – Redesigned with Government Updates first, plus activity feed
 const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   <div>
     <div className="welcome-section">
       <h2>Welcome back, Admin 👋</h2>
-      <p>Here's what's happening in your Knowledge Hub.</p>
+      <p>Your knowledge hub – stay updated and connected.</p>
     </div>
 
+    {/* Stats */}
     <div className="stat-grid">
       <StatCard label="Discussions" value={DATA.stats.discussions} icon={FiMessageCircle} color="blue" />
       <StatCard label="Knowledge Articles" value={DATA.stats.articles} icon={FiBook} color="green" />
       <StatCard label="Announcements" value={DATA.stats.announcements} icon={FiBell} color="amber" />
       <StatCard label="Training Materials" value={DATA.stats.trainings} icon={FiAward} color="purple" />
       <StatCard label="Open Questions" value={DATA.stats.openQuestions} icon={FiAlertCircle} color="rose" />
+      <StatCard label="Unread Mentions" value={DATA.stats.unreadMentions} icon={FiAtSign} color="indigo" />
     </div>
 
-    <div className="trending-section">
-      <h3>🔥 Trending Topics</h3>
-      <TrendingTags tags={DATA.trending} onTagClick={handleTagClick} />
+    {/* Government Updates – Always First */}
+    <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #ef4444' }}>
+      <div className="card-header">
+        <h3><FiFileText className="h-4 w-4" style={{ color: '#ef4444' }} /> Government Updates</h3>
+        <span className="see-all" onClick={() => navigateTo('announcements')}>View all →</span>
+      </div>
+      {DATA.governmentUpdates.map(update => (
+        <div key={update.id} className="gov-update-item">
+          <span className={`priority-badge ${update.priority}`}>{update.priority}</span>
+          <span className="update-title">{update.title}</span>
+          <span className="update-date">{update.date}</span>
+        </div>
+      ))}
     </div>
 
     <div className="two-column-grid">
       <div>
+        {/* Unread Discussions (mocked as recent) */}
         <div className="card">
           <div className="card-header">
-            <h3><FiMessageCircle className="h-4 w-4" /> Recent Discussions</h3>
+            <h3><FiMessageCircle className="h-4 w-4" /> Unread Discussions</h3>
             <span className="see-all" onClick={() => navigateTo('discussions')}>View all →</span>
           </div>
-          {DATA.discussions.slice(0, 4).map(d => (
+          {DATA.discussions.slice(0, 3).map(d => (
             <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />
           ))}
         </div>
+        {/* Recent Discussions */}
         <div className="card">
           <div className="card-header">
-            <h3><FiStar className="h-4 w-4" /> Popular Discussions</h3>
+            <h3><FiClock className="h-4 w-4" /> Recent Discussions</h3>
+            <span className="see-all" onClick={() => navigateTo('discussions')}>View all →</span>
           </div>
-          {DATA.popular.map(p => (
-            <div key={p.id} className="discuss-card" onClick={() => navigateTo('discussions')}>
-              <div className="top">
-                <div className="icon" style={{ background: '#fef3c7', color: '#d97706' }}><FiHeart className="h-4 w-4" /></div>
-                <div className="info">
-                  <div className="title">{p.title}</div>
-                  <div className="bottom" style={{ marginTop: 2 }}>
-                    <span className="meta"><FiMessageSquare className="h-3 w-3" /> {p.replies} replies</span>
-                    <span className="meta"><FiEye className="h-3 w-3" /> {p.views} views</span>
-                    {p.tags.map(t => <span key={t} className="t">{t}</span>)}
-                  </div>
-                </div>
-              </div>
-            </div>
+          {DATA.discussions.slice(3, 6).map(d => (
+            <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />
           ))}
         </div>
       </div>
       <div>
+        {/* My Mentions */}
         <div className="card">
           <div className="card-header">
             <h3><FiAtSign className="h-4 w-4" /> My Mentions</h3>
             <span className="see-all" onClick={() => navigateTo('mentions')}>View all →</span>
           </div>
           {DATA.myMentions.map((m, idx) => (
-            <div key={idx} className="discuss-card" onClick={() => navigateTo('discussions')}>
+            <div key={idx} className="discuss-card" onClick={() => navigateTo('mentions')}>
               <div className="top">
                 <div className="icon" style={{ background: '#ede9fe', color: '#7c3aed' }}><FiAtSign className="h-4 w-4" /></div>
                 <div className="info">
@@ -839,10 +898,11 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
             </div>
           ))}
         </div>
+        {/* My Drafts */}
         <div className="card">
           <div className="card-header">
-            <h3><FiEdit2 className="h-4 w-4" /> Draft Discussions</h3>
-            <span className="see-all" onClick={() => navigateTo('discussions')}>View all →</span>
+            <h3><FiEdit2 className="h-4 w-4" /> My Drafts</h3>
+            <span className="see-all" onClick={() => navigateTo('drafts')}>View all →</span>
           </div>
           {DATA.drafts.map((d, idx) => (
             <div key={idx} className="discuss-card" style={{ opacity: 0.7 }}>
@@ -856,9 +916,12 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
             </div>
           ))}
         </div>
+        {/* Activity Feed */}
+        <ActivityFeed activities={DATA.activityFeed} />
       </div>
     </div>
 
+    {/* Announcements */}
     <div className="card">
       <div className="card-header">
         <h3><FiBell className="h-4 w-4" /> Latest Announcements</h3>
@@ -871,7 +934,7 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   </div>
 );
 
-// Discussions List Page
+// Discussions List – same as before, with filter
 const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -879,20 +942,11 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
 
   const filtered = useMemo(() => {
     let list = DATA.discussions;
-    if (filterCategory !== 'all') {
-      list = list.filter(d => d.type === filterCategory);
-    }
-    if (filterStatus !== 'all') {
-      list = list.filter(d => filterStatus === 'solved' ? d.solved : !d.solved);
-    }
-    // Sort
-    if (sortBy === 'latest') {
-      list = list.slice().sort((a, b) => new Date(b.lastReply) - new Date(a.lastReply));
-    } else if (sortBy === 'replies') {
-      list = list.slice().sort((a, b) => b.replies - a.replies);
-    } else if (sortBy === 'views') {
-      list = list.slice().sort((a, b) => b.views - a.views);
-    }
+    if (filterCategory !== 'all') list = list.filter(d => d.type === filterCategory);
+    if (filterStatus !== 'all') list = list.filter(d => filterStatus === 'solved' ? d.solved : !d.solved);
+    if (sortBy === 'latest') list = list.slice().sort((a, b) => new Date(b.lastReply) - new Date(a.lastReply));
+    else if (sortBy === 'replies') list = list.slice().sort((a, b) => b.replies - a.replies);
+    else if (sortBy === 'views') list = list.slice().sort((a, b) => b.views - a.views);
     return list;
   }, [filterCategory, filterStatus, sortBy]);
 
@@ -903,40 +957,27 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
         <div className="filters">
           <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
             <option value="all">All Categories</option>
-            {DATA.categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.label}</option>
-            ))}
+            {DATA.categories.map(cat => (<option key={cat.id} value={cat.id}>{cat.label}</option>))}
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-            <option value="all">All Status</option>
-            <option value="open">Open</option>
-            <option value="solved">Solved</option>
+            <option value="all">All Status</option><option value="open">Open</option><option value="solved">Solved</option>
           </select>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
-            <option value="latest">Latest</option>
-            <option value="replies">Most Replies</option>
-            <option value="views">Most Views</option>
+            <option value="latest">Latest</option><option value="replies">Most Replies</option><option value="views">Most Views</option>
           </select>
         </div>
       </div>
       <div className="discussion-list">
-        {filtered.map(d => (
-          <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />
-        ))}
-        {filtered.length === 0 && (
-          <div className="empty-state">
-            <FiMessageCircle className="h-12 w-12" />
-            <p>No discussions found</p>
-          </div>
-        )}
+        {filtered.map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
+        {filtered.length === 0 && <div className="empty-state"><FiMessageCircle className="h-12 w-12" /><p>No discussions found</p></div>}
       </div>
     </div>
   );
 };
 
-// Discussion Detail Page
+// Discussion Detail – Enhanced with CRM context and Convert dropdown
 const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
-  const discussion = DATA.discussionDetail; // In real app, fetch by ID
+  const discussion = DATA.discussionDetail;
   if (!discussion) return <div>Discussion not found</div>;
 
   const typeIcons = {
@@ -950,17 +991,17 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   };
   const Icon = typeIcons[discussion.type] || FiMessageSquare;
 
+  const handleConvert = (action) => {
+    toast.success(`Converting to ${action}... (demo)`);
+  };
+
   return (
     <div className="detail-layout">
       <div className="detail-main">
         <div className="detail-header">
           <div className="detail-meta">
-            <span className="type-badge">
-              <Icon className="h-3 w-3" /> {discussion.type.charAt(0).toUpperCase() + discussion.type.slice(1)}
-            </span>
-            <span className={`status-badge ${discussion.solved ? 'solved' : 'open'}`}>
-              {discussion.solved ? 'Solved' : 'Open'}
-            </span>
+            <span className="type-badge"><Icon className="h-3 w-3" /> {discussion.type.charAt(0).toUpperCase() + discussion.type.slice(1)}</span>
+            <span className={`status-badge ${discussion.solved ? 'solved' : 'open'}`}>{discussion.solved ? 'Solved' : 'Open'}</span>
             <span className="service-tag">{discussion.service}</span>
           </div>
           <h2>{discussion.title}</h2>
@@ -972,18 +1013,24 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
           </div>
         </div>
 
+        {/* CRM Context Bar */}
+        <div className="crm-context-bar">
+          {discussion.customer && <span><FiUser className="h-4 w-4" /> Customer: <strong>{discussion.customer}</strong></span>}
+          {discussion.applicationNumber && <span><FiFile className="h-4 w-4" /> Application: <strong>{discussion.applicationNumber}</strong></span>}
+          {discussion.trackingStatus && <span><FiTarget className="h-4 w-4" /> Status: <strong>{discussion.trackingStatus}</strong></span>}
+          {discussion.relatedServiceEntries && (
+            <span><FiBriefcase className="h-4 w-4" /> Service Entries: <strong>{discussion.relatedServiceEntries.length}</strong></span>
+          )}
+        </div>
+
         <div className="detail-body card">
           <div className="description">{discussion.description}</div>
           {discussion.attachments && (
             <div className="attachments">
-              {discussion.attachments.map((file, idx) => (
-                <span key={idx}><FiPaperclip className="h-3 w-3" /> {file}</span>
-              ))}
+              {discussion.attachments.map((file, idx) => (<span key={idx}><FiPaperclip className="h-3 w-3" /> {file}</span>))}
             </div>
           )}
-          <div className="tags">
-            {discussion.tags.map(t => <span key={t} className="t">#{t}</span>)}
-          </div>
+          <div className="tags">{discussion.tags.map(t => <span key={t} className="t">#{t}</span>)}</div>
         </div>
 
         <div className="replies-section">
@@ -1009,18 +1056,10 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
               control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '80px' },
               highlighter: { padding: '0.65rem' },
               input: { padding: '0.65rem', border: 'none', outline: 'none' },
-              suggestions: {
-                list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100 },
-                item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' }
-              }
+              suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100 }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
             }}
           >
-            <Mention
-              trigger="@"
-              data={STAFF_SUGGESTIONS}
-              markup="@[__display__](__id__)"
-              displayTransform={(id, display) => `@${display}`}
-            />
+            <Mention trigger="@" data={STAFF_SUGGESTIONS} markup="@[__display__](__id__)" displayTransform={(id, display) => `@${display}`} />
           </MentionsInput>
           <div className="reply-actions">
             <button className="btn-secondary">Cancel</button>
@@ -1042,10 +1081,15 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
           <div className="row"><span className="key">Followers</span><span className="value">{discussion.followers}</span></div>
         </div>
         <div className="block">
+          <div className="label">Actions</div>
+          <button className="action-btn" onClick={() => toast.info('Bookmarked')}><FiBookmark className="h-4 w-4" /> Bookmark</button>
+          <button className="action-btn" onClick={() => toast.info('Watching')}><FiEye className="h-4 w-4" /> Watch</button>
+          <button className="action-btn" onClick={() => toast.info('Shared')}><FiShare2 className="h-4 w-4" /> Share</button>
+          <ConvertDropdown onConvert={handleConvert} />
+        </div>
+        <div className="block">
           <div className="label">Tags</div>
-          <div className="tags-mini">
-            {discussion.tags.map(t => <span key={t} className="t">#{t}</span>)}
-          </div>
+          <div className="tags-mini">{discussion.tags.map(t => <span key={t} className="t">#{t}</span>)}</div>
         </div>
         <div className="block">
           <div className="label">People</div>
@@ -1069,62 +1113,74 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   );
 };
 
-// Knowledge Base Page
+// Knowledge Base (unchanged)
 const KnowledgePage = ({ navigateTo }) => (
   <div>
     <div className="page-header">
       <h2>Knowledge Base</h2>
       <div className="filters">
         <input type="text" placeholder="Search articles..." className="search-input" />
-        <select>
-          <option>All Categories</option>
-          {DATA.categories.map(cat => (
-            <option key={cat.id}>{cat.label}</option>
-          ))}
-        </select>
+        <select><option>All Categories</option>{DATA.categories.map(cat => (<option key={cat.id}>{cat.label}</option>))}</select>
       </div>
     </div>
     <div className="article-grid">
-      {DATA.articles.map(article => (
-        <ArticleCard key={article.id} article={article} onClick={() => navigateTo('knowledge')} />
-      ))}
+      {DATA.articles.map(article => <ArticleCard key={article.id} article={article} onClick={() => navigateTo('knowledge')} />)}
     </div>
   </div>
 );
 
-// Announcements Page
-const AnnouncementsPage = ({ navigateTo }) => (
-  <div>
-    <h2>Announcements</h2>
-    <div className="card">
-      {DATA.announcements.map((a, idx) => (
-        <AnnouncementItem key={idx} announcement={a} onClick={() => navigateTo('announcements')} />
-      ))}
+// Learning Center – grouped by service
+const LearningPage = ({ navigateTo }) => {
+  const services = ['Passport', 'Aadhaar', 'eDistrict', 'Ration Card'];
+  return (
+    <div>
+      <h2>Learning Center</h2>
+      <div className="learning-grid">
+        {services.map(service => {
+          const materials = DATA.training.filter(t => t.service === service);
+          return (
+            <div key={service} className="learning-card" onClick={() => navigateTo('training')}>
+              <div className="learning-header">{service}</div>
+              {materials.map(m => (
+                <div key={m.id} className="learning-item">
+                  <span className="learning-icon">{m.type.includes('Video') ? '🎬' : m.type.includes('PDF') ? '📄' : '📚'}</span>
+                  <span>{m.title}</span>
+                  <span className="learning-meta">{m.duration}</span>
+                </div>
+              ))}
+              {materials.length === 0 && <div className="learning-empty">No materials yet</div>}
+            </div>
+          );
+        })}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
-// Training Page
-const TrainingPage = ({ navigateTo }) => (
-  <div>
-    <h2>Training Materials</h2>
-    <div className="training-grid">
-      {DATA.training.map(t => (
-        <div key={t.id} className="training-card" onClick={() => navigateTo('training')}>
-          <div className="training-icon">
-            {t.type.includes('Video') ? '🎬' : t.type.includes('PDF') ? '📄' : '📚'}
-          </div>
-          <div className="training-info">
-            <div className="title">{t.title}</div>
-            <div className="meta">{t.type} · {t.duration}</div>
-            <div className="meta"><FiLayers className="h-3 w-3" /> {t.modules} modules</div>
-          </div>
-          <div className="training-updated">{t.updated}</div>
+// Announcements – with category filters
+const AnnouncementsPage = ({ navigateTo }) => {
+  const [filter, setFilter] = useState('all');
+  const filtered = DATA.announcements.filter(a => filter === 'all' || a.category === filter);
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Announcements</h2>
+        <div className="filters">
+          <select value={filter} onChange={e => setFilter(e.target.value)}>
+            <option value="all">All</option>
+            <option value="government">Government</option>
+            <option value="centre">Centre</option>
+            <option value="software">Software</option>
+            <option value="training">Training</option>
+          </select>
         </div>
-      ))}
+      </div>
+      <div className="card">
+        {filtered.map((a, idx) => <AnnouncementItem key={idx} announcement={a} onClick={() => navigateTo('announcements')} />)}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // Tags Page
 const TagsPage = ({ navigateTo, handleTagClick }) => (
@@ -1139,14 +1195,12 @@ const TagsPage = ({ navigateTo, handleTagClick }) => (
     </div>
     <div className="tag-discussions">
       <h3>Discussions by Tag</h3>
-      {DATA.discussions.slice(0, 3).map(d => (
-        <DiscussionCard key={d.id} discussion={d} onClick={() => navigateTo('discussions')} />
-      ))}
+      {DATA.discussions.slice(0, 3).map(d => <DiscussionCard key={d.id} discussion={d} onClick={() => navigateTo('discussions')} />)}
     </div>
   </div>
 );
 
-// Mentions Page
+// My Workspace sub-pages
 const MentionsPage = ({ navigateTo }) => (
   <div>
     <h2>Mentions</h2>
@@ -1167,49 +1221,52 @@ const MentionsPage = ({ navigateTo }) => (
   </div>
 );
 
-// Bookmarks Page
-const BookmarksPage = () => (
+const DraftsPage = ({ navigateTo }) => (
   <div>
-    <h2>Bookmarks</h2>
-    <div className="card empty-state">
-      <FiBookmark className="h-12 w-12" />
-      <p>You haven't bookmarked any discussions yet.</p>
+    <h2>My Drafts</h2>
+    <div className="card">
+      {DATA.drafts.map((d, idx) => (
+        <div key={idx} className="discuss-card" style={{ opacity: 0.8 }}>
+          <div className="top">
+            <div className="icon" style={{ background: '#f1f5f9', color: '#64748b' }}><FiFile className="h-4 w-4" /></div>
+            <div className="info">
+              <div className="title">{d.title}</div>
+              <div className="meta">Updated {d.updated}</div>
+              <button className="draft-action">Continue editing</button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   </div>
 );
 
-// Notifications Page
+const BookmarksPage = () => (
+  <div><h2>Bookmarks</h2><div className="card empty-state"><FiBookmark className="h-12 w-12" /><p>You haven't bookmarked any discussions yet.</p></div></div>
+);
+
+const FollowingPage = () => (
+  <div><h2>Following</h2><div className="card empty-state"><FiUserPlus className="h-12 w-12" /><p>You aren't following any discussions yet.</p></div></div>
+);
+
+const HistoryPage = () => (
+  <div><h2>History</h2><div className="card empty-state"><FiClock className="h-12 w-12" /><p>No recent history.</p></div></div>
+);
+
+// Notifications
 const NotificationsPage = () => (
   <div>
     <h2>Notifications</h2>
     <div className="card">
-      <div className="notification-item">
-        <div className="notification-icon" style={{ background: '#eef2ff', color: '#6366f1' }}><FiMessageSquare /></div>
-        <div className="notification-content">
-          <p><strong>Sneha M</strong> replied to <span className="highlight">Passport Police Verification Delay</span></p>
-          <span className="time">2 hours ago</span>
-        </div>
-      </div>
-      <div className="notification-item">
-        <div className="notification-icon" style={{ background: '#ecfdf5', color: '#10b981' }}><FiCheckCircle /></div>
-        <div className="notification-content">
-          <p><span className="highlight">Income Certificate Rejected</span> was marked as solved</p>
-          <span className="time">Yesterday</span>
-        </div>
-      </div>
-      <div className="notification-item">
-        <div className="notification-icon" style={{ background: '#fffbeb', color: '#f59e0b' }}><FiBell /></div>
-        <div className="notification-content">
-          <p>New announcement: <span className="highlight">Office Closed on 26th Jan</span></p>
-          <span className="time">2 days ago</span>
-        </div>
-      </div>
+      <div className="notification-item"><div className="notification-icon" style={{ background: '#eef2ff', color: '#6366f1' }}><FiMessageSquare /></div><div className="notification-content"><p><strong>Sneha M</strong> replied to <span className="highlight">Passport Police Verification Delay</span></p><span className="time">2 hours ago</span></div></div>
+      <div className="notification-item"><div className="notification-icon" style={{ background: '#ecfdf5', color: '#10b981' }}><FiCheckCircle /></div><div className="notification-content"><p><span className="highlight">Income Certificate Rejected</span> was marked as solved</p><span className="time">Yesterday</span></div></div>
+      <div className="notification-item"><div className="notification-icon" style={{ background: '#fffbeb', color: '#f59e0b' }}><FiBell /></div><div className="notification-content"><p>New announcement: <span className="highlight">Office Closed on 26th Jan</span></p><span className="time">2 days ago</span></div></div>
     </div>
   </div>
 );
 
-// Search Page
-const SearchPage = ({ query, navigateTo, openDiscussion }) => {
+// Search Page with AI answer
+const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
   const discussionResults = DATA.discussions.filter(d =>
     d.title.toLowerCase().includes(query.toLowerCase()) ||
     d.preview.toLowerCase().includes(query.toLowerCase())
@@ -1225,27 +1282,26 @@ const SearchPage = ({ query, navigateTo, openDiscussion }) => {
         <h2>Search: "{query}"</h2>
         <p>{discussionResults.length + articleResults.length} results found</p>
       </div>
+      {showAIAnswer && (
+        <div className="ai-answer card">
+          <div className="ai-header"><FiZap className="h-5 w-5" /> AI Answer</div>
+          <p>Based on your query about Aadhaar correction, here's the summary: You can correct your Aadhaar DOB by visiting the e-Aadhaar portal or nearest enrolment centre. The process requires supporting documents (birth certificate, school certificate, etc.). For more details, see the <strong>Knowledge Article</strong> below.</p>
+        </div>
+      )}
       {discussionResults.length > 0 && (
         <div className="search-section">
           <h3>Discussions</h3>
-          {discussionResults.map(d => (
-            <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />
-          ))}
+          {discussionResults.map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
         </div>
       )}
       {articleResults.length > 0 && (
         <div className="search-section">
           <h3>Knowledge Articles</h3>
-          {articleResults.map(a => (
-            <ArticleCard key={a.id} article={a} onClick={() => navigateTo('knowledge')} />
-          ))}
+          {articleResults.map(a => <ArticleCard key={a.id} article={a} onClick={() => navigateTo('knowledge')} />)}
         </div>
       )}
       {discussionResults.length === 0 && articleResults.length === 0 && (
-        <div className="empty-state">
-          <FiSearch className="h-12 w-12" />
-          <p>No results found. Try adjusting your search terms.</p>
-        </div>
+        <div className="empty-state"><FiSearch className="h-12 w-12" /><p>No results found. Try adjusting your search terms.</p></div>
       )}
     </div>
   );
