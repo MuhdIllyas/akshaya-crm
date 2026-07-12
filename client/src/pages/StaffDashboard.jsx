@@ -119,7 +119,7 @@ const StaffDashboard = () => {
   // Application Tracking State
   const [trackingStats, setTrackingStats] = useState({ total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
   const [trackingEntries, setTrackingEntries] = useState([]);
-  const [statView, setStatView] = useState('tokens'); 
+  const [statView, setStatView] = useState('applications'); 
 
   // --- Welcome banner state ---
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -961,28 +961,28 @@ const StaffDashboard = () => {
           <div className="flex items-center justify-between mb-4 mt-2">
             <h3 className="text-lg font-bold text-gray-900">Overview Metrics</h3>
             <div className="bg-gray-100 p-1 rounded-lg inline-flex">
-              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
               <button onClick={() => setStatView('applications')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Applications</button>
+              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
             </div>
           </div>
 
           {/* Stats Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-            {statView === 'tokens' ? (
-              <>
-                <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
-                <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
-                <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
-                <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
-                <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
-              </>
-            ) : (
+            {statView === 'applications' ? (
               <>
                 <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-gray-600" />
                 <StatCard title="Pending" value={trackingStats.pending || 0} icon={FiClock} color="bg-amber-500" />
                 <StatCard title="In Progress" value={trackingStats.in_progress || 0} icon={FiPlayCircle} color="bg-blue-500" />
                 <StatCard title="Completed" value={trackingStats.completed || 0} icon={FiCheckCircle} color="bg-green-500" />
                 <StatCard title="Delayed" value={trackingStats.delayed || 0} icon={FiAlertCircle} color="bg-rose-500" />
+              </>
+            ) : (
+              <>
+                <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
+                <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
+                <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
+                <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
+                <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
               </>
             )}
           </div>
