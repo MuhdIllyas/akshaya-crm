@@ -427,6 +427,8 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                     exportData = attByCentreData; sheetName = "Centre_Attendance"; break;
                 case 33: // Service Comparison
                     exportData = svcCompareDataRaw; sheetName = "Centre_Services"; break;
+                case 34: // Salary Advance 
+                    exportData = salaryAdvanceData; sheetName = "Salary_Advances"; break;
                 default:
                     toast.error("Export logic not mapped for this specific report."); // ✅ Toast
                     return;
@@ -488,6 +490,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
             case 31: exportData = profitCentreSummary; break;
             case 32: exportData = attByCentreData; break;
             case 33: exportData = svcCompareDataRaw; break;
+            case 34: exportData = salaryAdvanceData; break;
             default: 
                 toast.error("Export logic not mapped for this report.");
                 return;

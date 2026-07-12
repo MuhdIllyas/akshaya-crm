@@ -129,7 +129,8 @@ const Chat = ({
   serviceEntryId = null,
   allTasks = [],
   onTaskStatusUpdate = null,
-  onNormalTaskStatusUpdate = null
+  onNormalTaskStatusUpdate = null,
+  onDeleteConversation = null
 }) => {
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -188,6 +189,24 @@ const Chat = ({
     }
     return displayName || 'Unknown Chat';
   }, [activeConversation, currentUser.id]);
+
+  // Auto-fill the customer's name when the Template Modal opens!
+  useEffect(() => {
+    if (showTemplateModal && activeConversation) {
+      let defaultName = getConversationDisplayName();
+      
+      // Strip out CRM prefixes to get just the clean name
+      defaultName = defaultName.replace(/WhatsApp /i, '').replace(/Chat with /i, '').trim();
+
+      // If the name is just a raw phone number, leave it blank
+      if (/^\+?\d+$/.test(defaultName.replace(/[\s-]/g, ''))) {
+        defaultName = ''; 
+      }
+
+      setTemplateParams(defaultName);
+      setSelectedTemplate("reengagement_message"); // Always default to re-engagement
+    }
+  }, [showTemplateModal, activeConversation, getConversationDisplayName]);
 
   const isUserOnline = useCallback((userId) => {
     return onlineUsers.has(String(userId));
@@ -254,27 +273,16 @@ const Chat = ({
 
   // Join conversation room when active
   useEffect(() => {
-    if (!socket.connected || !activeConversation?.id) return;
+    if (!socket?.connected || !activeConversation?.id) return;
+    
     console.log("Joining conversation:", activeConversation.id);
     socket.emit("join_conversation", activeConversation.id);
+    
     return () => {
       console.log("Leaving conversation:", activeConversation.id);
       socket.emit("leave_conversation", activeConversation.id);
-      if (isTyping) {
-        fetch(`${API_BASE_URL}/api/chat/typing`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify({
-            conversation_id: activeConversation.id,
-            isTyping: false
-          })
-        }).catch(err => console.error("Error clearing typing status:", err));
-      }
     };
-  }, [activeConversation?.id, isTyping, API_BASE_URL]);
+  }, [activeConversation?.id]);
 
   // Listen for socket events
   useEffect(() => {
@@ -685,7 +693,13 @@ const Chat = ({
                 <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
                   <FiInfo className="mr-3" /> View Details
                 </button>
-                <button className="flex items-center w-full p-3 text-sm text-red-500 hover:bg-gray-50">
+                <button 
+                  onClick={() => {
+                    setIsMoreMenuOpen(false); // Close the menu
+                    if (onDeleteConversation) onDeleteConversation(activeConversation.id);
+                  }}
+                  className="flex items-center w-full p-3 text-sm text-red-500 hover:bg-gray-50"
+                >
                   <FiTrash2 className="mr-3" /> Delete Conversation
                 </button>
               </motion.div>
@@ -778,7 +792,12 @@ const Chat = ({
                           ) : msg.isFile ? (
                             <div
                               className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-                              onClick={() => msg.fileUrl && window.open(msg.fileUrl, '_blank')}
+                              onClick={() => {
+                                if (msg.fileUrl) {
+                                  const fullUrl = msg.fileUrl.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`;
+                                  window.open(fullUrl, '_blank');
+                                }
+                              }}
                             >
                               {msg.messageType === 'image' ? (
                                 <>
@@ -1006,11 +1025,10 @@ const Chat = ({
               <select
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
+                className="w-full border rounded-lg px-3 py-2 bg-gray-50"
               >
-                <option value="reengagement_message">Re‑engagement</option>
-                <option value="application_update">Application Update</option>
-                {/* Add more templates as needed */}
+                {/* Now using abstract keys. Backend handles the centre mapping! */}
+                <option value="reengagement_message">Re‑engagement (Auto-Mapped)</option>
               </select>
             </div>
             <div className="mb-4">

@@ -107,6 +107,13 @@ const Login = () => {
         localStorage.setItem("name", res.data.name);
         localStorage.setItem("centre_id", res.data.centre_id || "");
 
+        // Save the profile photo if it exists, otherwise clear any old ones
+        if (res.data.photo) {
+          localStorage.setItem("photo", res.data.photo);
+        } else {
+          localStorage.removeItem("photo");
+        }
+
         if (rememberMe) {
           localStorage.setItem("remembered_username", user.username);
           localStorage.setItem("remembered_password", user.password);

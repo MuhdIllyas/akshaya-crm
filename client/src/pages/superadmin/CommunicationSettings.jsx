@@ -17,6 +17,7 @@ const CommunicationSettings = () => {
     name: "",
     phone_number: "",
     access_token: "",
+    channel_id: "", 
   });
 
   const [selectedMappingAccount, setSelectedMappingAccount] = useState("");
@@ -82,7 +83,8 @@ const CommunicationSettings = () => {
     setAccountForm({
       name: acc.name,
       phone_number: acc.phone_number,
-      access_token: "", // Keep blank so we don't expose it. Handled dynamically on backend.
+      access_token: "", 
+      channel_id: acc.channel_id || "",
     });
     setShowAddModal(true);
   };
@@ -105,7 +107,7 @@ const CommunicationSettings = () => {
   const closeModal = () => {
     setShowAddModal(false);
     setEditingId(null);
-    setAccountForm({ name: "", phone_number: "", access_token: "" });
+    setAccountForm({ name: "", phone_number: "", access_token: "", channel_id: "" });
   };
 
   const copyWebhook = (phone) => {
@@ -361,6 +363,17 @@ const CommunicationSettings = () => {
                     value={accountForm.phone_number}
                     onChange={(e) => setAccountForm({...accountForm, phone_number: e.target.value})}
                     placeholder="e.g., +919961900071"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Channel ID</label>
+                  <input
+                    type="text"
+                    required
+                    value={accountForm.channel_id}
+                    onChange={(e) => setAccountForm({...accountForm, channel_id: e.target.value})}
+                    placeholder="e.g., 1234"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
                   />
                 </div>

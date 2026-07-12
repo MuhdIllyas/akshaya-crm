@@ -16,7 +16,7 @@ router.post("/login", async (req, res) => {
 
   try {
     const result = await pool.query(
-      "SELECT id, name, username, password, role, centre_id FROM staff WHERE username = $1",
+      "SELECT id, name, username, password, role, centre_id, photo FROM staff WHERE username = $1",
       [username]
     );
 
@@ -45,7 +45,8 @@ router.post("/login", async (req, res) => {
       name: user.name,
       username: user.username,
       role: user.role,
-      centre_id: user.centre_id || null
+      centre_id: user.centre_id || null,
+      photo: user.photo || null
     });
   } catch (err) {
     console.error("Login error:", err.message, err.stack);
@@ -64,7 +65,7 @@ router.get("/verify", async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const result = await pool.query(
-      "SELECT id, name, username, role, centre_id FROM staff WHERE id = $1",
+      "SELECT id, name, username, role, centre_id, photo FROM staff WHERE id = $1",
       [decoded.id]
     );
 
@@ -79,7 +80,8 @@ router.get("/verify", async (req, res) => {
       name: user.name,
       username: user.username,
       role: user.role,
-      centre_id: user.centre_id || null
+      centre_id: user.centre_id || null,
+      photo: user.photo || null
     });
   } catch (err) {
     console.error("Token verification error:", err.message, err.stack);

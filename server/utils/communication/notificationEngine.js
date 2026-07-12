@@ -42,10 +42,13 @@ export const triggerNotification = async ({ eventKey, centreId, customerPhone, t
     // 🔥 NEW: Use custom components if provided, otherwise default to standard body parameters
     const componentsToUse = customComponents || [
       {
+        type: "header" // 👈 REQUIRED: Fixes the 408 Request Timeout!
+      },
+      {
         type: "body",
         parameters: templateParams.map(param => ({
           type: "text",
-          text: String(param || "")
+          text: String(param || "-") // 👈 REQUIRED: Fallback to a dash to prevent Meta rejecting empty strings
         }))
       }
     ];
@@ -53,11 +56,12 @@ export const triggerNotification = async ({ eventKey, centreId, customerPhone, t
     // 4. Construct the Payload
     const payload = {
       to: formattedPhone,
+      channel_id: account.channel_id,
       type: 'template',
       template: {
         name: template.provider_template_name,
-        language: { code: template.language_code || 'en' },
-        components: componentsToUse // 👈 Uses our dynamic components
+        language: { code: "en" , policy: "deterministic" },
+        components: componentsToUse 
       }
     };
 

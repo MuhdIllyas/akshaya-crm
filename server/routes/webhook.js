@@ -1,9 +1,110 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import axios from 'axios';
+import { fileURLToPath } from 'url';
 import { resolveConversation } from '../utils/conversationService.js';
 import { sendMessage } from '../utils/messageRouter.js';
 import pool from '../db.js';
 
 const router = express.Router();
+
+// ===============================
+// 📁 DIRECTORY SETUP FOR DOWNLOADS
+// ===============================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads', 'chat');
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+// ===============================
+// 📥 BULLETPROOF MEDIA DOWNLOADER
+// ===============================
+async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, mimeType, filenameHint) {
+  try {
+    let downloadUrl = directLink;
+
+    // 1. Resolve ID to URL if necessary
+    if (!downloadUrl && mediaId) {
+      const cleanBase = baseUrl.replace(/\/messages\/?$/, '');
+      const endpointsToTry = [
+        `${cleanBase}/media/${mediaId}`,              
+        `${cleanBase}/${mediaId}`,                    
+        `https://graph.facebook.com/v18.0/${mediaId}` 
+      ];
+
+      for (const endpoint of endpointsToTry) {
+        try {
+          const res = await axios.get(endpoint, { headers: { Authorization: `Bearer ${accessToken}` } });
+          if (res.data && (res.data.url || res.data.link)) {
+            downloadUrl = res.data.url || res.data.link;
+            break; 
+          }
+        } catch (e) { /* Ignore and try next */ }
+      }
+    }
+
+    if (!downloadUrl) throw new Error("Could not find a valid download URL.");
+
+    console.log(`[Webhook] Downloading media from: ${downloadUrl.substring(0, 60)}...`);
+
+    let responseStream;
+
+    // 🔥 THE FIX: Try RAW Signed URL first!
+    // Meta's lookaside URLs with &hash= are pre-signed. Adding an Auth header modifies 
+    // the request and breaks the signature, causing the 401 Unauthorized.
+    try {
+      console.log(`[Webhook] Attempting raw download (pre-signed URL)...`);
+      const rawReq = await axios.get(downloadUrl, {
+        responseType: 'stream'
+      });
+      responseStream = rawReq.data;
+    } catch (rawErr) {
+      console.log(`[Webhook] Raw download failed (${rawErr.response?.status}). Attempting WITH auth token...`);
+      // Fallback: If it wasn't pre-signed, try with the Bearer token
+      const authReq = await axios.get(downloadUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        responseType: 'stream'
+      });
+      responseStream = authReq.data;
+    }
+
+    // 3. Determine extension and generate a safe filename
+    let ext = '';
+    if (mimeType) {
+      ext = '.' + mimeType.split('/')[1].split(';')[0]; 
+    } else if (filenameHint) {
+      ext = path.extname(filenameHint);
+    }
+    if (!ext) ext = '.bin'; 
+    
+    const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const filePath = path.join(UPLOAD_DIR, uniqueFilename);
+
+    // 4. Save to your local disk
+    const writer = fs.createWriteStream(filePath);
+    responseStream.pipe(writer);
+
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    // 🔥 ADDED THE REQUESTED LOGS HERE:
+    console.log("LOCAL FILE SAVED:", filePath);
+    console.log("RETURNING:", `/uploads/chat/${uniqueFilename}`);
+
+    // 5. Return the local relative path for the database
+    return `/uploads/chat/${uniqueFilename}`;
+
+  } catch (error) {
+    console.error(`[Webhook] Failed to download WhatsApp media:`, error.message);
+    return null;
+  }
+}
 
 // Helper to safely extract text from any API provider structure
 const extractText = (msg) => {
@@ -25,13 +126,11 @@ router.post('/whatsapp', async (req, res) => {
 
   try {
     const body = req.body;
-    console.log("🔥 LIBROMI WEBHOOK HIT");
-    // console.log("📩 RAW BODY:", JSON.stringify(body, null, 2)); // Uncomment if you need to deeply debug the payload
-
+    
     let from = null;
-    let text = null;
     let message_id = null;
     let recipientPhone = null;
+    let msgObject = null;
 
     // ===============================
     // 🔥 FORMAT 1: META / WHATSAPP CLOUD STYLE
@@ -44,10 +143,9 @@ router.post('/whatsapp', async (req, res) => {
 
         const messages = value?.messages;
         if (messages && messages.length > 0) {
-          const msg = messages[0];
-          from = msg.from;
-          text = extractText(msg);
-          message_id = msg.id;
+          msgObject = messages[0];
+          from = msgObject.from;
+          message_id = msgObject.id;
         }
       }
     }
@@ -55,18 +153,77 @@ router.post('/whatsapp', async (req, res) => {
     // 🔥 FORMAT 2: Flat / Alternative Libromi Structures
     // ===============================
     else if (body.messages && Array.isArray(body.messages)) {
-      const msg = body.messages[0];
-      from = msg.from;
-      text = extractText(msg);
-      message_id = msg.id;
+      msgObject = body.messages[0];
+      from = msgObject.from;
+      message_id = msgObject.id;
     } else if (body.data) {
+      msgObject = body.data;
       from = body.data.from || body.data.phone || body.data.sender;
-      text = extractText(body.data);
       message_id = body.data.id;
     } else if (body.from) {
+      msgObject = body;
       from = body.from;
-      text = extractText(body);
       message_id = body.message_id || body.id;
+    }
+
+    // ===============================
+    // 📸 PARSE NATIVE MEDIA & TEXT
+    // ===============================
+    let messageText = "";
+    let messageType = "text";
+    let fileUrl = null;
+    let fileName = null;
+    let mediaIdToDownload = null;
+    let directLink = null;
+    let mimeTypeHint = null;
+
+    if (msgObject) {
+      switch (msgObject.type) {
+        case "text":
+          messageText = extractText(msgObject) || "";
+          messageType = "text";
+          break;
+          
+        case "image":
+          messageType = "image";
+          mediaIdToDownload = msgObject.image?.id;
+          // 🔥 FIX: Check for .url first!
+          directLink = msgObject.image?.url || msgObject.image?.link || msgObject.url || msgObject.link;
+          mimeTypeHint = msgObject.image?.mime_type || "image/jpeg";
+          messageText = msgObject.image?.caption || msgObject.caption || "";
+          fileName = "Image.jpeg";
+          break;
+          
+        case "document":
+          messageType = "document";
+          mediaIdToDownload = msgObject.document?.id;
+          directLink = msgObject.document?.url || msgObject.document?.link || msgObject.url || msgObject.link;
+          mimeTypeHint = msgObject.document?.mime_type || "application/pdf";
+          fileName = msgObject.document?.filename || "Document.pdf";
+          messageText = msgObject.document?.caption || msgObject.caption || "";
+          break;
+
+        case "video":
+          messageType = "video";
+          mediaIdToDownload = msgObject.video?.id;
+          directLink = msgObject.video?.url || msgObject.video?.link || msgObject.url || msgObject.link;
+          mimeTypeHint = msgObject.video?.mime_type || "video/mp4";
+          messageText = msgObject.video?.caption || msgObject.caption || "";
+          fileName = "Video.mp4";
+          break;
+
+        case "audio":
+          messageType = "audio";
+          mediaIdToDownload = msgObject.audio?.id;
+          directLink = msgObject.audio?.url || msgObject.audio?.link || msgObject.url || msgObject.link;
+          mimeTypeHint = msgObject.audio?.mime_type || "audio/ogg";
+          fileName = "VoiceNote.ogg";
+          break;
+          
+        default:
+          messageText = extractText(msgObject) || "Unsupported message type received.";
+          messageType = "text";
+      }
     }
 
     // ===============================
@@ -78,10 +235,9 @@ router.post('/whatsapp', async (req, res) => {
     }
 
     // ===============================
-    // ❌ VALIDATION 
+    // ❌ VALIDATION (Must have Text OR Media)
     // ===============================
-    if (!from || !text) {
-      console.log(`⚠️ Webhook Ignored. It was likely a read/delivery receipt. (From: ${from}, Text: ${text})`);
+    if (!from || (!messageText && !directLink && !mediaIdToDownload)) {
       return; 
     }
 
@@ -89,15 +245,73 @@ router.post('/whatsapp', async (req, res) => {
     // 🔍 FIND ACCOUNTS AND CUSTOMERS
     // ===============================
     let communicationAccountId = null;
-    if (recipientPhone) {
+    let centreId = null;
+
+    let incomingChannelId = body.channel_id || body.data?.channel_id || null;
+    
+    if (incomingChannelId) {
+        const accountQuery = await pool.query(
+            `SELECT ca.id, c.id as centre_id 
+             FROM communication_accounts ca
+             LEFT JOIN centres c ON c.communication_account_id = ca.id
+             WHERE ca.channel_id = $1 LIMIT 1`,
+            [String(incomingChannelId)]
+        );
+        if (accountQuery.rows.length > 0) {
+            communicationAccountId = accountQuery.rows[0].id;
+            centreId = accountQuery.rows[0].centre_id;
+        }
+    }
+
+    if (!communicationAccountId && recipientPhone) {
         const formattedRecipient = recipientPhone.startsWith('+') ? recipientPhone : `+${recipientPhone}`;
         const accountQuery = await pool.query(
-            `SELECT id FROM communication_accounts WHERE phone_number = $1 OR phone_number = $2 LIMIT 1`,
+            `SELECT ca.id, c.id as centre_id 
+             FROM communication_accounts ca
+             LEFT JOIN centres c ON c.communication_account_id = ca.id
+             WHERE ca.phone_number = $1 OR ca.phone_number = $2 LIMIT 1`,
             [formattedRecipient, recipientPhone]
         );
         if (accountQuery.rows.length > 0) {
             communicationAccountId = accountQuery.rows[0].id;
+            centreId = accountQuery.rows[0].centre_id;
         }
+    }
+
+    // ===============================
+    // ⬇️ EXECUTE MEDIA DOWNLOAD
+    // ===============================
+    if ((mediaIdToDownload || directLink) && communicationAccountId) {
+      try {
+        const accountData = await pool.query(
+          `SELECT access_token, base_url FROM communication_accounts WHERE id = $1`,
+          [communicationAccountId]
+        );
+        
+        if (accountData.rows.length > 0) {
+          const { access_token, base_url } = accountData.rows[0];
+          
+          const localPath = await downloadWhatsAppMedia(
+            mediaIdToDownload, 
+            directLink,
+            access_token, 
+            base_url, 
+            mimeTypeHint, 
+            fileName
+          );
+          
+          if (localPath) {
+            fileUrl = localPath; 
+          } else if (directLink) {
+            fileUrl = directLink; 
+            messageText += "\n[Media saved as external link]";
+          } else {
+            messageText += "\n[Failed to download media attachment]";
+          }
+        }
+      } catch (err) {
+        console.error("Error retrieving account data for media download:", err);
+      }
     }
 
     const customerQuery = await pool.query(
@@ -117,27 +331,30 @@ router.post('/whatsapp', async (req, res) => {
       customer_id: customerId,
       phone_number: from,
       communication_account_id: communicationAccountId,
+      centre_id: centreId, 
       name: `WhatsApp - ${customerName}`,
       is_group: false,
     });
 
     // ===============================
-    // 💾 SAVE MESSAGE & EMIT SOCKET
+    // 💾 SAVE MESSAGE
     // ===============================
     const io = req.app.get('io') || req.io;
 
     await sendMessage({
       conversation_id: conversation.id,
-      sender_id: customerId, // Will associate with customer if they exist
+      sender_id: customerId, 
       sender_type: 'customer',
-      message: text,
-      message_type: 'text',
+      message: messageText,
+      message_type: messageType,
       direction: 'incoming',
       io: io,
-      external_message_id: message_id
+      external_message_id: message_id,
+      incoming_file_url: fileUrl,
+      incoming_file_name: fileName
     });
 
-    console.log(`✅ Message safely routed and saved from ${from}: "${text.substring(0, 20)}..."`);
+    console.log(`✅ Message safely routed. Type: [${messageType}]. Text: "${messageText.substring(0, 20)}..."`);
 
   } catch (err) {
     console.error('❌ WhatsApp webhook processing error:', err);

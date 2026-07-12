@@ -57,7 +57,7 @@ import CalendarView from "@/components/CalendarView";
 import ActivityPanel from "@/components/ActivityPanel";
 import EmojiPicker from 'emoji-picker-react';
 import Chat from '@/components/Chat';
-import { socket, connectSocket, disconnectSocket } from "@/services/socket";
+import { socket } from "@/services/socket";
 
 // ============== NEW CHAT MODAL (Enhanced for WhatsApp) ==============
 const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
@@ -461,46 +461,38 @@ const MessengerPage = ({ user }) => {
   };
 
   // ============== SOCKET.IO INTEGRATION ==============
-
   useEffect(() => {
     if (!token) return;
 
-    connectSocket(token);
-
-    socket.on("connect", () => {
-      socket.emit("join", {
-        staffId: currentUser.id,
-        centreId: currentUser.centreId
-      });
-      console.log("Socket connected");
+    // 🔥 FIX 1: Create named functions for EVERY listener. 
+    // This prevents `socket.off()` from wiping out DashboardLayout's listeners!
+    const handleConnect = () => {
+      console.log("Messenger socket connected");
       setSocketConnected(true);
-
       if (activeConversation) {
         socket.emit("join_conversation", activeConversation.id);
       }
-    });
+    };
 
-    socket.on("online_users", (users) => {
+    const handleOnlineUsers = (users) => {
       const stringUsers = users.map(user => String(user));
       setOnlineUsers(new Set(stringUsers));
-    });
+    };
 
-    socket.on("disconnect", () => {
+    const handleDisconnect = () => {
       console.log("Socket disconnected");
       setSocketConnected(false);
-    });
+    };
 
-    socket.on("connect_error", (err) => {
+    const handleConnectError = (err) => {
       console.error("Socket connection error:", err);
       toast.error("Realtime connection lost. Messages may be delayed.");
-    });
+    };
 
-    socket.on("new_message", (msg) => {
+    const handleNewMessage = (msg) => {
       const conversationId = msg.conversation_id;
 
-      if (processedMessageIds.current.has(msg.id)) {
-        return;
-      }
+      if (processedMessageIds.current.has(msg.id)) return;
       processedMessageIds.current.add(msg.id);
 
       setTimeout(() => {
@@ -510,18 +502,13 @@ const MessengerPage = ({ user }) => {
       setMessages(prev => {
         const currentMessages = prev[conversationId] || [];
 
-        if (currentMessages.some(m => m.id === msg.id)) {
-          return prev;
-        }
+        if (currentMessages.some(m => m.id === msg.id)) return prev;
 
         const filteredMessages = currentMessages.filter(m => {
           if (!m.isOptimistic) return true;
-
           const sameSender = String(msg.sender_id) === String(currentUser.id);
           const sameText = m.text === msg.message;
-
           if (sameSender && sameText) return false;
-
           return true;
         });
 
@@ -584,21 +571,25 @@ const MessengerPage = ({ user }) => {
           conversationId
         });
       } else if (String(msg.sender_id) !== String(currentUser.id)) {
-        // Fetch updated unread count for this conversation
         fetchConversationUnreadCount(conversationId).then(unreadCount => {
           setConversations(prev => prev.map(conv =>
-            conv.id === conversationId
-              ? { ...conv, unread: unreadCount }
-              : conv
+            conv.id === conversationId ? { ...conv, unread: unreadCount } : conv
           ));
         });
       }
-    });
+    };
 
-    socket.on("conversation_updated", (data) => {
+    const handleConversationUpdated = (data) => {
+      console.log("📥 [Frontend] RECEIVED conversation update", data);
       setConversations(prev => {
+        const exists = prev.some(c => String(c.id) === String(data.conversationId));
+        if (!exists) {
+          fetchConversations();
+          return prev;
+        }
+
         const updated = prev.map(conv =>
-          conv.id === data.conversationId
+          String(conv.id) === String(data.conversationId)
             ? {
               ...conv,
               last_message: data.lastMessage,
@@ -607,26 +598,22 @@ const MessengerPage = ({ user }) => {
               last_message_sender: data.lastMessageSender,
               last_message_at: data.time,
               time: data.time,
-              unread: data.unread
+              unread: data.unread !== undefined ? data.unread : conv.unread
             }
             : conv
         );
         return updated.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
       });
-    });
+    };
 
-    socket.on("typing", (data) => {
+    const handleTyping = (data) => {
       setTypingUsers(prev => {
         const currentTyping = prev[data.conversationId] || [];
-
         if (data.isTyping) {
           if (data.userId !== currentUser.id && !currentTyping.some(u => u.userId === data.userId)) {
             return {
               ...prev,
-              [data.conversationId]: [...currentTyping, {
-                name: data.userName,
-                userId: data.userId
-              }]
+              [data.conversationId]: [...currentTyping, { name: data.userName, userId: data.userId }]
             };
           }
         } else {
@@ -654,46 +641,42 @@ const MessengerPage = ({ user }) => {
           });
         }, 5000);
       }
-    });
+    };
 
-    socket.on("messages_read", (data) => {
+    const handleMessagesRead = (data) => {
       if (data.conversationId === activeConversation?.id) {
         setMessages(prev => ({
           ...prev,
           [data.conversationId]: prev[data.conversationId]?.map(msg =>
-            data.messageIds.includes(msg.id)
-              ? { ...msg, is_read_by_me: true }
-              : msg
+            data.messageIds.includes(msg.id) ? { ...msg, is_read_by_me: true } : msg
           )
         }));
       }
-
-      // Fetch updated unread counts for all conversations
       fetchAllUnreadCounts();
-    });
+    };
 
-    socket.on("unread_update", (data) => {
-      // Update specific conversation unread count
-      setConversations(prev => prev.map(conv =>
-        conv.id === data.conversationId
-          ? { ...conv, unread: data.unread }
-          : conv
-      ));
-    });
+    const handleUnreadUpdate = (data) => {
+      console.log("📥 [Frontend] RECEIVED unread_update", data);
+      if (data.unread !== undefined) {
+        setConversations(prev => prev.map(conv =>
+          String(conv.id) === String(data.conversationId) ? { ...conv, unread: data.unread } : conv
+        ));
+      }
+    };
 
-    socket.on("user_online", (data) => {
+    const handleUserOnline = (data) => {
       setOnlineUsers(prev => new Set([...prev, String(data.userId)]));
-    });
+    };
 
-    socket.on("user_offline", (data) => {
+    const handleUserOffline = (data) => {
       setOnlineUsers(prev => {
         const newSet = new Set(prev);
         newSet.delete(String(data.userId));
         return newSet;
       });
-    });
+    };
 
-    socket.on("new_conversation", (newConv) => {
+    const handleNewConversation = (newConv) => {
       setConversations(prev => {
         if (!prev.some(c => c.id === newConv.id)) {
           return [{
@@ -705,9 +688,9 @@ const MessengerPage = ({ user }) => {
         }
         return prev;
       });
-    });
+    };
 
-    socket.on("added_to_conversation", (conversation) => {
+    const handleAddedToConversation = (conversation) => {
       setConversations(prev => {
         if (!prev.some(c => c.id === conversation.id)) {
           return [{
@@ -720,38 +703,69 @@ const MessengerPage = ({ user }) => {
         return prev;
       });
       toast.info(`You were added to a new conversation`);
-    });
+    };
 
-    socket.on("message_deleted", (data) => {
+    const handleMessageDeleted = (data) => {
       if (data.conversationId === activeConversation?.id) {
         setMessages(prev => ({
           ...prev,
           [data.conversationId]: prev[data.conversationId]?.map(msg =>
-            msg.id === data.messageId
-              ? { ...msg, isDeleted: true, text: 'This message was deleted' }
-              : msg
+            msg.id === data.messageId ? { ...msg, isDeleted: true, text: 'This message was deleted' } : msg
           )
         }));
       }
-
       fetchConversations();
-    });
+    };
+
+    const handleConversationDeleted = (data) => {
+      setConversations(prev => prev.filter(c => String(c.id) !== String(data.conversationId)));
+      setActiveConversation(prevActive => {
+        if (prevActive && String(prevActive.id) === String(data.conversationId)) return null;
+        return prevActive;
+      });
+    };
+
+    // Attach listeners safely
+    socket.on("connect", handleConnect);
+    socket.on("online_users", handleOnlineUsers);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+    socket.on("new_message", handleNewMessage);
+    socket.on("conversation_updated", handleConversationUpdated);
+    socket.on("typing", handleTyping);
+    socket.on("messages_read", handleMessagesRead);
+    socket.on("unread_update", handleUnreadUpdate);
+    socket.on("user_online", handleUserOnline);
+    socket.on("user_offline", handleUserOffline);
+    socket.on("new_conversation", handleNewConversation);
+    socket.on("added_to_conversation", handleAddedToConversation);
+    socket.on("message_deleted", handleMessageDeleted);
+    socket.on("conversation_deleted", handleConversationDeleted);
+
+    // 🔥 FIX 2: Manually trigger if the global socket is already connected!
+    if (socket.connected) {
+      handleConnect();
+    }
 
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
-      socket.off("new_message");
-      socket.off("conversation_updated");
-      socket.off("typing");
-      socket.off("messages_read");
-      socket.off("unread_update");
-      socket.off("user_online");
-      socket.off("user_offline");
-      socket.off("new_conversation");
-      socket.off("added_to_conversation");
-      socket.off("message_deleted");
-      disconnectSocket();
+      // 🔥 FIX 3: Detach SPECIFIC references so we don't sever global listeners
+      socket.off("connect", handleConnect);
+      socket.off("online_users", handleOnlineUsers);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
+      socket.off("new_message", handleNewMessage);
+      socket.off("conversation_updated", handleConversationUpdated);
+      socket.off("typing", handleTyping);
+      socket.off("messages_read", handleMessagesRead);
+      socket.off("unread_update", handleUnreadUpdate);
+      socket.off("user_online", handleUserOnline);
+      socket.off("user_offline", handleUserOffline);
+      socket.off("new_conversation", handleNewConversation);
+      socket.off("added_to_conversation", handleAddedToConversation);
+      socket.off("message_deleted", handleMessageDeleted);
+      socket.off("conversation_deleted", handleConversationDeleted);
+      
+      // Removed disconnectSocket() completely!
     };
   }, [token, currentUser.id, currentUser.centreId, activeConversation]);
 
@@ -903,11 +917,12 @@ const MessengerPage = ({ user }) => {
   const handleSendMessage = async (message, file, optimisticMessage = null) => {
     if ((!message?.trim() && !file) || !activeConversation) return;
 
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}-${Math.random().toString(36).substring(2, 15)}`;
+    // 🔥 FIX 1: Safely grab the exact temp ID passed from Chat.jsx
+    const actualTempId = optimisticMessage?.tempId || `temp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 
     const optimisticMsg = optimisticMessage || {
-      id: tempId,
-      tempId: tempId,
+      id: actualTempId,
+      tempId: actualTempId,
       sender: 'You',
       senderId: currentUser.id,
       text: message || (file ? (file.type?.startsWith('image/') ? '📷 Image' : '📎 File') : ''),
@@ -924,7 +939,7 @@ const MessengerPage = ({ user }) => {
 
     setMessages(prev => {
       const currentMessages = prev[activeConversation.id] || [];
-      const exists = currentMessages.some(m => m.tempId === tempId || m.id === tempId);
+      const exists = currentMessages.some(m => m.tempId === actualTempId || m.id === actualTempId);
       if (exists) return prev;
       return {
         ...prev,
@@ -951,7 +966,6 @@ const MessengerPage = ({ user }) => {
         }, 200);
       }
 
-      // ALWAYS use the chat message endpoint
       const onSendMessage = `${API_BASE_URL}/api/chat/message`;
 
       const res = await fetch(onSendMessage, {
@@ -965,11 +979,22 @@ const MessengerPage = ({ user }) => {
 
       const newMsg = await res.json();
       
-      // Rest of the function remains unchanged...
-      // [keep all the existing code after this point]
+      // 🔥 FIX 2: Delete the optimistic (blurred) message on SUCCESS!
+      // The real message is arriving via Socket.io simultaneously.
+      setMessages(prev => ({
+        ...prev,
+        [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
+      }));
       
     } catch (err) {
-      // error handling...
+      console.error("Upload error:", err);
+      toast.error("Failed to send message or file");
+      
+      // 🔥 FIX 3: Clean up the stuck message if the server rejects the file size!
+      setMessages(prev => ({
+        ...prev,
+        [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
+      }));
     } finally {
       if (file) setIsUploading(false);
     }
@@ -996,7 +1021,7 @@ const MessengerPage = ({ user }) => {
           context_type: "customer",
           context_identifier: phoneNumber,
           context_name: customerName || phoneNumber,
-          participants: [] // no staff participants initially? Actually, the staff will be added automatically.
+          participants: [currentUser.id] // no staff participants initially? Actually, the staff will be added automatically.
           // We might need to add the current user as participant? The backend should handle.
         };
       } else {
@@ -1097,6 +1122,30 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== DELETE ENTIRE CONVERSATION ==============
+  const handleDeleteConversation = async (conversationId) => {
+    if (!window.confirm("Are you sure you want to delete this entire conversation? This action cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${conversationId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) throw new Error('Failed to delete conversation');
+
+      toast.success('Conversation deleted successfully');
+
+      // Instantly remove it from the sidebar and clear the active view
+      setConversations(prev => prev.filter(c => String(c.id) !== String(conversationId)));
+      setActiveConversation(null);
+
+    } catch (err) {
+      console.error('Error deleting conversation:', err);
+      toast.error('Failed to delete conversation');
+    }
+  };
+
   // ============== HELPER FUNCTIONS ==============
 
   const getAvatarColor = (id) => {
@@ -1127,10 +1176,11 @@ const MessengerPage = ({ user }) => {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error('Failed to update task');
-      // Update the tasks state
+      
+      // 🔥 FIX 1: Wrap in String() to prevent Type Mismatch bugs!
       setTasks(prevTasks =>
         prevTasks.map(t =>
-          t.id === taskId ? { ...t, status: newStatus } : t
+          String(t.id) === String(taskId) ? { ...t, status: newStatus } : t
         )
       );
       toast.success(`Task marked as ${newStatus}`);
@@ -1154,28 +1204,27 @@ const MessengerPage = ({ user }) => {
       });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-      // Update the tasks state (so the task list is in sync)
       await fetchTasks();
       toast.success(`Task marked as ${newStatus}`);
 
-      // Update the local messages state to change the JSON of this task-card message
+      // 🔥 FIX 2: Update the new 'live_task_data' directly instead of trying to JSON.parse
       setMessages(prev => {
         const convId = activeConversation?.id;
         if (!convId || !prev[convId]) return prev;
+        
         const updated = prev[convId].map(msg => {
           if (msg.messageType === 'task') {
-            try {
-              const taskData = JSON.parse(msg.text);
-              if (taskData.task_id === taskId) {
-                return {
-                  ...msg,
-                  text: JSON.stringify({ ...taskData, status: newStatus }),
-                };
-              }
-            } catch {}
+            // Check if this message belongs to the task we just updated
+            if (String(msg.text) === String(taskId) || (msg.live_task_data && String(msg.live_task_data.id) === String(taskId))) {
+              return {
+                ...msg,
+                live_task_data: { ...(msg.live_task_data || {}), status: newStatus }
+              };
+            }
           }
           return msg;
         });
+        
         return { ...prev, [convId]: updated };
       });
     } catch (err) {
@@ -2001,7 +2050,12 @@ const MessengerPage = ({ user }) => {
                 key={file.id}
                 whileHover={{ x: 5 }}
                 className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition"
-                onClick={() => window.open(file.fileUrl, '_blank')}
+                onClick={() => {
+                  if (file.fileUrl) {
+                    const fullUrl = file.fileUrl.startsWith('http') ? file.fileUrl : `${API_BASE_URL}${file.fileUrl}`;
+                    window.open(fullUrl, '_blank');
+                  }
+                }}
               >
                 <div className="bg-gray-100 p-2 rounded-lg mr-3">
                   {file.messageType === 'image' ? (
@@ -2472,6 +2526,7 @@ const MessengerPage = ({ user }) => {
                   allTasks={tasks}
                   onTaskStatusUpdate={handleServiceTaskStatusUpdate}
                   onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
+                  onDeleteConversation={handleDeleteConversation}
                 />
               </div>
             ) : activeView === "activity" ? (<div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>) : activeView === "calendar" ? (<div className="h-full overflow-y-auto">{renderCalendarView()}</div>) : activeView === "files" ? (<div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>) : activeView === "tasks" ? (<div className="h-full overflow-y-auto">{renderTasksView()}</div>) : activeView === "schedules" ? (<div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>) : (<div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>)}

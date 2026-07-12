@@ -27,7 +27,7 @@ import { MdAccessTime, MdPerson, MdBusinessCenter, MdLocationOn } from "react-ic
 import { BsCircleFill } from "react-icons/bs";
 import { IoMdCheckmarkCircle, IoMdClose } from "react-icons/io";
 // Import centralized socket and connection function
-import { socket, connectSocket } from '@/services/socket';
+import { socket } from '@/services/socket';
 
 const ActivityPanel = ({ token, userRole }) => {
   const [activities, setActivities] = useState([]);
@@ -40,30 +40,7 @@ const ActivityPanel = ({ token, userRole }) => {
   const containerRef = useRef(null);
   const filterMenuRef = useRef(null);
   
-  // Refs to track connection state to avoid duplicate joins
-  const hasConnected = useRef(false);
-
   const limit = 20;
-
-  // Initialize socket connection using centralized socket
-  useEffect(() => {
-    if (!token) {
-      console.error('No token provided for socket connection');
-      return;
-    }
-
-    // Connect if not already connected
-    if (!socket.connected && !hasConnected.current) {
-      connectSocket(token);
-      hasConnected.current = true;
-    }
-
-    // Optional: If already connected but we need to ensure it's using the token?
-    // The centralized socket already uses the token from connectSocket.
-    
-    // Cleanup on unmount? We don't disconnect the shared socket because other components might use it.
-    // So we just leave it connected. No cleanup needed for the socket itself.
-  }, [token]);
 
   const fetchActivities = async (pageNum = 1) => {
     try {

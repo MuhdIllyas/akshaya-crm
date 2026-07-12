@@ -1,7 +1,8 @@
 import pool from "../db.js";
 import axios from 'axios';
 import { addStaffToConversation } from './conversationService.js';
-import { isWithin24Hours } from './whatsappWindow.js'; // Note: Adjusted import path if it's in the same folder
+import { isWithin24Hours } from './whatsappWindow.js'; 
+import { triggerNotification } from "./communication/notificationEngine.js";
 
 /**
  * Helper: Get last customer message time for a conversation
@@ -17,6 +18,33 @@ async function getLastCustomerMessageTime(conversationId) {
 }
 
 /**
+ * 🧮 Centralized Unread Count Calculator
+ * Guarantees every part of the app uses the exact same unread logic.
+ */
+export async function getUnreadCount(staffId, conversationId) {
+  const result = await pool.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM chat_messages m
+    LEFT JOIN chat_message_reads r
+      ON m.id = r.message_id
+     AND r.staff_id = $1
+    WHERE
+      m.conversation_id = $2
+      AND (
+        m.sender_id IS NULL
+        OR m.sender_id <> $1
+      )
+      AND r.id IS NULL
+      AND m.is_deleted = false
+    `,
+    [staffId, conversationId]
+  );
+
+  return Number(result.rows[0].count) || 0;
+}
+
+/**
  * Central Message Router
  */
 export async function sendMessage({
@@ -28,18 +56,17 @@ export async function sendMessage({
   file = null,
   io = null,
   direction = null,
-  external_message_id = null
+  external_message_id = null,
+  incoming_file_url = null, 
+  incoming_file_name = null 
 }) {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    /* =========================
-       1. FILE HANDLING
-    ========================= */
-    let fileUrl = null;
-    let fileName = null;
+    let fileUrl = incoming_file_url || null; 
+    let fileName = incoming_file_name || null; 
     let fileSize = null;
 
     if (file) {
@@ -158,6 +185,44 @@ export async function sendMessage({
       io.to(`conversation:${conversation_id}`).emit("new_message", completeMessage);
     }
 
+    // ==========================================
+    // 🌟 GLOBAL PUSH NOTIFICATION TO SIDEBARS 🌟
+    // ==========================================
+    try {
+      const participantsRes = await pool.query(
+        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
+        [conversation_id]
+      );
+
+      // Normalize ID to prevent strict equality (===) bugs in React
+      const safeConvId = Number(conversation_id);
+
+      for (const p of participantsRes.rows) {
+        // 🔥 Use our centralized helper!
+        const unreadCount = await getUnreadCount(p.staff_id, safeConvId);
+
+        console.log(`📡 [Backend] Emit unread to user:${p.staff_id} | Conv: ${safeConvId} | Count: ${unreadCount}`);
+
+        if (io) {
+          io.to(`user:${p.staff_id}`).emit('unread_update', {
+            conversationId: safeConvId,
+            unread: unreadCount
+          });
+
+          io.to(`user:${p.staff_id}`).emit('conversation_updated', {
+            conversationId: safeConvId,
+            lastMessage: message || 'Attachment',
+            lastMessageSenderId: sender_id,
+            lastMessageSender: completeMessage?.sender_name || 'Customer',
+            time: completeMessage.created_at,
+            unread: unreadCount
+          });
+        }
+      }
+    } catch (pushErr) {
+      console.error("❌ [Socket] Error pushing global notification:", pushErr);
+    }
+
     /* =========================
        9. WHATSAPP SEND (Outgoing Only)
     ========================= */
@@ -178,88 +243,102 @@ export async function sendMessage({
 }
 
 /**
- * 🚀 MULTI-TENANT WHATSAPP SENDER
- * Dynamically fetches credentials for this specific conversation.
+ * 🚀 MULTI-TENANT WHATSAPP SENDER (Native Media Support)
  */
 async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) {
   const client = await pool.connect();
   try {
     const to = conversation.phone_number;
-    if (!to) {
-      console.error('No phone number for WhatsApp conversation');
-      return;
+    if (!to) return;
+
+    // 1. Check 24-Hour Customer Service Window
+    const lastCustomerTime = await getLastCustomerMessageTime(conversation.id);
+    const within24h = isWithin24Hours(lastCustomerTime);
+
+    if (!within24h) {
+      console.log(`Outside 24h window for ${to}, routing via Notification Engine.`);
+      const customerName = conversation.name ? conversation.name.replace(/Chat with |WhatsApp /ig, '').trim() : 'Customer';
+      
+      await triggerNotification({
+        eventKey: 'reengagement_message',
+        centreId: conversation.centre_id,
+        customerPhone: to,
+        templateParams: [customerName]
+      });
+      return; 
     }
 
-    // 1. Fetch the correct Communication Account
+    // 2. Fetch Account Credentials
     let accountQuery;
     if (conversation.communication_account_id) {
-      accountQuery = await client.query(`SELECT * FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
+      accountQuery = await client.query(`SELECT id, access_token, base_url, channel_id, name FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
     } else if (conversation.centre_id) {
-      // Fallback: Check if the centre has an account mapped
       accountQuery = await client.query(`
-        SELECT ca.* FROM communication_accounts ca 
+        SELECT ca.id, ca.access_token, ca.base_url, ca.channel_id, ca.name 
+        FROM communication_accounts ca 
         JOIN centres c ON c.communication_account_id = ca.id 
         WHERE c.id = $1 AND ca.is_active = true
       `, [conversation.centre_id]);
     }
 
-    if (!accountQuery || accountQuery.rows.length === 0) {
-      console.warn(`[Message Router] No active WhatsApp account found for Conversation ${conversation.id}.`);
-      return;
-    }
-
+    if (!accountQuery || accountQuery.rows.length === 0) return;
+    
     const account = accountQuery.rows[0];
     const formattedPhone = to.startsWith('+91') ? to : `+91${to.replace(/^\+91/, '')}`;
 
-    // 2. Check 24-Hour Customer Service Window
-    const lastCustomerTime = await getLastCustomerMessageTime(conversation.id);
-    const within24h = isWithin24Hours(lastCustomerTime);
+    // 3. Construct Native Media Payload
+    let payload = {
+      to: formattedPhone,
+      channel_id: account.channel_id,
+    };
 
-    let payload;
+    if (fileUrl) {
+      // Create a publicly accessible URL for Libromi/Meta to download from your server
+      const baseUrl = process.env.VITE_API_URL || 'https://staging-api.akshayasahayi.com';
+      const safeBase = baseUrl.replace(/\/$/, '');
+      const safePath = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+      const fullPublicUrl = `${safeBase}${safePath}`;
 
-    if (!within24h) {
-      // OUTSIDE 24H WINDOW: Force a Re-engagement Template
-      console.log(`Outside 24h window for ${formattedPhone}, sending template instead.`);
-      const customerName = conversation.name ? conversation.name.replace('Chat with ', '') : 'Customer';
+      // Detect File Type
+      const ext = fileName ? fileName.split('.').pop().toLowerCase() : '';
       
-      // Look up their mapped re-engagement template (or fallback)
-      const tplQuery = await client.query(`SELECT provider_template_name FROM communication_template_mappings WHERE communication_account_id = $1 AND event_key = 'reengagement_message'`, [account.id]);
-      const templateName = tplQuery.rows.length > 0 ? tplQuery.rows[0].provider_template_name : "reengagement_message";
-
-      payload = {
-        to: formattedPhone,
-        type: 'template',
-        template: {
-          name: templateName,
-          language: { code: 'en', policy: 'deterministic' },
-          components: [{ type: 'body', parameters: [{ type: 'text', text: customerName }] }]
-        }
-      };
-    } else {
-      // WITHIN 24H WINDOW: Send standard free-form text or files
-      let textBody = message || "";
-      if (fileUrl) {
-        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5000'; // Or APP_URL
-        const fullFileUrl = `${baseUrl}${fileUrl}`;
-        textBody = `📎 ${fileName || 'File'} shared: ${fullFileUrl}\n\n${message || ''}`;
+      if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+        payload.type = 'image';
+        payload.image = { link: fullPublicUrl };
+        if (message) payload.image.caption = message;
+      } 
+      else if (['mp4', '3gp'].includes(ext)) {
+        payload.type = 'video';
+        payload.video = { link: fullPublicUrl };
+        if (message) payload.video.caption = message;
+      } 
+      else if (['mp3', 'wav', 'ogg', 'aac'].includes(ext)) {
+        payload.type = 'audio';
+        payload.audio = { link: fullPublicUrl };
+      } 
+      else {
+        // 🔥 ALL PDFs AND DOCUMENTS MUST GO HERE
+        payload.type = 'document';
+        payload.document = { 
+          link: fullPublicUrl, 
+          filename: fileName || 'Document.pdf' 
+        };
+        if (message) payload.document.caption = message; 
       }
-
-      payload = {
-        to: formattedPhone,
-        type: 'text',
-        text: { body: textBody }
-      };
+    } else {
+      payload.type = 'text';
+      payload.text = { body: message || "" };
     }
 
-    // 3. Dispatch the dynamic request
+    // 4. Send to Libromi
     await axios.post(`${account.base_url}/messages`, payload, {
       headers: { Authorization: `Bearer ${account.access_token}`, 'Content-Type': 'application/json' }
     });
 
-    console.log(`✅ WhatsApp outgoing sent to ${formattedPhone} via Account: ${account.name}`);
+    console.log(`✅ WhatsApp ${payload.type} sent to ${formattedPhone} via Account: ${account.name}`);
 
   } catch (err) {
-    console.error('❌ Failed to send WhatsApp reply:', err.response?.data || err.message);
+    console.error(`❌ Failed to send WhatsApp media:`, err.response?.data || err.message);
   } finally {
     client.release();
   }
@@ -284,60 +363,33 @@ export async function sendSystemMessage(conversationId, message, io, taskId = nu
 }
 
 /**
- * Manually send a WhatsApp template (used by API route)
+ * 🚀 MANUAL TEMPLATE ROUTER
+ * Takes the frontend request, routes it through the Notification Engine, and updates the UI.
  */
 export async function sendManualWhatsAppTemplate({ conversationId, templateName, params = [], io }) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // Fetch conversation & account routing
-    const convRes = await client.query(
-      `SELECT * FROM chat_conversations WHERE id = $1 AND channel = 'whatsapp'`,
-      [conversationId]
-    );
+    const convRes = await client.query(`SELECT * FROM chat_conversations WHERE id = $1 AND channel = 'whatsapp'`, [conversationId]);
     if (!convRes.rows.length) throw new Error("WhatsApp conversation not found");
     const conversation = convRes.rows[0];
 
-    const to = conversation.phone_number;
-    if (!to) throw new Error("No phone number for this conversation");
-
-    let accountQuery;
-    if (conversation.communication_account_id) {
-      accountQuery = await client.query(`SELECT * FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
-    } else {
-      accountQuery = await client.query(`
-        SELECT ca.* FROM communication_accounts ca 
-        JOIN centres c ON c.communication_account_id = ca.id 
-        WHERE c.id = $1 AND ca.is_active = true
-      `, [conversation.centre_id]);
-    }
-
-    if (!accountQuery.rows.length) throw new Error("No active WhatsApp account mapped to this conversation.");
-    const account = accountQuery.rows[0];
-
-    const formattedPhone = to.startsWith('+91') ? to : `+91${to.replace(/^\+91/, '')}`;
-
-    const payload = {
-      to: formattedPhone,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: 'en', policy: 'deterministic' },
-        components: [
-          {
-            type: 'body',
-            parameters: params.map(p => ({ type: 'text', text: String(p) }))
-          }
-        ]
-      }
-    };
-
-    await axios.post(`${account.base_url}/messages`, payload, {
-      headers: { Authorization: `Bearer ${account.access_token}`, 'Content-Type': 'application/json' }
+    // 🔴 1. Delegate the API heavy lifting to the Notification Engine!
+    // templateName here is the abstract event key (e.g., 'reengagement_message') from the React frontend
+    const result = await triggerNotification({
+      eventKey: templateName,
+      centreId: conversation.centre_id,
+      customerPhone: conversation.phone_number,
+      templateParams: params
     });
 
-    // Save history
+    if (!result.success) {
+      // If the engine fails (e.g., template not mapped), throw the exact error back to the frontend UI
+      throw new Error(result.error?.error || result.reason || "Failed to route template through Notification Engine");
+    }
+
+    // 🟢 2. If the engine succeeded, save the visual record to the chat database
     const savedMsg = await client.query(
       `INSERT INTO chat_messages
        (conversation_id, sender_type, sender_id, message, message_type, direction, created_at)
@@ -347,12 +399,12 @@ export async function sendManualWhatsAppTemplate({ conversationId, templateName,
     );
 
     await client.query("COMMIT");
-
-    if (io) {
-      io.to(`conversation:${conversationId}`).emit("new_message", savedMsg.rows[0]);
-    }
-
+    
+    // 3. Emit the socket event so the bubble appears instantly for the staff
+    if (io) io.to(`conversation:${conversationId}`).emit("new_message", savedMsg.rows[0]);
+    
     return { success: true, messageId: savedMsg.rows[0].id };
+
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Manual template send error:", err.message);

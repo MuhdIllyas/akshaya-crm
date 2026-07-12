@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { socket, connectSocket, disconnectSocket } from "@/services/socket";
+import { socket } from '@/services/socket';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -13,6 +13,7 @@ const DashboardLayout = () => {
   
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadNotesCount, setUnreadNotesCount] = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
@@ -57,10 +58,27 @@ const DashboardLayout = () => {
     }
   };
 
+  // Fetch unread notes count
+  const fetchUnreadNotesCount = async () => {
+    if (!token) return;
+    try {
+      // Fix route path depending on how your Axios instance is set up, normally:
+      const res = await fetch(`${API_BASE_URL}/api/notes/unread`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch unread notes');
+      const data = await res.json();
+      setUnreadNotesCount(data.count);
+    } catch (err) {
+      console.error('Error fetching unread notes:', err);
+    }
+  };
+
   // Initial fetch on component mount
   useEffect(() => {
     if (token && currentUserId) {
       fetchAllUnreadCounts();
+      fetchUnreadNotesCount();
     }
   }, [token, currentUserId]);
 
@@ -68,61 +86,61 @@ const DashboardLayout = () => {
   useEffect(() => {
     if (!token || !currentUserId) return;
 
-    console.log("Setting up socket connection for dashboard...");
-    
-    // Connect socket
-    connectSocket(token);
+    console.log("Setting up socket listeners for dashboard...");
 
-    socket.on("connect", () => {
+    const handleConnect = () => {
       console.log("Dashboard socket connected");
-      socket.emit("join", {
-        staffId: currentUserId
-      });
       setSocketConnected(true);
-      // Fetch fresh unread counts on reconnect
       fetchAllUnreadCounts();
-    });
+      fetchUnreadNotesCount();
+    };
 
-    // Listen for unread count updates
-    socket.on("unread_update", (data) => {
-      console.log("Unread update received:", data);
-      // Refetch all unread counts to get accurate totals
+    const handleUnreadNotesUpdate = () => {
+      console.log("New note event received!");
+      fetchUnreadNotesCount(); // 🔥 Add this
+    };
+
+    const handleUnreadUpdate = (data) => {
+      console.log("Unread update received in dashboard:", data);
       fetchAllUnreadCounts();
-    });
+    };
 
-    // Listen for new messages to update unread count
-    socket.on("new_message", (msg) => {
+    const handleNewMessage = (msg) => {
       const isCurrentUser = String(msg.sender_id) === String(currentUserId);
-      console.log("New message received:", msg.message, "Is current user:", isCurrentUser);
-      
       if (!isCurrentUser) {
-        // Refetch all unread counts when new message arrives from others
-        console.log("New message from others, refreshing unread count...");
         fetchAllUnreadCounts();
       }
-    });
+    };
 
-    // Listen for messages read to update unread count
-    socket.on("messages_read", (data) => {
-      console.log("Messages read event received:", data);
-      // Refetch all unread counts when messages are read
+    const handleMessagesRead = (data) => {
       fetchAllUnreadCounts();
-    });
+    };
 
-    socket.on("disconnect", () => {
-      console.log("Dashboard socket disconnected");
+    const handleDisconnect = () => {
       setSocketConnected(false);
-    });
+    };
 
-    // Cleanup
+    // Attach listeners
+    socket.on("connect", handleConnect);
+    socket.on("unread_update", handleUnreadUpdate);
+    socket.on("unread_notes_update", handleUnreadNotesUpdate);
+    socket.on("new_message", handleNewMessage);
+    socket.on("messages_read", handleMessagesRead);
+    socket.on("disconnect", handleDisconnect);
+
+    // If socket is already connected when this component mounts, run logic manually
+    if (socket.connected) {
+      handleConnect();
+    }
+
+    // Cleanup ONLY these specific functions
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("unread_update");
-      socket.off("new_message");
-      socket.off("messages_read");
-      // Don't disconnect socket here as other components might use it
-      // disconnectSocket();
+      socket.off("connect", handleConnect);
+      socket.off("unread_update", handleUnreadUpdate);
+      socket.off("unread_notes_update", handleUnreadNotesUpdate);
+      socket.off("new_message", handleNewMessage);
+      socket.off("messages_read", handleMessagesRead);
+      socket.off("disconnect", handleDisconnect);
     };
   }, [token, currentUserId]);
 
@@ -135,23 +153,19 @@ const DashboardLayout = () => {
       if (!socketConnected || !initialLoadDone) {
         console.log("Polling for unread counts...");
         fetchAllUnreadCounts();
+        fetchUnreadNotesCount();
       }
     }, 15000); // Poll every 15 seconds as fallback
     
     return () => clearInterval(interval);
   }, [token, socketConnected, initialLoadDone]);
 
-  // Reset count when visiting messenger
+  // 🔥 Instantly clear the badge when they open the page
   useEffect(() => {
-    if (location.pathname.includes('/messenger')) {
-      console.log("Visiting messenger, resetting unread count...");
-      setUnreadCount(0);
-    } else {
-      // When leaving messenger, refresh counts after a short delay
-      const timer = setTimeout(() => {
-        fetchAllUnreadCounts();
-      }, 1000);
-      return () => clearTimeout(timer);
+    if (location.pathname.includes('/notes')) {
+      setUnreadNotesCount(0);
+      // We also trigger a fetch just to sync the backend
+      fetchUnreadNotesCount(); 
     }
   }, [location.pathname]);
 
@@ -196,7 +210,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff", label: "My Dashboard", icon: DashboardIcon },
       { path: "/dashboard/staff/calendar", label: "Calendar", icon: CalendarIcon },
       { path: "/dashboard/staff/tasks", label: "My Tasks", icon: TasksIcon },
-      { path: "/dashboard/staff/schedule", label: "Schedule", icon: CalendarIcon },
+      { path: "/dashboard/staff/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/staff/performance", label: "Performance", icon: ChartIcon },
       { path: "/dashboard/staff/attendance", label: "Salary & Attendance", icon: SalaryAttendanceIcon },
       { path: "/dashboard/staff/service_entry", label: "Service Entry", icon: ServiceEntryIcon },
@@ -298,6 +312,7 @@ const DashboardLayout = () => {
               const isActive = activePath === item.path;
               const IconComponent = item.icon;
               const isMessenger = item.label === "Messenger";
+              const isNotes = item.label === "Notes";
               
               return (
                 <Link 
@@ -319,7 +334,7 @@ const DashboardLayout = () => {
                     <IconComponent 
                       isActive={isActive} 
                       isCollapsed={isCollapsed} 
-                      unreadCount={isMessenger ? unreadCount : 0}
+                      unreadCount={isMessenger ? unreadCount : (isNotes ? unreadNotesCount : 0)}
                     />
                   </div>
                   {!isCollapsed && (
@@ -329,15 +344,26 @@ const DashboardLayout = () => {
                       {item.label}
                     </span>
                   )}
+
                   {/* Enhanced Tooltip */}
                   {isCollapsed && (
                     <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-10 shadow-lg">
                       {item.label}
+                      
+                      {/* Messenger Badge */}
                       {isMessenger && unreadCount > 0 && (
                         <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
                           {unreadCount > 99 ? '99+' : unreadCount}
                         </span>
                       )}
+                      
+                      {/* 🔥 ADDED: Notes Badge */}
+                      {isNotes && unreadNotesCount > 0 && (
+                        <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
+                          {unreadNotesCount > 99 ? '99+' : unreadNotesCount}
+                        </span>
+                      )}
+
                       <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-gray-900 border-transparent"></div>
                     </div>
                   )}
@@ -535,6 +561,29 @@ const MessengerIconWithBadge = ({ isActive = false, isCollapsed = false, unreadC
   </div>
 );
 
+// Notes Icon with Badge
+const NotesIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount = 0 }) => (
+  <div className="relative inline-block">
+    <svg 
+      className={isCollapsed ? "w-6 h-6" : "w-5 h-5"} 
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24"
+    >
+      {/* This is the exact path from your NotesIcon */}
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8" />
+    </svg>
+    {unreadCount > 0 && (
+      <span className={`absolute ${
+        isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
+      } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
+      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+        {unreadCount > 99 ? '99+' : unreadCount}
+      </span>
+    )}
+  </div>
+);
+
 // Icon Definitions
 const DashboardIcon = createIcon("M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6");
 const EventsIcon = createIcon(`M8 7V3m8 4V3m-9 8h10 M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z M12 16h.01 M12 12h.01 M12 20h.01`);
@@ -549,6 +598,7 @@ const CampaignIcon = createIcon("M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147
 const SettingsIcon = createIcon("M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z");
 const ReportsIcon = createIcon("M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z");
 const TasksIcon = createIcon("M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2");
+const NotesIcon = createIcon(`M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8`);
 const CalendarIcon = createIcon("M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z");
 const ChartIcon = createIcon("M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z");
 const TeamIcon = createIcon("M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z");

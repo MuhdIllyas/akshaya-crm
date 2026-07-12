@@ -14,7 +14,7 @@ import { getWalletsForCentre } from '@/services/walletService';
 import { postAttendance } from '/src/services/salaryService';
 import QuickServiceModal from '@/components/QuickServiceModal';
 import api from '@/services/serviceService';
-import { socket, connectSocket } from '@/services/socket';
+import { socket } from '@/services/socket';
 
 // Helper functions
 const formatCurrency = (amount) => {
@@ -92,8 +92,6 @@ const StaffDashboard = () => {
     totalReviews: 0,
   });
 
-  const hasJoinedCentre = useRef(false);
-
   // Cancel modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTokenData, setCancelTokenData] = useState(null);
@@ -118,6 +116,12 @@ const StaffDashboard = () => {
     return date.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
+  // Application Tracking State
+  const [trackingStats, setTrackingStats] = useState({ total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
+  const [trackingEntries, setTrackingEntries] = useState([]);
+  const [statView, setStatView] = useState('applications'); 
+  const [activeAppView, setActiveAppView] = useState('active');
+
   // --- Welcome banner state ---
   const [currentTime, setCurrentTime] = useState(new Date());
   const staffName = localStorage.getItem('username') || 'Staff';
@@ -127,6 +131,44 @@ const StaffDashboard = () => {
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'ST';
+
+  // Photo Formatting
+  const [imageError, setImageError] = useState(false);
+  const rawPhoto = localStorage.getItem('photo') ;
+  
+  let staffPhotoUrl = null;
+  if (rawPhoto && rawPhoto !== 'null' && rawPhoto !== 'undefined') {
+    staffPhotoUrl = rawPhoto.startsWith('http') || rawPhoto.startsWith('data:image') 
+      ? rawPhoto 
+      : `${import.meta.env.VITE_API_URL}${rawPhoto}`;
+  }
+
+  const fetchTrackingData = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Explicitly pass the staffId to force the backend to return ONLY this user's data
+      const [statsRes, entriesRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/stats?staff=${staffId}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/entries?staff=${staffId}&limit=100`, { headers })
+      ]);
+
+      if (!statsRes.ok) throw new Error('Failed to fetch tracking stats');
+      if (!entriesRes.ok) throw new Error('Failed to fetch tracking entries');
+
+      const statsData = await statsRes.json();
+      const entriesData = await entriesRes.json();
+
+      setTrackingStats(statsData || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
+      
+      // The /entries endpoint wraps the array inside a 'data' property
+      const entries = entriesData.data || [];
+      setTrackingEntries(entries);
+    } catch (err) {
+      console.error('Error fetching tracking data:', err);
+    }
+  }, [staffId]); // Added staffId to dependencies
 
   // Update clock every minute
   useEffect(() => {
@@ -146,39 +188,21 @@ const StaffDashboard = () => {
   const formatCurrentDate = (date) =>
     date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-  // --- Socket setup (unchanged) ---
+  // --- Socket global listeners ---
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    if (!socket.connected) connectSocket(token);
-
-    const onConnect = () => {
-      if (centreId && !hasJoinedCentre.current) {
-        socket.emit('joinCentre', centreId);
-        hasJoinedCentre.current = true;
-      }
-    };
-
     const onConnectError = (error) => {
       if (error.message === 'Socket authentication failed') {
         toast.error('Session expired. Please login again.');
       }
     };
 
-    socket.on('connect', onConnect);
     socket.on('connect_error', onConnectError);
 
-    if (socket.connected && centreId && !hasJoinedCentre.current) {
-      socket.emit('joinCentre', centreId);
-      hasJoinedCentre.current = true;
-    }
-
     return () => {
-      socket.off('connect', onConnect);
       socket.off('connect_error', onConnectError);
     };
-  }, [centreId]);
+  }, []);
+
 
   // --- Refresh tokens (unchanged) ---
   const refreshTokens = useCallback(async () => {
@@ -318,7 +342,8 @@ const StaffDashboard = () => {
         await Promise.all([
           getCategories().then(res => setCategories(res.data || [])),
           refreshTokens(),
-          fetchWorkspaceInit()
+          fetchWorkspaceInit(),
+          fetchTrackingData()
         ]);
         
       } catch (err) {
@@ -548,6 +573,31 @@ const StaffDashboard = () => {
     }, {});
   }, [recentServiceEntries]);
 
+  const filteredApplications = useMemo(() => {
+    let source = trackingEntries;
+    
+    // 1. Filter by Tab View
+    if (activeAppView === 'active') {
+      source = source.filter(app => ['pending', 'in_progress', 'resubmit'].includes(app.status));
+    } else if (activeAppView === 'completed') {
+      source = source.filter(app => ['completed', 'paid'].includes(app.status));
+    } else if (activeAppView === 'delayed') {
+      source = source.filter(app => ['rejected', 'delayed'].includes(app.status));
+    }
+
+    // 2. Filter by Search Query (Seamless integration with the top search bar)
+    const searchLower = searchQuery.toLowerCase().trim();
+    if (searchLower) {
+      source = source.filter(app => 
+        String(app.customer_name || '').toLowerCase().includes(searchLower) ||
+        String(app.application_number || '').toLowerCase().includes(searchLower) ||
+        String(app.phone || '').toLowerCase().includes(searchLower)
+      );
+    }
+
+    return source;
+  }, [trackingEntries, activeAppView, searchQuery]);
+
   const handleTakeWork = async (bookingId) => {
     try {
       await api.put(`/customer-services/${bookingId}/take`);
@@ -648,8 +698,17 @@ const StaffDashboard = () => {
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-start gap-4 mb-3">
-                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
-                  {staffInitials}
+                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0 overflow-hidden shadow-sm">
+                  {staffPhotoUrl && !imageError ? (
+                    <img 
+                      src={staffPhotoUrl} 
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                      onError={() => setImageError(true)} 
+                    />
+                  ) : (
+                    staffInitials
+                  )}
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold">
@@ -944,13 +1003,34 @@ const StaffDashboard = () => {
             )}
           </div>
 
-          {/* Stats Row - Token Metrics */}
+          {/* Stats Toggle Header */}
+          <div className="flex items-center justify-between mb-4 mt-2">
+            <h3 className="text-lg font-bold text-gray-900">Overview Metrics</h3>
+            <div className="bg-gray-100 p-1 rounded-lg inline-flex">
+              <button onClick={() => setStatView('applications')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Applications</button>
+              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
+            </div>
+          </div>
+
+          {/* Stats Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-            <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
-            <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
-            <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
-            <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
-            <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
+            {statView === 'applications' ? (
+              <>
+                <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-gray-600" />
+                <StatCard title="Pending" value={trackingStats.pending || 0} icon={FiClock} color="bg-amber-500" />
+                <StatCard title="In Progress" value={trackingStats.in_progress || 0} icon={FiPlayCircle} color="bg-blue-500" />
+                <StatCard title="Completed" value={trackingStats.completed || 0} icon={FiCheckCircle} color="bg-green-500" />
+                <StatCard title="Delayed" value={trackingStats.delayed || 0} icon={FiAlertCircle} color="bg-rose-500" />
+              </>
+            ) : (
+              <>
+                <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
+                <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
+                <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
+                <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
+                <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
+              </>
+            )}
           </div>
 
           {/* Two‑Column Layout */}
@@ -977,6 +1057,11 @@ const StaffDashboard = () => {
                     <FiPlayCircle className="h-4 w-4" />
                     My Online Work
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
+                  </button>
+                  <button onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-purple-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                    <FiTarget className="h-4 w-4" />
+                    Applications
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{trackingStats.total || 0}</span>
                   </button>
                 </div>
 
@@ -1138,6 +1223,94 @@ const StaffDashboard = () => {
                           </div>
                         ))
                       )}
+                    </div>
+                  )}
+                
+                  {/* TAB 4: APPLICATIONS TRACKING */}
+                  {workspaceTab === 'applications' && (
+                    <div className="space-y-4">
+                      
+                      {/* Sub-Tabs for Applications */}
+                      <div className="flex gap-2 border-b border-gray-200 pb-3">
+                        {['active', 'completed', 'delayed'].map(tab => {
+                          // Calculate counts based on global stats for the badges
+                          let count = 0;
+                          if (tab === 'active') count = (trackingStats.pending || 0) + (trackingStats.in_progress || 0);
+                          if (tab === 'completed') count = (trackingStats.completed || 0);
+                          if (tab === 'delayed') count = (trackingStats.delayed || 0);
+
+                          return (
+                            <button
+                              key={tab}
+                              onClick={() => setActiveAppView(tab)}
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
+                                activeAppView === tab ? 'bg-purple-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                              }`}
+                            >
+                              {tab}
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeAppView === tab ? 'bg-white/20' : 'bg-gray-200 text-gray-500'}`}>
+                                {count}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Application List */}
+                      <div className="space-y-3">
+                        {filteredApplications.length === 0 ? (
+                          <div className="text-center py-16 text-gray-400">
+                            <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
+                            <p className="font-medium">No {activeAppView} applications found</p>
+                          </div>
+                        ) : (
+                          filteredApplications.map(app => (
+                            <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group">
+                              <div className="flex items-center gap-4 min-w-0">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                                  activeAppView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                  activeAppView === 'delayed' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
+                                  'bg-purple-50 text-purple-700 border border-purple-100'
+                                }`}>
+                                  {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <h4 className="font-bold text-gray-900 text-sm truncate">{app.customer_name}</h4>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                      app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                                      app.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                      app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                      app.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
+                                      app.status === 'resubmit' ? 'bg-orange-100 text-orange-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {app.status?.replace('_', ' ')}
+                                    </span>
+                                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">
+                                      {app.progress}%
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500 truncate flex items-center gap-2">
+                                    <span className="font-medium">{app.service_name}</span>
+                                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                                    <span>{app.current_step || 'Submitted'}</span>
+                                  </p>
+                                  <p className="text-[10px] text-gray-400 mt-1 font-mono">
+                                    Last updated: {new Date(app.updated_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                                  </p>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
+                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
+                              >
+                                <FiBarChart2 className="h-4 w-4" /> Track
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

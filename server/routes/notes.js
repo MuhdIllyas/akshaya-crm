@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../db.js';
 import jwt from 'jsonwebtoken';
+import { io } from '../server.js'; // 🔥 1. IMPORT SOCKET.IO
 
 const router = express.Router();
 
@@ -26,36 +27,110 @@ const authenticateToken = (req, res, next) => {
 // Apply middleware to all routes in this file
 router.use(authenticateToken);
 
+// 🔥 1. NEW ROUTE: Reset the counter when the user opens the page
+router.post('/mark-viewed', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    // Update the timestamp to right now
+    await client.query(
+      `UPDATE staff SET last_notes_viewed = NOW() WHERE id = $1`,
+      [req.user.id]
+    );
+    
+    // Fire a socket event so the Dashboard layout clears the red badge instantly
+    io.to(`user_${req.user.id}`).emit('unread_notes_update', { type: 'read' });
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating view timestamp:', err);
+    res.status(500).json({ error: 'Failed to update view timestamp' });
+  } finally {
+    client.release();
+  }
+});
+
+// 🔥 2. UPDATED ROUTE: Count notes created AFTER the user's last_notes_viewed timestamp
+router.get('/unread', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { centre_id, id: userId, role } = req.user;
+    
+    let query;
+    let values;
+
+    if (role === 'superadmin') {
+      query = `
+        SELECT COUNT(DISTINCT n.id) as unread_count
+        FROM notes n
+        CROSS JOIN (SELECT COALESCE(last_notes_viewed, '2000-01-01'::timestamp) as last_viewed FROM staff WHERE id = $1) as curr_user
+        WHERE n.created_by != $1
+        AND n.created_at > curr_user.last_viewed
+        AND (
+          n.visibility = 'global'
+          OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+        )
+      `;
+      values = [userId];
+    } else {
+      query = `
+        SELECT COUNT(DISTINCT n.id) as unread_count
+        FROM notes n
+        CROSS JOIN (SELECT COALESCE(last_notes_viewed, '2000-01-01'::timestamp) as last_viewed FROM staff WHERE id = $1) as curr_user
+        LEFT JOIN staff s ON n.created_by = s.id
+        WHERE n.created_by != $1 
+        AND n.created_at > curr_user.last_viewed
+        AND (
+          n.visibility = 'global' 
+          OR (n.visibility = 'centre' AND s.centre_id = $2)
+          OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+        )
+      `;
+      values = [userId, centre_id];
+    }
+
+    const result = await client.query(query, values);
+    res.json({ count: parseInt(result.rows[0].unread_count) || 0 });
+  } catch (err) {
+    console.error('Error fetching unread notes count:', err);
+    res.status(500).json({ error: 'Failed to fetch unread notes count' });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/notes/all - Fetch all notes for the centre
 router.get('/all', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const { centre_id, id: userId, role } = req.user;
     
-    // Base query: Join notes with creator's name and the related service entry details
     let query = `
       SELECT 
-        n.id, n.title, n.content, n.visibility, n.created_at, n.related_service_entry_id,
+        n.id, n.title, n.content, n.visibility, n.created_at, 
+        n.related_service_entry_id,
+        n.related_service_tracking_id, 
+        n.related_service_id, 
+        n.created_by, 
         s.name AS creator_name,
         se.customer_name,
         se.token_id,
+        srv.name AS linked_service_name, 
         (SELECT COUNT(*) FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1) as is_mentioned
       FROM notes n
       LEFT JOIN staff s ON n.created_by = s.id
       LEFT JOIN service_entries se ON n.related_service_entry_id = se.id
+      LEFT JOIN services srv ON n.related_service_id = srv.id 
       WHERE 1=1
     `;
     
     const values = [userId];
     let idx = 2;
 
-    // Filter by Centre (unless superadmin)
     if (role !== 'superadmin') {
       query += ` AND s.centre_id = $${idx++}`;
       values.push(centre_id);
     }
 
-    // Visibility Logic: Staff can only see 'global', 'centre', or notes they created/were mentioned in
     query += ` AND (
       n.visibility = 'global' OR 
       n.visibility = 'centre' OR 
@@ -136,6 +211,11 @@ router.post("/", async (req, res) => {
     }
 
     await client.query("COMMIT");
+
+    // 🔥 3. TRIGGER SOCKET EVENTS FOR REAL-TIME BADGE UPDATES
+    // Broadcast a global ping. The frontend will hear it, ask the database for its specific count, and update instantly.
+    io.emit('unread_notes_update');
+
     res.status(201).json(note);
   } catch (err) {
     await client.query("ROLLBACK");
@@ -148,6 +228,8 @@ router.post("/", async (req, res) => {
 
 // --- 3. Get Notes by Customer ID ---
 router.get("/customer/:id", async (req, res) => {
+  if (isNaN(parseInt(req.params.id, 10))) return res.status(400).json({ error: "Invalid customer ID" });
+
   try {
     const result = await pool.query(
       `
@@ -181,6 +263,8 @@ router.get("/customer/:id", async (req, res) => {
 
 // --- 4. Get Notes by Service Entry ID ---
 router.get("/service-entry/:id", async (req, res) => {
+  if (isNaN(parseInt(req.params.id, 10))) return res.status(400).json({ error: "Invalid service entry ID" });
+
   try {
     const result = await pool.query(
       `
@@ -214,22 +298,16 @@ router.get("/service-entry/:id", async (req, res) => {
 
 // --- 5. Update a Note ---
 router.put("/:id", async (req, res) => {
+  if (isNaN(parseInt(req.params.id, 10))) return res.status(400).json({ error: "Invalid note ID" });
+
   try {
     const noteCheck = await pool.query("SELECT * FROM notes WHERE id = $1", [req.params.id]);
-
-    if (!noteCheck.rows.length) {
-      return res.status(404).json({ error: "Note not found" });
-    }
+    if (!noteCheck.rows.length) return res.status(404).json({ error: "Note not found" });
 
     const note = noteCheck.rows[0];
-    const canEdit =
-      note.created_by === req.user.id ||
-      req.user.role === "admin" ||
-      req.user.role === "superadmin";
+    const canEdit = note.created_by === req.user.id || req.user.role === "admin" || req.user.role === "superadmin";
 
-    if (!canEdit) {
-      return res.status(403).json({ error: "Unauthorized" });
-    }
+    if (!canEdit) return res.status(403).json({ error: "Unauthorized" });
 
     const { title, content, visibility } = req.body;
 
@@ -252,28 +330,32 @@ router.put("/:id", async (req, res) => {
 
 // --- 6. Delete a Note ---
 router.delete("/:id", async (req, res) => {
-  try {
-    const noteCheck = await pool.query("SELECT * FROM notes WHERE id = $1", [req.params.id]);
+  const noteId = parseInt(req.params.id, 10);
+  if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });
 
-    if (!noteCheck.rows.length) {
-      return res.status(404).json({ error: "Note not found" });
-    }
+  const client = await pool.connect();
+  
+  try {
+    const noteCheck = await client.query("SELECT * FROM notes WHERE id = $1", [noteId]);
+    if (!noteCheck.rows.length) return res.status(404).json({ error: "Note not found" });
 
     const note = noteCheck.rows[0];
-    const canDelete =
-      note.created_by === req.user.id ||
-      req.user.role === "admin" ||
-      req.user.role === "superadmin";
+    const canDelete = note.created_by === req.user.id || req.user.role === "admin" || req.user.role === "superadmin";
 
-    if (!canDelete) {
-      return res.status(403).json({ error: "Unauthorized" });
-    }
+    if (!canDelete) return res.status(403).json({ error: "Unauthorized" });
 
-    await pool.query("DELETE FROM notes WHERE id = $1", [req.params.id]);
+    await client.query("BEGIN");
+    await client.query("DELETE FROM note_mentions WHERE note_id = $1", [noteId]);
+    await client.query("DELETE FROM notes WHERE id = $1", [noteId]);
+    await client.query("COMMIT");
+    
     res.json({ success: true, message: "Note deleted successfully" });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: "Failed to delete note" });
+  } finally {
+    client.release();
   }
 });
 

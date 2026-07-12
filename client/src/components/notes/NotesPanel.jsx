@@ -131,32 +131,40 @@ const NotesPanel = ({
   const formatNoteContent = (text) => {
     if (!text) return null;
 
-    // Regex to match the react-mentions pattern: @[Display Name](id)
-    const mentionRegex = /@\[(.*?)\]\((\d+)\)/g;
+    // 🔥 FIX: Changed \d+ to \w+
+    const mentionRegex = /@\[(.*?)\]\((\w+)\)/g;
     const parts = [];
     let lastIndex = 0;
     let match;
 
     while ((match = mentionRegex.exec(text)) !== null) {
-      // 1. Push any normal text that comes before the mention
+      // 1. Push normal text before the mention
       if (match.index > lastIndex) {
         parts.push(text.substring(lastIndex, match.index));
       }
 
-      // 2. Push the beautifully styled mention badge
+      const name = match[1];
+      const id = match[2];
+      const isAllStaff = id === 'all';
+
+      // 2. Push the styled mention badge
       parts.push(
         <span 
           key={match.index} 
-          className="font-bold text-indigo-700 bg-indigo-100/80 border border-indigo-200 px-1.5 py-0.5 rounded-md mx-0.5"
+          className={`font-bold px-1.5 py-0.5 rounded-md mx-0.5 border ${
+            isAllStaff 
+              ? 'text-rose-700 bg-rose-100/80 border-rose-200' 
+              : 'text-indigo-700 bg-indigo-100/80 border-indigo-200'
+          }`}
         >
-          @{match[1]}
+          @{name}
         </span>
       );
 
       lastIndex = mentionRegex.lastIndex;
     }
 
-    // 3. Push any remaining normal text after the last mention
+    // 3. Push remaining normal text
     if (lastIndex < text.length) {
       parts.push(text.substring(lastIndex));
     }

@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from 'url';
 import { resolveConversation, addParticipantsToConversation } from '../../utils/conversationService.js';
-import { sendMessage } from '../../utils/messageRouter.js';
+import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -238,6 +238,7 @@ router.post("/conversation", authenticateToken, async (req, res) => {
     let finalName = name || context_name;
     let participantIds = null;
     let finalIsGroup = is_group;
+    let commAccountId = null; // 🔥 NEW: Variable to hold the tenant ID
 
     // Determine if this is a WhatsApp conversation
     const isWhatsApp = channel === 'whatsapp';
@@ -247,6 +248,17 @@ router.post("/conversation", authenticateToken, async (req, res) => {
       const phone = finalPhoneNumber;
       if (!phone) {
         return res.status(400).json({ error: "Phone number is required for WhatsApp conversation" });
+      }
+
+      // 🔥 NEW: Fetch the specific Communication Account ID for this Centre
+      const accountRes = await pool.query(
+        `SELECT communication_account_id FROM centres WHERE id = $1`,
+        [centreId]
+      );
+      commAccountId = accountRes.rows[0]?.communication_account_id;
+
+      if (!commAccountId) {
+        return res.status(400).json({ error: "No WhatsApp account is linked to your centre." });
       }
 
       // ⭐ Do NOT create a customer record. Just store the phone number and name in the conversation.
@@ -281,7 +293,8 @@ router.post("/conversation", authenticateToken, async (req, res) => {
       created_by: userId,
       name: finalName,
       is_group: finalIsGroup,
-      participant_ids: participantIds
+      participant_ids: participantIds,
+      communication_account_id: commAccountId // 🔥 PASSING THE TENANT ID HERE
     });
 
     // Add participants if needed (resolveConversation might have added them, but ensure)
@@ -528,7 +541,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
 });
 
 /* ================================
-   SEND MESSAGE
+   SEND MESSAGE (Smart Auto-Join)
 ================================ */
 
 router.post("/message", authenticateToken, upload.single("file"), async (req, res) => {
@@ -536,24 +549,44 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
     const { conversation_id, message, message_type } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
-    const hasAccess = await checkConversationAccess(conversation_id, userId);
-    if (!hasAccess) {
-      return res.status(403).json({ error: "Not a participant in this conversation" });
-    }
-    
-    const conversation = await pool.query(
-      `SELECT channel, assigned_staff_id FROM chat_conversations WHERE id = $1`,
+    const userCentreId = req.user.centre_id;
+
+    // 1. Get the conversation details to verify Centre ownership
+    const convRes = await pool.query(
+      `SELECT centre_id, channel FROM chat_conversations WHERE id = $1`,
       [conversation_id]
     );
-    
-    if (conversation.rows[0]?.channel === 'whatsapp') {
-      const canReply = await canReplyToWhatsApp(conversation_id, userId, userRole);
-      if (!canReply) {
-        return res.status(403).json({ error: "Only assigned staff can reply to WhatsApp messages" });
+
+    if (convRes.rows.length === 0) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    const conversation = convRes.rows[0];
+
+    // 2. Security Check: Prevent staff from messaging other centres' customers
+    if (userRole !== 'superadmin' && conversation.centre_id !== userCentreId) {
+       return res.status(403).json({ error: "This conversation belongs to another centre." });
+    }
+
+    // 3. Participant Check & Auto-Join (The Magic Fix)
+    if (userRole === 'staff') {
+      const participantCheck = await pool.query(
+        `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+        [conversation_id, userId]
+      );
+
+      // If the staff member isn't in the DB yet, auto-enroll them so they can reply!
+      if (participantCheck.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+           VALUES ($1, $2, 'staff', 'member', NOW())
+           ON CONFLICT DO NOTHING`,
+          [conversation_id, userId]
+        );
       }
     }
 
+    // 4. Send the message to the central router (which handles Libromi internally)
     const savedMessage = await sendMessage({
       conversation_id,
       sender_id: userId,
@@ -843,13 +876,11 @@ router.get("/unread/all", authenticateToken, async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT 
-        c.id as conversation_id,
-        COUNT(m.id) as unread_count
+      SELECT c.id as conversation_id, COUNT(m.id) as unread_count
       FROM chat_conversations c
       JOIN chat_participants p ON c.id = p.conversation_id
-      LEFT JOIN chat_messages m ON c.id = m.conversation_id
-        AND m.sender_id != $1
+      JOIN chat_messages m ON c.id = m.conversation_id
+        AND (m.sender_id IS NULL OR m.sender_id <> $1) -- 🔥 PERFECT LOGIC SYNC
         AND m.is_deleted = false
         AND NOT EXISTS (
           SELECT 1 FROM chat_message_reads r
@@ -882,23 +913,56 @@ router.get("/unread/:conversationId", authenticateToken, async (req, res) => {
     const { conversationId } = req.params;
     const userId = req.user.id;
 
-    const result = await pool.query(
-      `
-      SELECT COUNT(*) as count
-      FROM chat_messages m
-      LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
-      WHERE m.conversation_id = $2 
-        AND m.sender_id != $1
-        AND r.id IS NULL
-        AND m.is_deleted = false
-      `,
-      [userId, conversationId]
+    // 🔥 Use the central helper!
+    const unreadCount = await getUnreadCount(userId, conversationId);
+
+    res.json({ unread: unreadCount });
+  } catch (err) {
+    console.error("Fetch unread error:", err);
+    res.status(500).json({ error: "Failed to fetch unread count" });
+  }
+});
+
+/* ================================
+   DELETE ENTIRE CONVERSATION
+================================ */
+
+router.delete("/conversation/:conversationId", authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Security check: Only participants or admins can delete
+    const hasAccess = await checkConversationAccess(conversationId, userId);
+    if (!hasAccess && userRole !== 'superadmin' && userRole !== 'admin') {
+      return res.status(403).json({ error: "Not authorized to delete this conversation" });
+    }
+
+    // 🔥 Soft Delete: Update status to 'deleted' so it vanishes from the GET /conversations query
+    await pool.query(
+      `UPDATE chat_conversations SET status = 'deleted', updated_at = NOW() WHERE id = $1`,
+      [conversationId]
     );
 
-    res.json({ unread: parseInt(result.rows[0].count) });
+    // Tell all connected staff participants to instantly remove it from their UI
+    const io = req.io;
+    if (io) {
+       const participantsRes = await pool.query(
+        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
+        [conversationId]
+      );
+      for (const p of participantsRes.rows) {
+        io.to(`user:${p.staff_id}`).emit('conversation_deleted', { 
+          conversationId: parseInt(conversationId) 
+        });
+      }
+    }
+
+    res.json({ success: true });
   } catch (err) {
-    console.error("Fetch unread count error:", err);
-    res.status(500).json({ error: "Failed to fetch unread count", details: err.message });
+    console.error("Delete conversation error:", err);
+    res.status(500).json({ error: "Failed to delete conversation", details: err.message });
   }
 });
 
