@@ -120,6 +120,7 @@ const StaffDashboard = () => {
   const [trackingStats, setTrackingStats] = useState({ total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
   const [trackingEntries, setTrackingEntries] = useState([]);
   const [statView, setStatView] = useState('applications'); 
+  const [activeAppView, setActiveAppView] = useState('active');
 
   // --- Welcome banner state ---
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -560,6 +561,31 @@ const StaffDashboard = () => {
       return acc;
     }, {});
   }, [recentServiceEntries]);
+
+  const filteredApplications = useMemo(() => {
+    let source = trackingEntries;
+    
+    // 1. Filter by Tab View
+    if (activeAppView === 'active') {
+      source = source.filter(app => ['pending', 'in_progress', 'resubmit'].includes(app.status));
+    } else if (activeAppView === 'completed') {
+      source = source.filter(app => ['completed', 'paid'].includes(app.status));
+    } else if (activeAppView === 'delayed') {
+      source = source.filter(app => ['rejected', 'delayed'].includes(app.status));
+    }
+
+    // 2. Filter by Search Query (Seamless integration with the top search bar)
+    const searchLower = searchQuery.toLowerCase().trim();
+    if (searchLower) {
+      source = source.filter(app => 
+        String(app.customer_name || '').toLowerCase().includes(searchLower) ||
+        String(app.application_number || '').toLowerCase().includes(searchLower) ||
+        String(app.phone || '').toLowerCase().includes(searchLower)
+      );
+    }
+
+    return source;
+  }, [trackingEntries, activeAppView, searchQuery]);
 
   const handleTakeWork = async (bookingId) => {
     try {
@@ -1182,53 +1208,89 @@ const StaffDashboard = () => {
                 
                   {/* TAB 4: APPLICATIONS TRACKING */}
                   {workspaceTab === 'applications' && (
-                    <div className="space-y-3">
-                      {trackingEntries.length === 0 ? (
-                        <div className="text-center py-16 text-gray-400">
-                          <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
-                          <p className="font-medium">No active applications being tracked</p>
-                        </div>
-                      ) : (
-                        trackingEntries.map(app => (
-                          <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group">
-                            <div className="flex items-center gap-4 min-w-0">
-                              <div className="w-10 h-10 bg-purple-50 text-purple-700 border border-purple-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">
-                                {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <h4 className="font-bold text-gray-900 text-sm truncate">{app.customer_name}</h4>
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                    app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                                    app.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                                    app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                    app.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
-                                    app.status === 'resubmit' ? 'bg-orange-100 text-orange-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {app.status?.replace('_', ' ')}
-                                  </span>
-                                  <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">
-                                    {app.progress}%
-                                  </span>
-                                </div>
-                                <p className="text-xs text-gray-500 truncate">
-                                  {app.service_name} • <span className="font-medium">{app.current_step || 'Submitted'}</span>
-                                </p>
-                                <p className="text-[10px] text-gray-400 mt-1 font-mono">
-                                  Last updated: {new Date(app.updated_at).toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                            <button 
-                              onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
-                              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
+                    <div className="space-y-4">
+                      
+                      {/* Sub-Tabs for Applications */}
+                      <div className="flex gap-2 border-b border-gray-200 pb-3">
+                        {['active', 'completed', 'delayed'].map(tab => {
+                          // Calculate counts based on global stats for the badges
+                          let count = 0;
+                          if (tab === 'active') count = (trackingStats.pending || 0) + (trackingStats.in_progress || 0);
+                          if (tab === 'completed') count = (trackingStats.completed || 0);
+                          if (tab === 'delayed') count = (trackingStats.delayed || 0);
+
+                          return (
+                            <button
+                              key={tab}
+                              onClick={() => setActiveAppView(tab)}
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
+                                activeAppView === tab ? 'bg-purple-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                              }`}
                             >
-                              <FiBarChart2 className="h-4 w-4" /> Track
+                              {tab}
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeAppView === tab ? 'bg-white/20' : 'bg-gray-200 text-gray-500'}`}>
+                                {count}
+                              </span>
                             </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Application List */}
+                      <div className="space-y-3">
+                        {filteredApplications.length === 0 ? (
+                          <div className="text-center py-16 text-gray-400">
+                            <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
+                            <p className="font-medium">No {activeAppView} applications found</p>
                           </div>
-                        ))
-                      )}
+                        ) : (
+                          filteredApplications.map(app => (
+                            <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group">
+                              <div className="flex items-center gap-4 min-w-0">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                                  activeAppView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                  activeAppView === 'delayed' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
+                                  'bg-purple-50 text-purple-700 border border-purple-100'
+                                }`}>
+                                  {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <h4 className="font-bold text-gray-900 text-sm truncate">{app.customer_name}</h4>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                      app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                                      app.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                      app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                      app.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
+                                      app.status === 'resubmit' ? 'bg-orange-100 text-orange-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {app.status?.replace('_', ' ')}
+                                    </span>
+                                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">
+                                      {app.progress}%
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500 truncate flex items-center gap-2">
+                                    <span className="font-medium">{app.service_name}</span>
+                                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                                    <span>{app.current_step || 'Submitted'}</span>
+                                  </p>
+                                  <p className="text-[10px] text-gray-400 mt-1 font-mono">
+                                    Last updated: {new Date(app.updated_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                                  </p>
+                                </div>
+                              </div>
+                              <button 
+                                onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
+                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
+                              >
+                                <FiBarChart2 className="h-4 w-4" /> Track
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
