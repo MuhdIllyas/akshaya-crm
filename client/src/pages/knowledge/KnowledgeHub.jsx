@@ -1249,5 +1249,4 @@ const SearchPage = ({ query, navigateTo, openDiscussion }) => {
   );
 };
 
-// Export the main component
 export default KnowledgeHub;
