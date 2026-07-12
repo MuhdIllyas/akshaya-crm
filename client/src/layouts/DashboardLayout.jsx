@@ -219,6 +219,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/messages", label: "Notifications", icon: NotificationsIcon },
       { path: "/dashboard/staff/team", label: "My Team", icon: TeamIcon },
       { path: "/dashboard/staff/messenger", label: "Messenger", icon: MessengerIconWithBadge },
+      { path: "/dashboard/staff/knowledge_hub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/staff/token", label: "Token Generator", icon: TokenGeneratorIcon },
       { path: "/dashboard/staff/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/staff/track_service", label: "Track Service", icon: TrackServiceIcon },
@@ -614,5 +615,5 @@ const TokenGeneratorIcon = createIcon("M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.74
 const TrackServiceIcon = createIcon("M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7");
 const CustomersIcon = createIcon("M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z");
 const ServiceLogsIcon = createIcon("M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01");
-
+const KnowledgeHubIcon = createIcon("M12 2a7 7 0 00-4 12.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26A7 7 0 0012 2zm-2 18h4m-3 2h2");
 export default DashboardLayout;

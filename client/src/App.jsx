@@ -50,6 +50,9 @@ import axios from "axios";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 
+//Knowledge Hub
+import KnowledgeHub from './pages/knowledge/KnowledgeHub';
+
 //Analytics Page
 import ReportsSection from './pages/ReportsSection';
 
@@ -412,6 +415,10 @@ const App = () => {
             <Route
               path="staff/messenger"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><Messenger /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/knowledge_hub"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><KnowledgeHub /></ProtectedRoute>}
             />
             <Route
               path="staff/track_service"
