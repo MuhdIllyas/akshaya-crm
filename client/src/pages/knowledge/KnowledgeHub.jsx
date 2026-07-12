@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  FiHome, FiMessageCircle, FiBook, FiBullhorn, FiGraduationCap,
+  FiHome, FiMessageCircle, FiBook, FiBell, FiAward,
   FiTags, FiBookmark, FiAtSign, FiClock, FiPlus, FiSearch,
-  FiBell, FiUser, FiChevronRight, FiChevronLeft, FiX,
+  FiUser, FiChevronRight, FiChevronLeft, FiX,
   FiStar, FiTrendingUp, FiCalendar, FiEye, FiMessageSquare,
   FiPaperclip, FiLink, FiCheckCircle, FiAlertCircle, FiFilter,
   FiChevronDown, FiCornerDownLeft, FiEdit2, FiTrash2, FiSave,
   FiExternalLink, FiLock, FiMapPin, FiGlobe, FiHeart, FiZap,
-  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo, FiAward
+  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo,
+  FiMenu, FiSettings, FiFile, FiLayers, FiFolder
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
@@ -230,8 +231,8 @@ Please suggest any other escalation channels or contacts.`,
   categories: [
     { id: 'questions', label: 'Questions', icon: 'fa-circle-question', color: '#6366f1' },
     { id: 'ideas', label: 'Ideas', icon: 'fa-lightbulb', color: '#f59e0b' },
-    { id: 'announcements', label: 'Announcements', icon: 'fa-bullhorn', color: '#ef4444' },
-    { id: 'training', label: 'Training', icon: 'fa-graduation-cap', color: '#10b981' },
+    { id: 'announcements', label: 'Announcements', icon: FiBell, color: '#ef4444' },
+    { id: 'training', label: 'Training', icon: FiAward, color: '#10b981' },
     { id: 'problems', label: 'Problems', icon: 'fa-triangle-exclamation', color: '#eab308' },
     { id: 'bugs', label: 'Bugs', icon: 'fa-bug', color: '#f97316' },
     { id: 'government_orders', label: 'Government Orders', icon: 'fa-file-lines', color: '#8b5cf6' },
@@ -258,8 +259,8 @@ const Sidebar = ({ active, onNavigate }) => {
     { id: 'home', label: 'Home', icon: FiHome },
     { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: DATA.stats.discussions },
     { id: 'knowledge', label: 'Knowledge Base', icon: FiBook, count: DATA.stats.articles },
-    { id: 'announcements', label: 'Announcements', icon: FiBullhorn, count: DATA.stats.announcements },
-    { id: 'training', label: 'Training', icon: FiGraduationCap, count: DATA.stats.trainings },
+    { id: 'announcements', label: 'Announcements', icon: FiBell, count: DATA.stats.announcements },
+    { id: 'training', label: 'Training', icon: FiAward, count: DATA.stats.trainings },
     { id: 'tags', label: 'Tags', icon: FiTags },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
     { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: 3 },
@@ -302,7 +303,7 @@ const Sidebar = ({ active, onNavigate }) => {
 };
 
 // Top Bar with Global Search
-const TopBar = ({ onSearch, query }) => {
+const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar }) => {
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -318,7 +319,7 @@ const TopBar = ({ onSearch, query }) => {
 
   return (
     <div className="topbar">
-      <button className="mobile-menu-btn" onClick={() => window.dispatchEvent(new CustomEvent('toggleMobileSidebar'))}>
+      <button className="mobile-menu-btn" onClick={toggleMobileSidebar}>
         <FiMenu className="h-5 w-5" />
       </button>
       <div className="search-wrap">
@@ -387,8 +388,8 @@ const DiscussionCard = ({ discussion, onClick }) => {
   const typeIcons = {
     question: FiMessageSquare,
     idea: FiZap,
-    announcement: FiBullhorn,
-    training: FiGraduationCap,
+    announcement: FiBell,
+    training: FiAward,
     bug: FiAlertCircle,
     problem: FiAlertCircle,
     guide: FiBook,
@@ -446,7 +447,7 @@ const ArticleCard = ({ article, onClick }) => (
       <span><FiFolder className="h-3 w-3" /> {article.category}</span>
       <span><FiUser className="h-3 w-3" /> {article.author}</span>
       <span><FiClock className="h-3 w-3" /> {article.updated}</span>
-      <span><FiBookOpen className="h-3 w-3" /> {article.readingTime}</span>
+      <span><FiClock className="h-3 w-3" /> {article.readingTime}</span>
     </div>
   </div>
 );
@@ -473,13 +474,6 @@ const KnowledgeHub = () => {
     attachments: [],
   });
   const [tagInput, setTagInput] = useState('');
-
-  // Toggle mobile sidebar
-  useEffect(() => {
-    const handler = () => setMobileSidebarOpen(prev => !prev);
-    window.addEventListener('toggleMobileSidebar', handler);
-    return () => window.removeEventListener('toggleMobileSidebar', handler);
-  }, []);
 
   // Navigation
   const navigateTo = (target, id = null) => {
@@ -546,6 +540,9 @@ const KnowledgeHub = () => {
     // Refresh discussions list (mock)
   };
 
+  // Toggle mobile sidebar
+  const toggleMobileSidebar = () => setMobileSidebarOpen(prev => !prev);
+
   // Render page content based on current page
   const renderPage = () => {
     switch (page) {
@@ -583,7 +580,12 @@ const KnowledgeHub = () => {
 
       {/* Main Content */}
       <div className="main-content">
-        <TopBar onSearch={handleSearch} query={searchQuery} />
+        <TopBar
+          onSearch={handleSearch}
+          query={searchQuery}
+          onNavigate={navigateTo}
+          toggleMobileSidebar={toggleMobileSidebar}
+        />
 
         <div className="page-content">
           {renderPage()}
@@ -776,8 +778,8 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
     <div className="stat-grid">
       <StatCard label="Discussions" value={DATA.stats.discussions} icon={FiMessageCircle} color="blue" />
       <StatCard label="Knowledge Articles" value={DATA.stats.articles} icon={FiBook} color="green" />
-      <StatCard label="Announcements" value={DATA.stats.announcements} icon={FiBullhorn} color="amber" />
-      <StatCard label="Training Materials" value={DATA.stats.trainings} icon={FiGraduationCap} color="purple" />
+      <StatCard label="Announcements" value={DATA.stats.announcements} icon={FiBell} color="amber" />
+      <StatCard label="Training Materials" value={DATA.stats.trainings} icon={FiAward} color="purple" />
       <StatCard label="Open Questions" value={DATA.stats.openQuestions} icon={FiAlertCircle} color="rose" />
     </div>
 
@@ -859,7 +861,7 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
 
     <div className="card">
       <div className="card-header">
-        <h3><FiBullhorn className="h-4 w-4" /> Latest Announcements</h3>
+        <h3><FiBell className="h-4 w-4" /> Latest Announcements</h3>
         <span className="see-all" onClick={() => navigateTo('announcements')}>View all →</span>
       </div>
       {DATA.announcements.map((a, idx) => (
@@ -940,8 +942,8 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   const typeIcons = {
     question: FiMessageSquare,
     idea: FiZap,
-    announcement: FiBullhorn,
-    training: FiGraduationCap,
+    announcement: FiBell,
+    training: FiAward,
     bug: FiAlertCircle,
     problem: FiAlertCircle,
     guide: FiBook,
@@ -1115,7 +1117,7 @@ const TrainingPage = ({ navigateTo }) => (
           <div className="training-info">
             <div className="title">{t.title}</div>
             <div className="meta">{t.type} · {t.duration}</div>
-            <div className="meta"><FiCubes className="h-3 w-3" /> {t.modules} modules</div>
+            <div className="meta"><FiLayers className="h-3 w-3" /> {t.modules} modules</div>
           </div>
           <div className="training-updated">{t.updated}</div>
         </div>
@@ -1196,7 +1198,7 @@ const NotificationsPage = () => (
         </div>
       </div>
       <div className="notification-item">
-        <div className="notification-icon" style={{ background: '#fffbeb', color: '#f59e0b' }}><FiBullhorn /></div>
+        <div className="notification-icon" style={{ background: '#fffbeb', color: '#f59e0b' }}><FiBell /></div>
         <div className="notification-content">
           <p>New announcement: <span className="highlight">Office Closed on 26th Jan</span></p>
           <span className="time">2 days ago</span>
