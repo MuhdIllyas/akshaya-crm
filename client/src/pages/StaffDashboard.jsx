@@ -132,6 +132,17 @@ const StaffDashboard = () => {
     .toUpperCase()
     .slice(0, 2) || 'ST';
 
+  // Photo Formatting
+  const [imageError, setImageError] = useState(false);
+  const rawPhoto = localStorage.getItem('photo') ;
+  
+  let staffPhotoUrl = null;
+  if (rawPhoto && rawPhoto !== 'null' && rawPhoto !== 'undefined') {
+    staffPhotoUrl = rawPhoto.startsWith('http') || rawPhoto.startsWith('data:image') 
+      ? rawPhoto 
+      : `${import.meta.env.VITE_API_URL}${rawPhoto}`;
+  }
+
   const fetchTrackingData = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
@@ -687,8 +698,17 @@ const StaffDashboard = () => {
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-start gap-4 mb-3">
-                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
-                  {staffInitials}
+                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0 overflow-hidden shadow-sm">
+                  {staffPhotoUrl && !imageError ? (
+                    <img 
+                      src={staffPhotoUrl} 
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                      onError={() => setImageError(true)} 
+                    />
+                  ) : (
+                    staffInitials
+                  )}
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold">
