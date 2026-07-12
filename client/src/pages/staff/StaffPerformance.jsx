@@ -89,7 +89,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, l
         {trend !== undefined && trendValue !== undefined && (
           <p className={`font-medium text-sm mt-1 flex items-center ${trendValue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
             {trendValue >= 0 ? <FiTrendingUp className="mr-1 h-3 w-3" /> : <FiTrendingDown className="mr-1 h-3 w-3" />}
-            {Math.abs(trendValue)}% {trend}
+            {Math.round(Math.abs(trendValue))}% {trend}
           </p>
         )}
       </div>
