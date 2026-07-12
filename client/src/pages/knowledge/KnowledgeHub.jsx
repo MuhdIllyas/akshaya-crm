@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FiHome, FiMessageCircle, FiBook, FiBell, FiAward,
-  FiTags, FiBookmark, FiAtSign, FiClock, FiPlus, FiSearch,
+  FiTag, FiBookmark, FiAtSign, FiClock, FiPlus, FiSearch,
   FiUser, FiChevronRight, FiChevronLeft, FiX,
   FiStar, FiTrendingUp, FiCalendar, FiEye, FiMessageSquare,
   FiPaperclip, FiLink, FiCheckCircle, FiAlertCircle, FiFilter,
@@ -261,7 +261,7 @@ const Sidebar = ({ active, onNavigate }) => {
     { id: 'knowledge', label: 'Knowledge Base', icon: FiBook, count: DATA.stats.articles },
     { id: 'announcements', label: 'Announcements', icon: FiBell, count: DATA.stats.announcements },
     { id: 'training', label: 'Training', icon: FiAward, count: DATA.stats.trainings },
-    { id: 'tags', label: 'Tags', icon: FiTags },
+    { id: 'tags', label: 'Tags', icon: FiTag },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
     { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: 3 },
     { id: 'history', label: 'History', icon: FiClock },
