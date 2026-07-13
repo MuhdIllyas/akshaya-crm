@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom"; // 🔥 NEW: Imported useNavigate
+import { useNavigate } from "react-router-dom"; 
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiSend,
@@ -362,6 +362,9 @@ const MessengerPage = ({ user }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [socketConnected, setSocketConnected] = useState(false);
+
+  const [serviceDetails, setServiceDetails] = useState(null);
+  const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
 
   const lastMessageIdsRef = useRef(new Set());
   const typingTimeoutRef = useRef(null);
@@ -898,6 +901,27 @@ const MessengerPage = ({ user }) => {
       }
     };
   }, [activeConversation?.id]);
+
+  // FETCH SERVICE DETAILS IF IT'S A SERVICE CONVERSATION
+  useEffect(() => {
+    if (activeConversation?.context_type === 'service_entry' && activeConversation.context_id) {
+      setLoadingServiceDetails(true);
+      fetch(`${API_BASE_URL}/api/customer-services/${activeConversation.context_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        setServiceDetails(data);
+        setLoadingServiceDetails(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch service details", err);
+        setLoadingServiceDetails(false);
+      });
+    } else {
+      setServiceDetails(null);
+    }
+  }, [activeConversation?.id, token]);
 
   const handleSendMessage = async (message, file, optimisticMessage = null) => {
     if ((!message?.trim() && !file) || !activeConversation) return;
@@ -1974,27 +1998,130 @@ const MessengerPage = ({ user }) => {
             </p>
           )}
 
-          {/* 🔥 NEW: Service Details & Track Button */}
+          {/* 🔥 Expanded Service Details & Track Button */}
           {activeConversation.context_type === 'service_entry' && (
             <div className="mt-5 w-full">
-              <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 mb-3 text-left">
-                <p className="text-[10px] text-purple-600 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-                  <FiBriefcase /> Service Collaboration
-                </p>
-                <p className="text-sm font-semibold text-gray-800 truncate" title={activeConversation.context_name}>
-                  {activeConversation.context_name || 'Service Request'}
-                </p>
-                {activeConversation.context_identifier && (
-                  <p className="text-xs text-gray-500 mt-1 font-mono">
-                    Ref/App #: {activeConversation.context_identifier}
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-3 text-left shadow-sm">
+                <div className="mb-3">
+                  <p className="text-[10px] text-purple-600 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <FiBriefcase /> Service Collaboration
                   </p>
+                  <p className="text-sm font-bold text-gray-900" title={activeConversation.context_name}>
+                    {activeConversation.context_name || 'Service Request'}
+                  </p>
+                  {activeConversation.context_identifier && (
+                    <p className="text-xs text-purple-700 mt-0.5 font-mono font-medium">
+                      Ref/App #: {activeConversation.context_identifier}
+                    </p>
+                  )}
+                </div>
+
+                {loadingServiceDetails ? (
+                  <div className="animate-pulse space-y-2 py-2">
+                    <div className="h-3 bg-purple-200/50 rounded w-3/4"></div>
+                    <div className="h-3 bg-purple-200/50 rounded w-1/2"></div>
+                    <div className="h-3 bg-purple-200/50 rounded w-5/6"></div>
+                  </div>
+                ) : serviceDetails ? (
+                  <div className="bg-white rounded-lg p-3 space-y-2.5 text-xs border border-purple-100/60 shadow-sm">
+                    {/* Basic Info */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Service Type</p>
+                        <p className="font-semibold text-gray-800">{serviceDetails.category_name || serviceDetails.service_name || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Subcategory</p>
+                        <p className="font-semibold text-gray-800">{serviceDetails.subcategory_name || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    {/* Status & Step */}
+                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Status</p>
+                        <span className={`inline-block px-1.5 py-0.5 rounded font-bold text-[10px] uppercase tracking-wider ${
+                          serviceDetails.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          serviceDetails.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {serviceDetails.status?.replace('-', ' ') || 'Pending'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Current Step</p>
+                        <p className="font-semibold text-blue-600 truncate" title={serviceDetails.current_step}>
+                          {serviceDetails.current_step || 'Initial Phase'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Time & Priority */}
+                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Priority</p>
+                        <p className={`font-bold ${
+                          serviceDetails.priority === 'High' ? 'text-red-600' :
+                          serviceDetails.priority === 'Medium' ? 'text-yellow-600' :
+                          'text-gray-800'
+                        }`}>
+                          {serviceDetails.priority || 'Normal'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Avg Time</p>
+                        <p className="font-semibold text-gray-800 flex items-center gap-1">
+                          <FiClock size={10}/> {serviceDetails.average_time || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Expiry & Updated */}
+                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Expiry Date</p>
+                        <p className="font-semibold text-gray-800">
+                          {serviceDetails.expiry_date ? new Date(serviceDetails.expiry_date).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Last Updated</p>
+                        <p className="font-semibold text-gray-800">
+                          {serviceDetails.updated_at ? new Date(serviceDetails.updated_at).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Assigned To */}
+                    <div className="pt-2.5 border-t border-gray-100">
+                      <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Assigned To</p>
+                      <p className="font-semibold text-gray-800 flex items-center gap-1">
+                        <FiUser size={12}/> {serviceDetails.assigned_staff_name || serviceDetails.staff_name || 'Unassigned'}
+                      </p>
+                    </div>
+
+                    {/* Notes */}
+                    {serviceDetails.notes && (
+                      <div className="pt-2.5 border-t border-gray-100 bg-yellow-50/50 -mx-3 -mb-3 px-3 py-2 rounded-b-lg">
+                        <p className="text-yellow-800 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Notes</p>
+                        <p className="font-medium text-yellow-900 italic line-clamp-3" title={serviceDetails.notes}>
+                          "{serviceDetails.notes}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-center text-purple-500 py-3 bg-white rounded-lg border border-purple-100 font-medium">
+                    Click Track Service below to view full data.
+                  </div>
                 )}
               </div>
+              
               <button
                 onClick={() => navigate(`/dashboard/staff/track_service/${activeConversation.context_id}`)}
-                className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium shadow-sm transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5"
+                className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 hover:shadow-lg"
               >
-                <FiMapPin size={16} /> Track Service
+                <FiMapPin size={16} /> Track Full Service
               </button>
             </div>
           )}
