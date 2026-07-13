@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom"; // <-- Added for Quick Actions navigation
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiSend,
@@ -23,7 +22,6 @@ import {
   FiMessageSquare,
   FiUser,
   FiSmartphone,
-  FiMapPin, FiBriefcase
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdCheckmarkCircleOutline } from "react-icons/io";
@@ -31,7 +29,7 @@ import { BsCircleFill } from "react-icons/bs";
 import { toast } from "react-toastify";
 import EmojiPicker from 'emoji-picker-react';
 import { socket } from "@/services/socket";
-import axios from "axios"; 
+import axios from "axios"; // <-- added for template API
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -134,7 +132,6 @@ const Chat = ({
   onNormalTaskStatusUpdate = null,
   onDeleteConversation = null
 }) => {
-  const navigate = useNavigate(); // <-- Added for routing
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -169,6 +166,7 @@ const Chat = ({
     const customerMessages = currentMessages.filter(m => m.sender_type === 'customer' && !m.isOptimistic);
     if (customerMessages.length > 0) {
       const lastMsg = customerMessages[customerMessages.length - 1];
+      // ✅ Use createdAt (raw timestamp) instead of time (formatted string)
       const ts = lastMsg.createdAt || lastMsg.created_at;
       if (ts) setLastCustomerMessageTime(new Date(ts));
     } else {
@@ -196,12 +194,17 @@ const Chat = ({
   useEffect(() => {
     if (showTemplateModal && activeConversation) {
       let defaultName = getConversationDisplayName();
+      
+      // Strip out CRM prefixes to get just the clean name
       defaultName = defaultName.replace(/WhatsApp /i, '').replace(/Chat with /i, '').trim();
+
+      // If the name is just a raw phone number, leave it blank
       if (/^\+?\d+$/.test(defaultName.replace(/[\s-]/g, ''))) {
         defaultName = ''; 
       }
+
       setTemplateParams(defaultName);
-      setSelectedTemplate("reengagement_message"); 
+      setSelectedTemplate("reengagement_message"); // Always default to re-engagement
     }
   }, [showTemplateModal, activeConversation, getConversationDisplayName]);
 
@@ -272,9 +275,11 @@ const Chat = ({
   useEffect(() => {
     if (!socket?.connected || !activeConversation?.id) return;
     
+    console.log("Joining conversation:", activeConversation.id);
     socket.emit("join_conversation", activeConversation.id);
     
     return () => {
+      console.log("Leaving conversation:", activeConversation.id);
       socket.emit("leave_conversation", activeConversation.id);
     };
   }, [activeConversation?.id]);
@@ -508,10 +513,9 @@ const Chat = ({
     }
   };
 
-  // Welcome Screen
   if (!activeConversation) {
     return (
-      <div className="flex flex-col items-center justify-center bg-gray-50 p-4 text-center h-full overflow-y-auto w-full">
+      <div className="flex flex-col items-center justify-center bg-gray-50 p-4 text-center h-full overflow-y-auto">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -572,563 +576,427 @@ const Chat = ({
   const isParticipantOnline = singleOtherParticipant ? isUserOnline(singleOtherParticipant.staff_id) : false;
 
   return (
-    <div className="flex h-full w-full bg-white overflow-hidden">
-      
-      {/* ============================================================== */}
-      {/* 1. MAIN CHAT AREA                                              */}
-      {/* ============================================================== */}
-      <div className="flex flex-col flex-1 min-w-0 relative">
-        {/* Fixed Header */}
-        <div className="flex-none h-[70px] w-full px-4 flex items-center border-b border-gray-200 bg-white shadow-sm z-10">
-          <button className="md:hidden mr-3 text-gray-500 hover:text-gray-700" onClick={onBack}>
-            <FiChevronLeft size={24} />
+    <div className="flex flex-col w-full bg-white h-full min-h-0">
+      {/* Fixed Header */}
+      <div className="flex-none h-[70px] w-full px-4 flex items-center border-b border-gray-200 bg-white shadow-sm">
+        <button className="md:hidden mr-3 text-gray-500 hover:text-gray-700" onClick={onBack}>
+          <FiChevronLeft size={24} />
+        </button>
+        <div className="relative">
+          <div
+            className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${activeConversation.avatarColor || 'bg-navy-700'} mr-3 flex-shrink-0`}
+          >
+            {avatarChar}
+          </div>
+          {showOnlineStatus && singleOtherParticipant && (
+            <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="font-semibold text-gray-800 truncate">{displayName}</h2>
+            {isWhatsApp && (
+              <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                <FiSmartphone size={12} /> WhatsApp
+              </span>
+            )}
+            {serviceInfo && (
+              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full">
+                Service
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            {typingUsers[activeConversation.id]?.length > 0 ? (
+              <p className="text-xs text-navy-700 italic">
+                {typingUsers[activeConversation.id].map(u => u.name).join(', ')} typing...
+              </p>
+            ) : activeConversation.is_group ? (
+              <p className="text-xs text-gray-500">
+                {activeConversation.participants?.length || 0} members
+                {onlineParticipants.length > 0 && (
+                  <span className="ml-2">({onlineParticipants.length} online)</span>
+                )}
+              </p>
+            ) : isWhatsApp ? (
+              <p className="text-xs text-gray-500">
+                WhatsApp conversation
+              </p>
+            ) : (
+              <div className="flex items-center">
+                <BsCircleFill className={`text-xs mr-1 ${isParticipantOnline ? 'text-green-500' : 'text-gray-400'}`} />
+                <span className="text-xs text-gray-500">
+                  {isParticipantOnline ? 'Online' : 'Offline'}
+                </span>
+              </div>
+            )}
+            {serviceInfo && serviceInfo.applicationNumber && (
+              <span className="text-xs text-gray-400 ml-2">
+                App #{serviceInfo.applicationNumber}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="ml-auto flex gap-1 relative">
+          <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition">
+            <FiVideoCall size={18} />
           </button>
-          <div className="relative">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${activeConversation.avatarColor || 'bg-navy-700'} mr-3 flex-shrink-0`}
-            >
-              {avatarChar}
-            </div>
-            {showOnlineStatus && singleOtherParticipant && (
-              <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="font-semibold text-gray-800 truncate">{displayName}</h2>
-              {isWhatsApp && (
-                <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <FiSmartphone size={12} /> WhatsApp
-                </span>
-              )}
-              {serviceInfo && (
-                <span className="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full">
-                  Service
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1 flex-wrap">
-              {typingUsers[activeConversation.id]?.length > 0 ? (
-                <p className="text-xs text-navy-700 italic">
-                  {typingUsers[activeConversation.id].map(u => u.name).join(', ')} typing...
-                </p>
-              ) : activeConversation.is_group ? (
-                <p className="text-xs text-gray-500">
-                  {activeConversation.participants?.length || 0} members
-                  {onlineParticipants.length > 0 && (
-                    <span className="ml-2">({onlineParticipants.length} online)</span>
-                  )}
-                </p>
-              ) : isWhatsApp ? (
-                <p className="text-xs text-gray-500">
-                  WhatsApp conversation
-                </p>
-              ) : (
-                <div className="flex items-center">
-                  <BsCircleFill className={`text-xs mr-1 ${isParticipantOnline ? 'text-green-500' : 'text-gray-400'}`} />
-                  <span className="text-xs text-gray-500">
-                    {isParticipantOnline ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-              )}
-              {serviceInfo && serviceInfo.applicationNumber && (
-                <span className="text-xs text-gray-400 ml-2">
-                  App #{serviceInfo.applicationNumber}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="ml-auto flex gap-1 relative">
-            <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition">
-              <FiVideoCall size={18} />
-            </button>
-            <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition">
-              <FiPhoneCall size={18} />
-            </button>
+          <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition">
+            <FiPhoneCall size={18} />
+          </button>
+          <button
+            onClick={onOpenTaskModal}
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition"
+            title="Create New Task"
+          >
+            <FiPlus size={18} />
+          </button>
+          {hasTasks && (
             <button
-              onClick={onOpenTaskModal}
+              onClick={() => setShowTasksModal(true)}
               className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition"
-              title="Create New Task"
+              title="View Tasks"
             >
-              <FiPlus size={18} />
+              <FiList size={18} />
             </button>
-            {hasTasks && (
-              <button
-                onClick={() => setShowTasksModal(true)}
-                className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition"
-                title="View Tasks"
-              >
-                <FiList size={18} />
-              </button>
-            )}
-            {/* WhatsApp Template Button (only if window expired) */}
-            {isWhatsApp && !isWithinWindow && (
-              <button
-                onClick={() => setShowTemplateModal(true)}
-                className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition"
-                title="Send Template"
-              >
-                <FiMessageSquare size={18} />
-              </button>
-            )}
+          )}
+          {/* WhatsApp Template Button (only if window expired) */}
+          {isWhatsApp && !isWithinWindow && (
             <button
-              className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition relative"
-              onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+              onClick={() => setShowTemplateModal(true)}
+              className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition"
+              title="Send Template"
             >
-              <FiMoreVertical size={18} />
+              <FiMessageSquare size={18} />
+            </button>
+          )}
+          <button
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition relative"
+            onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+          >
+            <FiMoreVertical size={18} />
+          </button>
+          <AnimatePresence>
+            {isMoreMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden"
+              >
+                <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
+                  <FiUserPlus className="mr-3" /> Add People
+                </button>
+                <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
+                  <FiStar className="mr-3" /> Mark as Favorite
+                </button>
+                <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
+                  <FiInfo className="mr-3" /> View Details
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsMoreMenuOpen(false); // Close the menu
+                    if (onDeleteConversation) onDeleteConversation(activeConversation.id);
+                  }}
+                  className="flex items-center w-full p-3 text-sm text-red-500 hover:bg-gray-50"
+                >
+                  <FiTrash2 className="mr-3" /> Delete Conversation
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Scrollable Messages Area */}
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto bg-gray-50 chat-scroll"
+      >
+        <div className="px-4 py-6 space-y-4">
+          {loadingChat ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
+            </div>
+          ) : (
+            <>
+              {currentMessages.map((msg, index) => {
+                const messageKey = msg.isOptimistic
+                  ? `opt-${msg.tempId || msg.id}-${index}`
+                  : `msg-${msg.id}`;
+                const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
+                const isNewTaskMessage = msg.messageType === "task";
+                return (
+                  <motion.div
+                    key={messageKey}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
+                  >
+                  {isTaskMessage ? (
+                    // ✅ EXISTING SERVICE TASK (DO NOT TOUCH)
+                    <div className="flex max-w-xs lg:max-w-md flex-row">
+                      <div className="mr-2 flex-shrink-0 relative">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                          <FiMessageSquare size={14} />
+                        </div>
+                      </div>
+                      <TaskMessage
+                        taskId={msg.fileName}
+                        text={msg.text}
+                        taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
+                        onStatusUpdate={onTaskStatusUpdate}
+                      />
+                    </div>
+
+                    ) : isNewTaskMessage ? (
+                      // 🔥 NEW TASK UI (Updated for normalized database)
+                      (() => {
+                          // Use the live task data attached by your backend fetch query
+                          const task = msg.live_task_data || msg.data || allTasks.find(t => String(t.id) === String(msg.text)); 
+                          
+                          if (!task) return null;
+                          
+                          return (
+                            <NormalTaskMessage
+                              taskId={task.id}
+                              taskData={task}
+                              onStatusUpdate={onNormalTaskStatusUpdate}
+                            />
+                          );
+                      })()
+                    ) : (
+                      <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
+                        {!msg.isCurrentUser && (
+                          <div className="mr-2 flex-shrink-0 relative">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                              {msg.sender_type === 'customer' ? (
+                                <FiUser size={14} className="text-gray-500" />
+                              ) : (
+                                msg.sender?.[0] || '?'
+                              )}
+                            </div>
+                            {!isWhatsApp && isUserOnline(msg.senderId) && (
+                              <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
+                            )}
+                          </div>
+                        )}
+                        <div
+                          className={`px-4 py-2 rounded-2xl ${msg.isCurrentUser
+                              ? "bg-navy-700 text-white rounded-br-none"
+                              : "bg-white text-gray-700 rounded-bl-none shadow-sm border border-gray-200"
+                            } ${msg.isOptimistic ? 'opacity-70' : ''}`}
+                        >
+                          {msg.isDeleted ? (
+                            <p className="text-sm italic text-gray-400">This message was deleted</p>
+                          ) : msg.isFile ? (
+                            <div
+                              className="flex items-center gap-2 cursor-pointer hover:opacity-80"
+                              onClick={() => {
+                                if (msg.fileUrl) {
+                                  const fullUrl = msg.fileUrl.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`;
+                                  window.open(fullUrl, '_blank');
+                                }
+                              }}
+                            >
+                              {msg.messageType === 'image' ? (
+                                <>
+                                  <FiImage className="flex-shrink-0" size={20} />
+                                  <span className="truncate">{msg.fileName || 'Image'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FiFile className="flex-shrink-0" size={20} />
+                                  <span className="truncate">{msg.fileName || 'File'}</span>
+                                </>
+                              )}
+                              <FiDownload size={14} className="ml-2" />
+                            </div>
+                          ) : (
+                            <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                          )}
+                          <div className={`flex justify-between items-center mt-1 text-xs ${msg.isCurrentUser ? "text-blue-200" : "text-gray-500"}`}>
+                            <span>{msg.time}</span>
+                            <div className="flex items-center">
+                              {renderMessageStatus(msg)}
+                            </div>
+                          </div>
+                        </div>
+                        {msg.isCurrentUser && !msg.isDeleted && !msg.isOptimistic && (
+                          <button
+                            onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
+                            className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition self-end mb-1"
+                          >
+                            <FiTrash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Fixed Input Area */}
+      <div className="w-full bg-white p-3 border-t border-gray-200 sticky bottom-0">
+        {fileToUpload && (
+          <div className="mb-2 px-3 py-2 bg-gray-100 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {fileToUpload.type?.startsWith('image/') ? (
+                <FiImage className="text-gray-600" />
+              ) : (
+                <FiFile className="text-gray-600" />
+              )}
+              <span className="text-sm text-gray-700 truncate max-w-[200px]">
+                {fileToUpload.name}
+              </span>
+              <span className="text-xs text-gray-500">
+                ({(fileToUpload.size / 1024).toFixed(1)} KB)
+              </span>
+            </div>
+            <button
+              onClick={() => setFileToUpload(null)}
+              className="text-gray-500 hover:text-red-500"
+              disabled={isUploading}
+            >
+              <FiX size={18} />
+            </button>
+          </div>
+        )}
+        {isUploading && fileToUpload && (
+          <div className="mb-2">
+            <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-navy-700"
+                initial={{ width: 0 }}
+                animate={{ width: `${uploadProgress}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-1 text-right">
+              Uploading... {uploadProgress}%
+            </p>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
+              className="p-2 text-gray-500 hover:text-navy-700 rounded-full hover:bg-gray-100 transition"
+            >
+              <FaRegSmile size={20} />
             </button>
             <AnimatePresence>
-              {isMoreMenuOpen && (
+              {isEmojiPickerOpen && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden"
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute bottom-full left-0 mb-2 z-50"
+                  ref={emojiPickerRef}
                 >
-                  <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
-                    <FiUserPlus className="mr-3" /> Add People
-                  </button>
-                  <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
-                    <FiStar className="mr-3" /> Mark as Favorite
-                  </button>
-                  <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
-                    <FiInfo className="mr-3" /> View Details
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setIsMoreMenuOpen(false); 
-                      if (onDeleteConversation) onDeleteConversation(activeConversation.id);
-                    }}
-                    className="flex items-center w-full p-3 text-sm text-red-500 hover:bg-gray-50"
-                  >
-                    <FiTrash2 className="mr-3" /> Delete Conversation
-                  </button>
+                  <EmojiPicker
+                    onEmojiClick={handleEmojiSelect}
+                    width={300}
+                    height={400}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
-        </div>
-
-        {/* Scrollable Messages Area */}
-        <div
-          ref={messagesContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto bg-[#f0f2f5] chat-scroll"
-        >
-          <div className="px-4 py-6 space-y-4">
-            {loadingChat ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
-              </div>
-            ) : (
-              <>
-                {currentMessages.map((msg, index) => {
-                  const messageKey = msg.isOptimistic
-                    ? `opt-${msg.tempId || msg.id}-${index}`
-                    : `msg-${msg.id}`;
-                  const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
-                  const isNewTaskMessage = msg.messageType === "task";
-                  return (
-                    <motion.div
-                      key={messageKey}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
-                    >
-                    {isTaskMessage ? (
-                      // ✅ EXISTING SERVICE TASK (DO NOT TOUCH)
-                      <div className="flex max-w-xs lg:max-w-md flex-row">
-                        <div className="mr-2 flex-shrink-0 relative">
-                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-                            <FiMessageSquare size={14} />
-                          </div>
-                        </div>
-                        <TaskMessage
-                          taskId={msg.fileName}
-                          text={msg.text}
-                          taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
-                          onStatusUpdate={onTaskStatusUpdate}
-                        />
-                      </div>
-
-                      ) : isNewTaskMessage ? (
-                        // 🔥 NEW TASK UI (Updated for normalized database)
-                        (() => {
-                            const task = msg.live_task_data || msg.data || allTasks.find(t => String(t.id) === String(msg.text)); 
-                            
-                            if (!task) return null;
-                            
-                            return (
-                              <NormalTaskMessage
-                                taskId={task.id}
-                                taskData={task}
-                                onStatusUpdate={onNormalTaskStatusUpdate}
-                              />
-                            );
-                        })()
-                      ) : (
-                        <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
-                          {!msg.isCurrentUser && (
-                            <div className="mr-2 flex-shrink-0 relative">
-                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-                                {msg.sender_type === 'customer' ? (
-                                  <FiUser size={14} className="text-gray-500" />
-                                ) : (
-                                  msg.sender?.[0] || '?'
-                                )}
-                              </div>
-                              {!isWhatsApp && isUserOnline(msg.senderId) && (
-                                <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
-                              )}
-                            </div>
-                          )}
-                          <div
-                            className={`px-4 py-2 rounded-2xl ${msg.isCurrentUser
-                                ? "bg-navy-700 text-white rounded-br-none shadow-sm"
-                                : "bg-white text-gray-700 rounded-bl-none shadow-sm border border-gray-200"
-                              } ${msg.isOptimistic ? 'opacity-70' : ''}`}
-                          >
-                            {msg.isDeleted ? (
-                              <p className="text-sm italic text-gray-400">This message was deleted</p>
-                            ) : msg.isFile ? (
-                              <div
-                                className="flex items-center gap-2 cursor-pointer hover:opacity-80"
-                                onClick={() => {
-                                  if (msg.fileUrl) {
-                                    const fullUrl = msg.fileUrl.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`;
-                                    window.open(fullUrl, '_blank');
-                                  }
-                                }}
-                              >
-                                {msg.messageType === 'image' ? (
-                                  <>
-                                    <FiImage className="flex-shrink-0" size={20} />
-                                    <span className="truncate">{msg.fileName || 'Image'}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <FiFile className="flex-shrink-0" size={20} />
-                                    <span className="truncate">{msg.fileName || 'File'}</span>
-                                  </>
-                                )}
-                                <FiDownload size={14} className="ml-2" />
-                              </div>
-                            ) : (
-                              <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
-                            )}
-                            <div className={`flex justify-between items-center mt-1 text-xs ${msg.isCurrentUser ? "text-blue-200" : "text-gray-500"}`}>
-                              <span>{msg.time}</span>
-                              <div className="flex items-center">
-                                {renderMessageStatus(msg)}
-                              </div>
-                            </div>
-                          </div>
-                          {msg.isCurrentUser && !msg.isDeleted && !msg.isOptimistic && (
-                            <button
-                              onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
-                              className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition self-end mb-1"
-                            >
-                              <FiTrash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-
-        {/* Fixed Input Area */}
-        <div className="w-full bg-white p-3 border-t border-gray-200 sticky bottom-0 z-10">
-          {fileToUpload && (
-            <div className="mb-2 px-3 py-2 bg-gray-100 rounded-lg flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {fileToUpload.type?.startsWith('image/') ? (
-                  <FiImage className="text-gray-600" />
-                ) : (
-                  <FiFile className="text-gray-600" />
-                )}
-                <span className="text-sm text-gray-700 truncate max-w-[200px]">
-                  {fileToUpload.name}
-                </span>
-                <span className="text-xs text-gray-500">
-                  ({(fileToUpload.size / 1024).toFixed(1)} KB)
-                </span>
-              </div>
-              <button
-                onClick={() => setFileToUpload(null)}
-                className="text-gray-500 hover:text-red-500"
-                disabled={isUploading}
-              >
-                <FiX size={18} />
-              </button>
-            </div>
-          )}
-          {isUploading && fileToUpload && (
-            <div className="mb-2">
-              <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-navy-700"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${uploadProgress}%` }}
-                  transition={{ duration: 0.3 }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1 text-right">
-                Uploading... {uploadProgress}%
-              </p>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <button
-                onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
-                className="p-2 text-gray-500 hover:text-navy-700 rounded-full hover:bg-gray-100 transition"
-              >
-                <FaRegSmile size={20} />
-              </button>
-              <AnimatePresence>
-                {isEmojiPickerOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute bottom-full left-0 mb-2 z-50"
-                    ref={emojiPickerRef}
-                  >
-                    <EmojiPicker
-                      onEmojiClick={handleEmojiSelect}
-                      width={300}
-                      height={400}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center border border-gray-200">
+          <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isWhatsApp && !isWithinWindow
+                  ? "24h window expired – use template button"
+                  : "Type a message..."
+              }
+              className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-700"
+              disabled={isUploading || (isWhatsApp && !isWithinWindow)}
+            />
+            <div className="flex items-center gap-1">
               <input
-                type="text"
-                value={newMessage}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  isWhatsApp && !isWithinWindow
-                    ? "24h window expired – use template button"
-                    : "Type a message..."
-                }
-                className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-700"
-                disabled={isUploading || (isWhatsApp && !isWithinWindow)}
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={handleFileSelect}
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
               />
-              <div className="flex items-center gap-1">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  onChange={handleFileSelect}
-                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 text-gray-500 hover:text-navy-700 rounded-full hover:bg-gray-200 transition"
-                  disabled={isUploading || (isWhatsApp && !isWithinWindow)}
-                >
-                  <FiPaperclip size={18} />
-                </button>
-              </div>
-            </div>
-            {newMessage || fileToUpload ? (
-              <motion.button
-                initial={{ scale: 0.8 }}
-                animate={{ scale: 1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleSendMessage}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 text-gray-500 hover:text-navy-700 rounded-full hover:bg-gray-200 transition"
                 disabled={isUploading || (isWhatsApp && !isWithinWindow)}
-                className="bg-navy-700 text-white p-3 rounded-full shadow-md hover:bg-navy-800 transition disabled:opacity-50"
               >
-                <FiSend size={18} />
-              </motion.button>
-            ) : (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="bg-gray-200 text-gray-600 p-3 rounded-full shadow"
-              >
-                <FiMic size={18} />
-              </motion.button>
-            )}
+                <FiPaperclip size={18} />
+              </button>
+            </div>
           </div>
+          {newMessage || fileToUpload ? (
+            <motion.button
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleSendMessage}
+              disabled={isUploading || (isWhatsApp && !isWithinWindow)}
+              className="bg-navy-700 text-white p-3 rounded-full shadow-md hover:bg-navy-800 transition disabled:opacity-50"
+            >
+              <FiSend size={18} />
+            </motion.button>
+          ) : (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="bg-gray-200 text-gray-600 p-3 rounded-full shadow"
+            >
+              <FiMic size={18} />
+            </motion.button>
+          )}
         </div>
       </div>
 
-
-      {/* ============================================================== */}
-      {/* 2. RIGHT SIDEBAR: SERVICE WORKSPACE                            */}
-      {/* ============================================================== */}
-      {serviceInfo && (
-        <div className="hidden lg:flex w-[340px] xl:w-[400px] flex-col border-l border-gray-200 bg-white overflow-y-auto flex-shrink-0 chat-scroll z-10 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)]">
-          
-          {/* Top Banner / Service Title */}
-          <div className="bg-gradient-to-br from-purple-700 to-indigo-800 p-6 text-white shrink-0">
-             <div className="flex items-center gap-2 mb-2 opacity-80 text-xs font-bold tracking-wider uppercase">
-               <FiBriefcase /> Service Details
-             </div>
-             <h2 className="text-xl font-bold leading-tight mb-1">
-               {serviceInfo.serviceType || serviceInfo.name || 'Service Request'}
-             </h2>
-             {serviceInfo.subcategory && (
-               <p className="text-purple-200 text-sm mb-4">{serviceInfo.subcategory}</p>
-             )}
-             
-             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-bold uppercase tracking-wider border border-white/10">
-               {serviceInfo.status === 'completed' ? <IoMdCheckmarkCircle /> : <FiClock />}
-               {serviceInfo.status?.replace('_', ' ') || 'Pending'}
-             </div>
-          </div>
-
-          <div className="p-6 space-y-6">
-            
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => navigate(`/dashboard/staff/track_service/${serviceInfo.trackingId || serviceEntryId}`)}
-                className="col-span-2 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition shadow-sm"
-              >
-                <FiMapPin /> Open Tracking
-              </button>
-            </div>
-
-            {/* Quick Stats Grid */}
-            <div>
-              <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Overview</h3>
-              <div className="grid grid-cols-2 gap-3">
-                
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Current Step</p>
-                  <p className="font-semibold text-gray-900 text-sm truncate" title={serviceInfo.currentStep}>
-                    {serviceInfo.currentStep || '-'}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Priority</p>
-                  <p className={`font-semibold text-sm ${serviceInfo.priority === 'High' || serviceInfo.priority === 'high' ? 'text-red-600' : 'text-gray-900'}`}>
-                    {serviceInfo.priority || 'Normal'}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Assigned To</p>
-                  <p className="font-semibold text-gray-900 text-sm truncate" title={serviceInfo.assignedTo}>
-                    {serviceInfo.assignedTo || 'Unassigned'}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Avg Time</p>
-                  <p className="font-semibold text-gray-900 text-sm">
-                    {serviceInfo.averageTime || '-'}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Expiry Date</p>
-                  <p className="font-semibold text-gray-900 text-sm">
-                     {serviceInfo.expiryDate ? new Date(serviceInfo.expiryDate).toLocaleDateString() : '-'}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                  <p className="text-gray-500 text-[10px] uppercase font-bold tracking-wider mb-1">Last Updated</p>
-                  <p className="font-semibold text-gray-900 text-sm">
-                     {serviceInfo.lastUpdated ? new Date(serviceInfo.lastUpdated).toLocaleDateString() : '-'}
-                  </p>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Customer Information */}
-            <div>
-              <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Customer Details</h3>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-bold">
-                    {(serviceInfo.customerName || serviceInfo.name || '?')[0].toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-bold text-gray-900 text-sm">{serviceInfo.customerName || serviceInfo.name || '-'}</p>
-                    <p className="text-gray-500 text-xs mt-0.5">{serviceInfo.phone || '-'}</p>
-                  </div>
-                </div>
-                <div className="pt-3 border-t border-gray-100">
-                  <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider block mb-0.5">Application No.</span>
-                  <span className="font-mono font-medium text-gray-900 text-sm">{serviceInfo.applicationNumber || '-'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Notes Section */}
-            {serviceInfo.notes && (
-              <div>
-                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Service Notes</h3>
-                <div className="bg-yellow-50/50 border border-yellow-100 rounded-xl p-4">
-                  <p className="text-sm text-yellow-900 italic leading-relaxed">
-                    "{serviceInfo.notes}"
-                  </p>
-                </div>
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
-
-
-      {/* ============================================================== */}
-      {/* 3. MODALS                                                      */}
-      {/* ============================================================== */}
-
       {/* Tasks Modal */}
       {showTasksModal && serviceInfo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" onClick={() => setShowTasksModal(false)}>
-          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTasksModal(false)}>
+          <div className="bg-white rounded-lg w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-900">Service Tasks</h3>
-              <button onClick={() => setShowTasksModal(false)} className="text-gray-500 hover:bg-gray-100 p-2 rounded-full transition">
+              <h3 className="text-lg font-semibold text-gray-900">Service Tasks</h3>
+              <button onClick={() => setShowTasksModal(false)} className="text-gray-500 hover:text-gray-700">
                 <FiX size={20} />
               </button>
             </div>
-            <div className="p-4 max-h-[60vh] overflow-y-auto chat-scroll">
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
               {serviceInfo.tasks.length === 0 ? (
-                <div className="text-center py-8">
-                   <FiCheckSquare className="mx-auto text-gray-300 text-4xl mb-3" />
-                   <p className="text-gray-500 font-medium">No tasks for this service.</p>
-                </div>
+                <p className="text-gray-500 text-center py-4">No tasks for this service.</p>
               ) : (
                 <div className="space-y-3">
                   {serviceInfo.tasks.map(task => (
-                    <div key={task.id} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <div key={task.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className={`font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                             {task.title}
                           </h4>
                           {task.description && <p className="text-sm text-gray-600 mt-1">{task.description}</p>}
-                          <div className="flex flex-wrap gap-2 mt-3 text-xs font-medium">
-                            {task.assigned_to_name && <span className="bg-white border border-gray-200 px-2 py-1 rounded-md text-gray-600">👤 {task.assigned_to_name}</span>}
-                            {task.due_date && <span className="bg-white border border-gray-200 px-2 py-1 rounded-md text-gray-600">📅 {formatDate(task.due_date)}</span>}
-                            <span className={`px-2 py-1 rounded-md ${
+                          <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
+                            {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
+                            {task.due_date && <span>📅 {formatDate(task.due_date)}</span>}
+                            <span className={`px-2 py-0.5 rounded-full ${
                               task.priority === 'high' ? 'bg-red-100 text-red-800' :
                               task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
                               'bg-green-100 text-green-800'
                             }`}>
                               {task.priority}
                             </span>
-                            <span className={`px-2 py-1 rounded-md ${
+                            <span className={`px-2 py-0.5 rounded-full ${
                               task.status === 'completed' ? 'bg-green-100 text-green-800' :
                               task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
                               'bg-gray-100 text-gray-800'
@@ -1149,43 +1017,44 @@ const Chat = ({
 
       {/* WhatsApp Template Modal */}
       {showTemplateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" onClick={() => setShowTemplateModal(false)}>
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-4 text-gray-900">Send WhatsApp Template</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTemplateModal(false)}>
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Send WhatsApp Template</h3>
             <div className="mb-4">
-              <label className="block text-sm font-bold text-gray-700 mb-1">Template</label>
+              <label className="block text-sm font-medium mb-1">Template</label>
               <select
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-2 bg-gray-50 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                className="w-full border rounded-lg px-3 py-2 bg-gray-50"
               >
+                {/* Now using abstract keys. Backend handles the centre mapping! */}
                 <option value="reengagement_message">Re‑engagement (Auto-Mapped)</option>
               </select>
             </div>
-            <div className="mb-6">
-              <label className="block text-sm font-bold text-gray-700 mb-1">Parameters (comma separated)</label>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Parameters (comma separated)</label>
               <input
                 type="text"
                 value={templateParams}
                 onChange={(e) => setTemplateParams(e.target.value)}
                 placeholder="e.g. John, APP-123"
-                className="w-full border border-gray-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                className="w-full border rounded-lg px-3 py-2"
               />
-              <p className="text-xs text-gray-500 mt-1.5 font-medium">Example: Customer name, Application ID</p>
+              <p className="text-xs text-gray-500 mt-1">Example: Customer name, Application ID</p>
             </div>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowTemplateModal(false)}
-                className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSendTemplate}
                 disabled={sendingTemplate}
-                className="px-5 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 disabled:opacity-50 transition shadow-sm"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
-                {sendingTemplate ? "Sending..." : "Send Template"}
+                {sendingTemplate ? "Sending..." : "Send"}
               </button>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiSend,
@@ -319,6 +320,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
 
 // ============== MAIN MESSENGER PAGE ==============
 const MessengerPage = ({ user }) => {
+  const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   let decodedPayload = null;
@@ -362,6 +364,9 @@ const MessengerPage = ({ user }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [socketConnected, setSocketConnected] = useState(false);
+
+  const [serviceDetails, setServiceDetails] = useState(null);
+  const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
 
   const lastMessageIdsRef = useRef(new Set());
   const typingTimeoutRef = useRef(null);
@@ -459,6 +464,26 @@ const MessengerPage = ({ user }) => {
       return 0;
     }
   };
+
+  useEffect(() => {
+    if (activeConversation?.context_type === 'service_entry' && activeConversation.context_id) {
+      setLoadingServiceDetails(true);
+      fetch(`${API_BASE_URL}/api/customer-services/${activeConversation.context_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        setServiceDetails(data);
+        setLoadingServiceDetails(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch service details", err);
+        setLoadingServiceDetails(false);
+      });
+    } else {
+      setServiceDetails(null);
+    }
+  }, [activeConversation?.id, token, API_BASE_URL]);
 
   // ============== SOCKET.IO INTEGRATION ==============
   useEffect(() => {
@@ -2040,6 +2065,128 @@ const MessengerPage = ({ user }) => {
               );
             })}
           </div>
+
+          {activeConversation.context_type === 'service_entry' && (
+            <>
+              <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
+                <FiBriefcase className="mr-2" /> Service Details
+              </h4>
+              
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
+                <div className="mb-3 border-b border-gray-200 pb-3">
+                  <p className="text-sm font-bold text-gray-900 truncate" title={activeConversation.context_name}>
+                    {activeConversation.context_name || 'Service Request'}
+                  </p>
+                  {activeConversation.context_identifier && (
+                    <p className="text-xs text-navy-700 mt-1 font-mono font-medium">
+                      App #: {activeConversation.context_identifier}
+                    </p>
+                  )}
+                </div>
+
+                {loadingServiceDetails ? (
+                  <div className="animate-pulse space-y-2 py-2">
+                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-5/6"></div>
+                  </div>
+                ) : serviceDetails ? (
+                  <div className="space-y-3 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Service Type</p>
+                        <p className="font-medium text-gray-800">{serviceDetails.category_name || serviceDetails.service_name || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Subcategory</p>
+                        <p className="font-medium text-gray-800">{serviceDetails.subcategory_name || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Status</p>
+                        <span className={`inline-block px-2 py-0.5 rounded font-medium text-[10px] uppercase tracking-wider ${
+                          serviceDetails.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          serviceDetails.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {serviceDetails.status?.replace('-', ' ') || 'Pending'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Current Step</p>
+                        <p className="font-medium text-navy-700 truncate" title={serviceDetails.current_step}>
+                          {serviceDetails.current_step || 'Initial Phase'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Priority</p>
+                        <p className={`font-medium ${
+                          serviceDetails.priority === 'High' ? 'text-red-600' :
+                          serviceDetails.priority === 'Medium' ? 'text-yellow-600' :
+                          'text-gray-800'
+                        }`}>
+                          {serviceDetails.priority || 'Normal'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Avg Time</p>
+                        <p className="font-medium text-gray-800 flex items-center gap-1">
+                          <FiClock size={10}/> {serviceDetails.average_time || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Expiry Date</p>
+                        <p className="font-medium text-gray-800">
+                          {serviceDetails.expiry_date ? new Date(serviceDetails.expiry_date).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Last Updated</p>
+                        <p className="font-medium text-gray-800">
+                          {serviceDetails.updated_at ? new Date(serviceDetails.updated_at).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-200">
+                      <p className="text-gray-500 mb-0.5">Assigned To</p>
+                      <p className="font-medium text-gray-800 flex items-center gap-1">
+                        <FiUser size={12}/> {serviceDetails.assigned_staff_name || serviceDetails.staff_name || 'Unassigned'}
+                      </p>
+                    </div>
+
+                    {serviceDetails.notes && (
+                      <div className="pt-2 border-t border-gray-200">
+                        <p className="text-gray-500 mb-0.5">Notes</p>
+                        <p className="font-medium text-gray-700 italic">
+                          "{serviceDetails.notes}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-center text-gray-500 py-2">
+                    Unable to load service details.
+                  </div>
+                )}
+                
+                <button
+                  onClick={() => navigate(`/dashboard/staff/track_service/${activeConversation.context_id}`)}
+                  className="w-full mt-4 py-2 bg-navy-700 hover:bg-navy-800 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center justify-center gap-2"
+                >
+                  <FiMapPin size={16} /> Open Tracking
+                </button>
+              </div>
+            </>
+          )}
 
           <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
             <FiFile className="mr-2" /> Shared Files
