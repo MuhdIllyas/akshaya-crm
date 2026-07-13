@@ -2225,46 +2225,102 @@ const MessengerPage = ({ user }) => {
             )}
           </div>
 
-          {/* Tasks Section (only for service conversations) */}
-          {activeConversation.context_type === 'service_entry' && (
+          {/* Tasks Section (Works for BOTH Service & Normal Chats) */}
+          {activeConversation.channel !== 'whatsapp' && (
             <>
               <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
                 <FiCheckSquare className="mr-2" /> Tasks
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
                 {(() => {
-                  const serviceTasks = tasks.filter(t => t.related_service_entry_id === activeConversation.context_id);
-                  if (serviceTasks.length === 0) {
-                    return <p className="text-sm text-gray-500 text-center py-2">No tasks for this service</p>;
+                  // 1. Gather the relevant tasks
+                  let relevantTasks = [];
+                  
+                  if (activeConversation.context_type === 'service_entry') {
+                    // Service Chats: Get all tasks linked to this service entry
+                    relevantTasks = tasks.filter(t => String(t.related_service_entry_id) === String(activeConversation.context_id));
+                  } else {
+                    // Normal Chats: Extract tasks that were shared as messages in this specific chat!
+                    const uniqueTaskIds = new Set();
+                    const chatMessages = messages[activeConversation.id] || [];
+                    const taskMessages = chatMessages.filter(m => m.messageType === 'task' && !m.isDeleted);
+                    
+                    taskMessages.forEach(msg => {
+                      // Grab the live task data attached to the message, or fallback to the master task list
+                      const taskObj = msg.live_task_data || tasks.find(t => String(t.id) === String(msg.text));
+                      if (taskObj && !uniqueTaskIds.has(String(taskObj.id))) {
+                        uniqueTaskIds.add(String(taskObj.id));
+                        relevantTasks.push(taskObj);
+                      }
+                    });
                   }
-                  return serviceTasks.map(task => (
-                    <div key={task.id} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+
+                  // 2. Handle empty state
+                  if (relevantTasks.length === 0) {
+                    return (
+                      <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
+                        <FiCheckSquare className="mx-auto text-gray-300 text-2xl mb-2" />
+                        <p className="text-xs text-gray-500 font-medium">No tasks in this conversation</p>
+                      </div>
+                    );
+                  }
+
+                  // 3. Render the tasks elegantly
+                  return relevantTasks.map(task => (
+                    <div key={task.id} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <p className={`font-medium text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                        <div className="flex-1 min-w-0 pr-2">
+                          <p className={`font-semibold text-sm truncate ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-800'}`} title={task.title}>
                             {task.title}
                           </p>
                           {task.description && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2" title={task.description}>
+                              {task.description}
+                            </p>
                           )}
-                          <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
-                            {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
-                            {task.due_date && <span>📅 {new Date(task.due_date).toLocaleDateString()}</span>}
-                            <span className={`px-2 py-0.5 rounded-full ${task.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-green-100 text-green-800'
-                              }`}>
-                              {task.priority}
+                          
+                          {/* Badges Row */}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {task.assigned_to_name && (
+                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
+                                <FiUser size={10}/> {task.assigned_to_name}
+                              </span>
+                            )}
+                            {task.due_date && (
+                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
+                                <FiCalendar size={10}/> {new Date(task.due_date).toLocaleDateString('en-IN')}
+                              </span>
+                            )}
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              task.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-100' :
+                              task.priority === 'medium' ? 'bg-yellow-50 text-yellow-600 border border-yellow-100' :
+                              'bg-green-50 text-green-600 border border-green-100'
+                            }`}>
+                              {task.priority || 'Normal'}
                             </span>
                           </div>
                         </div>
-                        {task.status !== 'completed' && (
+
+                        {/* Completion Checkmark */}
+                        {task.status !== 'completed' ? (
                           <button
-                            onClick={() => handleServiceTaskStatusUpdate(task.id, 'completed')}
-                            className="ml-2 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                            onClick={() => {
+                              // Dynamically trigger the correct API handler depending on the task type
+                              if (task.related_service_entry_id) {
+                                handleServiceTaskStatusUpdate(task.id, 'completed');
+                              } else {
+                                handleNormalTaskStatusUpdate(task.id, task.status);
+                              }
+                            }}
+                            className="shrink-0 p-1.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors border border-green-200"
+                            title="Mark Complete"
                           >
-                            ✓ Complete
+                            <FiCheck size={14} />
                           </button>
+                        ) : (
+                          <div className="shrink-0 p-1.5 bg-gray-50 text-gray-400 rounded-lg border border-gray-100" title="Completed">
+                            <FiCheck size={14} />
+                          </div>
                         )}
                       </div>
                     </div>
