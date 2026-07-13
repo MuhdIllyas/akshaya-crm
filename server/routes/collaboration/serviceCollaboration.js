@@ -774,17 +774,31 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to view service details' });
     }
 
-    // 2. Fetch all necessary details safely using LEFT JOINs
+    // 2. Fetch all necessary details by accurately joining the normalized tables
     const query = `
       SELECT 
-        se.*,
+        se.id,
+        se.customer_name,
+        se.phone,
+        se.application_number,
         s.name as service_name,
         s.name as category_name,
-        st.name as assigned_staff_name,
-        st.name as staff_name
+        sub.name as subcategory_name,
+        staff.name as assigned_staff_name,
+        staff.name as staff_name,
+        st.id as tracking_id,
+        COALESCE(st.status, se.status) as status,
+        st.current_step,
+        st.priority,
+        st.average_time,
+        st.expiry_date,
+        st.notes,
+        st.updated_at
       FROM service_entries se
       LEFT JOIN services s ON se.category_id = s.id
-      LEFT JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN staff ON se.staff_id = staff.id
+      LEFT JOIN service_tracking st ON st.service_entry_id = se.id
       WHERE se.id = $1
     `;
     const result = await pool.query(query, [serviceEntryId]);
@@ -793,27 +807,7 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
-    const serviceData = result.rows[0];
-
-    // 3. Extract the subcategory name if it exists inside the JSON array
-    if (serviceData.subcategory_id) {
-      try {
-        const catRes = await pool.query(`SELECT subcategories FROM services WHERE id = $1`, [serviceData.category_id]);
-        const subcategories = catRes.rows[0]?.subcategories || [];
-        
-        // Handle both stringified JSON and native JSONB arrays
-        const parsedSubcategories = typeof subcategories === 'string' ? JSON.parse(subcategories) : subcategories;
-        const sub = parsedSubcategories.find(s => Number(s.id) === Number(serviceData.subcategory_id));
-        
-        if (sub) {
-          serviceData.subcategory_name = sub.name;
-        }
-      } catch(e) {
-        console.error("Error parsing subcategory", e);
-      }
-    }
-
-    res.json(serviceData);
+    res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch service summary' });
