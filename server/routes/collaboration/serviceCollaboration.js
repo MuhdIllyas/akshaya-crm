@@ -774,13 +774,13 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to view service details' });
     }
 
-    // 2. Fetch all necessary details by accurately joining the normalized tables
+    // 2. Fetch all necessary details safely using exact schema mapping
     const query = `
       SELECT 
         se.id,
         se.customer_name,
         se.phone,
-        se.application_number,
+        st.application_number,    -- FIXED: Lives in service_tracking
         s.name as service_name,
         s.name as category_name,
         sub.name as subcategory_name,
@@ -791,9 +791,9 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
         st.current_step,
         st.priority,
         st.average_time,
-        st.expiry_date,
+        se.expiry_date,           -- FIXED: Lives in service_entries
         st.notes,
-        st.updated_at
+        COALESCE(st.updated_at, se.updated_at) as updated_at
       FROM service_entries se
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
@@ -809,7 +809,7 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("Summary fetch error:", err);
     res.status(500).json({ error: 'Failed to fetch service summary' });
   }
 });
