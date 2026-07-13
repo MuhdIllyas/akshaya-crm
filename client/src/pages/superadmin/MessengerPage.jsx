@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom"; 
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiSend,
@@ -47,7 +46,7 @@ import {
   FiAlertCircle,
   FiImage,
   FiChevronRight,
-  FiSmartphone,
+  FiSmartphone, // Added for WhatsApp icon
 } from "react-icons/fi";
 import { FaRegSmile, FaEllipsisH } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdClose } from "react-icons/io";
@@ -67,7 +66,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
   const [isGroup, setIsGroup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [chatType, setChatType] = useState('internal'); 
+  const [chatType, setChatType] = useState('internal'); // 'internal' or 'whatsapp'
   const [phoneNumber, setPhoneNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
 
@@ -85,6 +84,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
     if (chatType === 'internal') {
       await onCreate(selectedUsers, isGroup ? groupName : null, 'internal');
     } else {
+      // WhatsApp: phone number required
       if (!phoneNumber.trim()) {
         toast.error('Phone number is required for WhatsApp chat');
         setIsCreating(false);
@@ -319,7 +319,6 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
 
 // ============== MAIN MESSENGER PAGE ==============
 const MessengerPage = ({ user }) => {
-  const navigate = useNavigate(); // 🔥 NEW: Hook for navigation
   const token = localStorage.getItem("token");
 
   let decodedPayload = null;
@@ -333,6 +332,7 @@ const MessengerPage = ({ user }) => {
     }
   }
 
+  // Safely extract the role and centre from the token if the `user` prop is missing
   const currentUser = {
     role: user?.role || decodedPayload?.role || localStorage.getItem("role") || "staff", 
     id: user?.id || decodedPayload?.id || 1,
@@ -362,9 +362,6 @@ const MessengerPage = ({ user }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [socketConnected, setSocketConnected] = useState(false);
-
-  const [serviceDetails, setServiceDetails] = useState(null);
-  const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
 
   const lastMessageIdsRef = useRef(new Set());
   const typingTimeoutRef = useRef(null);
@@ -424,6 +421,8 @@ const MessengerPage = ({ user }) => {
   const emojiPickerRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  // ============== UNREAD COUNTS API FUNCTIONS ==============
+
   const fetchAllUnreadCounts = async () => {
     if (!token) return;
 
@@ -434,6 +433,7 @@ const MessengerPage = ({ user }) => {
       if (!res.ok) throw new Error('Failed to fetch unread counts');
       const unreadMap = await res.json();
 
+      // Update conversations with unread counts
       setConversations(prev => prev.map(conv => ({
         ...conv,
         unread: unreadMap[conv.id] || 0
@@ -464,6 +464,8 @@ const MessengerPage = ({ user }) => {
   useEffect(() => {
     if (!token) return;
 
+    // 🔥 FIX 1: Create named functions for EVERY listener. 
+    // This prevents `socket.off()` from wiping out DashboardLayout's listeners!
     const handleConnect = () => {
       console.log("Messenger socket connected");
       setSocketConnected(true);
@@ -723,6 +725,7 @@ const MessengerPage = ({ user }) => {
       });
     };
 
+    // Attach listeners safely
     socket.on("connect", handleConnect);
     socket.on("online_users", handleOnlineUsers);
     socket.on("disconnect", handleDisconnect);
@@ -739,11 +742,13 @@ const MessengerPage = ({ user }) => {
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("conversation_deleted", handleConversationDeleted);
 
+    // 🔥 FIX 2: Manually trigger if the global socket is already connected!
     if (socket.connected) {
       handleConnect();
     }
 
     return () => {
+      // 🔥 FIX 3: Detach SPECIFIC references so we don't sever global listeners
       socket.off("connect", handleConnect);
       socket.off("online_users", handleOnlineUsers);
       socket.off("disconnect", handleDisconnect);
@@ -759,8 +764,12 @@ const MessengerPage = ({ user }) => {
       socket.off("added_to_conversation", handleAddedToConversation);
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("conversation_deleted", handleConversationDeleted);
+      
+      // Removed disconnectSocket() completely!
     };
   }, [token, currentUser.id, currentUser.centreId, activeConversation]);
+
+  // ============== CHAT API INTEGRATION ==============
 
   const fetchConversations = async () => {
     try {
@@ -775,11 +784,11 @@ const MessengerPage = ({ user }) => {
         id: conv.id,
         name: conv.name || null,
         is_group: conv.is_group || false,
-        channel: conv.channel || 'internal', 
+        channel: conv.channel || 'internal', // important: 'whatsapp' or 'internal'
         context_type: conv.context_type,
         context_id: conv.context_id,
         context_name: conv.context_name,
-        context_identifier: conv.context_identifier, 
+        context_identifier: conv.context_identifier, // phone number for WhatsApp
         last_message: conv.last_message,
         lastMessage: conv.last_message,
         last_message_at: conv.last_message_at,
@@ -796,6 +805,8 @@ const MessengerPage = ({ user }) => {
       );
 
       setConversations(sorted);
+
+      // Fetch fresh unread counts
       fetchAllUnreadCounts();
 
     } catch (err) {
@@ -866,6 +877,7 @@ const MessengerPage = ({ user }) => {
           conversationId
         });
 
+        // After marking as read, fetch updated unread count
         setTimeout(() => {
           fetchConversationUnreadCount(conversationId).then(unreadCount => {
             setConversations(prev => prev.map(conv =>
@@ -902,30 +914,10 @@ const MessengerPage = ({ user }) => {
     };
   }, [activeConversation?.id]);
 
-  // FETCH SERVICE DETAILS IF IT'S A SERVICE CONVERSATION
-  useEffect(() => {
-    if (activeConversation?.context_type === 'service_entry' && activeConversation.context_id) {
-      setLoadingServiceDetails(true);
-      fetch(`${API_BASE_URL}/api/customer-services/${activeConversation.context_id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        setServiceDetails(data);
-        setLoadingServiceDetails(false);
-      })
-      .catch(err => {
-        console.error("Failed to fetch service details", err);
-        setLoadingServiceDetails(false);
-      });
-    } else {
-      setServiceDetails(null);
-    }
-  }, [activeConversation?.id, token]);
-
   const handleSendMessage = async (message, file, optimisticMessage = null) => {
     if ((!message?.trim() && !file) || !activeConversation) return;
 
+    // 🔥 FIX 1: Safely grab the exact temp ID passed from Chat.jsx
     const actualTempId = optimisticMessage?.tempId || `temp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 
     const optimisticMsg = optimisticMessage || {
@@ -987,6 +979,8 @@ const MessengerPage = ({ user }) => {
 
       const newMsg = await res.json();
       
+      // 🔥 FIX 2: Delete the optimistic (blurred) message on SUCCESS!
+      // The real message is arriving via Socket.io simultaneously.
       setMessages(prev => ({
         ...prev,
         [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
@@ -996,6 +990,7 @@ const MessengerPage = ({ user }) => {
       console.error("Upload error:", err);
       toast.error("Failed to send message or file");
       
+      // 🔥 FIX 3: Clean up the stuck message if the server rejects the file size!
       setMessages(prev => ({
         ...prev,
         [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
@@ -1020,12 +1015,14 @@ const MessengerPage = ({ user }) => {
           requestBody.name = name;
         }
       } else if (channel === 'whatsapp') {
+        // Create WhatsApp conversation
         requestBody = {
           channel: "whatsapp",
           context_type: "customer",
           context_identifier: phoneNumber,
           context_name: customerName || phoneNumber,
-          participants: [currentUser.id]
+          participants: [currentUser.id] // no staff participants initially? Actually, the staff will be added automatically.
+          // We might need to add the current user as participant? The backend should handle.
         };
       } else {
         throw new Error('Invalid channel');
@@ -1125,6 +1122,7 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== DELETE ENTIRE CONVERSATION ==============
   const handleDeleteConversation = async (conversationId) => {
     if (!window.confirm("Are you sure you want to delete this entire conversation? This action cannot be undone.")) return;
 
@@ -1138,6 +1136,7 @@ const MessengerPage = ({ user }) => {
 
       toast.success('Conversation deleted successfully');
 
+      // Instantly remove it from the sidebar and clear the active view
       setConversations(prev => prev.filter(c => String(c.id) !== String(conversationId)));
       setActiveConversation(null);
 
@@ -1146,6 +1145,8 @@ const MessengerPage = ({ user }) => {
       toast.error('Failed to delete conversation');
     }
   };
+
+  // ============== HELPER FUNCTIONS ==============
 
   const getAvatarColor = (id) => {
     const colors = [
@@ -1161,6 +1162,7 @@ const MessengerPage = ({ user }) => {
     return colors[(id || 0) % colors.length];
   };
 
+  // ============== TASK STATUS UPDATE FOR SERVICE CHAT ==============
   const handleServiceTaskStatusUpdate = async (taskId, newStatus) => {
     const serviceEntryId = activeConversation?.context_id;
     if (!serviceEntryId) return;
@@ -1175,6 +1177,7 @@ const MessengerPage = ({ user }) => {
       });
       if (!res.ok) throw new Error('Failed to update task');
       
+      // 🔥 FIX 1: Wrap in String() to prevent Type Mismatch bugs!
       setTasks(prevTasks =>
         prevTasks.map(t =>
           String(t.id) === String(taskId) ? { ...t, status: newStatus } : t
@@ -1187,6 +1190,7 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== TASK STATUS UPDATE FOR NORMAL CHAT ==============
   const handleNormalTaskStatusUpdate = async (taskId, currentStatus) => {
     const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
     try {
@@ -1203,12 +1207,14 @@ const MessengerPage = ({ user }) => {
       await fetchTasks();
       toast.success(`Task marked as ${newStatus}`);
 
+      // 🔥 FIX 2: Update the new 'live_task_data' directly instead of trying to JSON.parse
       setMessages(prev => {
         const convId = activeConversation?.id;
         if (!convId || !prev[convId]) return prev;
         
         const updated = prev[convId].map(msg => {
           if (msg.messageType === 'task') {
+            // Check if this message belongs to the task we just updated
             if (String(msg.text) === String(taskId) || (msg.live_task_data && String(msg.live_task_data.id) === String(taskId))) {
               return {
                 ...msg,
@@ -1226,6 +1232,8 @@ const MessengerPage = ({ user }) => {
       toast.error('Failed to update task');
     }
   };
+
+  // ============== DATA FETCHING FUNCTIONS ==============
 
   const fetchCentres = async () => {
     if (currentUser.role !== "superadmin") {
@@ -1853,6 +1861,7 @@ const MessengerPage = ({ user }) => {
             const lastMessageSenderName = c.last_message_sender;
             const lastMessageSenderId = c.last_message_sender_id;
 
+            // 👈 NEW: Hide raw IDs for tasks in the sidebar
             if (!isNaN(lastMessageText) && lastMessageText.trim() !== '') {
                lastMessageText = "📋 Sent a task";
             } else if (lastMessageSenderId && String(lastMessageSenderId) !== String(currentUser.id) && lastMessageSenderName) {
@@ -1962,14 +1971,14 @@ const MessengerPage = ({ user }) => {
       <div className="flex flex-col h-full bg-white border-l border-gray-200 overflow-hidden">
         <div className="flex-none p-6 flex flex-col items-center border-b border-gray-200">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-navy-700 flex items-center justify-center text-white text-3xl mb-4 shadow-sm">
+            <div className="w-24 h-24 rounded-full bg-navy-700 flex items-center justify-center text-white text-3xl mb-4">
               {displayName?.[0] || '?'}
             </div>
             {!activeConversation.is_group && onlineParticipants.length > 0 && (
               <span className="absolute bottom-4 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></span>
             )}
           </div>
-          <h3 className="text-xl font-bold text-gray-800 text-center">{displayName}</h3>
+          <h3 className="text-xl font-bold text-gray-800">{displayName}</h3>
           {activeConversation.channel === 'whatsapp' && (
             <p className="text-green-600 text-sm flex items-center mt-1">
               <FiSmartphone className="mr-1" size={14} /> WhatsApp
@@ -1982,7 +1991,7 @@ const MessengerPage = ({ user }) => {
             </p>
           )}
           {activeConversation.is_group && (
-            <p className="text-gray-500 mt-1 text-center">
+            <p className="text-gray-500 mt-1">
               {activeConversation.participants?.length || 0} members
               {onlineParticipants.length > 0 && (
                 <span className="ml-1 text-green-600">
@@ -1996,134 +2005,6 @@ const MessengerPage = ({ user }) => {
               <FiAlertCircle size={12} />
               Reconnecting...
             </p>
-          )}
-
-          {/* 🔥 Expanded Service Details & Track Button */}
-          {activeConversation.context_type === 'service_entry' && (
-            <div className="mt-5 w-full">
-              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-3 text-left shadow-sm">
-                <div className="mb-3">
-                  <p className="text-[10px] text-purple-600 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <FiBriefcase /> Service Collaboration
-                  </p>
-                  <p className="text-sm font-bold text-gray-900" title={activeConversation.context_name}>
-                    {activeConversation.context_name || 'Service Request'}
-                  </p>
-                  {activeConversation.context_identifier && (
-                    <p className="text-xs text-purple-700 mt-0.5 font-mono font-medium">
-                      Ref/App #: {activeConversation.context_identifier}
-                    </p>
-                  )}
-                </div>
-
-                {loadingServiceDetails ? (
-                  <div className="animate-pulse space-y-2 py-2">
-                    <div className="h-3 bg-purple-200/50 rounded w-3/4"></div>
-                    <div className="h-3 bg-purple-200/50 rounded w-1/2"></div>
-                    <div className="h-3 bg-purple-200/50 rounded w-5/6"></div>
-                  </div>
-                ) : serviceDetails ? (
-                  <div className="bg-white rounded-lg p-3 space-y-2.5 text-xs border border-purple-100/60 shadow-sm">
-                    {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Service Type</p>
-                        <p className="font-semibold text-gray-800">{serviceDetails.category_name || serviceDetails.service_name || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Subcategory</p>
-                        <p className="font-semibold text-gray-800">{serviceDetails.subcategory_name || 'N/A'}</p>
-                      </div>
-                    </div>
-
-                    {/* Status & Step */}
-                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Status</p>
-                        <span className={`inline-block px-1.5 py-0.5 rounded font-bold text-[10px] uppercase tracking-wider ${
-                          serviceDetails.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          serviceDetails.status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {serviceDetails.status?.replace('-', ' ') || 'Pending'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Current Step</p>
-                        <p className="font-semibold text-blue-600 truncate" title={serviceDetails.current_step}>
-                          {serviceDetails.current_step || 'Initial Phase'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Time & Priority */}
-                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Priority</p>
-                        <p className={`font-bold ${
-                          serviceDetails.priority === 'High' ? 'text-red-600' :
-                          serviceDetails.priority === 'Medium' ? 'text-yellow-600' :
-                          'text-gray-800'
-                        }`}>
-                          {serviceDetails.priority || 'Normal'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Avg Time</p>
-                        <p className="font-semibold text-gray-800 flex items-center gap-1">
-                          <FiClock size={10}/> {serviceDetails.average_time || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Expiry & Updated */}
-                    <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-gray-100">
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Expiry Date</p>
-                        <p className="font-semibold text-gray-800">
-                          {serviceDetails.expiry_date ? new Date(serviceDetails.expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Last Updated</p>
-                        <p className="font-semibold text-gray-800">
-                          {serviceDetails.updated_at ? new Date(serviceDetails.updated_at).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Assigned To */}
-                    <div className="pt-2.5 border-t border-gray-100">
-                      <p className="text-gray-400 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Assigned To</p>
-                      <p className="font-semibold text-gray-800 flex items-center gap-1">
-                        <FiUser size={12}/> {serviceDetails.assigned_staff_name || serviceDetails.staff_name || 'Unassigned'}
-                      </p>
-                    </div>
-
-                    {/* Notes */}
-                    {serviceDetails.notes && (
-                      <div className="pt-2.5 border-t border-gray-100 bg-yellow-50/50 -mx-3 -mb-3 px-3 py-2 rounded-b-lg">
-                        <p className="text-yellow-800 mb-0.5 text-[10px] uppercase font-bold tracking-wider">Notes</p>
-                        <p className="font-medium text-yellow-900 italic line-clamp-3" title={serviceDetails.notes}>
-                          "{serviceDetails.notes}"
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-xs text-center text-purple-500 py-3 bg-white rounded-lg border border-purple-100 font-medium">
-                    Click Track Service below to view full data.
-                  </div>
-                )}
-              </div>
-              
-              <button
-                onClick={() => navigate(`/dashboard/staff/track_service/${activeConversation.context_id}`)}
-                className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                <FiMapPin size={16} /> Track Full Service
-              </button>
-            </div>
           )}
         </div>
 
@@ -2216,23 +2097,17 @@ const MessengerPage = ({ user }) => {
                           <p className={`font-medium text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>
                             {task.title}
                           </p>
-                          {task.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>}
+                          {task.description && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
+                          )}
                           <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
                             {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
                             {task.due_date && <span>📅 {new Date(task.due_date).toLocaleDateString()}</span>}
-                            <span className={`px-2 py-0.5 rounded-full ${
-                              task.priority === 'high' ? 'bg-red-100 text-red-800' :
-                              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-green-100 text-green-800'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded-full ${task.priority === 'high' ? 'bg-red-100 text-red-800' :
+                                task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-green-100 text-green-800'
+                              }`}>
                               {task.priority}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded-full ${
-                              task.status === 'completed' ? 'bg-green-100 text-green-800' :
-                              task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {task.status === 'in_progress' ? 'In Progress' : task.status === 'completed' ? 'Completed' : 'Pending'}
                             </span>
                           </div>
                         </div>
