@@ -468,7 +468,7 @@ const MessengerPage = ({ user }) => {
   useEffect(() => {
     if (activeConversation?.context_type === 'service_entry' && activeConversation.context_id) {
       setLoadingServiceDetails(true);
-      fetch(`${API_BASE_URL}/api/customer-services/${activeConversation.context_id}`, {
+      fetch(`${API_BASE_URL}/api/servicecollaboration/${activeConversation.context_id}/summary`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       .then(res => res.ok ? res.json() : null)

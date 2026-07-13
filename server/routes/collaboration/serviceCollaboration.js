@@ -764,4 +764,60 @@ router.get('/:serviceEntryId/conversation', authenticateToken, async (req, res) 
   }
 });
 
+// GET /api/servicecollaboration/:serviceEntryId/summary - to view service entry details in chat
+router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
+  const { serviceEntryId } = req.params;
+  try {
+    // 1. Verify the staff member is allowed to view this service
+    const allowed = await canAccessService(serviceEntryId, req.user.id, req.user.role);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Not authorized to view service details' });
+    }
+
+    // 2. Fetch all necessary details safely using LEFT JOINs
+    const query = `
+      SELECT 
+        se.*,
+        s.name as service_name,
+        s.name as category_name,
+        st.name as assigned_staff_name,
+        st.name as staff_name
+      FROM service_entries se
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN staff st ON se.staff_id = st.id
+      WHERE se.id = $1
+    `;
+    const result = await pool.query(query, [serviceEntryId]);
+    
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    const serviceData = result.rows[0];
+
+    // 3. Extract the subcategory name if it exists inside the JSON array
+    if (serviceData.subcategory_id) {
+      try {
+        const catRes = await pool.query(`SELECT subcategories FROM services WHERE id = $1`, [serviceData.category_id]);
+        const subcategories = catRes.rows[0]?.subcategories || [];
+        
+        // Handle both stringified JSON and native JSONB arrays
+        const parsedSubcategories = typeof subcategories === 'string' ? JSON.parse(subcategories) : subcategories;
+        const sub = parsedSubcategories.find(s => Number(s.id) === Number(serviceData.subcategory_id));
+        
+        if (sub) {
+          serviceData.subcategory_name = sub.name;
+        }
+      } catch(e) {
+        console.error("Error parsing subcategory", e);
+      }
+    }
+
+    res.json(serviceData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch service summary' });
+  }
+});
+
 export default router;
