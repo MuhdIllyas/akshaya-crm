@@ -653,10 +653,13 @@ const Chat = ({
       if (m.mention_type === 'tracking') {
         parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
       } 
-      // Render Staff Chip
+      // 🔥 UPDATED: Render Staff Chip (Bold and Colored)
       else if (m.mention_type === 'staff') {
         parts.push(
-          <span key={`mnt-${idx}`} className="text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded shadow-sm border border-blue-100">
+          <span 
+            key={`mnt-${idx}`} 
+            className="font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded-md border border-indigo-200 shadow-sm mx-0.5 cursor-default"
+          >
             {m.display_text}
           </span>
         );
