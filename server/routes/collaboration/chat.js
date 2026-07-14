@@ -631,7 +631,8 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       message,
       message_type,
       file: req.file,
-      io: req.io
+      io: req.io,
+      mentions
     });
 
     // 5. 🔥 Insert Mentions safely

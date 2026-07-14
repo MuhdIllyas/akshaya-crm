@@ -58,7 +58,8 @@ export async function sendMessage({
   direction = null,
   external_message_id = null,
   incoming_file_url = null, 
-  incoming_file_name = null 
+  incoming_file_name = null,
+  mentions = null 
 }) {
   const client = await pool.connect();
 
@@ -181,6 +182,11 @@ export async function sendMessage({
     /* =========================
        8. SOCKET EMIT
     ========================= */
+    if (mentions) {
+       // Attach mentions to the payload before broadcasting
+       completeMessage.mentions = typeof mentions === 'string' ? JSON.parse(mentions) : mentions;
+    }
+
     if (io) {
       io.to(`conversation:${conversation_id}`).emit("new_message", completeMessage);
     }
