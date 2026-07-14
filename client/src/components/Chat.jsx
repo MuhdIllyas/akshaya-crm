@@ -919,6 +919,7 @@ const Chat = ({
                 return (
                   <motion.div
                     key={messageKey}
+                    id={`msg-${msg.id}`}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}

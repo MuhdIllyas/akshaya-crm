@@ -636,7 +636,6 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
 
     // 5. 🔥 Insert Mentions safely
     if (mentions) {
-      // Safely parse mentions whether it arrives as a string (FormData) or array/object
       const parsedMentions = typeof mentions === 'string' ? JSON.parse(mentions) : mentions;
       
       for (const m of parsedMentions) {
@@ -646,21 +645,36 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
           [savedMessage.id, m.mention_type, m.entity_id, m.display_text, m.start_index, m.end_index]
         );
         
-        // 6. FIX: Notification Persistence + Socket emit
+        // 6. Generic Notification Persistence
         if (m.mention_type === 'staff') {
-          // Insert into notifications table first
+          // Insert into the new polymorphic notifications table
           await client.query(
-            `INSERT INTO notifications (user_id, title, message, type, related_id, is_read, created_at)
-             VALUES ($1, $2, $3, 'mention', $4, false, NOW())`,
-            [m.entity_id, 'You were mentioned', `${req.user.name} mentioned you in a chat.`, conversation_id]
+            `INSERT INTO notifications (
+                recipient_staff_id, 
+                sender_staff_id, 
+                type, 
+                message, 
+                conversation_id, 
+                related_entity_type, 
+                related_entity_id
+             ) VALUES ($1, $2, 'mention', $3, $4, 'chat_message', $5)`,
+            [
+              m.entity_id,                                 // $1: recipient
+              userId,                                      // $2: sender
+              `${req.user.name} mentioned you in a chat.`, // $3: message
+              conversation_id,                             // $4: conversation_id
+              savedMessage.id                              // $5: message_id
+            ]
           );
 
-          // Then emit over socket
+          // Emit the rich payload over Socket.IO so the live Notification Bell can use it
           if (req.io) {
             req.io.to(`user:${m.entity_id}`).emit('notification', {
-              title: "You were mentioned",
-              body: `${req.user.name} mentioned you in a message.`,
-              conversationId: conversation_id
+              type: "mention",
+              message: `${req.user.name} mentioned you in a chat.`,
+              conversationId: conversation_id,
+              messageId: savedMessage.id, // Deep-link ID
+              senderName: req.user.name
             });
           }
         }
