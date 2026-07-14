@@ -1095,13 +1095,45 @@ router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
     if (isNaN(parseInt(id))) return res.status(400).json({ error: 'Invalid ID' });
 
     const result = await pool.query(
-      `SELECT st.id as tracking_id, se.customer_name, st.status, st.current_step, st.priority,
-              staff.name as assigned_to, s.name as service_name
-       FROM service_tracking st
-       JOIN service_entries se ON st.service_entry_id = se.id
-       LEFT JOIN services s ON se.category_id = s.id
-       LEFT JOIN staff ON st.assigned_to = staff.id
-       WHERE st.id = $1`, 
+      `SELECT
+          st.id AS tracking_id,
+          st.application_number,
+          st.status,
+          st.current_step,
+          st.priority,
+          st.average_time,
+          st.assigned_to,
+
+          c.name AS customer_name,
+
+          srv.name AS service_name,
+
+          sub.name AS subcategory_name,
+
+          staff.name AS assigned_to_name
+
+      FROM service_tracking st
+
+      LEFT JOIN service_entries se
+          ON st.service_entry_id = se.id
+
+      LEFT JOIN customer_services cs
+          ON se.customer_service_id = cs.id
+
+      LEFT JOIN customers c
+          ON cs.customer_id = c.id
+
+      LEFT JOIN services srv
+          ON cs.service_id = srv.id
+
+      LEFT JOIN subcategories sub
+          ON cs.subcategory_id = sub.id
+
+      LEFT JOIN staff
+          ON staff.id = st.assigned_to
+
+      WHERE
+      st.id = $1;`, 
       [id]
     );
     
