@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 
 // ==========================================================================
-// MOCK DATA – extended with pinning support
+// MOCK DATA
 // ==========================================================================
 const MOCK_NOTIFICATIONS = [
   {
@@ -429,13 +429,13 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
     >
       <div className="p-4">
         <div className="flex items-start gap-4">
-          {/* Icon with module badge */}
+          {/* Icon with module badge – now dark navy blue */}
           <div className="relative flex-shrink-0">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconColor}`}>
               <Icon className="h-5 w-5" />
             </div>
             {notification.module && (
-              <span className="absolute -top-1 -right-1 text-[8px] font-bold bg-gray-800 text-white px-1.5 py-0.5 rounded-full">
+              <span className="absolute -top-1 -right-1 text-[8px] font-bold bg-indigo-900 text-white px-1.5 py-0.5 rounded-full">
                 {notification.module}
               </span>
             )}
