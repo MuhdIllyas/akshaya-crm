@@ -21,7 +21,7 @@ import {
   FiList,
   FiMessageSquare,
   FiUser,
-  FiSmartphone,
+  FiSmartphone, FiMapPin
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdCheckmarkCircleOutline } from "react-icons/io";
