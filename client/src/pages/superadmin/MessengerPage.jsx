@@ -976,6 +976,11 @@ const MessengerPage = ({ user }) => {
     formData.append('conversation_id', activeConversation.id);
     formData.append('message', message || '');
     formData.append('message_type', file ? (file.type?.startsWith('image/') ? 'image' : 'file') : 'text');
+
+    // 🔥 Attach Mentions to the Form Payload
+    if (optimisticMessage?.mentions?.length > 0) {
+      formData.append('mentions', JSON.stringify(optimisticMessage.mentions));
+    }
     
     if (file) {
       formData.append('file', file);

@@ -405,6 +405,22 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
             ELSE NULL 
           END as live_task_data,
           (
+            SELECT COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', mn.id,
+                  'mention_type', mn.mention_type,
+                  'entity_id', mn.entity_id,
+                  'display_text', mn.display_text,
+                  'start_index', mn.start_index,
+                  'end_index', mn.end_index
+                )
+              ), '[]'::json
+            ) 
+            FROM chat_mentions mn 
+            WHERE mn.message_id = m.id
+          ) as mentions,
+          (
             SELECT COUNT(*)
             FROM chat_message_reads r
             WHERE r.message_id = m.id
@@ -439,6 +455,22 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
             )
             ELSE NULL 
           END as live_task_data,
+          (
+            SELECT COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', mn.id,
+                  'mention_type', mn.mention_type,
+                  'entity_id', mn.entity_id,
+                  'display_text', mn.display_text,
+                  'start_index', mn.start_index,
+                  'end_index', mn.end_index
+                )
+              ), '[]'::json
+            ) 
+            FROM chat_mentions mn 
+            WHERE mn.message_id = m.id
+          ) as mentions,
           (
             SELECT COUNT(*)
             FROM chat_message_reads r
@@ -530,6 +562,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
       isCurrentUser: m.sender_id === userId,
       messageType: m.type,
       isFile: m.type !== "text"
+      // Note: 'mentions' is automatically carried over via the spread operator (...m)
     }));
     
     res.json(formatted);
@@ -596,6 +629,31 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       file: req.file,
       io: req.io
     });
+
+    // 🔥 Insert Mentions
+    if (mentions) {
+      try {
+        const parsedMentions = JSON.parse(mentions);
+        for (const m of parsedMentions) {
+          await pool.query(
+            `INSERT INTO chat_mentions (message_id, mention_type, entity_id, display_text, start_index, end_index)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [savedMessage.id, m.mention_type, m.entity_id, m.display_text, m.start_index, m.end_index]
+          );
+          
+          // Send Real-time Notification if it's a staff mention
+          if (m.mention_type === 'staff' && req.io) {
+            req.io.to(`user:${m.entity_id}`).emit('notification', {
+              title: "You were mentioned",
+              body: `${req.user.name} mentioned you in a message.`,
+              conversationId: conversation_id
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Mention insert error:", e);
+      }
+    }
 
     res.json(savedMessage);
   } catch (err) {
@@ -963,6 +1021,49 @@ router.delete("/conversation/:conversationId", authenticateToken, async (req, re
   } catch (err) {
     console.error("Delete conversation error:", err);
     res.status(500).json({ error: "Failed to delete conversation", details: err.message });
+  }
+});
+
+/* ================================
+   MENTIONS API (Search & Tracking)
+================================ */
+
+// Search staff for autocomplete
+router.get("/mentions/search-staff", authenticateToken, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+    const result = await pool.query(
+      `SELECT id, name, role FROM staff WHERE name ILIKE $1 AND status = 'active' LIMIT 5`,
+      [`%${q}%`]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fast primary key lookup for a Tracking ID
+router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (isNaN(parseInt(id))) return res.status(400).json({ error: 'Invalid ID' });
+
+    const result = await pool.query(
+      `SELECT st.id as tracking_id, se.customer_name, st.status, st.current_step, st.priority,
+              staff.name as assigned_to, s.name as service_name
+       FROM service_tracking st
+       JOIN service_entries se ON st.service_entry_id = se.id
+       LEFT JOIN services s ON se.category_id = s.id
+       LEFT JOIN staff ON st.assigned_to = staff.id
+       WHERE st.id = $1`, 
+      [id]
+    );
+    
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Tracking not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -29,7 +29,7 @@ import { BsCircleFill } from "react-icons/bs";
 import { toast } from "react-toastify";
 import EmojiPicker from 'emoji-picker-react';
 import { socket } from "@/services/socket";
-import axios from "axios"; // <-- added for template API
+import axios from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -113,6 +113,108 @@ const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
   );
 };
 
+// Normal task message
+const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
+  const [completing, setCompleting] = useState(false);
+  const completed = taskData?.status === 'completed';
+
+  const handleComplete = async () => {
+    if (completing || completed) return;
+    setCompleting(true);
+    try {
+      if (onStatusUpdate) {
+        await onStatusUpdate(taskId, taskData.status);
+      }
+    } catch {
+      // parent handles the error toast
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h4 className={`font-medium ${
+            completed ? 'line-through text-gray-500' : 'text-gray-900'
+          }`}>
+            {taskData.title}
+          </h4>
+          <p className="text-xs text-gray-500 mt-1">
+            Priority: {taskData.priority} | Status: {taskData.status}
+          </p>
+          {taskData.due_date && (
+            <p className="text-xs text-gray-500">
+              📅 {formatDate(taskData.due_date)}
+            </p>
+          )}
+        </div>
+        {!completed && (
+          <button
+            onClick={handleComplete}
+            disabled={completing}
+            className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+          >
+            {completing ? '...' : '✓ Complete'}
+          </button>
+        )}
+        {completed && (
+          <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
+            ✓ Completed
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------- NEW: Tracking Mention Card ----------
+const TrackingMentionCard = ({ entityId, displayText }) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    axios.get(`${API_BASE_URL}/api/chat/mentions/tracking/${entityId}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    .then(res => { if (isMounted) setData(res.data); })
+    .catch(err => console.error(err))
+    .finally(() => { if (isMounted) setLoading(false); });
+    return () => { isMounted = false; };
+  }, [entityId]);
+
+  if (loading) return <span className="text-purple-600 font-medium animate-pulse">{displayText}</span>;
+  if (!data) return <span className="text-red-500 font-medium line-through" title="Tracking ID not found">{displayText}</span>;
+
+  return (
+    <div 
+      className="my-2 p-3 bg-white border border-purple-100 rounded-xl shadow-sm block w-64 hover:shadow-md hover:border-purple-300 transition cursor-pointer group"
+      onClick={() => window.open(`/dashboard/staff/track_service/${entityId}`, '_blank')}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded flex items-center gap-1 border border-purple-100">
+          Tracking #{entityId}
+        </span>
+        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+          data.status === 'Processing' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'
+        }`}>
+          {data.status}
+        </span>
+      </div>
+      <p className="font-bold text-gray-900 truncate text-sm" title={data.service_name}>{data.service_name}</p>
+      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1"><FiUser size={12} /> {data.customer_name}</p>
+      <p className="text-xs text-gray-500 mt-0.5">Step: <span className="font-medium text-gray-700">{data.current_step}</span></p>
+      <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
+        <p className="text-[10px] text-gray-400">Assigned: {data.assigned_to || 'Unassigned'}</p>
+        <span className="text-xs text-purple-600 font-medium group-hover:underline">Open</span>
+      </div>
+    </div>
+  );
+};
+// -------------------------------------------------
+
 const Chat = ({
   activeConversation,
   messages,
@@ -147,6 +249,12 @@ const Chat = ({
   const [selectedTemplate, setSelectedTemplate] = useState("reengagement_message");
   const [templateParams, setTemplateParams] = useState("");
   const [sendingTemplate, setSendingTemplate] = useState(false);
+
+  // ---------- NEW: Mention states ----------
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [mentionResults, setMentionResults] = useState([]);
+  const [pendingStaffMentions, setPendingStaffMentions] = useState([]);
+  // -----------------------------------------
 
   const messagesEndRef = useRef(null);
   const emojiPickerRef = useRef(null);
@@ -215,61 +323,6 @@ const Chat = ({
   const shouldShowOnlineIndicator = useCallback(() => {
     return activeConversation?.channel !== 'whatsapp' && !activeConversation?.is_group;
   }, [activeConversation]);
-
-  const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
-    const [completing, setCompleting] = useState(false);
-    const completed = taskData?.status === 'completed';
-
-    const handleComplete = async () => {
-      if (completing || completed) return;
-      setCompleting(true);
-      try {
-        if (onStatusUpdate) {
-          await onStatusUpdate(taskId, taskData.status);
-        }
-      } catch {
-        // parent handles the error toast
-      } finally {
-        setCompleting(false);
-      }
-    };
-
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
-        <div className="flex justify-between items-start gap-4">
-          <div>
-            <h4 className={`font-medium ${
-              completed ? 'line-through text-gray-500' : 'text-gray-900'
-            }`}>
-              {taskData.title}
-            </h4>
-            <p className="text-xs text-gray-500 mt-1">
-              Priority: {taskData.priority} | Status: {taskData.status}
-            </p>
-            {taskData.due_date && (
-              <p className="text-xs text-gray-500">
-                📅 {formatDate(taskData.due_date)}
-              </p>
-            )}
-          </div>
-          {!completed && (
-            <button
-              onClick={handleComplete}
-              disabled={completing}
-              className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-            >
-              {completing ? '...' : '✓ Complete'}
-            </button>
-          )}
-          {completed && (
-            <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
-              ✓ Completed
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // Join conversation room when active
   useEffect(() => {
@@ -359,11 +412,31 @@ const Chat = ({
     }
   }, [activeConversation?.id, currentUser.id, currentUser.name, API_BASE_URL]);
 
-  const handleInputChange = (e) => {
-    const value = e.target.value;
-    setNewMessage(value);
+  // ---------- UPDATED: handleInputChange ----------
+  const handleInputChange = async (e) => {
+    const val = e.target.value;
+    setNewMessage(val);
+
+    // 🔥 NEW: Detect Staff Mention Triggers (Starts with @ followed by letters)
+    const cursor = e.target.selectionStart;
+    const textBeforeCursor = val.slice(0, cursor);
+    const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z]+)$/);
+    
+    if (match) {
+      setMentionQuery(match[1]);
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/chat/mentions/search-staff?q=${match[1]}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        setMentionResults(res.data);
+      } catch (err) { console.error("Staff fetch error", err); }
+    } else {
+      setMentionQuery(null);
+    }
+
+    // Existing typing indicator logic
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (value.length > 0) {
+    if (val.length > 0) {
       if (!isTyping) {
         setIsTyping(true);
         emitTyping(true);
@@ -381,6 +454,7 @@ const Chat = ({
       }
     }
   };
+  // ------------------------------------------------
 
   useEffect(() => {
     return () => {
@@ -389,13 +463,68 @@ const Chat = ({
     };
   }, [activeConversation?.id, isTyping, emitTyping]);
 
+  // ---------- NEW: handleSelectMention ----------
+  const handleSelectMention = (staff) => {
+    const inputEl = document.getElementById("chat-message-input");
+    const cursor = inputEl.selectionStart;
+    // Replace the query text with the resolved staff name
+    const textBefore = newMessage.slice(0, cursor).replace(/(?:^|\s)@([a-zA-Z]+)$/, ` @${staff.name} `);
+    const textAfter = newMessage.slice(cursor);
+    
+    setNewMessage(textBefore + textAfter);
+    setMentionQuery(null);
+    
+    // Store it in pending mentions so we can parse it on send
+    setPendingStaffMentions(prev => [...prev, { entityId: staff.id, name: staff.name }]);
+    inputEl.focus();
+  };
+  // ------------------------------------------------
+
+  // ---------- UPDATED: handleSendMessage ----------
   const handleSendMessage = () => {
     if ((!newMessage.trim() && !fileToUpload) || !activeConversation) return;
+
     if (isTyping) {
       setIsTyping(false);
       emitTyping(false);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     }
+
+    // 🔥 NEW: Extract Mentions using Regex and pending selections
+    const mentions = [];
+    const trackingRegex = /(?:^|\s)@(\d+)/g;
+    let match;
+
+    // 1. Parse Tracking IDs (@284)
+    while ((match = trackingRegex.exec(newMessage)) !== null) {
+      const matchText = match[0].trim();
+      const startIndex = match.index + (match[0].startsWith(' ') ? 1 : 0);
+      mentions.push({
+        mention_type: 'tracking',
+        entity_id: parseInt(match[1], 10),
+        display_text: matchText,
+        start_index: startIndex,
+        end_index: startIndex + matchText.length
+      });
+    }
+
+    // 2. Parse Staff Mentions based on resolved autocomplete selections
+    pendingStaffMentions.forEach(m => {
+      const regex = new RegExp(`(?:^|\\s)@${m.name}(?=\\s|$)`, 'g');
+      while ((match = regex.exec(newMessage)) !== null) {
+        const matchText = match[0].trim();
+        const startIndex = match.index + (match[0].startsWith(' ') ? 1 : 0);
+        mentions.push({
+          mention_type: 'staff',
+          entity_id: m.entityId,
+          display_text: matchText,
+          start_index: startIndex,
+          end_index: startIndex + matchText.length
+        });
+      }
+    });
+    // ---------------------------------------------
+
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const optimisticMessage = {
       id: tempId,
@@ -411,12 +540,15 @@ const Chat = ({
       messageType: fileToUpload ? (fileToUpload.type?.startsWith('image/') ? 'image' : 'file') : 'text',
       isCurrentUser: true,
       is_read_by_me: true,
-      isOptimistic: true
+      isOptimistic: true,
+      mentions: mentions // <-- Attach mentions
     };
     onSendMessage(newMessage, fileToUpload, optimisticMessage);
     setNewMessage("");
     setFileToUpload(null);
+    setPendingStaffMentions([]); // Reset pending mentions
   };
+  // ------------------------------------------------
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -482,6 +614,41 @@ const Chat = ({
       return <IoMdCheckmarkCircleOutline className="text-blue-200 ml-1" size={14} title="Sent" />;
     }
   };
+
+  // ---------- NEW: renderMessageTextWithMentions ----------
+  const renderMessageTextWithMentions = (text, mentions = []) => {
+    if (!mentions || mentions.length === 0) return <p className="text-sm whitespace-pre-wrap break-words">{text}</p>;
+    
+    // Sort mentions by starting index to avoid slicing errors
+    const sorted = [...mentions].sort((a, b) => a.start_index - b.start_index);
+    const parts = [];
+    let lastIndex = 0;
+    
+    sorted.forEach((m, idx) => {
+      if (m.start_index > lastIndex) {
+        parts.push(text.slice(lastIndex, m.start_index));
+      }
+      
+      if (m.mention_type === 'tracking') {
+        parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+      } else if (m.mention_type === 'staff') {
+        parts.push(
+          <span key={`mnt-${idx}`} className="text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded cursor-pointer hover:bg-blue-100 transition">
+            {m.display_text}
+          </span>
+        );
+      }
+      
+      lastIndex = m.end_index;
+    });
+    
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    
+    return <div className="text-sm whitespace-pre-wrap break-words">{parts}</div>;
+  };
+  // -------------------------------------------------------
 
   // Manual template send handler
   const handleSendTemplate = async () => {
@@ -813,7 +980,8 @@ const Chat = ({
                               <FiDownload size={14} className="ml-2" />
                             </div>
                           ) : (
-                            <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                            // ---------- REPLACED with mention renderer ----------
+                            renderMessageTextWithMentions(msg.text, msg.mentions)
                           )}
                           <div className={`flex justify-between items-center mt-1 text-xs ${msg.isCurrentUser ? "text-blue-200" : "text-gray-500"}`}>
                             <span>{msg.time}</span>
@@ -842,7 +1010,7 @@ const Chat = ({
       </div>
 
       {/* Fixed Input Area */}
-      <div className="w-full bg-white p-3 border-t border-gray-200 sticky bottom-0">
+      <div className="w-full bg-white p-3 border-t border-gray-200 sticky bottom-0 relative">
         {fileToUpload && (
           <div className="mb-2 px-3 py-2 bg-gray-100 rounded-lg flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -910,6 +1078,7 @@ const Chat = ({
           </div>
           <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center">
             <input
+              id="chat-message-input"   // <-- added id
               type="text"
               value={newMessage}
               onChange={handleInputChange}
@@ -961,6 +1130,32 @@ const Chat = ({
             </motion.button>
           )}
         </div>
+
+        {/* ---------- NEW: Autocomplete dropdown ---------- */}
+        {mentionQuery && mentionResults.length > 0 && (
+          <div className="absolute bottom-[80px] left-14 bg-white border border-gray-200 rounded-xl shadow-xl w-64 overflow-hidden z-50">
+            <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 font-semibold uppercase">
+              Staff Suggestions
+            </div>
+            {mentionResults.map(staff => (
+              <button
+                key={staff.id}
+                onClick={() => handleSelectMention(staff)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition text-left"
+              >
+                <div className="w-8 h-8 rounded-full bg-navy-700 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  {staff.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 text-sm truncate">{staff.name}</p>
+                  <p className="text-xs text-gray-500 truncate">{staff.role}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {/* ---------------------------------------------- */}
+
       </div>
 
       {/* Tasks Modal */}
