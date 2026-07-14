@@ -169,7 +169,7 @@ const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
   );
 };
 
-// ---------- NEW: Tracking Mention Card ----------
+// ---------- NEW: Flat Tracking Mention Card ----------
 const TrackingMentionCard = ({ entityId, displayText }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -185,56 +185,83 @@ const TrackingMentionCard = ({ entityId, displayText }) => {
     return () => { isMounted = false; };
   }, [entityId]);
 
-  if (loading) return <span className="text-purple-600 font-medium animate-pulse">{displayText}</span>;
-  if (!data) return <span className="text-red-500 font-medium line-through" title="Tracking not found">{displayText}</span>;
+  if (loading) return <span className="text-blue-200 font-medium animate-pulse">{displayText}</span>;
+  if (!data) return <span className="text-red-300 font-medium line-through" title="Tracking not found">{displayText}</span>;
 
   return (
-    <div className="my-3 block w-72 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Top Header */}
-      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
-        <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-          <FiFile className="text-purple-600" /> Tracking #{entityId}
-        </span>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-100 px-2 py-0.5 rounded-md">
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(`/dashboard/staff/track_service/${data.tracking_id || entityId}`, '_blank');
+      }}
+      className="my-3 block w-72 bg-white border-2 border-gray-200 rounded-lg shadow-sm hover:border-navy-700 transition-colors cursor-pointer text-left overflow-hidden select-none"
+    >
+      {/* Header section */}
+      <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex justify-between items-center">
+        <div className="flex items-center gap-1.5 text-navy-700 font-bold text-xs">
+          <FiFile size={12} />
+          <span>App #{data.application_number || data.tracking_id || entityId}</span>
+        </div>
+        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+          data.priority === 'High' ? 'bg-red-50 text-red-600 border-red-200' :
+          data.priority === 'Medium' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
+          'bg-green-50 text-green-600 border-green-200'
+        }`}>
           {data.priority || 'Normal'}
         </span>
       </div>
 
-      {/* Body Content */}
-      <div className="p-4">
-        <h4 className="font-bold text-gray-900 text-sm mb-3 truncate" title={data.service_name}>
-          📄 {data.service_name}
-        </h4>
-        
-        <div className="space-y-2 text-xs">
-          <div className="flex items-center text-gray-600">
-            <FiUser className="w-4 h-4 mr-2.5 text-gray-400" />
-            <span className="truncate">{data.customer_name}</span>
-          </div>
-          
-          <div className="flex items-center text-green-700 font-medium">
-            <BsCircleFill className="w-2.5 h-2.5 mr-3 ml-0.5" />
-            <span className="truncate">{data.status}</span>
-          </div>
-          
-          <div className="flex items-center text-gray-600">
-            <FiMapPin className="w-4 h-4 mr-2.5 text-gray-400" />
-            <span className="truncate">{data.current_step}</span>
-          </div>
+      {/* Body section */}
+      <div className="p-3 space-y-2.5">
+        {/* Service Name */}
+        <div className="flex items-start gap-2">
+          <FiBriefcase className="text-gray-400 mt-0.5 shrink-0" size={14} />
+          <p className="font-bold text-gray-900 text-sm leading-tight">
+            {data.service_name || 'Unknown Service'}
+          </p>
         </div>
-        
-        {/* Footer / Call to Action */}
-        <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-          <div className="text-[10px] text-gray-500 flex flex-col">
-            <span className="text-gray-400 uppercase tracking-wider">Assigned</span>
-            <span className="font-medium text-gray-700 text-xs">{data.assigned_to || 'Unassigned'}</span>
+
+        {/* Customer Name */}
+        <div className="flex items-center gap-2">
+          <FiUser className="text-gray-400 shrink-0" size={14} />
+          <p className="font-medium text-gray-700 text-sm truncate">
+            {data.customer_name || 'No Customer Attached'}
+          </p>
+        </div>
+
+        {/* Status Box */}
+        <div className="bg-gray-50 border border-gray-100 rounded-md p-2 space-y-1.5 mt-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-500 font-medium">Status</span>
+            <span className="font-bold text-gray-800 capitalize">{data.status || 'Pending'}</span>
           </div>
-          <button 
-            onClick={() => window.open(`/dashboard/staff/track_service/${entityId}`, '_blank')}
-            className="text-xs px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-lg transition-colors flex items-center gap-1"
-          >
-            Open <FiChevronRight size={14} />
-          </button>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-500 font-medium">Step</span>
+            <span className="font-bold text-navy-700 truncate max-w-[120px]" title={data.current_step}>
+              {data.current_step || 'Initial Phase'}
+            </span>
+          </div>
+          {data.estimated_delivery && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500 font-medium">Delivery</span>
+              <span className="font-bold text-gray-800 flex items-center gap-1">
+                <FiClock size={10} /> {data.estimated_delivery}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer section */}
+      <div className="bg-gray-50 border-t border-gray-200 px-3 py-2 flex items-center justify-between">
+        <div className="flex flex-col">
+          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Assigned To</span>
+          <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">
+            {data.assigned_to || 'Unassigned'}
+          </span>
+        </div>
+        <div className="text-xs font-bold text-navy-700 flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
+          Open <FiChevronRight size={12} />
         </div>
       </div>
     </div>

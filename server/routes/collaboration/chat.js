@@ -1088,11 +1088,13 @@ router.get("/mentions/search-staff", authenticateToken, async (req, res) => {
   }
 });
 
-// Fast primary key lookup for a Tracking ID
+// Fast lookup for Tracking ID OR Application Number
 router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    if (isNaN(parseInt(id))) return res.status(400).json({ error: 'Invalid ID' });
+    
+    // Removed isNaN check in case your app numbers have letters later (e.g. APP-10936)
+    if (!id) return res.status(400).json({ error: 'Invalid ID' });
 
     const result = await pool.query(
       `SELECT
@@ -1101,45 +1103,40 @@ router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
           st.status,
           st.current_step,
           st.priority,
-          st.average_time,
-          st.assigned_to,
-
-          c.name AS customer_name,
-
+          st.average_time AS estimated_delivery,
+          
+          se.customer_name,
           srv.name AS service_name,
-
           sub.name AS subcategory_name,
-
-          staff.name AS assigned_to_name
+          
+          COALESCE(staff.name, st.assigned_to::text) AS assigned_to
 
       FROM service_tracking st
-
-      LEFT JOIN service_entries se
+      
+      -- Join directly to service_entries
+      LEFT JOIN service_entries se 
           ON st.service_entry_id = se.id
+          
+      -- Grab the service and subcategory names directly from service_entries
+      LEFT JOIN services srv 
+          ON se.category_id = srv.id
+      LEFT JOIN subcategories sub 
+          ON se.subcategory_id = sub.id
 
-      LEFT JOIN customer_services cs
-          ON se.customer_service_id = cs.id
-
-      LEFT JOIN customers c
-          ON cs.customer_id = c.id
-
-      LEFT JOIN services srv
-          ON cs.service_id = srv.id
-
-      LEFT JOIN subcategories sub
-          ON cs.subcategory_id = sub.id
-
-      LEFT JOIN staff
+      -- Grab the staff name
+      LEFT JOIN staff 
           ON staff.id = st.assigned_to
 
-      WHERE
-      st.id = $1;`, 
+      -- 🔥 CRITICAL FIX: Search both the primary key AND the application number
+      WHERE st.id::text = $1 OR st.application_number = $1`, 
       [id]
     );
     
     if (result.rows.length === 0) return res.status(404).json({ error: 'Tracking not found' });
+    
     res.json(result.rows[0]);
   } catch (err) {
+    console.error("Tracking lookup error:", err);
     res.status(500).json({ error: err.message });
   }
 });
