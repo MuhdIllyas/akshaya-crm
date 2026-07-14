@@ -564,7 +564,8 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
-          live_task_data: msg.live_task_data || null
+          live_task_data: msg.live_task_data || null,
+          mentions: msg.mentions || []
         };
 
         return {
@@ -879,7 +880,8 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
-          live_task_data: msg.live_task_data || null
+          live_task_data: msg.live_task_data || null,
+          mentions: msg.mentions || []
         };
       });
 
