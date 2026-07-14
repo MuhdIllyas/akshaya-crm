@@ -679,7 +679,6 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
           }
         }
       }
-      savedMessage.mentions = parsedMentions;
     }
 
     await client.query('COMMIT'); // Commit the transaction
