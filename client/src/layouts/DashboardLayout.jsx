@@ -216,7 +216,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/service_entry", label: "Service Entry", icon: ServiceEntryIcon },
       { path: "/dashboard/staff/expense_entry", label: "Expense Entry", icon: ExpenseEntryIcon },
       { path: "/dashboard/staff/pending_payments", label: "Pending Payments", icon: PendingPaymentIcon },
-      { path: "/dashboard/staff/messages", label: "Notifications", icon: NotificationsIcon },
+      { path: "/dashboard/staff/notifications", label: "Notifications", icon: NotificationsIcon },
       { path: "/dashboard/staff/team", label: "My Team", icon: TeamIcon },
       { path: "/dashboard/staff/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/staff/knowledge_hub", label: "Knowledge Hub", icon: KnowledgeHubIcon },

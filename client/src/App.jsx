@@ -53,6 +53,9 @@ import Home from "./pages/Home";
 //Knowledge Hub
 import KnowledgeHub from './pages/knowledge/KnowledgeHub';
 
+//Notification Page
+import NotificationsPage from './pages/NotificationsPage';
+
 //Analytics Page
 import ReportsSection from './pages/ReportsSection';
 
@@ -411,6 +414,10 @@ const App = () => {
             <Route
               path="staff/pending_payments"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><PendingPayments /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/notifications"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><NotificationsPage /></ProtectedRoute>}
             />
             <Route
               path="staff/messenger"
