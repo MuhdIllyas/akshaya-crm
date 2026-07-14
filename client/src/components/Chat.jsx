@@ -283,6 +283,8 @@ const Chat = ({
   const typingTimeoutRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
 
+  const chatInputRef = useRef(null);
+
   const currentMessages = messages[activeConversation?.id] || [];
 
   // Compute if 24h window is open
@@ -485,19 +487,24 @@ const Chat = ({
 
   // ---------- NEW: handleSelectMention ----------
   const handleSelectMention = (staff) => {
-    const inputEl = document.querySelector('input[placeholder="Type a message..."]'); // Target your input
-    const cursor = inputEl.selectionStart;
-    
-    // Replace the typed query with the full staff name
-    const textBefore = newMessage.slice(0, cursor).replace(/(?:^|\s)@([a-zA-Z]+)$/, ` @${staff.name} `);
-    const textAfter = newMessage.slice(cursor);
-    
-    setNewMessage(textBefore + textAfter);
-    setMentionQuery(null);
-    setPendingStaffMentions(prev => [...prev, { entityId: staff.id, name: staff.name }]);
-    
-    inputEl.focus();
-  };
+      
+      const inputEl = chatInputRef.current; 
+      
+      // Safety check just in case it hasn't mounted
+      if (!inputEl) return; 
+
+      const cursor = inputEl.selectionStart;
+      
+      // Replace the typed query with the full staff name
+      const textBefore = newMessage.slice(0, cursor).replace(/(?:^|\s)@([a-zA-Z]+)$/, ` @${staff.name} `);
+      const textAfter = newMessage.slice(cursor);
+      
+      setNewMessage(textBefore + textAfter);
+      setMentionQuery(null);
+      setPendingStaffMentions(prev => [...prev, { entityId: staff.id, name: staff.name }]);
+      
+      inputEl.focus();
+    };
 
   const handleSendMessage = () => {
     if ((!newMessage.trim() && !fileToUpload) || !activeConversation) return;
@@ -1095,6 +1102,7 @@ const Chat = ({
           <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center">
             <input
               id="chat-message-input"   // <-- added id
+              ref={chatInputRef}
               type="text"
               value={newMessage}
               onChange={handleInputChange}

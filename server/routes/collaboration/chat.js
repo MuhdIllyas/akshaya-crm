@@ -1046,6 +1046,9 @@ router.delete("/conversation/:conversationId", authenticateToken, async (req, re
 
 // Search staff for autocomplete
 router.get("/mentions/search-staff", authenticateToken, async (req, res) => {
+  console.log("Mention search called");
+  console.log(req.query);
+
   try {
     const { q } = req.query;
     const { centre_id, role } = req.user; // Extract centre_id and role
