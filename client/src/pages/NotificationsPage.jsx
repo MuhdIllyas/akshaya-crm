@@ -8,7 +8,8 @@ import {
   FiSlack, FiMessageSquare as FiMessageSquareIcon,
   FiRepeat, FiBookOpen, FiLink, FiThumbsUp, FiTrendingUp,
   FiMenu, FiPlus, FiMinus, FiChevronDown, FiRefreshCw,
-  FiPlay, FiPause, FiTrash2, FiEdit2, FiSend, FiPin, FiUnlock
+  FiPlay, FiPause, FiTrash2, FiEdit2, FiSend,
+  FiMapPin
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -168,7 +169,7 @@ const MOCK_NOTIFICATIONS = [
     message: 'Complete eDistrict verification',
     time: 'Yesterday',
     isRead: true,
-    isPinned: true, // pinned until completed
+    isPinned: true,
     priority: 'high',
     sender: {
       name: 'Muhammed Illyas',
@@ -395,7 +396,6 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
 
   // Determine actions based on type (with fallback)
   const typeActions = TYPE_ACTIONS[notification.type] || ['mark_read'];
-  // Override with custom actions if provided, but ensure they are valid
   const actions = notification.actions && notification.actions.length > 0
     ? notification.actions.filter(a => typeActions.includes(a) || a === 'mark_read')
     : typeActions;
@@ -449,7 +449,7 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
                 {priorityLabel}
               </span>
               {!notification.isRead && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
-              {notification.isPinned && <FiPin className="h-3 w-3 text-amber-500" />}
+              {notification.isPinned && <FiMapPin className="h-3 w-3 text-amber-500 fill-current" />}
               <span className="text-xs text-gray-400 ml-auto">{notification.time}</span>
             </div>
 
@@ -540,7 +540,9 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
                   onClick={handlePin}
                   title={notification.isPinned ? 'Unpin' : 'Pin'}
                 >
-                  {notification.isPinned ? <FiUnlock className="h-3 w-3" /> : <FiPin className="h-3 w-3" />}
+                  <FiMapPin
+                    className={`h-3 w-3 ${notification.isPinned ? 'fill-current text-amber-500' : 'text-gray-400'}`}
+                  />
                 </button>
                 {notification.actionLabel && (
                   <span className="text-xs text-indigo-600 font-medium ml-auto flex items-center gap-1">
@@ -586,8 +588,8 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
     if (tabId === 'all') return notifications.length;
     if (tabId === 'unread') return notifications.filter(n => !n.isRead).length;
     if (tabId === 'assignments') {
-      // Tasks + Services that are unread or not yet acted upon (simplified)
-      return notifications.filter(n => (n.type === 'task' || n.type === 'service')).length;
+      // Tasks + Services
+      return notifications.filter(n => n.type === 'task' || n.type === 'service').length;
     }
     return notifications.filter(n => n.type === tabId).length;
   };
@@ -596,7 +598,6 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
   const filtered = useMemo(() => {
     let items = notifications;
 
-    // Tab filter
     switch (activeTab) {
       case 'all': break;
       case 'unread': items = items.filter(n => !n.isRead); break;
