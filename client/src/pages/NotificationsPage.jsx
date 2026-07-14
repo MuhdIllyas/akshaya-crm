@@ -8,13 +8,13 @@ import {
   FiSlack, FiMessageSquare as FiMessageSquareIcon,
   FiRepeat, FiBookOpen, FiLink, FiThumbsUp, FiTrendingUp,
   FiMenu, FiPlus, FiMinus, FiChevronDown, FiRefreshCw,
-  FiPlay, FiPause, FiTrash2, FiEdit2, FiSend
+  FiPlay, FiPause, FiTrash2, FiEdit2, FiSend, FiPin, FiUnlock
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 
 // ==========================================================================
-// MOCK DATA – extends with richer fields
+// MOCK DATA – extended with pinning support
 // ==========================================================================
 const MOCK_NOTIFICATIONS = [
   {
@@ -22,10 +22,12 @@ const MOCK_NOTIFICATIONS = [
     type: 'message',
     icon: FiMessageSquareIcon,
     color: 'blue',
+    module: 'WHATSAPP',
     title: 'New WhatsApp Message',
     message: '"Sir, my application is approved."',
     time: '2 min ago',
     isRead: false,
+    isPinned: false,
     priority: 'high',
     sender: {
       name: 'Abdul Rahman',
@@ -40,6 +42,11 @@ const MOCK_NOTIFICATIONS = [
       customer: 'Abdul Rahman',
       centre: 'Pukayur',
       service: 'Passport Renewal',
+      trackingId: 'TRK-10396',
+    },
+    preview: {
+      lastMessage: '"Sir, my application is approved."',
+      receivedAt: '2 min ago',
     },
   },
   {
@@ -47,10 +54,12 @@ const MOCK_NOTIFICATIONS = [
     type: 'mention',
     icon: FiAtSign,
     color: 'purple',
+    module: 'MESSENGER',
     title: 'You were mentioned',
     message: '"Please verify this."',
     time: '5 min ago',
     isRead: false,
+    isPinned: false,
     priority: 'high',
     sender: {
       name: 'Prajitha',
@@ -64,16 +73,21 @@ const MOCK_NOTIFICATIONS = [
     metadata: {
       conversation: 'Passport Renewal',
     },
+    preview: {
+      conversation: 'Passport Workspace',
+    },
   },
   {
     id: 3,
     type: 'service',
     icon: FiBriefcase,
     color: 'indigo',
+    module: 'SERVICE',
     title: 'Service Assigned',
     message: 'Passport Renewal Verification',
     time: '10 min ago',
     isRead: false,
+    isPinned: false,
     priority: 'medium',
     sender: {
       name: 'Admin',
@@ -88,6 +102,11 @@ const MOCK_NOTIFICATIONS = [
       customer: 'Abdul Rahman',
       serviceId: '#10396',
       centre: 'Pukayur',
+      trackingId: 'TRK-10396',
+    },
+    preview: {
+      customer: 'Abdul Rahman',
+      currentStep: 'Verification',
     },
   },
   {
@@ -95,10 +114,12 @@ const MOCK_NOTIFICATIONS = [
     type: 'task',
     icon: FiCheckSquare,
     color: 'emerald',
+    module: 'TASK',
     title: 'Task Completed',
     message: 'Aadhaar Update',
     time: 'Yesterday',
     isRead: true,
+    isPinned: false,
     priority: 'normal',
     sender: {
       name: 'Prajitha',
@@ -112,16 +133,19 @@ const MOCK_NOTIFICATIONS = [
     metadata: {
       taskId: '#52',
     },
+    preview: null,
   },
   {
     id: 5,
     type: 'calendar',
     icon: FiCalendar,
     color: 'orange',
+    module: 'CALENDAR',
     title: 'Event Reminder',
     message: 'Team Meeting in 30 minutes',
     time: 'Yesterday',
     isRead: true,
+    isPinned: false,
     priority: 'medium',
     sender: null,
     centre: 'Pukayur',
@@ -132,16 +156,19 @@ const MOCK_NOTIFICATIONS = [
       event: 'Team Meeting',
       time: '3:00 PM',
     },
+    preview: null,
   },
   {
     id: 6,
     type: 'task',
     icon: FiCheckSquare,
     color: 'emerald',
+    module: 'TASK',
     title: 'Task Assigned',
     message: 'Complete eDistrict verification',
     time: 'Yesterday',
     isRead: true,
+    isPinned: true, // pinned until completed
     priority: 'high',
     sender: {
       name: 'Muhammed Illyas',
@@ -151,20 +178,23 @@ const MOCK_NOTIFICATIONS = [
     centre: 'Pukayur',
     actionUrl: '/tasks/101',
     actionLabel: 'Open Task →',
-    actions: ['open', 'mark_read', 'snooze'],
+    actions: ['open', 'mark_read', 'complete'],
     metadata: {
       dueDate: 'Today',
     },
+    preview: null,
   },
   {
     id: 7,
     type: 'expense',
     icon: FiDollarSign,
     color: 'green',
+    module: 'EXPENSE',
     title: 'Expense Approved',
     message: 'Travel Allowance',
     time: '2 days ago',
     isRead: true,
+    isPinned: false,
     priority: 'normal',
     sender: {
       name: 'Finance Team',
@@ -178,16 +208,19 @@ const MOCK_NOTIFICATIONS = [
     metadata: {
       amount: '₹450',
     },
+    preview: null,
   },
   {
     id: 8,
     type: 'team',
     icon: FiUsers,
     color: 'pink',
+    module: 'TEAM',
     title: 'You\'ve been added to',
     message: 'Passport Team',
     time: '2 days ago',
     isRead: true,
+    isPinned: false,
     priority: 'normal',
     sender: {
       name: 'Admin',
@@ -201,16 +234,19 @@ const MOCK_NOTIFICATIONS = [
     metadata: {
       team: 'Passport Team',
     },
+    preview: null,
   },
   {
     id: 9,
     type: 'review',
     icon: FiStar,
     color: 'yellow',
+    module: 'REVIEW',
     title: 'Customer Review',
     message: '"Excellent service"',
     time: '3 days ago',
     isRead: true,
+    isPinned: false,
     priority: 'normal',
     sender: {
       name: 'Rahman',
@@ -224,16 +260,19 @@ const MOCK_NOTIFICATIONS = [
     metadata: {
       rating: 5,
     },
+    preview: null,
   },
   {
     id: 10,
     type: 'payment',
     icon: FiDollarSign,
     color: 'red',
+    module: 'PAYMENT',
     title: 'Pending Payment',
     message: '2 customers pending – ₹850',
     time: '3 days ago',
     isRead: true,
+    isPinned: false,
     priority: 'medium',
     sender: null,
     centre: 'Pukayur',
@@ -244,16 +283,19 @@ const MOCK_NOTIFICATIONS = [
       count: 2,
       amount: '₹850',
     },
+    preview: null,
   },
   {
     id: 11,
     type: 'system',
     icon: FiActivity,
     color: 'gray',
+    module: 'SYSTEM',
     title: 'System Update',
     message: 'CRM v2.4.2 is available',
     time: '4 days ago',
     isRead: true,
+    isPinned: false,
     priority: 'low',
     sender: null,
     centre: 'Pukayur',
@@ -263,6 +305,7 @@ const MOCK_NOTIFICATIONS = [
     metadata: {
       version: 'v2.4.2',
     },
+    preview: null,
   },
 ];
 
@@ -294,13 +337,68 @@ const ICON_COLORS = {
 };
 
 // ==========================================================================
+// ACTION BUTTONS PER TYPE
+// ==========================================================================
+const TYPE_ACTIONS = {
+  mention: ['reply', 'mark_read'],
+  message: ['reply', 'mark_read'],
+  service: ['accept', 'mark_read'],
+  task: ['open', 'complete', 'mark_read'],
+  review: ['view', 'mark_read'],
+  calendar: ['view', 'mark_read'],
+  expense: ['view', 'mark_read'],
+  team: ['view', 'mark_read'],
+  payment: ['view', 'mark_read'],
+  system: ['view', 'mark_read'],
+};
+
+// ==========================================================================
+// QUICK PREVIEW COMPONENT
+// ==========================================================================
+const QuickPreview = ({ notification }) => {
+  if (!notification.preview) return null;
+  const { preview, metadata } = notification;
+  return (
+    <div className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 text-sm">
+      <div className="font-semibold text-gray-900 mb-1">{notification.title}</div>
+      {preview.lastMessage && (
+        <p className="text-gray-600 border-l-2 border-indigo-300 pl-2 mt-1 italic">{preview.lastMessage}</p>
+      )}
+      {preview.conversation && (
+        <p className="text-gray-600 mt-1">Conversation: <span className="font-medium">{preview.conversation}</span></p>
+      )}
+      {preview.customer && (
+        <p className="text-gray-600">Customer: <span className="font-medium">{preview.customer}</span></p>
+      )}
+      {preview.currentStep && (
+        <p className="text-gray-600">Current Step: <span className="font-medium">{preview.currentStep}</span></p>
+      )}
+      {preview.receivedAt && (
+        <p className="text-xs text-gray-400 mt-2">Received: {preview.receivedAt}</p>
+      )}
+      {metadata?.trackingId && (
+        <p className="text-xs text-gray-400">Tracking: {metadata.trackingId}</p>
+      )}
+    </div>
+  );
+};
+
+// ==========================================================================
 // NOTIFICATION ITEM COMPONENT
 // ==========================================================================
-const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMode }) => {
+const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onTogglePin, viewMode }) => {
   const Icon = notification.icon || FiBell;
   const iconColor = ICON_COLORS[notification.color] || ICON_COLORS.gray;
   const priorityLabel = PRIORITY_LABELS[notification.priority] || 'NORMAL';
   const priorityColor = PRIORITY_COLORS[notification.priority] || PRIORITY_COLORS.normal;
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Determine actions based on type (with fallback)
+  const typeActions = TYPE_ACTIONS[notification.type] || ['mark_read'];
+  // Override with custom actions if provided, but ensure they are valid
+  const actions = notification.actions && notification.actions.length > 0
+    ? notification.actions.filter(a => typeActions.includes(a) || a === 'mark_read')
+    : typeActions;
 
   const handleAction = (e, action) => {
     e.stopPropagation();
@@ -309,34 +407,49 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
 
   const handleClick = () => {
     if (viewMode === 'activity') {
-      // In activity mode, just mark as read and navigate
       onMarkRead(notification.id);
     }
     onClick(notification.actionUrl);
   };
 
+  const handlePin = (e) => {
+    e.stopPropagation();
+    onTogglePin(notification.id);
+  };
+
   return (
     <div
       className={`relative rounded-xl border transition-all hover:shadow-md cursor-pointer ${
+        notification.isPinned ? 'border-amber-300 bg-amber-50' :
         !notification.isRead ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
       } ${viewMode === 'activity' ? 'opacity-80' : ''}`}
+      onMouseEnter={() => setShowPreview(true)}
+      onMouseLeave={() => setShowPreview(false)}
       onClick={handleClick}
     >
       <div className="p-4">
         <div className="flex items-start gap-4">
-          {/* Icon */}
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${iconColor}`}>
-            <Icon className="h-5 w-5" />
+          {/* Icon with module badge */}
+          <div className="relative flex-shrink-0">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconColor}`}>
+              <Icon className="h-5 w-5" />
+            </div>
+            {notification.module && (
+              <span className="absolute -top-1 -right-1 text-[8px] font-bold bg-gray-800 text-white px-1.5 py-0.5 rounded-full">
+                {notification.module}
+              </span>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
-            {/* Top row: title, priority, time */}
+            {/* Top row: title, priority, time, pin */}
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="font-semibold text-gray-900 text-sm">{notification.title}</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>
                 {priorityLabel}
               </span>
               {!notification.isRead && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
+              {notification.isPinned && <FiPin className="h-3 w-3 text-amber-500" />}
               <span className="text-xs text-gray-400 ml-auto">{notification.time}</span>
             </div>
 
@@ -372,9 +485,9 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
             )}
 
             {/* Actions */}
-            {notification.actions && notification.actions.length > 0 && (
+            {actions && actions.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 mt-3">
-                {notification.actions.includes('reply') && (
+                {actions.includes('reply') && (
                   <button
                     className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition"
                     onClick={(e) => handleAction(e, 'reply')}
@@ -382,7 +495,7 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
                     Reply
                   </button>
                 )}
-                {notification.actions.includes('open') && (
+                {actions.includes('open') && (
                   <button
                     className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition"
                     onClick={(e) => handleAction(e, 'open')}
@@ -390,7 +503,7 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
                     Open
                   </button>
                 )}
-                {notification.actions.includes('accept') && (
+                {actions.includes('accept') && (
                   <button
                     className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition"
                     onClick={(e) => handleAction(e, 'accept')}
@@ -398,15 +511,23 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
                     Accept
                   </button>
                 )}
-                {notification.actions.includes('snooze') && (
+                {actions.includes('complete') && (
                   <button
-                    className="text-xs font-medium text-amber-600 hover:text-amber-800 px-3 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 transition"
-                    onClick={(e) => handleAction(e, 'snooze')}
+                    className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition"
+                    onClick={(e) => handleAction(e, 'complete')}
                   >
-                    Snooze
+                    Mark Complete
                   </button>
                 )}
-                {notification.actions.includes('mark_read') && !notification.isRead && (
+                {actions.includes('view') && (
+                  <button
+                    className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition"
+                    onClick={(e) => handleAction(e, 'view')}
+                  >
+                    View
+                  </button>
+                )}
+                {actions.includes('mark_read') && !notification.isRead && (
                   <button
                     className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 transition"
                     onClick={(e) => handleAction(e, 'mark_read')}
@@ -414,6 +535,13 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
                     Mark Read
                   </button>
                 )}
+                <button
+                  className="text-xs font-medium text-amber-500 hover:text-amber-700 px-2 py-1 rounded-lg hover:bg-amber-50 transition"
+                  onClick={handlePin}
+                  title={notification.isPinned ? 'Unpin' : 'Pin'}
+                >
+                  {notification.isPinned ? <FiUnlock className="h-3 w-3" /> : <FiPin className="h-3 w-3" />}
+                </button>
                 {notification.actionLabel && (
                   <span className="text-xs text-indigo-600 font-medium ml-auto flex items-center gap-1">
                     {notification.actionLabel} <FiChevronRight className="h-3 w-3" />
@@ -424,6 +552,9 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
           </div>
         </div>
       </div>
+
+      {/* Quick Preview */}
+      {showPreview && <QuickPreview notification={notification} />}
     </div>
   );
 };
@@ -434,9 +565,9 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMod
 const NotificationsPage = ({ notifications: externalNotifications, setNotifications: setExternalNotifications }) => {
   const [notifications, setNotifications] = useState(externalNotifications || MOCK_NOTIFICATIONS);
   const [activeTab, setActiveTab] = useState('all');
-  const [viewMode, setViewMode] = useState('notifications'); // 'notifications' | 'activity'
+  const [viewMode, setViewMode] = useState('notifications');
   const [searchQuery, setSearchQuery] = useState('');
-  const [timeFilter, setTimeFilter] = useState('all'); // 'all' | 'today' | 'week' | 'earlier'
+  const [timeFilter, setTimeFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
 
   const tabs = [
@@ -450,6 +581,18 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
     { id: 'system', label: 'System', icon: FiActivity },
   ];
 
+  // Helper to get count for assignment tab
+  const getTabCount = (tabId) => {
+    if (tabId === 'all') return notifications.length;
+    if (tabId === 'unread') return notifications.filter(n => !n.isRead).length;
+    if (tabId === 'assignments') {
+      // Tasks + Services that are unread or not yet acted upon (simplified)
+      return notifications.filter(n => (n.type === 'task' || n.type === 'service')).length;
+    }
+    return notifications.filter(n => n.type === tabId).length;
+  };
+
+  // Filter logic
   const filtered = useMemo(() => {
     let items = notifications;
 
@@ -466,18 +609,25 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
       default: break;
     }
 
-    // Search
+    // Search – include metadata
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      items = items.filter(n =>
-        n.title.toLowerCase().includes(q) ||
-        n.message.toLowerCase().includes(q) ||
-        (n.sender?.name?.toLowerCase().includes(q)) ||
-        (n.centre?.toLowerCase().includes(q))
-      );
+      items = items.filter(n => {
+        const metadataStr = n.metadata ? JSON.stringify(n.metadata).toLowerCase() : '';
+        return (
+          n.title.toLowerCase().includes(q) ||
+          n.message.toLowerCase().includes(q) ||
+          (n.sender?.name?.toLowerCase().includes(q)) ||
+          (n.centre?.toLowerCase().includes(q)) ||
+          metadataStr.includes(q) ||
+          (n.metadata?.trackingId?.toLowerCase().includes(q)) ||
+          (n.metadata?.customer?.toLowerCase().includes(q)) ||
+          (n.metadata?.serviceId?.toLowerCase().includes(q))
+        );
+      });
     }
 
-    // Time filter (simplified)
+    // Time filter
     if (timeFilter === 'today') {
       items = items.filter(n => n.time.includes('min') || n.time.includes('hour'));
     } else if (timeFilter === 'week') {
@@ -486,8 +636,10 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
       items = items.filter(n => !n.time.includes('min') && !n.time.includes('hour') && !n.time.includes('day') && !n.time.includes('Yesterday'));
     }
 
-    // For activity view, we show everything, but we might sort by time descending
-    return items;
+    // Pinned items float to top
+    const pinned = items.filter(n => n.isPinned);
+    const unpinned = items.filter(n => !n.isPinned);
+    return [...pinned, ...unpinned];
   }, [notifications, activeTab, searchQuery, timeFilter]);
 
   const grouped = useMemo(() => {
@@ -513,15 +665,15 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
 
   // Actions
   const handleMarkRead = (id) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, isRead: true } : n)
-    );
-    if (setExternalNotifications) setExternalNotifications(notifications);
+    const updated = notifications.map(n => n.id === id ? { ...n, isRead: true } : n);
+    setNotifications(updated);
+    if (setExternalNotifications) setExternalNotifications(updated);
   };
 
   const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    if (setExternalNotifications) setExternalNotifications(notifications);
+    const updated = notifications.map(n => ({ ...n, isRead: true }));
+    setNotifications(updated);
+    if (setExternalNotifications) setExternalNotifications(updated);
     toast.success('All notifications marked as read');
   };
 
@@ -538,8 +690,11 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
       case 'accept':
         toast.success(`Accepted ${notification.title} (demo)`);
         break;
-      case 'snooze':
-        toast.info(`Snoozed ${notification.title} for 1 hour (demo)`);
+      case 'complete':
+        toast.success(`Marked "${notification.title}" as complete (demo)`);
+        break;
+      case 'view':
+        toast.info(`Viewing ${notification.title} (demo)`);
         break;
       case 'mark_read':
         handleMarkRead(id);
@@ -550,8 +705,17 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
     }
   };
 
+  const handleTogglePin = (id) => {
+    const updated = notifications.map(n =>
+      n.id === id ? { ...n, isPinned: !n.isPinned } : n
+    );
+    setNotifications(updated);
+    if (setExternalNotifications) setExternalNotifications(updated);
+    const pinned = updated.find(n => n.id === id);
+    toast.info(pinned.isPinned ? 'Pinned' : 'Unpinned');
+  };
+
   const handleClick = (url) => {
-    // In real app, use navigate(url) from react-router
     toast.info(`Navigating to ${url} (demo)`);
   };
 
@@ -597,7 +761,7 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
           <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
             type="text"
-            placeholder="Search notifications..."
+            placeholder="Search notifications (title, message, sender, centre, tracking ID, customer…)"
             value={searchQuery}
             onChange={handleSearch}
             className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
@@ -625,9 +789,7 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
       {/* Tabs */}
       <div className="flex flex-wrap gap-1 mb-6 border-b border-gray-200 pb-0.5">
         {tabs.map(tab => {
-          const count = tab.id === 'all' ? notifications.length :
-                        tab.id === 'unread' ? unreadCount :
-                        notifications.filter(n => n.type === tab.id).length;
+          const count = getTabCount(tab.id);
           return (
             <button
               key={tab.id}
@@ -667,6 +829,7 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
                     onAction={handleAction}
                     onMarkRead={handleMarkRead}
                     onClick={handleClick}
+                    onTogglePin={handleTogglePin}
                     viewMode={viewMode}
                   />
                 ))}
@@ -695,7 +858,7 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
         )}
       </div>
 
-      {/* Notification Preferences (mock) - hidden behind a gear icon at bottom */}
+      {/* Notification Preferences */}
       <div className="mt-8 text-center border-t border-gray-200 pt-4">
         <button
           className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 mx-auto"
