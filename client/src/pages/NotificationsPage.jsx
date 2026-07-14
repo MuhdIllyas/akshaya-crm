@@ -1,200 +1,443 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   FiBell, FiMessageCircle, FiAtSign, FiBriefcase, FiCheckSquare,
   FiCalendar, FiDollarSign, FiUsers, FiStar, FiClock, FiX,
   FiAlertCircle, FiChevronRight, FiFilter, FiCheck,
-  FiMail, FiPhone, FiUser, FiActivity, FiEye
+  FiMail, FiPhone, FiUser, FiActivity, FiEye, FiSearch,
+  FiMoreHorizontal, FiFileText, FiTag, FiAward, FiSettings,
+  FiSlack, FiMessageSquare as FiMessageSquareIcon,
+  FiRepeat, FiBookOpen, FiLink, FiThumbsUp, FiTrendingUp,
+  FiMenu, FiPlus, FiMinus, FiChevronDown, FiRefreshCw,
+  FiPlay, FiPause, FiTrash2, FiEdit2, FiSend
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 
-// Mock notification data (will be fetched from API)
+// ==========================================================================
+// MOCK DATA – extends with richer fields
+// ==========================================================================
 const MOCK_NOTIFICATIONS = [
   {
     id: 1,
     type: 'message',
+    icon: FiMessageSquareIcon,
+    color: 'blue',
     title: 'New WhatsApp Message',
-    message: 'Abdul Rahman sent a message',
+    message: '"Sir, my application is approved."',
     time: '2 min ago',
     isRead: false,
     priority: 'high',
-    icon: FiMessageCircle,
+    sender: {
+      name: 'Abdul Rahman',
+      avatar: null,
+      role: 'Customer',
+    },
+    centre: 'Pukayur',
     actionUrl: '/messenger/337',
-    relatedEntity: 'messenger',
+    actionLabel: 'Open Chat →',
+    actions: ['reply', 'mark_read'],
+    metadata: {
+      customer: 'Abdul Rahman',
+      centre: 'Pukayur',
+      service: 'Passport Renewal',
+    },
   },
   {
     id: 2,
     type: 'mention',
+    icon: FiAtSign,
+    color: 'purple',
     title: 'You were mentioned',
-    message: 'Illyas mentioned you in Messenger',
+    message: '"Please verify this."',
     time: '5 min ago',
     isRead: false,
     priority: 'high',
-    icon: FiAtSign,
+    sender: {
+      name: 'Prajitha',
+      avatar: null,
+      role: 'Staff',
+    },
+    centre: 'Pukayur',
     actionUrl: '/messenger/337#mention',
-    relatedEntity: 'messenger',
+    actionLabel: 'Open Conversation →',
+    actions: ['reply', 'mark_read'],
+    metadata: {
+      conversation: 'Passport Renewal',
+    },
   },
   {
     id: 3,
     type: 'service',
+    icon: FiBriefcase,
+    color: 'indigo',
     title: 'Service Assigned',
-    message: 'Passport Renewal #10396 – Assigned by Admin',
+    message: 'Passport Renewal Verification',
     time: '10 min ago',
     isRead: false,
     priority: 'medium',
-    icon: FiBriefcase,
+    sender: {
+      name: 'Admin',
+      avatar: null,
+      role: 'Admin',
+    },
+    centre: 'Pukayur',
     actionUrl: '/tracking/10396',
-    relatedEntity: 'tracking',
+    actionLabel: 'Open Tracking →',
+    actions: ['accept', 'mark_read'],
+    metadata: {
+      customer: 'Abdul Rahman',
+      serviceId: '#10396',
+      centre: 'Pukayur',
+    },
   },
   {
     id: 4,
     type: 'task',
+    icon: FiCheckSquare,
+    color: 'emerald',
     title: 'Task Completed',
-    message: 'Prajitha completed Aadhaar Update',
+    message: 'Aadhaar Update',
     time: 'Yesterday',
     isRead: true,
     priority: 'normal',
-    icon: FiCheckSquare,
+    sender: {
+      name: 'Prajitha',
+      avatar: null,
+      role: 'Staff',
+    },
+    centre: 'Pukayur',
     actionUrl: '/tasks/52',
-    relatedEntity: 'tasks',
+    actionLabel: 'Open Task →',
+    actions: ['mark_read'],
+    metadata: {
+      taskId: '#52',
+    },
   },
   {
     id: 5,
     type: 'calendar',
+    icon: FiCalendar,
+    color: 'orange',
     title: 'Event Reminder',
     message: 'Team Meeting in 30 minutes',
     time: 'Yesterday',
     isRead: true,
     priority: 'medium',
-    icon: FiCalendar,
+    sender: null,
+    centre: 'Pukayur',
     actionUrl: '/calendar',
-    relatedEntity: 'calendar',
+    actionLabel: 'Open Calendar →',
+    actions: ['mark_read'],
+    metadata: {
+      event: 'Team Meeting',
+      time: '3:00 PM',
+    },
   },
   {
     id: 6,
     type: 'task',
+    icon: FiCheckSquare,
+    color: 'emerald',
     title: 'Task Assigned',
-    message: 'Complete eDistrict verification – Due Today',
+    message: 'Complete eDistrict verification',
     time: 'Yesterday',
     isRead: true,
     priority: 'high',
-    icon: FiCheckSquare,
+    sender: {
+      name: 'Muhammed Illyas',
+      avatar: null,
+      role: 'Staff',
+    },
+    centre: 'Pukayur',
     actionUrl: '/tasks/101',
-    relatedEntity: 'tasks',
+    actionLabel: 'Open Task →',
+    actions: ['open', 'mark_read', 'snooze'],
+    metadata: {
+      dueDate: 'Today',
+    },
   },
   {
     id: 7,
     type: 'expense',
+    icon: FiDollarSign,
+    color: 'green',
     title: 'Expense Approved',
-    message: 'Travel Allowance – ₹450',
+    message: 'Travel Allowance',
     time: '2 days ago',
     isRead: true,
     priority: 'normal',
-    icon: FiDollarSign,
+    sender: {
+      name: 'Finance Team',
+      avatar: null,
+      role: 'Finance',
+    },
+    centre: 'Pukayur',
     actionUrl: '/expenses/88',
-    relatedEntity: 'expenses',
+    actionLabel: 'Open Expense →',
+    actions: ['mark_read'],
+    metadata: {
+      amount: '₹450',
+    },
   },
   {
     id: 8,
     type: 'team',
+    icon: FiUsers,
+    color: 'pink',
     title: 'You\'ve been added to',
     message: 'Passport Team',
     time: '2 days ago',
     isRead: true,
     priority: 'normal',
-    icon: FiUsers,
+    sender: {
+      name: 'Admin',
+      avatar: null,
+      role: 'Admin',
+    },
+    centre: 'Pukayur',
     actionUrl: '/teams/12',
-    relatedEntity: 'teams',
+    actionLabel: 'Open Team →',
+    actions: ['mark_read'],
+    metadata: {
+      team: 'Passport Team',
+    },
   },
   {
     id: 9,
     type: 'review',
+    icon: FiStar,
+    color: 'yellow',
     title: 'Customer Review',
-    message: '★★★★★ "Excellent service"',
+    message: '"Excellent service"',
     time: '3 days ago',
     isRead: true,
     priority: 'normal',
-    icon: FiStar,
+    sender: {
+      name: 'Rahman',
+      avatar: null,
+      role: 'Customer',
+    },
+    centre: 'Pukayur',
     actionUrl: '/reviews/56',
-    relatedEntity: 'reviews',
+    actionLabel: 'View Review →',
+    actions: ['mark_read'],
+    metadata: {
+      rating: 5,
+    },
   },
   {
     id: 10,
     type: 'payment',
+    icon: FiDollarSign,
+    color: 'red',
     title: 'Pending Payment',
     message: '2 customers pending – ₹850',
     time: '3 days ago',
     isRead: true,
     priority: 'medium',
-    icon: FiDollarSign,
+    sender: null,
+    centre: 'Pukayur',
     actionUrl: '/payments/pending',
-    relatedEntity: 'payments',
+    actionLabel: 'View Payments →',
+    actions: ['mark_read'],
+    metadata: {
+      count: 2,
+      amount: '₹850',
+    },
   },
   {
     id: 11,
     type: 'system',
+    icon: FiActivity,
+    color: 'gray',
     title: 'System Update',
     message: 'CRM v2.4.2 is available',
     time: '4 days ago',
     isRead: true,
     priority: 'low',
-    icon: FiActivity,
+    sender: null,
+    centre: 'Pukayur',
     actionUrl: '/settings',
-    relatedEntity: 'settings',
+    actionLabel: 'Update →',
+    actions: ['mark_read'],
+    metadata: {
+      version: 'v2.4.2',
+    },
   },
 ];
 
-const NotificationItem = ({ notification, onRead, onClick }) => {
+const PRIORITY_LABELS = {
+  high: 'HIGH',
+  medium: 'MEDIUM',
+  normal: 'NORMAL',
+  low: 'LOW',
+};
+
+const PRIORITY_COLORS = {
+  high: 'bg-red-100 text-red-700 border-red-200',
+  medium: 'bg-orange-100 text-orange-700 border-orange-200',
+  normal: 'bg-blue-100 text-blue-700 border-blue-200',
+  low: 'bg-gray-100 text-gray-500 border-gray-200',
+};
+
+const ICON_COLORS = {
+  blue: 'bg-blue-50 text-blue-600',
+  purple: 'bg-purple-50 text-purple-600',
+  indigo: 'bg-indigo-50 text-indigo-600',
+  emerald: 'bg-emerald-50 text-emerald-600',
+  orange: 'bg-orange-50 text-orange-600',
+  green: 'bg-green-50 text-green-600',
+  pink: 'bg-pink-50 text-pink-600',
+  yellow: 'bg-yellow-50 text-yellow-600',
+  red: 'bg-red-50 text-red-600',
+  gray: 'bg-gray-50 text-gray-600',
+};
+
+// ==========================================================================
+// NOTIFICATION ITEM COMPONENT
+// ==========================================================================
+const NotificationItem = ({ notification, onAction, onMarkRead, onClick, viewMode }) => {
   const Icon = notification.icon || FiBell;
-  const priorityColors = {
-    high: 'bg-red-500 border-red-500',
-    medium: 'bg-orange-500 border-orange-500',
-    normal: 'bg-blue-500 border-blue-500',
-    low: 'bg-gray-400 border-gray-400',
+  const iconColor = ICON_COLORS[notification.color] || ICON_COLORS.gray;
+  const priorityLabel = PRIORITY_LABELS[notification.priority] || 'NORMAL';
+  const priorityColor = PRIORITY_COLORS[notification.priority] || PRIORITY_COLORS.normal;
+
+  const handleAction = (e, action) => {
+    e.stopPropagation();
+    onAction(notification.id, action);
   };
-  const priorityDot = priorityColors[notification.priority] || priorityColors.normal;
+
+  const handleClick = () => {
+    if (viewMode === 'activity') {
+      // In activity mode, just mark as read and navigate
+      onMarkRead(notification.id);
+    }
+    onClick(notification.actionUrl);
+  };
 
   return (
     <div
-      className={`flex items-start gap-4 p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-50 ${
-        !notification.isRead ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-white'
-      }`}
-      onClick={() => {
-        if (!notification.isRead) onRead(notification.id);
-        onClick(notification.actionUrl);
-      }}
+      className={`relative rounded-xl border transition-all hover:shadow-md cursor-pointer ${
+        !notification.isRead ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
+      } ${viewMode === 'activity' ? 'opacity-80' : ''}`}
+      onClick={handleClick}
     >
-      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${priorityDot} bg-opacity-10`}>
-        <Icon className="h-5 w-5 text-gray-700" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-900 text-sm">{notification.title}</span>
-          {!notification.isRead && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
+      <div className="p-4">
+        <div className="flex items-start gap-4">
+          {/* Icon */}
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            {/* Top row: title, priority, time */}
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className="font-semibold text-gray-900 text-sm">{notification.title}</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>
+                {priorityLabel}
+              </span>
+              {!notification.isRead && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
+              <span className="text-xs text-gray-400 ml-auto">{notification.time}</span>
+            </div>
+
+            {/* Message */}
+            <div className="text-sm text-gray-700 mb-1">{notification.message}</div>
+
+            {/* Sender + Centre */}
+            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+              {notification.sender && (
+                <span className="flex items-center gap-1">
+                  <FiUser className="h-3 w-3" /> {notification.sender.name}
+                  {notification.sender.role && (
+                    <span className="text-gray-400">({notification.sender.role})</span>
+                  )}
+                </span>
+              )}
+              {notification.centre && (
+                <span className="flex items-center gap-1">
+                  <FiTag className="h-3 w-3" /> {notification.centre}
+                </span>
+              )}
+            </div>
+
+            {/* Metadata row */}
+            {notification.metadata && (
+              <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500 border-t border-gray-100 pt-2">
+                {Object.entries(notification.metadata).map(([key, value]) => (
+                  <span key={key} className="flex items-center gap-1">
+                    <span className="font-medium text-gray-400">{key}:</span> {value}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Actions */}
+            {notification.actions && notification.actions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                {notification.actions.includes('reply') && (
+                  <button
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition"
+                    onClick={(e) => handleAction(e, 'reply')}
+                  >
+                    Reply
+                  </button>
+                )}
+                {notification.actions.includes('open') && (
+                  <button
+                    className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition"
+                    onClick={(e) => handleAction(e, 'open')}
+                  >
+                    Open
+                  </button>
+                )}
+                {notification.actions.includes('accept') && (
+                  <button
+                    className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition"
+                    onClick={(e) => handleAction(e, 'accept')}
+                  >
+                    Accept
+                  </button>
+                )}
+                {notification.actions.includes('snooze') && (
+                  <button
+                    className="text-xs font-medium text-amber-600 hover:text-amber-800 px-3 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 transition"
+                    onClick={(e) => handleAction(e, 'snooze')}
+                  >
+                    Snooze
+                  </button>
+                )}
+                {notification.actions.includes('mark_read') && !notification.isRead && (
+                  <button
+                    className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 transition"
+                    onClick={(e) => handleAction(e, 'mark_read')}
+                  >
+                    Mark Read
+                  </button>
+                )}
+                {notification.actionLabel && (
+                  <span className="text-xs text-indigo-600 font-medium ml-auto flex items-center gap-1">
+                    {notification.actionLabel} <FiChevronRight className="h-3 w-3" />
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-        <p className="text-sm text-gray-600 mt-0.5">{notification.message}</p>
-        <span className="text-xs text-gray-400 mt-1 block">{notification.time}</span>
       </div>
-      <button
-        className="text-gray-400 hover:text-gray-600 transition p-1"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!notification.isRead) onRead(notification.id);
-          toast.info('Notification marked as read');
-        }}
-        title="Mark as read"
-      >
-        <FiCheck className="h-4 w-4" />
-      </button>
     </div>
   );
 };
 
-const NotificationsPage = () => {
-  const navigate = useNavigate();
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+// ==========================================================================
+// NOTIFICATIONS PAGE
+// ==========================================================================
+const NotificationsPage = ({ notifications: externalNotifications, setNotifications: setExternalNotifications }) => {
+  const [notifications, setNotifications] = useState(externalNotifications || MOCK_NOTIFICATIONS);
   const [activeTab, setActiveTab] = useState('all');
+  const [viewMode, setViewMode] = useState('notifications'); // 'notifications' | 'activity'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [timeFilter, setTimeFilter] = useState('all'); // 'all' | 'today' | 'week' | 'earlier'
+  const [showFilters, setShowFilters] = useState(false);
 
   const tabs = [
     { id: 'all', label: 'All', icon: FiBell },
@@ -203,21 +446,49 @@ const NotificationsPage = () => {
     { id: 'tasks', label: 'Tasks', icon: FiCheckSquare },
     { id: 'messages', label: 'Messages', icon: FiMessageCircle },
     { id: 'services', label: 'Services', icon: FiBriefcase },
+    { id: 'assignments', label: 'Assignments', icon: FiCheckSquare },
     { id: 'system', label: 'System', icon: FiActivity },
   ];
 
   const filtered = useMemo(() => {
+    let items = notifications;
+
+    // Tab filter
     switch (activeTab) {
-      case 'all': return notifications;
-      case 'unread': return notifications.filter(n => !n.isRead);
-      case 'mentions': return notifications.filter(n => n.type === 'mention');
-      case 'tasks': return notifications.filter(n => n.type === 'task');
-      case 'messages': return notifications.filter(n => n.type === 'message');
-      case 'services': return notifications.filter(n => n.type === 'service');
-      case 'system': return notifications.filter(n => n.type === 'system');
-      default: return notifications;
+      case 'all': break;
+      case 'unread': items = items.filter(n => !n.isRead); break;
+      case 'mentions': items = items.filter(n => n.type === 'mention'); break;
+      case 'tasks': items = items.filter(n => n.type === 'task'); break;
+      case 'messages': items = items.filter(n => n.type === 'message'); break;
+      case 'services': items = items.filter(n => n.type === 'service'); break;
+      case 'assignments': items = items.filter(n => n.type === 'task' || n.type === 'service'); break;
+      case 'system': items = items.filter(n => n.type === 'system'); break;
+      default: break;
     }
-  }, [notifications, activeTab]);
+
+    // Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      items = items.filter(n =>
+        n.title.toLowerCase().includes(q) ||
+        n.message.toLowerCase().includes(q) ||
+        (n.sender?.name?.toLowerCase().includes(q)) ||
+        (n.centre?.toLowerCase().includes(q))
+      );
+    }
+
+    // Time filter (simplified)
+    if (timeFilter === 'today') {
+      items = items.filter(n => n.time.includes('min') || n.time.includes('hour'));
+    } else if (timeFilter === 'week') {
+      items = items.filter(n => n.time.includes('day') || n.time.includes('Yesterday'));
+    } else if (timeFilter === 'earlier') {
+      items = items.filter(n => !n.time.includes('min') && !n.time.includes('hour') && !n.time.includes('day') && !n.time.includes('Yesterday'));
+    }
+
+    // For activity view, we show everything, but we might sort by time descending
+    return items;
+  }, [notifications, activeTab, searchQuery, timeFilter]);
 
   const grouped = useMemo(() => {
     const groups = { Today: [], Yesterday: [], Older: [] };
@@ -227,8 +498,7 @@ const NotificationsPage = () => {
     yesterday.setDate(yesterday.getDate() - 1);
 
     filtered.forEach(n => {
-      // For demo, we use the time string to guess group
-      if (n.time.includes('min') || n.time.includes('hour')) {
+      if (n.time.includes('min') || n.time.includes('hour') || n.time.includes('Just')) {
         groups.Today.push(n);
       } else if (n.time.includes('Yesterday')) {
         groups.Yesterday.push(n);
@@ -239,23 +509,60 @@ const NotificationsPage = () => {
     return groups;
   }, [filtered]);
 
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // Actions
   const handleMarkRead = (id) => {
     setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, isRead: true } : n)
     );
+    if (setExternalNotifications) setExternalNotifications(notifications);
   };
 
-  const handleNotificationClick = (url) => {
-    if (url) {
-      navigate(url);
+  const handleMarkAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    if (setExternalNotifications) setExternalNotifications(notifications);
+    toast.success('All notifications marked as read');
+  };
+
+  const handleAction = (id, action) => {
+    const notification = notifications.find(n => n.id === id);
+    if (!notification) return;
+    switch (action) {
+      case 'reply':
+        toast.info(`Replying to "${notification.title}" (demo)`);
+        break;
+      case 'open':
+        toast.info(`Opening ${notification.title} (demo)`);
+        break;
+      case 'accept':
+        toast.success(`Accepted ${notification.title} (demo)`);
+        break;
+      case 'snooze':
+        toast.info(`Snoozed ${notification.title} for 1 hour (demo)`);
+        break;
+      case 'mark_read':
+        handleMarkRead(id);
+        toast.info('Marked as read');
+        break;
+      default:
+        break;
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const handleClick = (url) => {
+    // In real app, use navigate(url) from react-router
+    toast.info(`Navigating to ${url} (demo)`);
+  };
+
+  const handleSearch = (e) => {
+    setSearchQuery(e.target.value);
+  };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-50 rounded-xl">
             <FiBell className="h-6 w-6 text-indigo-600" />
@@ -267,15 +574,52 @@ const NotificationsPage = () => {
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-3">
+          <button
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-50 transition"
+            onClick={handleMarkAllRead}
+          >
+            <FiCheck className="h-4 w-4" /> Mark all read
+          </button>
+          <button
+            className="text-sm text-gray-500 hover:text-gray-700 font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+            onClick={() => setViewMode(prev => prev === 'notifications' ? 'activity' : 'notifications')}
+          >
+            {viewMode === 'notifications' ? '📊' : '🔔'}
+            {viewMode === 'notifications' ? ' Activity' : ' Notifications'}
+          </button>
+        </div>
+      </div>
+
+      {/* Search and filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex-1 min-w-[200px] relative">
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <input
+            type="text"
+            placeholder="Search notifications..."
+            value={searchQuery}
+            onChange={handleSearch}
+            className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+          />
+        </div>
         <button
-          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
-          onClick={() => {
-            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-            toast.success('All marked as read');
-          }}
+          className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+          onClick={() => setShowFilters(!showFilters)}
         >
-          <FiCheck className="h-4 w-4" /> Mark all read
+          <FiFilter className="h-4 w-4" />
+          Filters
         </button>
+        <select
+          value={timeFilter}
+          onChange={(e) => setTimeFilter(e.target.value)}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+        >
+          <option value="all">All time</option>
+          <option value="today">Today</option>
+          <option value="week">This week</option>
+          <option value="earlier">Earlier</option>
+        </select>
       </div>
 
       {/* Tabs */}
@@ -308,20 +652,22 @@ const NotificationsPage = () => {
         })}
       </div>
 
-      {/* Notification List */}
+      {/* Grouped list */}
       <div className="space-y-6">
         {Object.entries(grouped).map(([group, items]) => {
           if (items.length === 0) return null;
           return (
             <div key={group}>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">{group}</h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {items.map(n => (
                   <NotificationItem
                     key={n.id}
                     notification={n}
-                    onRead={handleMarkRead}
-                    onClick={handleNotificationClick}
+                    onAction={handleAction}
+                    onMarkRead={handleMarkRead}
+                    onClick={handleClick}
+                    viewMode={viewMode}
                   />
                 ))}
               </div>
@@ -330,13 +676,33 @@ const NotificationsPage = () => {
         })}
         {filtered.length === 0 && (
           <div className="text-center py-16">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <FiBell className="h-8 w-8 text-gray-300" />
+            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+              {viewMode === 'notifications' ? (
+                <FiBell className="h-10 w-10 text-gray-300" />
+              ) : (
+                <FiActivity className="h-10 w-10 text-gray-300" />
+              )}
             </div>
-            <h3 className="text-lg font-semibold text-gray-700">No notifications</h3>
-            <p className="text-sm text-gray-400 mt-1">You're all caught up</p>
+            <h3 className="text-lg font-semibold text-gray-700">
+              {viewMode === 'notifications' ? '🎉 You\'re all caught up!' : 'No activity yet'}
+            </h3>
+            <p className="text-sm text-gray-400 mt-1">
+              {viewMode === 'notifications'
+                ? 'We\'ll notify you when something requires your attention.'
+                : 'Activity from your team will appear here.'}
+            </p>
           </div>
         )}
+      </div>
+
+      {/* Notification Preferences (mock) - hidden behind a gear icon at bottom */}
+      <div className="mt-8 text-center border-t border-gray-200 pt-4">
+        <button
+          className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 mx-auto"
+          onClick={() => toast.info('Notification preferences dialog (demo)')}
+        >
+          <FiSettings className="h-3 w-3" /> Manage preferences
+        </button>
       </div>
     </div>
   );
