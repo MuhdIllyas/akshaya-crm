@@ -658,7 +658,7 @@ const Chat = ({
         parts.push(
           <span 
             key={`mnt-${idx}`} 
-            className="font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded-md border border-indigo-200 shadow-sm mx-0.5 cursor-default"
+            className="font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-md border border-blue-200 shadow-sm mx-0.5 cursor-pointer hover:bg-blue-200 transition-colors"
           >
             {m.display_text}
           </span>
