@@ -1055,7 +1055,7 @@ router.get("/mentions/search-staff", authenticateToken, async (req, res) => {
     
     if (!q) return res.json([]);
 
-    let queryStr = `SELECT id, name, role FROM staff WHERE name ILIKE $1 AND status = 'active'`;
+    let queryStr = `SELECT id, name, role FROM staff WHERE name ILIKE $1 AND status = 'Active'`;
     const params = [`%${q}%`];
 
     // FIX: Restrict to the same centre unless the user is a superadmin
