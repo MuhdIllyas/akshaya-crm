@@ -578,14 +578,16 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
 ================================ */
 
 router.post("/message", authenticateToken, upload.single("file"), async (req, res) => {
+  const client = await pool.connect(); // Use a dedicated client for transactions
   try {
-    const { conversation_id, message, message_type } = req.body;
+    // 1. FIX: Added 'mentions' to the destructured body
+    const { conversation_id, message, message_type, mentions } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
     const userCentreId = req.user.centre_id;
 
     // 1. Get the conversation details to verify Centre ownership
-    const convRes = await pool.query(
+    const convRes = await client.query(
       `SELECT centre_id, channel FROM chat_conversations WHERE id = $1`,
       [conversation_id]
     );
@@ -603,14 +605,14 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
 
     // 3. Participant Check & Auto-Join (The Magic Fix)
     if (userRole === 'staff') {
-      const participantCheck = await pool.query(
+      const participantCheck = await client.query(
         `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
         [conversation_id, userId]
       );
 
       // If the staff member isn't in the DB yet, auto-enroll them so they can reply!
       if (participantCheck.rows.length === 0) {
-        await pool.query(
+        await client.query(
           `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
            VALUES ($1, $2, 'staff', 'member', NOW())
            ON CONFLICT DO NOTHING`,
@@ -618,6 +620,8 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
         );
       }
     }
+
+    await client.query('BEGIN'); // 2. FIX: Start transaction to ensure safety
 
     // 4. Send the message to the central router (which handles Libromi internally)
     const savedMessage = await sendMessage({
@@ -630,19 +634,29 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       io: req.io
     });
 
-    // 🔥 Insert Mentions
+    // 5. 🔥 Insert Mentions safely
     if (mentions) {
-      try {
-        const parsedMentions = JSON.parse(mentions);
-        for (const m of parsedMentions) {
-          await pool.query(
-            `INSERT INTO chat_mentions (message_id, mention_type, entity_id, display_text, start_index, end_index)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [savedMessage.id, m.mention_type, m.entity_id, m.display_text, m.start_index, m.end_index]
+      // Safely parse mentions whether it arrives as a string (FormData) or array/object
+      const parsedMentions = typeof mentions === 'string' ? JSON.parse(mentions) : mentions;
+      
+      for (const m of parsedMentions) {
+        await client.query(
+          `INSERT INTO chat_mentions (message_id, mention_type, entity_id, display_text, start_index, end_index)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [savedMessage.id, m.mention_type, m.entity_id, m.display_text, m.start_index, m.end_index]
+        );
+        
+        // 6. FIX: Notification Persistence + Socket emit
+        if (m.mention_type === 'staff') {
+          // Insert into notifications table first
+          await client.query(
+            `INSERT INTO notifications (user_id, title, message, type, related_id, is_read, created_at)
+             VALUES ($1, $2, $3, 'mention', $4, false, NOW())`,
+            [m.entity_id, 'You were mentioned', `${req.user.name} mentioned you in a chat.`, conversation_id]
           );
-          
-          // Send Real-time Notification if it's a staff mention
-          if (m.mention_type === 'staff' && req.io) {
+
+          // Then emit over socket
+          if (req.io) {
             req.io.to(`user:${m.entity_id}`).emit('notification', {
               title: "You were mentioned",
               body: `${req.user.name} mentioned you in a message.`,
@@ -650,15 +664,17 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
             });
           }
         }
-      } catch (e) {
-        console.error("Mention insert error:", e);
       }
     }
 
+    await client.query('COMMIT'); // Commit the transaction
     res.json(savedMessage);
   } catch (err) {
+    await client.query('ROLLBACK'); // Rollback if anything fails
     console.error("Message send error:", err);
     res.status(500).json({ error: "Failed to send message" });
+  } finally {
+    client.release(); // Always release the client back to the pool
   }
 });
 
@@ -1032,11 +1048,22 @@ router.delete("/conversation/:conversationId", authenticateToken, async (req, re
 router.get("/mentions/search-staff", authenticateToken, async (req, res) => {
   try {
     const { q } = req.query;
+    const { centre_id, role } = req.user; // Extract centre_id and role
+    
     if (!q) return res.json([]);
-    const result = await pool.query(
-      `SELECT id, name, role FROM staff WHERE name ILIKE $1 AND status = 'active' LIMIT 5`,
-      [`%${q}%`]
-    );
+
+    let queryStr = `SELECT id, name, role FROM staff WHERE name ILIKE $1 AND status = 'active'`;
+    const params = [`%${q}%`];
+
+    // FIX: Restrict to the same centre unless the user is a superadmin
+    if (role !== 'superadmin') {
+      queryStr += ` AND centre_id = $2`;
+      params.push(centre_id);
+    }
+    
+    queryStr += ` LIMIT 5`;
+
+    const result = await pool.query(queryStr, params);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });

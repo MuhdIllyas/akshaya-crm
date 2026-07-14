@@ -186,29 +186,49 @@ const TrackingMentionCard = ({ entityId, displayText }) => {
   }, [entityId]);
 
   if (loading) return <span className="text-purple-600 font-medium animate-pulse">{displayText}</span>;
-  if (!data) return <span className="text-red-500 font-medium line-through" title="Tracking ID not found">{displayText}</span>;
+  if (!data) return <span className="text-red-500 font-medium line-through" title="Not found">{displayText}</span>;
 
   return (
     <div 
-      className="my-2 p-3 bg-white border border-purple-100 rounded-xl shadow-sm block w-64 hover:shadow-md hover:border-purple-300 transition cursor-pointer group"
+      className="my-2 p-3 bg-white border border-purple-100 rounded-xl shadow-sm block w-72 hover:shadow-md hover:border-purple-300 transition cursor-pointer group"
       onClick={() => window.open(`/dashboard/staff/track_service/${entityId}`, '_blank')}
     >
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded flex items-center gap-1 border border-purple-100">
-          Tracking #{entityId}
+          <FiFile size={10} /> App #{data.application_number || entityId}
         </span>
         <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-          data.status === 'Processing' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'
+          data.priority === 'High' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'
         }`}>
-          {data.status}
+          {data.priority || 'Normal'}
         </span>
       </div>
-      <p className="font-bold text-gray-900 truncate text-sm" title={data.service_name}>{data.service_name}</p>
-      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1"><FiUser size={12} /> {data.customer_name}</p>
-      <p className="text-xs text-gray-500 mt-0.5">Step: <span className="font-medium text-gray-700">{data.current_step}</span></p>
-      <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
+      
+      <p className="font-bold text-gray-900 truncate text-sm">{data.service_name}</p>
+      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+        <FiUser size={12} /> {data.customer_name}
+      </p>
+      
+      <div className="mt-3 bg-gray-50 p-2 rounded-lg border border-gray-100">
+        <div className="flex justify-between text-xs mb-1">
+          <span className="text-gray-500">Status:</span>
+          <span className="font-medium text-gray-800">{data.status}</span>
+        </div>
+        <div className="flex justify-between text-xs mb-1">
+          <span className="text-gray-500">Step:</span>
+          <span className="font-medium text-gray-800">{data.current_step}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="text-gray-500">Delivery:</span>
+          <span className="font-medium text-gray-800 flex items-center gap-1">
+            <FiClock size={10}/> {data.estimated_delivery || 'N/A'}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-3 pt-2 border-t border-gray-100 flex justify-between items-center">
         <p className="text-[10px] text-gray-400">Assigned: {data.assigned_to || 'Unassigned'}</p>
-        <span className="text-xs text-purple-600 font-medium group-hover:underline">Open</span>
+        <span className="text-xs text-purple-600 font-medium group-hover:underline">Open Tracking →</span>
       </div>
     </div>
   );
@@ -416,8 +436,8 @@ const Chat = ({
   const handleInputChange = async (e) => {
     const val = e.target.value;
     setNewMessage(val);
-
-    // 🔥 NEW: Detect Staff Mention Triggers (Starts with @ followed by letters)
+    
+    // Detect Staff Mentions (@ followed by letters)
     const cursor = e.target.selectionStart;
     const textBeforeCursor = val.slice(0, cursor);
     const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z]+)$/);
@@ -465,37 +485,28 @@ const Chat = ({
 
   // ---------- NEW: handleSelectMention ----------
   const handleSelectMention = (staff) => {
-    const inputEl = document.getElementById("chat-message-input");
+    const inputEl = document.querySelector('input[placeholder="Type a message..."]'); // Target your input
     const cursor = inputEl.selectionStart;
-    // Replace the query text with the resolved staff name
+    
+    // Replace the typed query with the full staff name
     const textBefore = newMessage.slice(0, cursor).replace(/(?:^|\s)@([a-zA-Z]+)$/, ` @${staff.name} `);
     const textAfter = newMessage.slice(cursor);
     
     setNewMessage(textBefore + textAfter);
     setMentionQuery(null);
-    
-    // Store it in pending mentions so we can parse it on send
     setPendingStaffMentions(prev => [...prev, { entityId: staff.id, name: staff.name }]);
+    
     inputEl.focus();
   };
-  // ------------------------------------------------
 
-  // ---------- UPDATED: handleSendMessage ----------
   const handleSendMessage = () => {
     if ((!newMessage.trim() && !fileToUpload) || !activeConversation) return;
 
-    if (isTyping) {
-      setIsTyping(false);
-      emitTyping(false);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    }
-
-    // 🔥 NEW: Extract Mentions using Regex and pending selections
     const mentions = [];
     const trackingRegex = /(?:^|\s)@(\d+)/g;
     let match;
 
-    // 1. Parse Tracking IDs (@284)
+    // 1. Auto-Parse Tracking IDs on send (@284)
     while ((match = trackingRegex.exec(newMessage)) !== null) {
       const matchText = match[0].trim();
       const startIndex = match.index + (match[0].startsWith(' ') ? 1 : 0);
@@ -508,7 +519,7 @@ const Chat = ({
       });
     }
 
-    // 2. Parse Staff Mentions based on resolved autocomplete selections
+    // 2. Parse Staff Mentions from the ones they clicked in the dropdown
     pendingStaffMentions.forEach(m => {
       const regex = new RegExp(`(?:^|\\s)@${m.name}(?=\\s|$)`, 'g');
       while ((match = regex.exec(newMessage)) !== null) {
@@ -617,9 +628,11 @@ const Chat = ({
 
   // ---------- NEW: renderMessageTextWithMentions ----------
   const renderMessageTextWithMentions = (text, mentions = []) => {
-    if (!mentions || mentions.length === 0) return <p className="text-sm whitespace-pre-wrap break-words">{text}</p>;
+    if (!mentions || mentions.length === 0) {
+      return <p className="text-sm whitespace-pre-wrap break-words">{text}</p>;
+    }
     
-    // Sort mentions by starting index to avoid slicing errors
+    // Sort by index so we can slice the string correctly
     const sorted = [...mentions].sort((a, b) => a.start_index - b.start_index);
     const parts = [];
     let lastIndex = 0;
@@ -629,11 +642,14 @@ const Chat = ({
         parts.push(text.slice(lastIndex, m.start_index));
       }
       
+      // Render Tracking Card
       if (m.mention_type === 'tracking') {
         parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
-      } else if (m.mention_type === 'staff') {
+      } 
+      // Render Staff Chip
+      else if (m.mention_type === 'staff') {
         parts.push(
-          <span key={`mnt-${idx}`} className="text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded cursor-pointer hover:bg-blue-100 transition">
+          <span key={`mnt-${idx}`} className="text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded shadow-sm border border-blue-100">
             {m.display_text}
           </span>
         );
@@ -646,7 +662,7 @@ const Chat = ({
       parts.push(text.slice(lastIndex));
     }
     
-    return <div className="text-sm whitespace-pre-wrap break-words">{parts}</div>;
+    return <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">{parts}</div>;
   };
   // -------------------------------------------------------
 
