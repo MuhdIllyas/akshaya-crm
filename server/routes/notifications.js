@@ -123,7 +123,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/test-trigger', async (req, res) => {
   try {
     // Safely get the staff ID. If req.user doesn't exist, hardcode an ID (like 1 or 68) for testing
-    const recipientId = req.user ? req.user.id : 1; // CHANGE '1' to YOUR actual Staff ID in the DB
+    const recipientId = req.user ? req.user.id : 52; // CHANGE '1' to YOUR actual Staff ID in the DB
     
     const notification = await notificationService.createNotification({
       recipientStaffId: recipientId, 
