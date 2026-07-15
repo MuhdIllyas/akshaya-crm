@@ -51,7 +51,6 @@ const notificationService = {
              c.name AS centre_name 
       ${baseQuery} 
       ORDER BY 
-        array_position(ARRAY['high', 'medium', 'normal', 'low']::varchar[], n.priority) ASC,
         n.is_pinned DESC, 
         n.created_at DESC 
       LIMIT $${paramIdx++} OFFSET $${paramIdx}
