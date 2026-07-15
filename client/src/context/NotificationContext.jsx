@@ -16,9 +16,13 @@ export const NotificationProvider = ({ children }) => {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const res = await fetch('/api/notifications/count', {
+        // Add the API base URL!
+        const API_BASE_URL = import.meta.env.VITE_API_URL;
+        
+        const res = await fetch(`${API_BASE_URL}/api/notifications/count`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        
         const data = await res.json();
         if (data.unread !== undefined) {
           setUnreadCount(data.unread);
