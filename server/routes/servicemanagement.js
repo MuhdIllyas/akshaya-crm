@@ -4025,6 +4025,87 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
   }
 });
 
+// GET /api/servicemanagement/payment-receipt/:paymentId - for admin or superadmin to view in the notification panel
+router.get("/payment-receipt/:paymentId", authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { paymentId } = req.params;
+    
+    // 🔥 We join wallet_transactions to find exactly who collected this money
+    // and use a subquery to calculate previously paid amounts for this specific service
+    const query = `
+      SELECT 
+        p.id AS payment_id,
+        p.amount AS amount_collected,
+        p.status AS payment_status,
+        p.created_at AS payment_date,
+        se.id AS service_entry_id,
+        se.customer_name,
+        se.phone AS customer_phone,
+        se.total_charges AS total_bill,
+        s.name AS service_name,
+        w.name AS wallet_name,
+        st.name AS collected_by_name,
+        st.role AS collected_by_role,
+        COALESCE(
+          (
+            SELECT SUM(amount) 
+            FROM payments p2 
+            WHERE p2.service_entry_id = se.id 
+              AND p2.created_at < p.created_at 
+              AND p2.status = 'received' 
+              AND COALESCE(p2.is_reversal, FALSE) = FALSE
+          ), 0
+        ) AS previously_paid
+      FROM payments p
+      JOIN service_entries se ON p.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id::integer = s.id
+      LEFT JOIN wallets w ON p.wallet_id = w.id
+      LEFT JOIN wallet_transactions wt ON wt.reference_payment_id = p.id AND wt.type = 'credit'
+      LEFT JOIN staff st ON wt.staff_id = st.id
+      WHERE p.id = $1
+      LIMIT 1
+    `;
+    
+    const { rows } = await client.query(query, [paymentId]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Receipt not found" });
+    }
+    
+    const data = rows[0];
+    const previouslyPaid = parseFloat(data.previously_paid);
+    const amountCollected = parseFloat(data.amount_collected);
+    const totalBill = parseFloat(data.total_bill);
+    const remainingBalance = Math.max(0, totalBill - previouslyPaid - amountCollected);
+    
+    // Format it perfectly for the frontend Drawer
+    res.json({
+      id: data.payment_id,
+      status: remainingBalance <= 0 ? 'fully_paid' : 'partially_paid',
+      amountCollected,
+      totalBill,
+      previouslyPaid,
+      remainingBalance,
+      date: data.payment_date,
+      customer: { name: data.customer_name || 'Walk-in', phone: data.customer_phone || 'N/A' },
+      service: { name: data.service_name || 'Service', trackingId: `SRV-${data.service_entry_id}` },
+      audit: { 
+        collectedBy: data.collected_by_name || 'Unknown', 
+        role: data.collected_by_role || 'Staff', 
+        wallet: data.wallet_name || 'Unknown Wallet' 
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ Fetch receipt error:", err);
+    res.status(500).json({ error: "Failed to fetch payment receipt" });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/servicemanagement/pending-payments/history
 router.get("/pending-payments/history", authenticateToken, async (req, res) => {
   const client = await pool.connect();

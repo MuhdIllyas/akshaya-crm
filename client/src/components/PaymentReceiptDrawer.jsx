@@ -1,40 +1,55 @@
+//for admin / superadmin to view in the notification panel
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-toastify';
 import { 
   FiX, FiCheckCircle, FiClock, FiUser, 
-  FiBriefcase, FiHash, FiCreditCard, FiTag 
+  FiBriefcase, FiHash, FiCreditCard
 } from 'react-icons/fi';
 
 const PaymentReceiptDrawer = ({ isOpen, onClose, paymentId }) => {
   const [loading, setLoading] = useState(true);
   const [receipt, setReceipt] = useState(null);
 
-  // Simulate fetching the exact payment details from the database
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
+
   useEffect(() => {
-    if (isOpen && paymentId) {
+    let isMounted = true;
+
+    const fetchReceipt = async () => {
+      if (!isOpen || !paymentId) return;
+      
       setLoading(true);
-      // Replace this setTimeout with your actual fetch call:
-      // fetch(`/api/servicemanagement/payment-receipt/${paymentId}`)
-      setTimeout(() => {
-        setReceipt({
-          id: paymentId,
-          status: 'fully_paid', // or 'partially_paid'
-          amountCollected: 500,
-          totalBill: 1500,
-          previouslyPaid: 1000,
-          remainingBalance: 0,
-          date: new Date().toISOString(),
-          customer: { name: 'Rahul', phone: '+91 98765 43210' },
-          service: { name: 'Passport Renewal', trackingId: 'SRV-10396' },
-          audit: { collectedBy: 'Prajith', role: 'Staff', wallet: 'Cash Drawer 1' }
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/api/servicemanagement/payment-receipt/${paymentId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
-        setLoading(false);
-      }, 600);
-    }
-  }, [isOpen, paymentId]);
+
+        if (!res.ok) throw new Error('Failed to fetch receipt');
+        
+        const data = await res.json();
+        if (isMounted) {
+          setReceipt(data);
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error("Could not load receipt details.");
+        onClose(); // Close the drawer if it fails to load
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchReceipt();
+
+    return () => {
+      isMounted = false; // Cleanup to prevent state updates if unmounted early
+    };
+  }, [isOpen, paymentId, API_BASE_URL, onClose]);
 
   const formatCurrency = (amt) => 
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(amt);
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(amt || 0);
 
   return (
     <AnimatePresence>
