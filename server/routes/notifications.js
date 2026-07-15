@@ -119,4 +119,21 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// TEMP TEST ROUTE
+router.post('/test-trigger', async (req, res) => {
+  try {
+    const notification = await notificationService.createNotification({
+      recipientStaffId: req.user.id, // Send to yourself
+      ...notificationTemplates.systemAnnouncement({
+        title: "Test Successful! 🚀",
+        message: "The Akshaya CRM Notification Engine is live.",
+        metadata: { version: "1.0.0" }
+      })
+    });
+    res.json({ success: true, notification });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
