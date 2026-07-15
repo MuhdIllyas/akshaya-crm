@@ -13,7 +13,15 @@ const syncUnreadCount = async (client, staffId) => {
 };
 
 const notificationService = {
-  
+
+  async getUnreadCount(staffId) {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM notifications WHERE recipient_staff_id = $1 AND is_read = false`,
+      [staffId]
+    );
+    return parseInt(result.rows[0].count, 10);
+  },  
+
   async getPaginatedNotifications(staffId, queryParams) {
     const { page = 1, limit = 50, unread, type, category } = queryParams;
     const offset = (page - 1) * limit;
