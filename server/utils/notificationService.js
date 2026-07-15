@@ -1,6 +1,6 @@
 import pool from '../db.js';
-import socketNotifications from './socketNotifications.js';
-import { NOTIFICATION_TYPES } from './notificationTemplates.js';
+import socketNotifications from '../utils/socketNotifications.js';
+import { NOTIFICATION_TYPES } from '../utils/notificationTemplates.js';
 
 const syncUnreadCount = async (client, staffId) => {
   const countRes = await client.query(
