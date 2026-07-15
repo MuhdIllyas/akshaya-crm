@@ -160,7 +160,6 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
   const priorityColor = PRIORITY_COLORS[notification.priority] || PRIORITY_COLORS.normal;
   const [showPreview, setShowPreview] = useState(false);
 
-  // Determine actions based on type (with fallback)
   const typeActions = TYPE_ACTIONS[notification.type] || ['mark_read'];
   const actions = notification.actions && notification.actions.length > 0
     ? notification.actions.filter(a => typeActions.includes(a) || a === 'mark_read')
@@ -172,15 +171,19 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
   };
 
   const handleClick = () => {
-    if (viewMode === 'activity') {
-      onMarkRead(notification.id);
-    }
+    if (viewMode === 'activity') onMarkRead(notification.id);
     onClick(notification.actionUrl);
   };
 
   const handlePin = (e) => {
     e.stopPropagation();
     onTogglePin(notification.id);
+  };
+
+  // Helper to format camelCase keys (e.g. "dueDate" -> "Due Date")
+  const formatKey = (str) => {
+    const spaced = str.replace(/([A-Z])/g, ' $1');
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   };
 
   return (
@@ -195,7 +198,8 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
     >
       <div className="p-4">
         <div className="flex items-start gap-4">
-          {/* Icon with module badge – now matching sidebar navy */}
+          
+          {/* ICON BADGE */}
           <div className="relative flex-shrink-0">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconColor}`}>
               <Icon className="h-5 w-5" />
@@ -208,29 +212,31 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
           </div>
 
           <div className="flex-1 min-w-0">
-            {/* Top row: title, priority, time, pin */}
+            {/* HEADER ROW */}
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="font-semibold text-gray-900 text-sm">{notification.title}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>
-                {priorityLabel}
-              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>{priorityLabel}</span>
               {!notification.isRead && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
               {notification.isPinned && <FiMapPin className="h-3 w-3 text-amber-500 fill-current" />}
               <span className="text-xs text-gray-400 ml-auto">{notification.time}</span>
             </div>
 
-            {/* Message */}
-            <div className="text-sm text-gray-700 mb-2">{notification.message}</div>
+            {/* MAIN MESSAGE */}
+            <div className="text-sm text-gray-700 mb-3">{notification.message}</div>
 
-            {/* 🔥 STRUCTURED METADATA CARD */}
+            {/* STRUCTURED METADATA CARD */}
             {notification.metadata && Object.keys(notification.metadata).length > 0 && (
-              <div className="mt-2 mb-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-700 space-y-1.5 border border-gray-100">
+              <div className="mb-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-700 space-y-1.5 border border-gray-100">
                 {Object.entries(notification.metadata).map(([key, value]) => {
-                  // Skip hidden system keys if they exist (like IDs)
-                  if (key.includes('Id')) return null; 
+                  // Hide ugly backend IDs
+                  if (key.toLowerCase().includes('id')) return null;
+                  
+                  // Hide 'assignedBy' if we are already rendering the sender below
+                  if ((key === 'assignedBy' || key === 'Assigned by') && notification.sender) return null;
+
                   return (
                     <div key={key} className="flex">
-                      <span className="w-24 font-medium text-gray-500">{key}:</span>
+                      <span className="w-28 font-medium text-gray-500">{formatKey(key)}:</span>
                       <span className="flex-1 font-semibold text-gray-900">{value}</span>
                     </div>
                   );
@@ -238,106 +244,39 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
               </div>
             )}
 
-            {/* Sender + Centre */}
-            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+            {/* FOOTER: SENDER AND CENTRE */}
+            <div className="flex items-center gap-4 text-xs text-gray-500">
               {notification.sender && (
                 <span className="flex items-center gap-1">
-                  <FiUser className="h-3 w-3" /> {notification.sender.name}
-                  {notification.sender.role && (
-                    <span className="text-gray-400">({notification.sender.role})</span>
-                  )}
+                  <FiUser className="h-3.5 w-3.5 text-gray-400" /> 
+                  <span className="font-medium text-gray-700">{notification.sender.name}</span>
+                  {notification.sender.role && <span>({notification.sender.role})</span>}
                 </span>
               )}
               {notification.centre && (
                 <span className="flex items-center gap-1">
-                  <FiTag className="h-3 w-3" /> {notification.centre}
+                  <FiTag className="h-3.5 w-3.5 text-gray-400" /> 
+                  <span className="font-medium text-gray-700">{notification.centre}</span>
                 </span>
               )}
             </div>
 
-            {/* Metadata row */}
-            {notification.metadata && (
-              <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500 border-t border-gray-100 pt-2">
-                {Object.entries(notification.metadata).map(([key, value]) => (
-                  <span key={key} className="flex items-center gap-1">
-                    <span className="font-medium text-gray-400">{key}:</span> {value}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Actions */}
+            {/* ACTION BUTTONS */}
             {actions && actions.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                {actions.includes('reply') && (
-                  <button
-                    className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition"
-                    onClick={(e) => handleAction(e, 'reply')}
-                  >
-                    Reply
-                  </button>
-                )}
-                {actions.includes('open') && (
-                  <button
-                    className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition"
-                    onClick={(e) => handleAction(e, 'open')}
-                  >
-                    Open
-                  </button>
-                )}
-                {actions.includes('accept') && (
-                  <button
-                    className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition"
-                    onClick={(e) => handleAction(e, 'accept')}
-                  >
-                    Accept
-                  </button>
-                )}
-                {actions.includes('complete') && (
-                  <button
-                    className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 transition"
-                    onClick={(e) => handleAction(e, 'complete')}
-                  >
-                    Mark Complete
-                  </button>
-                )}
-                {actions.includes('view') && (
-                  <button
-                    className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition"
-                    onClick={(e) => handleAction(e, 'view')}
-                  >
-                    View
-                  </button>
-                )}
-                {actions.includes('mark_read') && !notification.isRead && (
-                  <button
-                    className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 transition"
-                    onClick={(e) => handleAction(e, 'mark_read')}
-                  >
-                    Mark Read
-                  </button>
-                )}
-                <button
-                  className="text-xs font-medium text-amber-500 hover:text-amber-700 px-2 py-1 rounded-lg hover:bg-amber-50 transition"
-                  onClick={handlePin}
-                  title={notification.isPinned ? 'Unpin' : 'Pin'}
-                >
-                  <FiMapPin
-                    className={`h-3 w-3 ${notification.isPinned ? 'fill-current text-amber-500' : 'text-gray-400'}`}
-                  />
-                </button>
-                {notification.actionLabel && (
-                  <span className="text-xs text-indigo-600 font-medium ml-auto flex items-center gap-1">
-                    {notification.actionLabel} <FiChevronRight className="h-3 w-3" />
-                  </span>
-                )}
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-gray-100">
+                {actions.includes('reply') && <button className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg bg-indigo-50" onClick={(e) => handleAction(e, 'reply')}>Reply</button>}
+                {actions.includes('open') && <button className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-lg bg-gray-100" onClick={(e) => handleAction(e, 'open')}>Open</button>}
+                {actions.includes('accept') && <button className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1.5 rounded-lg bg-emerald-50" onClick={(e) => handleAction(e, 'accept')}>Accept</button>}
+                {actions.includes('complete') && <button className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1.5 rounded-lg bg-emerald-50" onClick={(e) => handleAction(e, 'complete')}>Mark Complete</button>}
+                {actions.includes('view') && <button className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-lg bg-gray-100" onClick={(e) => handleAction(e, 'view')}>View Details</button>}
+                {actions.includes('mark_read') && !notification.isRead && <button className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg bg-gray-50" onClick={(e) => handleAction(e, 'mark_read')}>Mark as Read</button>}
+                <button className="text-xs font-medium text-amber-500 hover:text-amber-700 px-2 py-1.5 rounded-lg hover:bg-amber-50 ml-auto" onClick={handlePin}><FiMapPin className={`h-3.5 w-3.5 ${notification.isPinned ? 'fill-current text-amber-500' : 'text-gray-400'}`} /></button>
+                {notification.actionLabel && <span className="text-xs text-indigo-600 font-medium flex items-center gap-1 ml-2">{notification.actionLabel} <FiChevronRight className="h-3 w-3" /></span>}
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* Quick Preview */}
       {showPreview && <QuickPreview notification={notification} />}
     </div>
   );
