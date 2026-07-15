@@ -26,33 +26,34 @@ const notificationService = {
     const { page = 1, limit = 50, unread, type, category } = queryParams;
     const offset = (page - 1) * limit;
 
-    let baseQuery = `FROM notifications WHERE recipient_staff_id = $1`;
+    // 🔥 ADDED LEFT JOINS TO GRAB NAMES
+    let baseQuery = `
+      FROM notifications n
+      LEFT JOIN staff s ON n.sender_staff_id = s.id
+      LEFT JOIN centres c ON n.centre_id = c.id
+      WHERE n.recipient_staff_id = $1
+    `;
     const params = [staffId];
     let paramIdx = 2;
 
-    if (unread === 'true') {
-      baseQuery += ` AND is_read = false`;
-    }
-    if (type) {
-      baseQuery += ` AND type = $${paramIdx++}`;
-      params.push(type);
-    }
-    if (category) {
-      baseQuery += ` AND category = $${paramIdx++}`;
-      params.push(category);
-    }
+    if (unread === 'true') baseQuery += ` AND n.is_read = false`;
+    if (type) { baseQuery += ` AND n.type = $${paramIdx++}`; params.push(type); }
+    if (category) { baseQuery += ` AND n.category = $${paramIdx++}`; params.push(category); }
 
-    // 1. Get Total Count for Pagination
     const countRes = await pool.query(`SELECT COUNT(*) ${baseQuery}`, params);
     const total = parseInt(countRes.rows[0].count, 10);
 
-    // 2. Get Data (Ordered correctly by semantic priority, then pinned, then newest)
+    // 🔥 SELECT THE NEW FIELDS
     const dataQuery = `
-      SELECT * ${baseQuery} 
+      SELECT n.*, 
+             s.name AS sender_name, 
+             s.role AS sender_role, 
+             c.name AS centre_name 
+      ${baseQuery} 
       ORDER BY 
-        array_position(ARRAY['high', 'medium', 'normal', 'low']::varchar[], priority) ASC,
-        is_pinned DESC, 
-        created_at DESC 
+        array_position(ARRAY['high', 'medium', 'normal', 'low']::varchar[], n.priority) ASC,
+        n.is_pinned DESC, 
+        n.created_at DESC 
       LIMIT $${paramIdx++} OFFSET $${paramIdx}
     `;
     params.push(limit, offset);
@@ -61,10 +62,8 @@ const notificationService = {
     return {
       notifications: dataRes.rows,
       pagination: {
-        page: parseInt(page, 10),
-        limit: parseInt(limit, 10),
-        total,
-        pages: Math.ceil(total / limit)
+        page: parseInt(page, 10), limit: parseInt(limit, 10),
+        total, pages: Math.ceil(total / limit)
       }
     };
   },
@@ -88,7 +87,9 @@ const notificationService = {
     try {
       await client.query('BEGIN');
       let notification;
+      let isUpdate = false; // Track if we are updating or creating
 
+      // 1. DEDUPLICATION LOGIC (WhatsApp / Messages)
       if (type === NOTIFICATION_TYPES.WHATSAPP_MESSAGE && conversationId) {
         const existingRes = await client.query(
           `SELECT id, metadata FROM notifications 
@@ -105,11 +106,12 @@ const notificationService = {
             `UPDATE notifications SET title = $1, message = $2, metadata = $3, created_at = NOW() WHERE id = $4 RETURNING *`,
             [`New WhatsApp Messages (${msgCount})`, message, { ...oldMetadata, ...metadata, messageCount: msgCount }, existingId]
           )).rows[0];
-
-          socketNotifications.emitNotificationUpdated(recipientStaffId, notification);
+          
+          isUpdate = true;
         }
       }
 
+      // 2. INSERT LOGIC (If no deduplication occurred)
       if (!notification) {
         notification = (await client.query(
           `INSERT INTO notifications (
@@ -119,13 +121,35 @@ const notificationService = {
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false, NOW()) RETURNING *`,
           [recipientStaffId, senderStaffId, centreId, type, category, title, message, priority, relatedEntityType, relatedEntityId, conversationId, metadata]
         )).rows[0];
-
-        socketNotifications.emitNotification(recipientStaffId, notification);
       }
 
+      // 🔥 3. ENRICH THE NOTIFICATION (Join names before emitting)
+      const enrichedRes = await client.query(`
+        SELECT n.*, 
+               s.name AS sender_name, 
+               s.role AS sender_role, 
+               c.name AS centre_name 
+        FROM notifications n
+        LEFT JOIN staff s ON n.sender_staff_id = s.id
+        LEFT JOIN centres c ON n.centre_id = c.id
+        WHERE n.id = $1
+      `, [notification.id]);
+      
+      const enrichedNotification = enrichedRes.rows[0];
+
+      // 4. SYNC BADGE COUNTS & COMMIT
       await syncUnreadCount(client, recipientStaffId);
       await client.query('COMMIT');
-      return notification;
+
+      // 5. EMIT SOCKETS WITH FULL ENRICHED DATA
+      if (isUpdate) {
+        socketNotifications.emitNotificationUpdated(recipientStaffId, enrichedNotification);
+      } else {
+        socketNotifications.emitNotification(recipientStaffId, enrichedNotification);
+      }
+
+      return enrichedNotification;
+
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

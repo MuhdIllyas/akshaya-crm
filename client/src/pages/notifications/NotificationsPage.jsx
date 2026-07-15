@@ -62,8 +62,8 @@ const mapDBNotificationToUI = (dbNotif) => {
     isRead: dbNotif.is_read || false,
     isPinned: dbNotif.is_pinned || false,
     priority: dbNotif.priority || 'normal',
-    sender: dbNotif.sender_staff_id ? { name: 'Staff User', role: 'Staff' } : null,
-    centre: dbNotif.centre_id ? `Centre ${dbNotif.centre_id}` : null,
+    sender: dbNotif.sender_name ? { name: dbNotif.sender_name, role: dbNotif.sender_role } : null,
+    centre: dbNotif.centre_name || null,
     actionUrl,
     actionLabel: 'View →',
     actions: ['mark_read', 'view'],
@@ -220,7 +220,23 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
             </div>
 
             {/* Message */}
-            <div className="text-sm text-gray-700 mb-1">{notification.message}</div>
+            <div className="text-sm text-gray-700 mb-2">{notification.message}</div>
+
+            {/* 🔥 STRUCTURED METADATA CARD */}
+            {notification.metadata && Object.keys(notification.metadata).length > 0 && (
+              <div className="mt-2 mb-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-700 space-y-1.5 border border-gray-100">
+                {Object.entries(notification.metadata).map(([key, value]) => {
+                  // Skip hidden system keys if they exist (like IDs)
+                  if (key.includes('Id')) return null; 
+                  return (
+                    <div key={key} className="flex">
+                      <span className="w-24 font-medium text-gray-500">{key}:</span>
+                      <span className="flex-1 font-semibold text-gray-900">{value}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Sender + Centre */}
             <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">

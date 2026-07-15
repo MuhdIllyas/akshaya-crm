@@ -43,10 +43,15 @@ export const notificationTemplates = {
   taskAssigned: (data) => ({
     type: NOTIFICATION_TYPES.TASK_ASSIGNED,
     category: NOTIFICATION_CATEGORIES.WORK,
-    title: 'Task Assigned',
-    message: `You have been assigned: ${data.taskTitle}`,
-    priority: 'medium',
-    metadata: data.metadata || {}
+    title: '📝 Task Assigned',
+    message: 'You have been assigned a new task.',
+    priority: data.priority || 'medium',
+    // 🔥 Human-readable keys for the frontend
+    metadata: {
+      'Task': data.taskTitle,
+      'Assigned by': data.assignedByName,
+      'Due Date': data.dueDate
+    }
   }),
 
   systemAnnouncement: (data) => ({
