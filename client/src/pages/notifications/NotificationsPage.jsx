@@ -525,6 +525,9 @@ const NotificationsPage = () => {
     if (action === 'view' && notification.type === 'payment') {
       handleMarkRead(id); // Instantly mark as read
       
+      console.log("Notification:", notification);
+      console.log("Payment ID:", notification.related_entity_id);
+
       // Grab the ID from the notification metadata/entity and open the drawer
       setSelectedPaymentId(notification.related_entity_id || id);
       setIsReceiptDrawerOpen(true);
