@@ -289,6 +289,10 @@ const AdminExpenseManagement = () => {
   const [centres, setCentres] = useState([]);
   const [selectedCentreId, setSelectedCentreId] = useState(defaultCentreId);
 
+  //added for notification view
+  const location = useLocation(); 
+  const [highlightedExpenseId, setHighlightedExpenseId] = useState(null);
+
   // ---- Data State ----
   const [expenses, setExpenses] = useState([]);
   const [wallets, setWallets] = useState([]);
