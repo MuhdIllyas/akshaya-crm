@@ -158,39 +158,105 @@ const notificationService = {
   },
 
   async createBulkNotifications({
-    recipientStaffIds, // Array of IDs
+    recipientStaffIds,
     senderStaffId = null,
-    // Spread from template factory
-    type, category, title, message, priority, metadata = {}
+    centreId = null,
+    relatedEntityType = null,
+    relatedEntityId = null,
+    conversationId = null,
+    // The following come spread from the template factory
+    type,
+    category,
+    title,
+    message,
+    priority,
+    metadata = {}
   }) {
+    if (!recipientStaffIds || recipientStaffIds.length === 0) return [];
+    
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
-      const result = await client.query(`
-        INSERT INTO notifications (
-          recipient_staff_id, sender_staff_id, type, category, title, message, priority, metadata, is_read, created_at
-        )
-        SELECT unnest($1::int[]), $2, $3, $4, $5, $6, $7, $8::jsonb, false, NOW()
-      `, [recipientStaffIds, senderStaffId, type, category, title, message, priority, metadata]);
       
-      // Fast Bulk Unread Sync
-      const countRes = await client.query(`
-        SELECT recipient_staff_id, COUNT(*) as count 
-        FROM notifications 
-        WHERE recipient_staff_id = ANY($1::int[]) AND is_read = false
-        GROUP BY recipient_staff_id
-      `, [recipientStaffIds]);
-
-      countRes.rows.forEach(row => {
-        socketNotifications.emitUnreadCount(row.recipient_staff_id, parseInt(row.count, 10));
-      });
-
+      const insertQuery = `
+        INSERT INTO notifications (
+          recipient_staff_id, 
+          sender_staff_id, 
+          centre_id,
+          type, 
+          category, 
+          title, 
+          message, 
+          priority, 
+          related_entity_type,
+          related_entity_id,
+          conversation_id,
+          metadata, 
+          is_read, 
+          created_at
+        )
+        SELECT 
+          unnest($1::int[]), 
+          $2, 
+          $3,
+          $4, 
+          $5, 
+          $6, 
+          $7, 
+          $8, 
+          $9,
+          $10,
+          $11,
+          $12::jsonb, 
+          false, 
+          NOW()
+        RETURNING *
+      `;
+      
+      const values = [
+        recipientStaffIds, 
+        senderStaffId, 
+        centreId,
+        type, 
+        category, 
+        title, 
+        message, 
+        priority, 
+        relatedEntityType,
+        relatedEntityId,
+        conversationId,
+        metadata
+      ];
+      
+      const { rows } = await client.query(insertQuery, values);
+      
+      // Emit sockets individually for real-time updates
+      for (const row of rows) {
+        // Run the join query to enrich it before sending
+        const enrichedRes = await client.query(`
+          SELECT n.*, 
+                 s.name AS sender_name, 
+                 s.role AS sender_role, 
+                 c.name AS centre_name 
+          FROM notifications n
+          LEFT JOIN staff s ON n.sender_staff_id = s.id
+          LEFT JOIN centres c ON n.centre_id = c.id
+          WHERE n.id = $1
+        `, [row.id]);
+        
+        const enrichedNotification = enrichedRes.rows[0];
+        socketNotifications.emitNotification(row.recipient_staff_id, enrichedNotification);
+        
+        // Sync unread counts
+        await syncUnreadCount(client, row.recipient_staff_id);
+      }
+      
       await client.query('COMMIT');
-      return result.rowCount;
-    } catch (e) {
+      return rows;
+    } catch (error) {
       await client.query('ROLLBACK');
-      throw e;
+      console.error("Error creating bulk notifications:", error);
+      throw error;
     } finally {
       client.release();
     }
