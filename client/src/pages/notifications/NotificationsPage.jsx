@@ -19,7 +19,11 @@ import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext'; 
 
 const timeAgo = (dateString) => {
+  if (!dateString) return 'Just now';
+  
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Just now'; // Fallback for invalid dates
+
   const seconds = Math.round((new Date() - date) / 1000);
   const minutes = Math.round(seconds / 60);
   const hours = Math.round(minutes / 60);
@@ -39,30 +43,32 @@ const mapDBNotificationToUI = (dbNotif) => {
   if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/staff/track_service/${dbNotif.related_entity_id}`;
   if (dbNotif.type === 'whatsapp_message') actionUrl = `/dashboard/staff/messenger`;
 
+  // Safely get type to prevent .includes() crashing
+  const typeStr = dbNotif.type || 'system';
+
   return {
     id: dbNotif.id,
-    type: dbNotif.type,
-    // We map your backend types to the icon variables you defined further down
-    icon: dbNotif.type.includes('message') ? FiMessageSquareIcon : 
-          dbNotif.type.includes('task') ? FiCheckSquare : 
-          dbNotif.type.includes('service') ? FiBriefcase : FiBell,
-    color: dbNotif.type.includes('message') ? 'blue' : 
-           dbNotif.type.includes('task') ? 'emerald' : 
-           dbNotif.type.includes('service') ? 'indigo' : 'gray',
+    type: typeStr,
+    icon: typeStr.includes('message') ? FiMessageSquareIcon : 
+          typeStr.includes('task') ? FiCheckSquare : 
+          typeStr.includes('service') ? FiBriefcase : FiBell,
+    color: typeStr.includes('message') ? 'blue' : 
+           typeStr.includes('task') ? 'emerald' : 
+           typeStr.includes('service') ? 'indigo' : 'gray',
     module: dbNotif.category ? dbNotif.category.toUpperCase() : 'CRM',
-    title: dbNotif.title,
-    message: dbNotif.message,
+    title: dbNotif.title || 'Notification',
+    message: dbNotif.message || '',
     time: timeAgo(dbNotif.created_at),
-    isRead: dbNotif.is_read,
+    isRead: dbNotif.is_read || false,
     isPinned: dbNotif.is_pinned || false,
     priority: dbNotif.priority || 'normal',
-    sender: dbNotif.sender_staff_id ? { name: 'Staff User', role: 'Staff' } : null, // (You can expand this if your backend joins staff table)
+    sender: dbNotif.sender_staff_id ? { name: 'Staff User', role: 'Staff' } : null,
     centre: dbNotif.centre_id ? `Centre ${dbNotif.centre_id}` : null,
     actionUrl,
     actionLabel: 'View →',
     actions: ['mark_read', 'view'],
-    metadata: dbNotif.metadata,
-    preview: dbNotif.metadata 
+    metadata: dbNotif.metadata || {},
+    preview: dbNotif.metadata || {}
   };
 };
 
@@ -344,10 +350,20 @@ const NotificationsPage = () => {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
-        if (data.notifications) {
-          setNotifications(data.notifications.map(mapDBNotificationToUI));
+        
+        // ACCEPT BOTH FORMATS: { notifications: [...] } OR [...]
+        let notificationArray = [];
+        if (data.notifications && Array.isArray(data.notifications)) {
+          notificationArray = data.notifications;
+        } else if (Array.isArray(data)) {
+          notificationArray = data;
         }
+
+        console.log("Fetched notifications raw data:", notificationArray); // <-- Great for debugging!
+        setNotifications(notificationArray.map(mapDBNotificationToUI));
+        
       } catch (error) {
+        console.error("Fetch Error:", error);
         toast.error('Failed to load notifications');
       } finally {
         setLoading(false);
