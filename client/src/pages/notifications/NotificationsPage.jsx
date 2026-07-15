@@ -18,6 +18,8 @@ import { toast } from 'react-toastify';
 import { socket } from '@/services/socket'; 
 import { useNotifications } from '../../context/NotificationContext';
 
+import PaymentReceiptDrawer from '@/components/PaymentReceiptDrawer';
+
 const timeAgo = (dateString) => {
   if (!dateString) return 'Just now';
   
