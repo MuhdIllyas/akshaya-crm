@@ -60,6 +60,9 @@ import notesRoutes from "./routes/notes.js";
 //communication routes
 import communicationRoutes from "./routes/communication.js";
 
+//notification routes
+import notificationRoutes from "./routes/notifications.js";
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -304,6 +307,9 @@ app.use("/api/notes", notesRoutes);
 
 /* Communication */
 app.use("/api/communication", communicationRoutes);
+
+/* Notification */
+app.use("/api/notifications", notificationRoutes);
 
 /* ================================
    STATIC FILES
