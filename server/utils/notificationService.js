@@ -1,4 +1,4 @@
-import pool from '../config/db.js';
+import pool from '../db.js';
 import socketNotifications from './socketNotifications.js';
 import { NOTIFICATION_TYPES } from './notificationTemplates.js';
 
