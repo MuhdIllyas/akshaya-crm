@@ -121,10 +121,15 @@ router.delete('/:id', async (req, res) => {
 
 // TEMP TEST ROUTE
 router.post('/test-trigger', async (req, res) => {
+  console.log("--> [1] Test Route Hit");
+  
   try {
-    // Safely get the staff ID. If req.user doesn't exist, hardcode an ID (like 1 or 68) for testing
-    const recipientId = req.user ? req.user.id : 52; // CHANGE '1' to YOUR actual Staff ID in the DB
+    // If you aren't passing a Bearer token in Postman, req.user will be undefined.
+    // This safely defaults to staff ID 1. Change '1' to your actual ID if needed!
+    const recipientId = req.user ? req.user.id : 58; 
+    console.log("--> [2] Recipient ID resolved to:", recipientId);
     
+    console.log("--> [3] Calling Database to create notification...");
     const notification = await notificationService.createNotification({
       recipientStaffId: recipientId, 
       ...notificationTemplates.systemAnnouncement({
@@ -133,9 +138,12 @@ router.post('/test-trigger', async (req, res) => {
         metadata: { version: "1.0.0" }
       })
     });
+    
+    console.log("--> [4] Notification inserted! Sending response to Postman.");
     res.json({ success: true, notification });
+    
   } catch (err) {
-    console.error("Test trigger failed:", err);
+    console.error("--> [X] Error caught:", err);
     res.status(500).json({ error: err.message });
   }
 });
