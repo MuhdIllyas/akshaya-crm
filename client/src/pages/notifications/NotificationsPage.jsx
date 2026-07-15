@@ -104,15 +104,19 @@ const ICON_COLORS = {
 // ==========================================================================
 const TYPE_ACTIONS = {
   mention: ['reply', 'mark_read'],
-  message: ['reply', 'mark_read'],
-  service: ['accept', 'mark_read'],
-  task: ['open', 'complete', 'mark_read'],
-  review: ['view', 'mark_read'],
+  whatsapp_message: ['reply', 'mark_read'],       
+  service_assigned: ['accept', 'mark_read'],      
+  service_completed: ['view', 'mark_read'],       
+  task_assigned: ['open', 'complete', 'mark_read'],
+  task_completed: ['open', 'mark_read'],          
   calendar: ['view', 'mark_read'],
   expense: ['view', 'mark_read'],
-  team: ['view', 'mark_read'],
+  expense_approved: ['view', 'mark_read'],
   payment: ['view', 'mark_read'],
+  review: ['view', 'mark_read'],
+  team: ['view', 'mark_read'],
   system: ['view', 'mark_read'],
+  default: ['view', 'mark_read']
 };
 
 // ==========================================================================
@@ -422,10 +426,10 @@ const NotificationsPage = () => {
       case 'all': break;
       case 'unread': items = items.filter(n => !n.isRead); break;
       case 'mentions': items = items.filter(n => n.type === 'mention'); break;
-      case 'tasks': items = items.filter(n => n.type === 'task'); break;
-      case 'messages': items = items.filter(n => n.type === 'message'); break;
-      case 'services': items = items.filter(n => n.type === 'service'); break;
-      case 'assignments': items = items.filter(n => n.type === 'task' || n.type === 'service'); break;
+      case 'tasks': items = items.filter(n => n.type.includes('task')); break;
+      case 'messages': items = items.filter(n => n.type === 'whatsapp_message' || n.type === 'message'); break;
+      case 'services': items = items.filter(n => n.type.includes('service')); break;
+      case 'assignments': items = items.filter(n => n.type.includes('task') || n.type.includes('service')); break;
       case 'system': items = items.filter(n => n.type === 'system'); break;
       default: break;
     }

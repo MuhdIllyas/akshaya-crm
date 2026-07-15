@@ -31,7 +31,7 @@ const authMiddleware = (allowedRoles) => async (req, res, next) => {
   }
 };
 
-router.use(authMiddleware); 
+router.use(authMiddleware(['admin','staff','superadmin'])); 
 
 /**
  * GET /api/notifications
