@@ -37,11 +37,19 @@ const timeAgo = (dateString) => {
 };
 
 const mapDBNotificationToUI = (dbNotif) => {
+  const role = localStorage.getItem('role') || 'staff';
   // Construct a frontend route based on the entity
   let actionUrl = '#';
-  if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/staff/tasks`; 
-  if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/staff/track_service/${dbNotif.related_entity_id}`;
-  if (dbNotif.type === 'whatsapp_message') actionUrl = `/dashboard/staff/messenger`;
+  if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/${role}/tasks`; 
+  if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/${role}/track_service/${dbNotif.related_entity_id}`;
+  if (dbNotif.type === 'whatsapp_message') actionUrl = `/dashboard/${role}/messenger`;
+  
+  // Route to the correct expense page based on the user's role
+  if (dbNotif.related_entity_type === 'expense' || dbNotif.type?.includes('expense')) {
+    actionUrl = ["admin", "superadmin"].includes(role) 
+      ? `/dashboard/${role}/expensemanagement` 
+      : `/dashboard/staff/expense_entry`;
+  }
 
   // Safely get type to prevent .includes() crashing
   const typeStr = dbNotif.type || 'system';
@@ -478,29 +486,45 @@ const NotificationsPage = () => {
   const handleAction = (id, action) => {
     const notification = notifications.find(n => n.id === id);
     if (!notification) return;
-    switch (action) {
-      case 'reply':
-        toast.info(`Replying to "${notification.title}" (demo)`);
-        break;
-      case 'open':
-        toast.info(`Opening ${notification.title} (demo)`);
-        break;
-      case 'accept':
-        toast.success(`Accepted ${notification.title} (demo)`);
-        break;
-      case 'complete':
-        toast.success(`Marked "${notification.title}" as complete (demo)`);
-        break;
-      case 'view':
-        toast.info(`Viewing ${notification.title} (demo)`);
-        break;
-      case 'mark_read':
-        handleMarkRead(id);
-        toast.info('Marked as read');
-        break;
-      default:
-        break;
+    
+    const role = localStorage.getItem('role') || 'staff';
+
+    if (action === 'mark_read') {
+      handleMarkRead(id);
+      return;
     }
+
+    // Handle "View Details" specifically for expenses
+    if (action === 'view' && notification.type.includes('expense')) {
+      handleMarkRead(id);
+      
+      const targetRoute = ["admin", "superadmin"].includes(role) 
+        ? `/dashboard/${role}/expensemanagement` 
+        : `/dashboard/staff/expense_entry`;
+
+      // Pass the ID in state so the destination page can highlight the row
+      navigate(targetRoute, { 
+        state: { openExpenseId: notification.related_entity_id } 
+      });
+      return;
+    }
+
+    // Handle "Open" for tasks
+    if (action === 'open' && notification.type.includes('task')) {
+      handleMarkRead(id);
+      navigate(`/dashboard/${role}/tasks`);
+      return;
+    }
+
+    // Handle Messenger
+    if (action === 'reply' && notification.type === 'whatsapp_message') {
+      handleMarkRead(id);
+      navigate(`/dashboard/${role}/messenger`);
+      return;
+    }
+
+    // Fallback for actions not yet wired up
+    toast.info(`${action.toUpperCase()} action triggered for: ${notification.title}`);
   };
 
   const handleTogglePin = async (id) => {
