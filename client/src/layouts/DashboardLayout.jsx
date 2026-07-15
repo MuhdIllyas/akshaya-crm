@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { socket } from '@/services/socket';
+import { useNotifications } from '../context/NotificationContext';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -16,6 +17,9 @@ const DashboardLayout = () => {
   const [unreadNotesCount, setUnreadNotesCount] = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // global notification count
+  const { unreadCount: notificationsCount } = useNotifications();
 
   // Get current user info for socket
   let currentUserId = null;
@@ -216,7 +220,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/service_entry", label: "Service Entry", icon: ServiceEntryIcon },
       { path: "/dashboard/staff/expense_entry", label: "Expense Entry", icon: ExpenseEntryIcon },
       { path: "/dashboard/staff/pending_payments", label: "Pending Payments", icon: PendingPaymentIcon },
-      { path: "/dashboard/staff/notifications", label: "Notifications", icon: NotificationsIcon },
+      { path: "/dashboard/staff/notifications", label: "Notifications", icon: NotificationsIconWithBadge }, 
       { path: "/dashboard/staff/team", label: "My Team", icon: TeamIcon },
       { path: "/dashboard/staff/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/staff/knowledge_hub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
@@ -314,6 +318,7 @@ const DashboardLayout = () => {
               const IconComponent = item.icon;
               const isMessenger = item.label === "Messenger";
               const isNotes = item.label === "Notes";
+              const isNotifications = item.label === "Notifications";
               
               return (
                 <Link 
@@ -335,7 +340,11 @@ const DashboardLayout = () => {
                     <IconComponent 
                       isActive={isActive} 
                       isCollapsed={isCollapsed} 
-                      unreadCount={isMessenger ? unreadCount : (isNotes ? unreadNotesCount : 0)}
+                      unreadCount={
+                        isMessenger ? unreadCount : 
+                        isNotes ? unreadNotesCount : 
+                        isNotifications ? notificationsCount : 0 
+                      }
                     />
                   </div>
                   {!isCollapsed && (
@@ -362,6 +371,13 @@ const DashboardLayout = () => {
                       {isNotes && unreadNotesCount > 0 && (
                         <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
                           {unreadNotesCount > 99 ? '99+' : unreadNotesCount}
+                        </span>
+                      )}
+
+                      {/* 🔥 ADDED: Notifications Badge */}
+                      {isNotifications && notificationsCount > 0 && (
+                        <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
+                          {notificationsCount > 99 ? '99+' : notificationsCount}
                         </span>
                       )}
 
@@ -573,6 +589,28 @@ const NotesIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount
     >
       {/* This is the exact path from your NotesIcon */}
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8" />
+    </svg>
+    {unreadCount > 0 && (
+      <span className={`absolute ${
+        isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
+      } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
+      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+        {unreadCount > 99 ? '99+' : unreadCount}
+      </span>
+    )}
+  </div>
+);
+
+// Notifications Icon with Badge
+const NotificationsIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount = 0 }) => (
+  <div className="relative inline-block">
+    <svg 
+      className={isCollapsed ? "w-6 h-6" : "w-5 h-5"} 
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
     </svg>
     {unreadCount > 0 && (
       <span className={`absolute ${

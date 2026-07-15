@@ -55,6 +55,7 @@ import KnowledgeHub from './pages/knowledge/KnowledgeHub';
 
 //Notification Page
 import NotificationsPage from './pages/NotificationsPage';
+import { NotificationProvider } from './context/NotificationContext';
 
 //Analytics Page
 import ReportsSection from './pages/ReportsSection';
@@ -201,7 +202,7 @@ const CustomerProtectedRoute = ({ children }) => {
 // ---------------------------------------------------------------------
 const App = () => {
   return (
-    <>
+    <NotificationProvider>
       <ToastContainer
         position="top-right"
         autoClose={5000}
@@ -487,7 +488,7 @@ const App = () => {
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </>
+    </NotificationProvider>
   );
 };
 

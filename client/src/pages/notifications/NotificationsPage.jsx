@@ -12,303 +12,59 @@ import {
   FiMapPin
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
-// ==========================================================================
-// MOCK DATA
-// ==========================================================================
-const MOCK_NOTIFICATIONS = [
-  {
-    id: 1,
-    type: 'message',
-    icon: FiMessageSquareIcon,
-    color: 'blue',
-    module: 'WHATSAPP',
-    title: 'New WhatsApp Message',
-    message: '"Sir, my application is approved."',
-    time: '2 min ago',
-    isRead: false,
-    isPinned: false,
-    priority: 'high',
-    sender: {
-      name: 'Abdul Rahman',
-      avatar: null,
-      role: 'Customer',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/messenger/337',
-    actionLabel: 'Open Chat →',
-    actions: ['reply', 'mark_read'],
-    metadata: {
-      customer: 'Abdul Rahman',
-      centre: 'Pukayur',
-      service: 'Passport Renewal',
-      trackingId: 'TRK-10396',
-    },
-    preview: {
-      lastMessage: '"Sir, my application is approved."',
-      receivedAt: '2 min ago',
-    },
-  },
-  {
-    id: 2,
-    type: 'mention',
-    icon: FiAtSign,
-    color: 'purple',
-    module: 'MESSENGER',
-    title: 'You were mentioned',
-    message: '"Please verify this."',
-    time: '5 min ago',
-    isRead: false,
-    isPinned: false,
-    priority: 'high',
-    sender: {
-      name: 'Prajitha',
-      avatar: null,
-      role: 'Staff',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/messenger/337#mention',
-    actionLabel: 'Open Conversation →',
-    actions: ['reply', 'mark_read'],
-    metadata: {
-      conversation: 'Passport Renewal',
-    },
-    preview: {
-      conversation: 'Passport Workspace',
-    },
-  },
-  {
-    id: 3,
-    type: 'service',
-    icon: FiBriefcase,
-    color: 'indigo',
-    module: 'SERVICE',
-    title: 'Service Assigned',
-    message: 'Passport Renewal Verification',
-    time: '10 min ago',
-    isRead: false,
-    isPinned: false,
-    priority: 'medium',
-    sender: {
-      name: 'Admin',
-      avatar: null,
-      role: 'Admin',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/tracking/10396',
-    actionLabel: 'Open Tracking →',
-    actions: ['accept', 'mark_read'],
-    metadata: {
-      customer: 'Abdul Rahman',
-      serviceId: '#10396',
-      centre: 'Pukayur',
-      trackingId: 'TRK-10396',
-    },
-    preview: {
-      customer: 'Abdul Rahman',
-      currentStep: 'Verification',
-    },
-  },
-  {
-    id: 4,
-    type: 'task',
-    icon: FiCheckSquare,
-    color: 'emerald',
-    module: 'TASK',
-    title: 'Task Completed',
-    message: 'Aadhaar Update',
-    time: 'Yesterday',
-    isRead: true,
-    isPinned: false,
-    priority: 'normal',
-    sender: {
-      name: 'Prajitha',
-      avatar: null,
-      role: 'Staff',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/tasks/52',
-    actionLabel: 'Open Task →',
-    actions: ['mark_read'],
-    metadata: {
-      taskId: '#52',
-    },
-    preview: null,
-  },
-  {
-    id: 5,
-    type: 'calendar',
-    icon: FiCalendar,
-    color: 'orange',
-    module: 'CALENDAR',
-    title: 'Event Reminder',
-    message: 'Team Meeting in 30 minutes',
-    time: 'Yesterday',
-    isRead: true,
-    isPinned: false,
-    priority: 'medium',
-    sender: null,
-    centre: 'Pukayur',
-    actionUrl: '/calendar',
-    actionLabel: 'Open Calendar →',
-    actions: ['mark_read'],
-    metadata: {
-      event: 'Team Meeting',
-      time: '3:00 PM',
-    },
-    preview: null,
-  },
-  {
-    id: 6,
-    type: 'task',
-    icon: FiCheckSquare,
-    color: 'emerald',
-    module: 'TASK',
-    title: 'Task Assigned',
-    message: 'Complete eDistrict verification',
-    time: 'Yesterday',
-    isRead: true,
-    isPinned: true,
-    priority: 'high',
-    sender: {
-      name: 'Muhammed Illyas',
-      avatar: null,
-      role: 'Staff',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/tasks/101',
-    actionLabel: 'Open Task →',
-    actions: ['open', 'mark_read', 'complete'],
-    metadata: {
-      dueDate: 'Today',
-    },
-    preview: null,
-  },
-  {
-    id: 7,
-    type: 'expense',
-    icon: FiDollarSign,
-    color: 'green',
-    module: 'EXPENSE',
-    title: 'Expense Approved',
-    message: 'Travel Allowance',
-    time: '2 days ago',
-    isRead: true,
-    isPinned: false,
-    priority: 'normal',
-    sender: {
-      name: 'Finance Team',
-      avatar: null,
-      role: 'Finance',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/expenses/88',
-    actionLabel: 'Open Expense →',
-    actions: ['mark_read'],
-    metadata: {
-      amount: '₹450',
-    },
-    preview: null,
-  },
-  {
-    id: 8,
-    type: 'team',
-    icon: FiUsers,
-    color: 'pink',
-    module: 'TEAM',
-    title: 'You\'ve been added to',
-    message: 'Passport Team',
-    time: '2 days ago',
-    isRead: true,
-    isPinned: false,
-    priority: 'normal',
-    sender: {
-      name: 'Admin',
-      avatar: null,
-      role: 'Admin',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/teams/12',
-    actionLabel: 'Open Team →',
-    actions: ['mark_read'],
-    metadata: {
-      team: 'Passport Team',
-    },
-    preview: null,
-  },
-  {
-    id: 9,
-    type: 'review',
-    icon: FiStar,
-    color: 'yellow',
-    module: 'REVIEW',
-    title: 'Customer Review',
-    message: '"Excellent service"',
-    time: '3 days ago',
-    isRead: true,
-    isPinned: false,
-    priority: 'normal',
-    sender: {
-      name: 'Rahman',
-      avatar: null,
-      role: 'Customer',
-    },
-    centre: 'Pukayur',
-    actionUrl: '/reviews/56',
-    actionLabel: 'View Review →',
-    actions: ['mark_read'],
-    metadata: {
-      rating: 5,
-    },
-    preview: null,
-  },
-  {
-    id: 10,
-    type: 'payment',
-    icon: FiDollarSign,
-    color: 'red',
-    module: 'PAYMENT',
-    title: 'Pending Payment',
-    message: '2 customers pending – ₹850',
-    time: '3 days ago',
-    isRead: true,
-    isPinned: false,
-    priority: 'medium',
-    sender: null,
-    centre: 'Pukayur',
-    actionUrl: '/payments/pending',
-    actionLabel: 'View Payments →',
-    actions: ['mark_read'],
-    metadata: {
-      count: 2,
-      amount: '₹850',
-    },
-    preview: null,
-  },
-  {
-    id: 11,
-    type: 'system',
-    icon: FiActivity,
-    color: 'gray',
-    module: 'SYSTEM',
-    title: 'System Update',
-    message: 'CRM v2.4.2 is available',
-    time: '4 days ago',
-    isRead: true,
-    isPinned: false,
-    priority: 'low',
-    sender: null,
-    centre: 'Pukayur',
-    actionUrl: '/settings',
-    actionLabel: 'Update →',
-    actions: ['mark_read'],
-    metadata: {
-      version: 'v2.4.2',
-    },
-    preview: null,
-  },
-];
+import { socket } from '@/services/socket'; 
+import { useNotifications } from '../context/NotificationContext'; 
+
+const timeAgo = (dateString) => {
+  const date = new Date(dateString);
+  const seconds = Math.round((new Date() - date) / 1000);
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.round(minutes / 60);
+  const days = Math.round(hours / 24);
+
+  if (seconds < 60) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
+};
+
+const mapDBNotificationToUI = (dbNotif) => {
+  // Construct a frontend route based on the entity
+  let actionUrl = '#';
+  if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/staff/tasks`; 
+  if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/staff/track_service/${dbNotif.related_entity_id}`;
+  if (dbNotif.type === 'whatsapp_message') actionUrl = `/dashboard/staff/messenger`;
+
+  return {
+    id: dbNotif.id,
+    type: dbNotif.type,
+    // We map your backend types to the icon variables you defined further down
+    icon: dbNotif.type.includes('message') ? FiMessageSquareIcon : 
+          dbNotif.type.includes('task') ? FiCheckSquare : 
+          dbNotif.type.includes('service') ? FiBriefcase : FiBell,
+    color: dbNotif.type.includes('message') ? 'blue' : 
+           dbNotif.type.includes('task') ? 'emerald' : 
+           dbNotif.type.includes('service') ? 'indigo' : 'gray',
+    module: dbNotif.category ? dbNotif.category.toUpperCase() : 'CRM',
+    title: dbNotif.title,
+    message: dbNotif.message,
+    time: timeAgo(dbNotif.created_at),
+    isRead: dbNotif.is_read,
+    isPinned: dbNotif.is_pinned || false,
+    priority: dbNotif.priority || 'normal',
+    sender: dbNotif.sender_staff_id ? { name: 'Staff User', role: 'Staff' } : null, // (You can expand this if your backend joins staff table)
+    centre: dbNotif.centre_id ? `Centre ${dbNotif.centre_id}` : null,
+    actionUrl,
+    actionLabel: 'View →',
+    actions: ['mark_read', 'view'],
+    metadata: dbNotif.metadata,
+    preview: dbNotif.metadata 
+  };
+};
 
 const PRIORITY_LABELS = {
   high: 'HIGH',
@@ -564,13 +320,61 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
 // ==========================================================================
 // NOTIFICATIONS PAGE
 // ==========================================================================
-const NotificationsPage = ({ notifications: externalNotifications, setNotifications: setExternalNotifications }) => {
-  const [notifications, setNotifications] = useState(externalNotifications || MOCK_NOTIFICATIONS);
+const NotificationsPage = () => {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
   const [activeTab, setActiveTab] = useState('all');
   const [viewMode, setViewMode] = useState('notifications');
   const [searchQuery, setSearchQuery] = useState('');
   const [timeFilter, setTimeFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+
+  // --- NEW: HOOKS & VARIABLES ---
+  const { decrementUnread, clearUnread } = useNotifications();
+  const navigate = useNavigate();
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
+  const token = localStorage.getItem('token');
+
+  // --- NEW: FETCH & SOCKETS ---
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/notifications?limit=50`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.notifications) {
+          setNotifications(data.notifications.map(mapDBNotificationToUI));
+        }
+      } catch (error) {
+        toast.error('Failed to load notifications');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotifications();
+
+    // Socket Listeners
+    const handleNewNotification = (newDbNotif) => {
+      setNotifications((prev) => [mapDBNotificationToUI(newDbNotif), ...prev]);
+    };
+
+    const handleUpdatedNotification = (updatedDbNotif) => {
+      setNotifications((prev) => 
+        prev.map(n => n.id === updatedDbNotif.id ? mapDBNotificationToUI(updatedDbNotif) : n)
+      );
+    };
+
+    socket.on('notification', handleNewNotification);
+    socket.on('notification_updated', handleUpdatedNotification);
+
+    return () => {
+      socket.off('notification', handleNewNotification);
+      socket.off('notification_updated', handleUpdatedNotification);
+    };
+  }, [API_BASE_URL, token]);
 
   const tabs = [
     { id: 'all', label: 'All', icon: FiBell },
@@ -665,17 +469,35 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   // Actions
-  const handleMarkRead = (id) => {
-    const updated = notifications.map(n => n.id === id ? { ...n, isRead: true } : n);
-    setNotifications(updated);
-    if (setExternalNotifications) setExternalNotifications(updated);
+  const handleMarkRead = async (id) => {
+    // Optimistic UI update
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    decrementUnread(); // Instantly lower the global sidebar bell count
+
+    try {
+      await fetch(`${API_BASE_URL}/api/notifications/${id}/read`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (error) {
+      toast.error('Failed to mark as read');
+    }
   };
 
-  const handleMarkAllRead = () => {
-    const updated = notifications.map(n => ({ ...n, isRead: true }));
-    setNotifications(updated);
-    if (setExternalNotifications) setExternalNotifications(updated);
+  const handleMarkAllRead = async () => {
+    // Optimistic UI update
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    clearUnread(); // Instantly clear the global sidebar bell count
     toast.success('All notifications marked as read');
+
+    try {
+      await fetch(`${API_BASE_URL}/api/notifications/read-all`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const handleAction = (id, action) => {
@@ -706,23 +528,36 @@ const NotificationsPage = ({ notifications: externalNotifications, setNotificati
     }
   };
 
-  const handleTogglePin = (id) => {
-    const updated = notifications.map(n =>
-      n.id === id ? { ...n, isPinned: !n.isPinned } : n
-    );
-    setNotifications(updated);
-    if (setExternalNotifications) setExternalNotifications(updated);
-    const pinned = updated.find(n => n.id === id);
-    toast.info(pinned.isPinned ? 'Pinned' : 'Unpinned');
+  const handleTogglePin = async (id) => {
+    // Optimistic UI update
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isPinned: !n.isPinned } : n));
+    try {
+      await fetch(`${API_BASE_URL}/api/notifications/${id}/pin`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (err) {
+      toast.error('Failed to pin notification');
+    }
   };
 
   const handleClick = (url) => {
-    toast.info(`Navigating to ${url} (demo)`);
+    if (url && url !== '#') {
+      navigate(url); 
+    }
   };
 
   const handleSearch = (e) => {
     setSearchQuery(e.target.value);
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <FiRefreshCw className="h-8 w-8 animate-spin text-indigo-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto">
