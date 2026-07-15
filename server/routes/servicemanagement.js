@@ -7,6 +7,7 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 import sendTokenUpdateWhatsApp from '../utils/sendTokenUpdateWhatsapp.js';
 import crypto from 'crypto';
 import axios from "axios";
+import notificationService from '../utils/notificationService.js';
 
 const router = express.Router();
 
@@ -3968,6 +3969,41 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
           io.to(`centre_${serviceEntry.centre_id}`).emit(`tokenUpdate:${serviceEntry.centre_id}`, { tokenId: serviceEntry.token_id, status: 'completed' });
         }
       }
+    }
+    // ====================================================================
+
+    // 🔥 NOTIFICATION ENGINE TRIGGER (Notify Admins of collected payment)
+    try {
+      // Find all admins for this centre to notify them of the collected revenue
+      const adminsRes = await client.query(
+        `SELECT id FROM staff WHERE centre_id = $1 AND role IN ('admin', 'superadmin')`,
+        [serviceEntry.centre_id] // Uses the centre_id we grabbed earlier
+      );
+      const adminIds = adminsRes.rows.map(r => r.id);
+
+      // Only notify if someone other than the admin is collecting it, or if you just want general alerts
+      if (adminIds.length > 0) {
+        // Fetch the service name to make the notification look nice
+        const sNameRes = await client.query(`SELECT s.name FROM services s JOIN service_entries se ON se.category_id = s.id WHERE se.id = $1`, [serviceEntryId]);
+        const serviceName = sNameRes.rows[0]?.name || 'a service';
+
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: adminIds,
+          senderStaffId: req.user.id, // The staff member who collected the money
+          type: 'payment',
+          category: 'finance',
+          title: '💰 Payment Collected',
+          message: `A pending payment was successfully collected.`,
+          priority: 'normal',
+          metadata: {
+            'Amount': `₹${amount}`,
+            'Service': serviceName,
+            'Status': (totalPaid >= totalCharges && totalCharges > 0) ? 'Fully Paid' : 'Partially Paid'
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error("Non-fatal: Failed to send payment collection notification:", notifErr);
     }
     // ====================================================================
 
