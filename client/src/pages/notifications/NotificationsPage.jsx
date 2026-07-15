@@ -168,6 +168,9 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
   const priorityColor = PRIORITY_COLORS[notification.priority] || PRIORITY_COLORS.normal;
   const [showPreview, setShowPreview] = useState(false);
 
+  const [isReceiptDrawerOpen, setIsReceiptDrawerOpen] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState(null);
+
   const typeActions = TYPE_ACTIONS[notification.type] || ['mark_read'];
   const actions = notification.actions && notification.actions.length > 0
     ? notification.actions.filter(a => typeActions.includes(a) || a === 'mark_read')
@@ -516,6 +519,16 @@ const NotificationsPage = () => {
       return;
     }
 
+    // Handle "View Details" specifically for Payments
+    if (action === 'view' && notification.type === 'payment') {
+      handleMarkRead(id); // Instantly mark as read
+      
+      // Grab the ID from the notification metadata/entity and open the drawer
+      setSelectedPaymentId(notification.related_entity_id || id);
+      setIsReceiptDrawerOpen(true);
+      return;
+    }
+
     // Handle Messenger
     if (action === 'reply' && notification.type === 'whatsapp_message') {
       handleMarkRead(id);
@@ -702,6 +715,13 @@ const NotificationsPage = () => {
           <FiSettings className="h-3 w-3" /> Manage preferences
         </button>
       </div>
+
+      {/* Pending Payments Drawer */}
+      <PaymentReceiptDrawer 
+        isOpen={isReceiptDrawerOpen} 
+        onClose={() => setIsReceiptDrawerOpen(false)} 
+        paymentId={selectedPaymentId} 
+      />
     </div>
   );
 };
