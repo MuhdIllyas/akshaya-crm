@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { socket } from '../socket'; // Adjust path to your socket.js
+import { socket } from '../services/socket.js';
 import { toast } from 'react-toastify';
 
 const NotificationContext = createContext();
