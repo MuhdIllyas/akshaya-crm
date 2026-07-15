@@ -3698,7 +3698,7 @@ router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
   }
 });
 
-// ========== PENDING PAYMENTS (FIXED QUERIES) ==========
+// ========== PENDING PAYMENTS ==========
 
 // GET /api/servicemanagement/pending-payments
 router.get("/pending-payments", authenticateToken, async (req, res) => {
