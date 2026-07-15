@@ -197,6 +197,31 @@ const notificationService = {
       client.release();
     }
   },
+
+  async togglePin(notificationId, staffId) {
+    const client = await pool.connect();
+    try {
+      // Toggle the boolean. We use coalesce just in case it's currently null.
+      const res = await client.query(
+        `UPDATE notifications 
+         SET is_pinned = NOT coalesce(is_pinned, false) 
+         WHERE id = $1 AND recipient_staff_id = $2 
+         RETURNING *`,
+        [notificationId, staffId]
+      );
+      
+      if (!res.rows.length) return null;
+
+      const updatedNotification = res.rows[0];
+
+      // Emit the update so if the user has multiple tabs open, they all sync!
+      socketNotifications.emitNotificationUpdated(staffId, updatedNotification);
+      
+      return updatedNotification;
+    } finally {
+      client.release();
+    }
+  },
   
   // (markAllAsRead and deleteNotification remain the same, safely wrapped in transactions)
 };

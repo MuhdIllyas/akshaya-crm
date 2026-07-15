@@ -80,6 +80,25 @@ router.patch('/:id/read', async (req, res) => {
 });
 
 /**
+ * PATCH /api/notifications/:id/pin
+ * Toggle the pinned status of a notification
+ */
+router.patch('/:id/pin', async (req, res) => {
+  try {
+    const notification = await notificationService.togglePin(req.params.id, req.user.id);
+    
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    
+    res.json({ success: true, notification });
+  } catch (err) {
+    console.error('Error toggling pin:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * PATCH /api/notifications/read-all
  * Mark all unread notifications as read for the current user
  */
