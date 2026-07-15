@@ -1,4 +1,4 @@
-import { io } from '../server.js'; 
+import { io } from '../server.js';
 
 const socketNotifications = {
   emitNotification: (recipientStaffId, notification) => {
