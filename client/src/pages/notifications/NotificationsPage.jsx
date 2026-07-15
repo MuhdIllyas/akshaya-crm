@@ -16,7 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
 import { socket } from '@/services/socket'; 
-import { useNotifications } from '../context/NotificationContext'; 
+import { useNotifications } from '../../context/NotificationContext';
 
 const timeAgo = (dateString) => {
   if (!dateString) return 'Just now';
