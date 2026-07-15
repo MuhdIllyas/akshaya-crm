@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-toastify";
+import { useLocation } from "react-router-dom";
 import {
   FiPlus,
   FiDollarSign,
@@ -386,6 +387,27 @@ const AdminExpenseManagement = () => {
       fetchCentres();
     }
   }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (location.state?.openExpenseId && expenses.length > 0) {
+      const targetId = location.state.openExpenseId;
+      setHighlightedExpenseId(targetId);
+      
+      // Give the table a tiny moment to render, then smoothly scroll to the row
+      setTimeout(() => {
+        const rowElement = document.getElementById(`expense-row-${targetId}`);
+        if (rowElement) {
+          rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+
+      // Clear the router state so it doesn't re-highlight if they refresh the page
+      window.history.replaceState({}, document.title);
+      
+      // Remove the highlight after 5 seconds so it goes back to normal
+      setTimeout(() => setHighlightedExpenseId(null), 5000);
+    }
+  }, [location.state, expenses]);
 
   // ---- Data Loading (with centre support) ----
   const buildQueryString = (params = {}) => {
@@ -924,7 +946,15 @@ const AdminExpenseManagement = () => {
                     const canDelete = expense.status === "pending";
 
                     return (
-                      <tr key={expense.id} className="hover:bg-gray-50">
+                      <tr 
+                        key={expense.id} 
+                        id={`expense-row-${expense.id}`} // <-- ADD THIS ID FOR SCROLLING
+                        className={`transition-colors duration-700 ${
+                          highlightedExpenseId === expense.id 
+                            ? "bg-indigo-100 border-l-4 border-indigo-600 shadow-inner" 
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
                         <td className="px-6 py-4">
                           <div className="flex items-center">
                             <span className="text-xl mr-3">{category?.icon || "📝"}</span>
