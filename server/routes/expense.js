@@ -1,6 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import notificationService from "../utils/notificationService.js"; 
 
 const router = express.Router();
 
@@ -101,12 +102,13 @@ router.post("/", async (req, res) => {
     await client.query("BEGIN");
 
     const walletRes = await client.query(
-      `SELECT id, balance FROM wallets WHERE id = $1 AND centre_id = $2`,
+      `SELECT id, balance, name FROM wallets WHERE id = $1 AND centre_id = $2`,
       [wallet_id, centreId]
     );
     if (walletRes.rows.length === 0) {
       throw new Error("Invalid wallet for your centre");
     }
+    const walletName = walletRes.rows[0].name;
 
   const expenseRes = await client.query(
     `INSERT INTO expenses (
@@ -158,7 +160,6 @@ router.post("/", async (req, res) => {
         throw new Error("Insufficient wallet balance");
       }
       
-      // 🔥 FIX: Added reference_id, reference_type, and correction_group_id to link it properly
       await client.query(
         `INSERT INTO wallet_transactions (
           wallet_id,
@@ -195,6 +196,38 @@ router.post("/", async (req, res) => {
     }
 
     await client.query("COMMIT");
+
+    // 🔥 NEW: NOTIFICATION ENGINE TRIGGER (Notify Admins)
+    if (requires_approval) {
+      try {
+        // Find all admins for this centre
+        const adminsRes = await client.query(
+          `SELECT id FROM staff WHERE centre_id = $1 AND role IN ('admin', 'superadmin')`,
+          [centreId]
+        );
+        const adminIds = adminsRes.rows.map(r => r.id);
+
+        if (adminIds.length > 0) {
+          await notificationService.createBulkNotifications({
+            recipientStaffIds: adminIds,
+            senderStaffId: staffId,
+            type: 'expense',
+            category: 'finance',
+            title: '⏳ Expense Approval Required',
+            message: `A new expense requires your approval.`,
+            priority: 'medium',
+            metadata: {
+              'Category': category,
+              'Amount': `₹${amount}`,
+              'Wallet': walletName || 'Unknown Wallet'
+            }
+          });
+        }
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send expense request notification:", notifErr);
+      }
+    }
+
     res.status(201).json(expenseRes.rows[0]);
   } catch (err) {
     await client.query("ROLLBACK");
@@ -338,7 +371,6 @@ router.put("/:id/approve", async (req, res) => {
       throw new Error("Insufficient wallet balance");
     }
 
-    // 🔥 FIX: Added reference_id, reference_type, and correction_group_id to link it properly
     await client.query(
       `INSERT INTO wallet_transactions (
         wallet_id,
@@ -393,6 +425,31 @@ router.put("/:id/approve", async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    // 🔥 NEW: NOTIFICATION ENGINE TRIGGER (Notify the Submitter)
+    if (exp.staff_id !== req.user.id) { // Don't notify if admin approves their own expense
+      try {
+        await notificationService.createNotification({
+          recipientStaffId: exp.staff_id,
+          senderStaffId: req.user.id,
+          centreId: exp.centre_id,
+          relatedEntityType: 'expense',
+          relatedEntityId: exp.id,
+          type: 'expense_approved',
+          category: 'finance',
+          title: '✅ Expense Approved',
+          message: `Your expense request has been approved.`,
+          priority: 'normal',
+          metadata: {
+            'Category': exp.category,
+            'Amount': `₹${exp.amount}`
+          }
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send approval notification:", notifErr);
+      }
+    }
+
     res.json({ message: "Expense approved successfully" });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -412,11 +469,47 @@ router.put("/:id/reject", async (req, res) => {
   }
   const client = await req.db.connect();
   try {
+    // 🔥 We query first so we can grab the staff ID for the notification
+    const expRes = await client.query(
+      `SELECT staff_id, amount, category, centre_id FROM expenses WHERE id = $1 AND status = 'pending'`, 
+      [req.params.id]
+    );
+    
+    if (expRes.rows.length === 0) {
+      return res.status(404).json({ error: "Expense not found or already processed" });
+    }
+    const exp = expRes.rows[0];
+
     await client.query(
       `UPDATE expenses SET status = 'rejected', approved_at = NOW(), approved_by = $1
        WHERE id = $2 AND status = 'pending'`,
       [req.user.id, req.params.id]
     );
+
+    // 🔥 NEW: NOTIFICATION ENGINE TRIGGER (Notify the Submitter)
+    if (exp.staff_id !== req.user.id) {
+      try {
+        await notificationService.createNotification({
+          recipientStaffId: exp.staff_id,
+          senderStaffId: req.user.id,
+          centreId: exp.centre_id,
+          relatedEntityType: 'expense',
+          relatedEntityId: req.params.id,
+          type: 'expense', 
+          category: 'finance',
+          title: '❌ Expense Rejected',
+          message: `Your expense request was rejected.`,
+          priority: 'high',
+          metadata: {
+            'Category': exp.category,
+            'Amount': `₹${exp.amount}`
+          }
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send rejection notification:", notifErr);
+      }
+    }
+
     res.json({ message: "Expense rejected successfully" });
   } catch (err) {
     console.error("Reject expense error:", err);
