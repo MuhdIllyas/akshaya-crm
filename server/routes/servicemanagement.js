@@ -3990,6 +3990,10 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
         await notificationService.createBulkNotifications({
           recipientStaffIds: adminIds,
           senderStaffId: req.user.id, // The staff member who collected the money
+
+          relatedEntityType: 'payment',
+          relatedEntityId: paymentId,
+
           type: 'payment',
           category: 'finance',
           title: '💰 Payment Collected',
