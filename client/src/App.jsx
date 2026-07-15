@@ -54,7 +54,7 @@ import Home from "./pages/Home";
 import KnowledgeHub from './pages/knowledge/KnowledgeHub';
 
 //Notification Page
-import NotificationsPage from './pages/NotificationsPage';
+import NotificationsPage from './context/NotificationContext';
 import { NotificationProvider } from './context/NotificationContext';
 
 //Analytics Page
