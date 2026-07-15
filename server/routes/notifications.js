@@ -1,4 +1,5 @@
 import express from 'express';
+import jwt from "jsonwebtoken";
 import notificationService from '../utils/notificationService.js';
 
 const router = express.Router();
