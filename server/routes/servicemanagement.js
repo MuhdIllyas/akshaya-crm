@@ -3971,6 +3971,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
       }
     }
     // ====================================================================
+    await client.query("COMMIT");
 
     // 🔥 NOTIFICATION ENGINE TRIGGER (Notify Admins of collected payment)
     try {
@@ -4011,8 +4012,6 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
     }
     // ====================================================================
 
-    await client.query("COMMIT");
-
     res.json({
       success: true,
       message: "Pending payment collected successfully"
@@ -4036,8 +4035,6 @@ router.get("/payment-receipt/:paymentId", authenticateToken, async (req, res) =>
   try {
     const { paymentId } = req.params;
     
-    // 🔥 We join wallet_transactions to find exactly who collected this money
-    // and use a subquery to calculate previously paid amounts for this specific service
     const query = `
       SELECT 
         p.id AS payment_id,
@@ -4064,7 +4061,7 @@ router.get("/payment-receipt/:paymentId", authenticateToken, async (req, res) =>
         ) AS previously_paid
       FROM payments p
       JOIN service_entries se ON p.service_entry_id = se.id
-      LEFT JOIN services s ON se.category_id::integer = s.id
+      LEFT JOIN services s ON se.category_id = s.id  -- ✅ Removed ::integer cast for safety
       LEFT JOIN wallets w ON p.wallet_id = w.id
       LEFT JOIN wallet_transactions wt ON wt.reference_payment_id = p.id AND wt.type = 'credit'
       LEFT JOIN staff st ON wt.staff_id = st.id
@@ -4075,16 +4072,15 @@ router.get("/payment-receipt/:paymentId", authenticateToken, async (req, res) =>
     const { rows } = await client.query(query, [paymentId]);
     
     if (rows.length === 0) {
-      return res.status(404).json({ error: "Receipt not found" });
+      return res.status(404).json({ error: "Receipt not found in database" });
     }
     
     const data = rows[0];
-    const previouslyPaid = parseFloat(data.previously_paid);
-    const amountCollected = parseFloat(data.amount_collected);
-    const totalBill = parseFloat(data.total_bill);
+    const previouslyPaid = parseFloat(data.previously_paid || 0);
+    const amountCollected = parseFloat(data.amount_collected || 0);
+    const totalBill = parseFloat(data.total_bill || 0);
     const remainingBalance = Math.max(0, totalBill - previouslyPaid - amountCollected);
     
-    // Format it perfectly for the frontend Drawer
     res.json({
       id: data.payment_id,
       status: remainingBalance <= 0 ? 'fully_paid' : 'partially_paid',
