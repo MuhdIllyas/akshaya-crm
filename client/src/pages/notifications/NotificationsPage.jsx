@@ -57,30 +57,34 @@ const mapDBNotificationToUI = (dbNotif) => {
   const typeStr = dbNotif.type || 'system';
 
   return {
-    id: dbNotif.id,
-    type: typeStr,
-    icon: typeStr.includes('message') ? FiMessageSquareIcon : 
-          typeStr.includes('task') ? FiCheckSquare : 
-          typeStr.includes('service') ? FiBriefcase : FiBell,
-    color: typeStr.includes('message') ? 'blue' : 
-           typeStr.includes('task') ? 'emerald' : 
-           typeStr.includes('service') ? 'indigo' : 'gray',
-    module: dbNotif.category ? dbNotif.category.toUpperCase() : 'CRM',
-    title: dbNotif.title || 'Notification',
-    message: dbNotif.message || '',
-    time: timeAgo(dbNotif.created_at),
-    isRead: dbNotif.is_read || false,
-    isPinned: dbNotif.is_pinned || false,
-    priority: dbNotif.priority || 'normal',
-    sender: dbNotif.sender_name ? { name: dbNotif.sender_name, role: dbNotif.sender_role } : null,
-    centre: dbNotif.centre_name || null,
-    actionUrl,
-    actionLabel: 'View →',
-    actions: ['mark_read', 'view'],
-    metadata: dbNotif.metadata || {},
-    preview: dbNotif.metadata || {}
+      id: dbNotif.id,
+      
+      related_entity_id: dbNotif.related_entity_id,
+      related_entity_type: dbNotif.related_entity_type,
+      
+      type: typeStr,
+      icon: typeStr.includes('message') ? FiMessageSquareIcon : 
+            typeStr.includes('task') ? FiCheckSquare : 
+            typeStr.includes('service') ? FiBriefcase : FiBell,
+      color: typeStr.includes('message') ? 'blue' : 
+            typeStr.includes('task') ? 'emerald' : 
+            typeStr.includes('service') ? 'indigo' : 'gray',
+      module: dbNotif.category ? dbNotif.category.toUpperCase() : 'CRM',
+      title: dbNotif.title || 'Notification',
+      message: dbNotif.message || '',
+      time: timeAgo(dbNotif.created_at),
+      isRead: dbNotif.is_read || false,
+      isPinned: dbNotif.is_pinned || false,
+      priority: dbNotif.priority || 'normal',
+      sender: dbNotif.sender_name ? { name: dbNotif.sender_name, role: dbNotif.sender_role } : null,
+      centre: dbNotif.centre_name || null,
+      actionUrl,
+      actionLabel: 'View →',
+      actions: ['mark_read', 'view'],
+      metadata: dbNotif.metadata || {},
+      preview: dbNotif.metadata || {}
+    };
   };
-};
 
 const PRIORITY_LABELS = {
   high: 'HIGH',
