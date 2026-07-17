@@ -1034,12 +1034,45 @@ const MessengerPage = ({ user }) => {
 
       const newMsg = await res.json();
       
-      // 🔥 FIX 2: Delete the optimistic (blurred) message on SUCCESS!
-      // The real message is arriving via Socket.io simultaneously.
-      setMessages(prev => ({
-        ...prev,
-        [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
-      }));
+      // 🔥 Swap the optimistic message with the real API response
+      // This guarantees the sender sees their message instantly, even if WebSockets lag.
+      setMessages(prev => {
+        const currentMessages = prev[activeConversation.id] || [];
+        const filtered = currentMessages.filter(m => m.tempId !== actualTempId);
+        
+        // Prevent duplication if the socket was somehow faster than the HTTP response
+        if (filtered.some(m => m.id === newMsg.id)) {
+            return { ...prev, [activeConversation.id]: filtered };
+        }
+        
+        // Format the saved message for the UI
+        const formattedMsg = {
+          id: newMsg.id,
+          sender: 'You',
+          senderId: currentUser.id,
+          text: newMsg.message,
+          time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: newMsg.created_at,
+          isFile: newMsg.message_type === 'file' || newMsg.message_type === 'image',
+          fileName: newMsg.file_name,
+          fileUrl: newMsg.file_url,
+          fileSize: newMsg.file_size,
+          messageType: newMsg.message_type,
+          isDeleted: newMsg.is_deleted,
+          isCurrentUser: true,
+          is_read_by_me: true,
+          isOptimistic: false,
+          isSystem: newMsg.sender_type === 'system',
+          sender_type: newMsg.sender_type,
+          live_task_data: newMsg.live_task_data || null,
+          mentions: newMsg.mentions || []
+        };
+        
+        return {
+          ...prev,
+          [activeConversation.id]: [...filtered, formattedMsg]
+        };
+      });
       
     } catch (err) {
       console.error("Upload error:", err);
