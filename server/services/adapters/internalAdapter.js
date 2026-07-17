@@ -1,37 +1,14 @@
-import { resolveConversation } from '../../utils/conversationService.js';
-import { sendMessage } from '../../utils/messageRouter.js';
+// services/communication/adapters/internalAdapter.js
+import { sendMessage } from '../../utils/messageRouter'; // ⚠️ Point 8: Rename this file to messageService.js soon!
 
 class InternalAdapter {
-  async process(payload) {
-    const { 
-      conversation_id, // Optional: if they are replying to an existing chat
-      sender, 
-      recipients = {}, 
-      message, 
-      context = {},
-      io 
-    } = payload;
+  // ⭐ Biggest Suggestion: Renamed process() to send()
+  async send(payload) {
+    const { conversation_id, sender, message, io } = payload;
 
-    let targetConversationId = conversation_id;
-
-    // 1. Resolve or Create Conversation if not provided
-    if (!targetConversationId) {
-      const conversation = await resolveConversation({
-        channel: 'internal',
-        context_type: context.type || null,
-        context_id: context.id || null,
-        participant_ids: [sender.id, ...(recipients.staff || [])],
-        is_group: recipients.staff?.length > 1 || context.is_group,
-        name: context.name || null,
-        created_by: sender.id,
-        centre_id: null // 🔥 Enforcing the Tenant-less rule for internal chats
-      });
-      targetConversationId = conversation.id;
-    }
-
-    // 2. Route the Message using your existing router
+    // The adapter ONLY cares about saving the message and emitting the socket
     const savedMessage = await sendMessage({
-      conversation_id: targetConversationId,
+      conversation_id: conversation_id,
       sender_id: sender.id,
       sender_type: sender.type || 'staff',
       message: message.text,
@@ -43,7 +20,7 @@ class InternalAdapter {
 
     return { 
       success: true,
-      conversationId: targetConversationId, 
+      conversationId: conversation_id, 
       message: savedMessage 
     };
   }
