@@ -9,6 +9,8 @@ import { resolveConversation, addParticipantsToConversation } from '../../utils/
 import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
 import notificationService from "../../utils/notificationService.js";
 
+import Communication from '../../services/communication/communicationEngine.js';
+
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -290,12 +292,13 @@ router.post("/conversation", authenticateToken, async (req, res) => {
       context_id: finalCustomerId,
       customer_id: finalCustomerId,
       phone_number: finalPhoneNumber,
-      centre_id: centreId,
+      // 🔥 NEW: Only assign a centre_id to WhatsApp or Service chats. Internal chats get NULL.
+      centre_id: (isWhatsApp || finalContextType === 'service_entry') ? centreId : null,
       created_by: userId,
       name: finalName,
       is_group: finalIsGroup,
       participant_ids: participantIds,
-      communication_account_id: commAccountId // 🔥 PASSING THE TENANT ID HERE
+      communication_account_id: commAccountId 
     });
 
     // Add participants if needed (resolveConversation might have added them, but ensure)
@@ -575,21 +578,20 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
 });
 
 /* ================================
-   SEND MESSAGE (Smart Auto-Join)
+   SEND MESSAGE (Smart Auto-Join & Dual-Ownership)
 ================================ */
 
 router.post("/message", authenticateToken, upload.single("file"), async (req, res) => {
   const client = await pool.connect(); // Use a dedicated client for transactions
   try {
-    // 1. FIX: Added 'mentions' to the destructured body
     const { conversation_id, message, message_type, mentions } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
     const userCentreId = req.user.centre_id;
 
-    // 1. Get the conversation details to verify Centre ownership
+    // 1. Get the conversation details
     const convRes = await client.query(
-      `SELECT centre_id, channel FROM chat_conversations WHERE id = $1`,
+      `SELECT centre_id, channel, name FROM chat_conversations WHERE id = $1`,
       [conversation_id]
     );
 
@@ -599,13 +601,29 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
 
     const conversation = convRes.rows[0];
 
-    // 2. Security Check: Prevent staff from messaging other centres' customers
-    if (userRole !== 'superadmin' && conversation.centre_id !== userCentreId) {
-       return res.status(403).json({ error: "This conversation belongs to another centre." });
+    // 2. 🔥 NEW: DUAL-OWNERSHIP SECURITY CHECK
+    let isAuthorized = false;
+    
+    if (userRole === 'superadmin') {
+      isAuthorized = true;
+    } else if (conversation.centre_id === null) {
+      // Participant-Owned (Internal Chat)
+      const participantCheck = await client.query(
+        `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+        [conversation_id, userId]
+      );
+      isAuthorized = participantCheck.rows.length > 0;
+    } else {
+      // Tenant-Owned (WhatsApp/External Chat)
+      isAuthorized = (String(conversation.centre_id) === String(userCentreId));
     }
 
-    // 3. Participant Check & Auto-Join (The Magic Fix)
-    if (userRole === 'staff') {
+    if (!isAuthorized) {
+       return res.status(403).json({ error: "Not authorized to message in this conversation." });
+    }
+
+    // 3. Participant Check & Auto-Join 
+    if (userRole === 'staff' || userRole === 'admin' || userRole === 'superadmin') {
       const participantCheck = await client.query(
         `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
         [conversation_id, userId]
@@ -622,25 +640,29 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       }
     }
 
-    await client.query('BEGIN'); // 2. FIX: Start transaction to ensure safety
+    await client.query('BEGIN'); // Start transaction 
 
-    // 4. Send the message to the central router
-    const savedMessage = await sendMessage({
-      conversation_id,
-      sender_id: userId,
-      sender_type: "staff",
-      message,
-      message_type,
-      file: req.file,
-      io: req.io,
-      mentions
+    // 4. 🔥 SEND THROUGH THE COMMUNICATION ENGINE (Replaces sendMessage)
+    const result = await Communication.send({
+      channel: conversation.channel || 'internal', 
+      conversation_id: conversation_id,
+      sender: { type: "staff", id: userId },
+      message: {
+        text: message,
+        type: message_type,
+        file: req.file,
+        mentions: mentions ? (typeof mentions === 'string' ? JSON.parse(mentions) : mentions) : []
+      },
+      io: req.io
     });
 
-    // 🔥 Fetch the sender's real name from the database
+    const savedMessage = result.message;
+
+    // 🔥 Fetch the sender's real name from the database for notifications
     const senderRes = await client.query(`SELECT name FROM staff WHERE id = $1`, [userId]);
     const senderName = senderRes.rows[0]?.name || 'A team member';
 
-    // 5. 🔥 Insert Mentions safely
+    // 5. Insert Mentions safely
     if (mentions) {
       const parsedMentions = typeof mentions === 'string' ? JSON.parse(mentions) : mentions;
       
@@ -651,15 +673,13 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
           [savedMessage.id, m.mention_type, m.entity_id, m.display_text, m.start_index, m.end_index]
         );
 
-        // 5.5 🔥 NEW: AUTO-ADD NON-PARTICIPANTS (The "Slack" Way)
+        // AUTO-ADD NON-PARTICIPANTS (The "Slack" Way)
         if (m.mention_type === 'staff') {
-          // Check if the mentioned user is actually in the conversation
           const participantCheck = await client.query(
             `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
             [conversation_id, m.entity_id]
           );
 
-          // If they are not in the chat, auto-add them!
           if (participantCheck.rows.length === 0) {
             await client.query(
               `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
@@ -667,14 +687,12 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
               [conversation_id, m.entity_id]
             );
 
-            // Fetch the basic conversation details to send to their frontend
             const newConvRes = await client.query(
               `SELECT id, name, is_group, channel, context_type, context_id, phone_number AS context_identifier, name AS context_name, status 
                FROM chat_conversations WHERE id = $1`,
               [conversation_id]
             );
 
-            // Emit a socket event to force their frontend to download the new chat
             if (req.io) {
               req.io.to(`user:${m.entity_id}`).emit("added_to_conversation", {
                 ...newConvRes.rows[0],
@@ -699,8 +717,6 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
               type: 'mention',
               category: 'communications',
               title: '💬 New Mention',
-              
-              // 🔥 Use the database-fetched name instead of req.user.name
               message: `${senderName} mentioned you in a chat.`, 
               
               priority: 'high',
@@ -715,14 +731,14 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       }
     }
 
-    await client.query('COMMIT'); // Commit the transaction
+    await client.query('COMMIT'); 
     res.json(savedMessage);
   } catch (err) {
-    await client.query('ROLLBACK'); // Rollback if anything fails
+    await client.query('ROLLBACK'); 
     console.error("Message send error:", err);
     res.status(500).json({ error: "Failed to send message" });
   } finally {
-    client.release(); // Always release the client back to the pool
+    client.release(); 
   }
 });
 
