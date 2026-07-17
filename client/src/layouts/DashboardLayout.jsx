@@ -179,6 +179,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin", label: "Overview", icon: DashboardIcon },
       { path: "/dashboard/superadmin/centremanagement", label: "Centre Management", icon: CentreIcon },
       { path: "/dashboard/superadmin/calendar", label: "Calendar", icon: EventsIcon },
+      { path: "/dashboard/superadmin/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/superadmin/staffmanagement", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/superadmin/walletmanagement", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/superadmin/servicemanagement", label: "Service Management", icon: ServicesIcon },
@@ -197,6 +198,7 @@ const DashboardLayout = () => {
     admin: [
       { path: "/dashboard/admin", label: "Overview", icon: DashboardIcon },
       { path: "/dashboard/admin/calendar", label: "Calendar", icon: EventsIcon },
+      { path: "/dashboard/admin/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/admin/staff", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/admin/wallets", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/admin/services", label: "Service Management", icon: ServicesIcon },

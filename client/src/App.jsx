@@ -249,6 +249,11 @@ const App = () => {
             />
 
             <Route
+              path="admin/notes"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><NotesPage /></ProtectedRoute>}
+            />
+
+            <Route
               path="admin/staff"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><StaffManagement /></ProtectedRoute>}
             />
@@ -319,6 +324,10 @@ const App = () => {
             <Route
               path="superadmin/calendar"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><CalendarPage /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/notes"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><NotesPage /></ProtectedRoute>}
             />
             <Route
               path="superadmin/staffmanagement"
