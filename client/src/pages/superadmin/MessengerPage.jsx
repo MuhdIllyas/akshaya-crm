@@ -806,9 +806,11 @@ const MessengerPage = ({ user }) => {
       const chatToOpen = conversations.find(c => c.id === targetConvId);
       
       if (chatToOpen) {
-        // Trigger whatever state function you normally use to open a chat
-        setSelectedConversation(chatToOpen); 
-        // (Replace setSelectedConversation with your actual state setter name!)
+        // Switch to the chats tab if they were somewhere else
+        setActiveView("chats"); 
+        
+        // Open the specific chat!
+        setActiveConversation(chatToOpen); 
 
         // Clear the router state so it doesn't re-trigger on page refresh
         window.history.replaceState({}, document.title);
