@@ -624,7 +624,7 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
 
     await client.query('BEGIN'); // 2. FIX: Start transaction to ensure safety
 
-    // 4. Send the message to the central router (which handles Libromi internally)
+    // 4. Send the message to the central router
     const savedMessage = await sendMessage({
       conversation_id,
       sender_id: userId,
@@ -635,6 +635,10 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       io: req.io,
       mentions
     });
+
+    // 🔥 Fetch the sender's real name from the database
+    const senderRes = await client.query(`SELECT name FROM staff WHERE id = $1`, [userId]);
+    const senderName = senderRes.rows[0]?.name || 'A team member';
 
     // 5. 🔥 Insert Mentions safely
     if (mentions) {
@@ -661,7 +665,10 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
               type: 'mention',
               category: 'communications',
               title: '💬 New Mention',
-              message: `${req.user.name} mentioned you in a chat.`,
+              
+              // 🔥 Use the database-fetched name instead of req.user.name
+              message: `${senderName} mentioned you in a chat.`, 
+              
               priority: 'high',
               metadata: {
                 'Chat Room': conversation.name || 'Internal Chat'
