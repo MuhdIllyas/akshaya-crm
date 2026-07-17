@@ -1,6 +1,6 @@
 // services/communication/communicationEngine.js
 import { resolveConversation } from '../../utils/conversationService.js';
-import internalAdapter from './adapters/internalAdapter.js';
+import internalAdapter from '../adapters/internalAdapter.js';
 
 class CommunicationEngine {
   constructor() {
