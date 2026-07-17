@@ -650,6 +650,40 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [savedMessage.id, m.mention_type, m.entity_id, m.display_text, m.start_index, m.end_index]
         );
+
+        // 5.5 🔥 NEW: AUTO-ADD NON-PARTICIPANTS (The "Slack" Way)
+        if (m.mention_type === 'staff') {
+          // Check if the mentioned user is actually in the conversation
+          const participantCheck = await client.query(
+            `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+            [conversation_id, m.entity_id]
+          );
+
+          // If they are not in the chat, auto-add them!
+          if (participantCheck.rows.length === 0) {
+            await client.query(
+              `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+               VALUES ($1, $2, 'staff', 'member', NOW())`,
+              [conversation_id, m.entity_id]
+            );
+
+            // Fetch the basic conversation details to send to their frontend
+            const newConvRes = await client.query(
+              `SELECT id, name, is_group, channel, context_type, context_id, phone_number AS context_identifier, name AS context_name, status 
+               FROM chat_conversations WHERE id = $1`,
+              [conversation_id]
+            );
+
+            // Emit a socket event to force their frontend to download the new chat
+            if (req.io) {
+              req.io.to(`user:${m.entity_id}`).emit("added_to_conversation", {
+                ...newConvRes.rows[0],
+                last_message: message,
+                last_message_at: new Date().toISOString()
+              });
+            }
+          }
+        }
         
         // 6. Centralized Notification Engine
         if (m.mention_type === 'staff') {
