@@ -33,7 +33,7 @@ import Messenger from './pages/superadmin/MessengerPage';
 import CommunicationSettings from './pages/superadmin/CommunicationSettings';
 import TeamManagement from "./pages/team/TeamManagement";
 import TokenGenerator from "./pages/staff/TokenGenerator";
-import NotesPage from './pages/staff/NotesPage';
+import NotesPage from "./pages/notes/NotesPage";
 import CampaignTokenManagementStaff from "./pages/staff/CampaignTokenManagementStaff";
 import ServiceWorkspace from './components/ServiceWorkspace';
 import StaffPerformance from './pages/staff/StaffPerformance';
