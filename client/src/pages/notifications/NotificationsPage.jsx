@@ -45,6 +45,13 @@ const mapDBNotificationToUI = (dbNotif) => {
   if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/${role}/tasks`; 
   if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/${role}/track_service/${dbNotif.related_entity_id}`;
   if (dbNotif.type === 'whatsapp_message') actionUrl = `/dashboard/${role}/messenger`;
+
+  // 🔥 Route for Token assignments (routes to queue/tokens page)
+  if (dbNotif.related_entity_type === 'token') {
+    actionUrl = ["admin", "superadmin"].includes(role) 
+      ? `/dashboard/${role}/token` 
+      : `/dashboard/staff/token`; 
+  }
   
   // Route to the correct expense page based on the user's role
   if (dbNotif.related_entity_type === 'expense' || dbNotif.type?.includes('expense')) {
@@ -522,6 +529,15 @@ const NotificationsPage = () => {
     if (action === 'open' && notification.type.includes('task')) {
       handleMarkRead(id);
       navigate(`/dashboard/${role}/tasks`);
+      return;
+    }
+
+    if (notification.related_entity_type === 'token' && (action === 'accept' || action === 'view')) {
+      handleMarkRead(id);
+      const targetRoute = ["admin", "superadmin"].includes(role) 
+        ? `/dashboard/${role}/token` 
+        : `/dashboard/staff/token`;
+      navigate(targetRoute);
       return;
     }
 

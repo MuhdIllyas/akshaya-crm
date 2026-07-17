@@ -3382,6 +3382,33 @@ router.put('/tokens/:tokenId/cancel', authenticateToken, async (req, res) => {
       io.to(`centre_${centreId}`).emit('tokenCancelled', { tokenId, reason });
     }
 
+    // 🔥 CRM NOTIFICATION ENGINE (Notify the assigned staff member)
+    try {
+      // If the token was assigned to a staff member, and that staff member isn't the one cancelling it
+      if (token.staff_id && parseInt(token.staff_id) !== req.user.id) {
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: [token.staff_id],
+          senderStaffId: req.user.id,
+          centreId: centreId,
+          relatedEntityType: 'token',
+          relatedEntityId: token.id,
+          type: 'system',
+          category: 'operations',
+          title: '❌ Token Cancelled',
+          message: `Token ${tokenId} assigned to you has been cancelled.`,
+          priority: 'normal',
+          metadata: {
+            'Token': tokenId,
+            'Customer': token.customer_name,
+            'Reason': reason || 'No reason provided'
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error("Non-fatal: Failed to send token cancellation notification:", notifErr);
+    }
+    // =================================================================
+
     res.json({ success: true, message: 'Token cancelled successfully' });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -3475,6 +3502,33 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
       staff_name: staffName,
       message: `Token ${tokenId} reassigned to ${staffName}`,
     });
+
+    // 🔥 CRM NOTIFICATION ENGINE (Notify the assigned staff member)
+    try {
+      // Don't notify the staff if they are assigning it to themselves
+      if (parseInt(staffId) !== req.user.id) {
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: [staffId], // Ping the specific staff member
+          senderStaffId: req.user.id,
+          centreId: token.centre_id,
+          relatedEntityType: 'token',
+          relatedEntityId: token.id, // The numeric DB id
+          type: 'service_assigned',
+          category: 'operations',
+          title: '🎟️ Token Assigned',
+          message: `You have been assigned Token ${tokenId} for ${token.customer_name}.`,
+          priority: 'high',
+          metadata: {
+            'Token': tokenId,
+            'Customer': token.customer_name,
+            'Phone': token.phone || 'N/A'
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error("Non-fatal: Failed to send token assignment notification:", notifErr);
+    }
+    // =================================================================
 
     // Send WhatsApp Notification for Assignment (Non-blocking)
     sendTokenUpdateWhatsApp({
