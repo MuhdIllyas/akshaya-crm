@@ -44,7 +44,7 @@ const mapDBNotificationToUI = (dbNotif) => {
   let actionUrl = '#';
   if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/${role}/tasks`; 
   if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/${role}/track_service/${dbNotif.related_entity_id}`;
-  if (dbNotif.type === 'whatsapp_message') actionUrl = `/dashboard/${role}/messenger`;
+  if (dbNotif.type === 'whatsapp_message' || dbNotif.type === 'mention') actionUrl = `/dashboard/${role}/messenger`;
 
   // 🔥 Route for Token assignments (routes to queue/tokens page)
   if (dbNotif.related_entity_type === 'token') {
@@ -555,9 +555,9 @@ const NotificationsPage = () => {
     }
 
     // Handle Messenger
-    if (action === 'reply' && notification.type === 'whatsapp_message') {
+    if (action === 'reply' && (notification.type === 'whatsapp_message' || notification.type === 'mention')) {
       handleMarkRead(id);
-      navigate(`/dashboard/${role}/messenger`);
+      navigate(`/dashboard/${role}/messenger`); 
       return;
     }
 
