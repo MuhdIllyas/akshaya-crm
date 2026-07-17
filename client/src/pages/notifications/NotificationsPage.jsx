@@ -46,6 +46,13 @@ const mapDBNotificationToUI = (dbNotif) => {
   if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/${role}/track_service/${dbNotif.related_entity_id}`;
   if (dbNotif.type === 'whatsapp_message' || dbNotif.type === 'mention') actionUrl = `/dashboard/${role}/messenger`;
 
+  // 🔥 Route for Notes
+  if (dbNotif.related_entity_type === 'note') {
+    actionUrl = ["admin", "superadmin"].includes(role) 
+      ? `/dashboard/${role}/notes`  
+      : `/dashboard/staff/notes`;
+  }
+
   // 🔥 Route for Token assignments (routes to queue/tokens page)
   if (dbNotif.related_entity_type === 'token') {
     actionUrl = ["admin", "superadmin"].includes(role) 
@@ -512,6 +519,19 @@ const NotificationsPage = () => {
 
     if (action === 'mark_read') {
       handleMarkRead(id);
+      return;
+    }
+
+    // Handle "View Details" for Notes
+    if (action === 'view' && notification.related_entity_type === 'note') {
+      handleMarkRead(id);
+      const targetRoute = ["admin", "superadmin"].includes(role) 
+        ? `/dashboard/${role}/notes` 
+        : `/dashboard/staff/notes`;
+      
+      navigate(targetRoute, { 
+        state: { openNoteId: notification.related_entity_id } 
+      });
       return;
     }
 

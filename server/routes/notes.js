@@ -1,7 +1,8 @@
 import express from 'express';
 import pool from '../db.js';
 import jwt from 'jsonwebtoken';
-import { io } from '../server.js'; // 🔥 1. IMPORT SOCKET.IO
+import { io } from '../server.js'; 
+import notificationService from '../utils/notificationService.js';
 
 const router = express.Router();
 
@@ -198,6 +199,8 @@ router.post("/", async (req, res) => {
 
     // Insert Mentions safely
     if (Array.isArray(mentions) && mentions.length > 0) {
+      
+      // 1. Save the mentions to the database
       for (const staffId of mentions) {
         await client.query(
           `
@@ -207,6 +210,31 @@ router.post("/", async (req, res) => {
           `,
           [note.id, staffId]
         );
+      }
+
+      // 2. Fetch the author's real name for the notification
+      const authorRes = await client.query(`SELECT name FROM staff WHERE id = $1`, [req.user.id]);
+      const authorName = authorRes.rows[0]?.name || 'A team member';
+
+      // 3. 🔥 Trigger the Notification Engine
+      try {
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: mentions, // Pass the whole array! It will notify everyone at once.
+          senderStaffId: req.user.id,
+          centreId: req.user.centre_id,
+          relatedEntityType: 'note',
+          relatedEntityId: note.id,
+          type: 'mention',
+          category: 'communications',
+          title: '📝 Mentioned in a Note',
+          message: `${authorName} mentioned you in a Note.`,
+          priority: 'normal',
+          metadata: {
+            'Title': title || 'Untitled Note'
+          }
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send note mention notification:", notifErr);
       }
     }
 
