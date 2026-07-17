@@ -50,7 +50,7 @@ const mapDBNotificationToUI = (dbNotif) => {
   if (dbNotif.related_entity_type === 'token') {
     actionUrl = ["admin", "superadmin"].includes(role) 
       ? `/dashboard/${role}/token` 
-      : `/dashboard/staff/token`; 
+      : `/dashboard/staff`; 
   }
   
   // Route to the correct expense page based on the user's role
