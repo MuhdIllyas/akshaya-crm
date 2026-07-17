@@ -199,7 +199,7 @@ router.get("/conversations", authenticateToken, async (req, res) => {
       INNER JOIN chat_participants p ON c.id = p.conversation_id
       WHERE p.staff_id = $1 
         AND c.status = $2
-        ${role !== "superadmin" ? "AND c.centre_id = $3" : ""}
+        ${role !== "superadmin" ? "AND (c.centre_id = $3 OR c.centre_id IS NULL)" : ""}
       ORDER BY c.last_message_at DESC NULLS LAST
       `,
       role !== "superadmin" ? [userId, status, centreId] : [userId, status]

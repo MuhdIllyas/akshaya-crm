@@ -1034,7 +1034,7 @@ const MessengerPage = ({ user }) => {
 
       const newMsg = await res.json();
       
-      // 🔥 Swap the optimistic message with the real API response
+      // 🔥 NEW FIX: Swap the optimistic message with the real API response
       // This guarantees the sender sees their message instantly, even if WebSockets lag.
       setMessages(prev => {
         const currentMessages = prev[activeConversation.id] || [];
