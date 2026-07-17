@@ -1,5 +1,5 @@
 // services/communication/adapters/internalAdapter.js
-import { sendMessage } from '../../utils/messageRouter'; // ⚠️ Point 8: Rename this file to messageService.js soon!
+import { sendMessage } from '../../utils/messageRouter.js'; // ⚠️ Point 8: Rename this file to messageService.js soon!
 
 class InternalAdapter {
   // ⭐ Biggest Suggestion: Renamed process() to send()
