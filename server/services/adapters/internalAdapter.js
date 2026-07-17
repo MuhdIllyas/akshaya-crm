@@ -1,4 +1,4 @@
-import { sendMessage } from '../../../utils/messageRouter.js'; 
+import { sendMessage } from '../../utils/messageRouter.js'; 
 
 class InternalAdapter {
   async send(payload) {
