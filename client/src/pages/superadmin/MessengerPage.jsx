@@ -59,6 +59,7 @@ import ActivityPanel from "@/components/ActivityPanel";
 import EmojiPicker from 'emoji-picker-react';
 import Chat from '@/components/Chat';
 import { socket } from "@/services/socket";
+import { useLocation } from "react-router-dom";
 
 // ============== NEW CHAT MODAL (Enhanced for WhatsApp) ==============
 const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
@@ -321,6 +322,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
 // ============== MAIN MESSENGER PAGE ==============
 const MessengerPage = ({ user }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const token = localStorage.getItem("token");
 
   let decodedPayload = null;
@@ -794,6 +796,25 @@ const MessengerPage = ({ user }) => {
       // Removed disconnectSocket() completely!
     };
   }, [token, currentUser.id, currentUser.centreId, activeConversation]);
+
+  // 🔥 Catch incoming navigation from Notifications
+  useEffect(() => {
+    if (location.state?.openConversationId && conversations.length > 0) {
+      const targetConvId = location.state.openConversationId;
+      
+      // Find the conversation in your loaded list
+      const chatToOpen = conversations.find(c => c.id === targetConvId);
+      
+      if (chatToOpen) {
+        // Trigger whatever state function you normally use to open a chat
+        setSelectedConversation(chatToOpen); 
+        // (Replace setSelectedConversation with your actual state setter name!)
+
+        // Clear the router state so it doesn't re-trigger on page refresh
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, conversations]);
 
   // ============== CHAT API INTEGRATION ==============
 

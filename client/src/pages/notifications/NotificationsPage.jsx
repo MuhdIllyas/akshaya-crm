@@ -68,6 +68,7 @@ const mapDBNotificationToUI = (dbNotif) => {
       
       related_entity_id: dbNotif.related_entity_id,
       related_entity_type: dbNotif.related_entity_type,
+      conversationId: dbNotif.conversation_id,
       
       type: typeStr,
       icon: typeStr.includes('message') ? FiMessageSquareIcon : 
@@ -88,6 +89,10 @@ const mapDBNotificationToUI = (dbNotif) => {
       actionUrl,
       actionLabel: 'View →',
       actions: ['mark_read', 'view'],
+
+      // 🔥 The state to pass when clicking the whole card
+      actionState: { openConversationId: dbNotif.conversation_id },
+
       metadata: dbNotif.metadata || {},
       preview: dbNotif.metadata || {}
     };
@@ -193,7 +198,7 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
 
   const handleClick = () => {
     if (viewMode === 'activity') onMarkRead(notification.id);
-    onClick(notification.actionUrl);
+    onClick(notification.actionUrl, notification.actionState);
   };
 
   const handlePin = (e) => {
@@ -557,7 +562,9 @@ const NotificationsPage = () => {
     // Handle Messenger
     if (action === 'reply' && (notification.type === 'whatsapp_message' || notification.type === 'mention')) {
       handleMarkRead(id);
-      navigate(`/dashboard/${role}/messenger`); 
+      navigate(`/dashboard/${role}/messenger`, { 
+        state: { openConversationId: notification.conversationId } // 🔥 ADD STATE HERE
+      });
       return;
     }
 
@@ -578,9 +585,10 @@ const NotificationsPage = () => {
     }
   };
 
-  const handleClick = (url) => {
+  // 2. Update the card click handler
+  const handleClick = (url, state) => { 
     if (url && url !== '#') {
-      navigate(url); 
+      navigate(url, { state }); 
     }
   };
 
