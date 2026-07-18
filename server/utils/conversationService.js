@@ -150,9 +150,11 @@ async function createConversationRecord(params, name, externalContactId) {
 async function assignParticipants(conversation, params) {
   const { is_group, participant_ids, context_type, context_id, customer_id, channel, phone_number, created_by, centre_id } = params;
 
-  if (channel === 'internal' && !is_group && participant_ids && participant_ids.length === 2) {
+  // 🔥 FIX: Handle ALL internal chats (both 1-on-1 and Groups)
+  if (channel === 'internal' && participant_ids && participant_ids.length > 0) {
     for (const staffId of participant_ids) {
-      await addStaffToConversation(conversation.id, staffId);
+      const role = (staffId === created_by) ? 'owner' : 'member';
+      await addStaffToConversation(conversation.id, staffId, role);
     }
   } 
   else if (context_type === "service_entry" && context_id) {
@@ -164,11 +166,15 @@ async function assignParticipants(conversation, params) {
   } 
   else if (context_type === "customer" && customer_id) {
     await addCustomerToConversation(conversation.id, customer_id);
-    if (conversation.assigned_staff_id) await addStaffToConversation(conversation.id, conversation.assigned_staff_id);
+    if (conversation.assigned_staff_id) {
+      await addStaffToConversation(conversation.id, conversation.assigned_staff_id, 'owner');
+    }
   } 
   else if (channel === "whatsapp" && phone_number) {
     if (customer_id) await addCustomerToConversation(conversation.id, customer_id);
-    if (conversation.assigned_staff_id) await addStaffToConversation(conversation.id, conversation.assigned_staff_id);
+    if (conversation.assigned_staff_id) {
+      await addStaffToConversation(conversation.id, conversation.assigned_staff_id, 'owner');
+    }
   }
 
   // Automatically add Centre Admin as a reviewer to external chats
