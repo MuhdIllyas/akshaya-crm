@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { resolveConversation } from '../../utils/conversationService.js';
 import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
 import notificationService from "../../utils/notificationService.js";
+import { notificationTemplates } from "../../utils/notificationTemplates.js";
 
 import Communication from '../../services/communication/communicationEngine.js';
 
@@ -699,24 +700,41 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
         // 6. Centralized Notification Engine
         if (m.mention_type === 'staff') {
           try {
-            await notificationService.createBulkNotifications({
+            // 1. Use your centralized template factory (fixes the category typo)
+            const template = notificationTemplates.mention({
+              senderName: senderName,
+              metadata: {
+                'Chat Room': conversation.name || 'Internal Chat'
+              }
+            });
+
+            // 2. Create the notification in the database
+            const createdNotifs = await notificationService.createBulkNotifications({
               recipientStaffIds: [m.entity_id], 
               senderStaffId: userId,            
               centreId: userCentreId,           
               relatedEntityType: 'message',
               relatedEntityId: savedMessage.id,
               conversationId: conversation_id,  
-              
-              type: 'mention',
-              category: 'communications',
-              title: '💬 New Mention',
-              message: `${senderName} mentioned you in a chat.`, 
-              
-              priority: 'high',
-              metadata: {
-                'Chat Room': conversation.name || 'Internal Chat'
-              }
+              ...template // Spreads type, category, title, message, priority
             });
+
+            // 3. 🔥 GUARANTEE REAL-TIME DELIVERY (Bypasses Circular Dependency Bugs)
+            if (req.io && createdNotifs && createdNotifs.length > 0) {
+              // Fetch the absolute latest unread count for the badge
+              const unreadCount = await notificationService.getUnreadCount(m.entity_id);
+              
+              // Fire the Spot Notification/Toast popup
+              req.io.to(`user:${m.entity_id}`).emit('notification', {
+                ...createdNotifs[0], // Has the DB ID and timestamp
+                ...template, 
+                sender_name: senderName
+              });
+              
+              // Fire the red Notification Bell badge update
+              req.io.to(`user:${m.entity_id}`).emit('notification_count', { unread: unreadCount });
+            }
+
           } catch (notifErr) {
             console.error("Non-fatal: Failed to trigger mention notification", notifErr);
           }
