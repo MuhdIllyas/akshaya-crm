@@ -356,7 +356,7 @@ const Chat = ({
     if (!displayName && !activeConversation.is_group && activeConversation.participants) {
       const otherParticipants = activeConversation.participants.filter(p => p.staff_id !== currentUser.id);
       if (otherParticipants.length > 0) {
-        displayName = otherParticipants.map(p => p.name).join(', ');
+        displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
       }
     }
     return displayName || 'Unknown Chat';

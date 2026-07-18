@@ -1842,7 +1842,7 @@ const MessengerPage = ({ user }) => {
         } else if (conv.participants) {
           const otherParticipants = conv.participants.filter(p => p.staff_id !== currentUser.id);
           if (otherParticipants.length > 0) {
-            displayName = otherParticipants.map(p => p.name).join(', ');
+            displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
           }
         }
       }
@@ -1908,7 +1908,7 @@ const MessengerPage = ({ user }) => {
               } else if (c.participants) {
                 const otherParticipants = c.participants.filter(p => p.staff_id !== currentUser.id);
                 if (otherParticipants.length > 0) {
-                  displayName = otherParticipants.map(p => p.name).join(', ');
+                  displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
                 }
               }
             }
@@ -2041,7 +2041,7 @@ const MessengerPage = ({ user }) => {
       } else if (activeConversation.participants) {
         const otherParticipants = activeConversation.participants.filter(p => p.staff_id !== currentUser.id);
         if (otherParticipants.length > 0) {
-          displayName = otherParticipants.map(p => p.name).join(', ');
+          displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
         }
       }
     }
@@ -2127,7 +2127,7 @@ const MessengerPage = ({ user }) => {
                     <p className="text-gray-700 font-medium">
                       {p.name} {isCurrentUserParticipant && '(You)'}
                     </p>
-                    <p className="text-xs text-gray-500">{p.role || 'Member'}</p>
+                    <p className="text-xs text-gray-500">{p.role || 'Member'} {p.centre_name && `• ${p.centre_name}`}</p>
                   </div>
                   {isOnline && (
                     <span className="text-xs text-green-600">● Online</span>

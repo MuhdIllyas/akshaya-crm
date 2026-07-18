@@ -187,13 +187,15 @@ router.get("/conversations", authenticateToken, async (req, res) => {
                 'staff_id', p.staff_id,
                 'name', s.name,
                 'role', s.role,
-                'photo', s.photo
+                'photo', s.photo,
+                'centre_name', c_staff.name
               )
             ),
             '[]'::json
           )
           FROM chat_participants p
           LEFT JOIN staff s ON p.staff_id = s.id
+          LEFT JOIN centres c_staff ON s.centre_id = c_staff.id
           WHERE p.conversation_id = c.id AND p.participant_type = 'staff'
         ) as participants
       FROM chat_conversations c
@@ -324,13 +326,15 @@ router.post("/conversation", authenticateToken, async (req, res) => {
                 'name', s.name,
                 'role', s.role,
                 'photo', s.photo,
-                'joined_at', p.joined_at
+                'joined_at', p.joined_at,
+                'centre_name', c_staff.name
               )
             ),
             '[]'::json
           )
           FROM chat_participants p
           JOIN staff s ON p.staff_id = s.id
+          LEFT JOIN centres c_staff ON s.centre_id = c_staff.id
           WHERE p.conversation_id = c.id
         ) as participants
       FROM chat_conversations c
