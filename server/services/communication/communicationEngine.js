@@ -1,6 +1,7 @@
 // services/communication/communicationEngine.js
 import { resolveConversation } from '../../utils/conversationService.js';
 import internalAdapter from '../adapters/internalAdapter.js';
+import whatsappAdapter from '../adapters/whatsappAdapter.js';
 
 class CommunicationEngine {
   constructor() {
@@ -8,6 +9,7 @@ class CommunicationEngine {
     
     // Register default built-in adapters
     this.register('internal', internalAdapter);
+    this.register('whatsapp', whatsappAdapter);
   }
 
   // ⭐ Point 9: Plugin architecture for adapters

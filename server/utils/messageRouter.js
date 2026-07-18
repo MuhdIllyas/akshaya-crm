@@ -1,21 +1,6 @@
 import pool from "../db.js";
-import axios from 'axios';
 import { addStaffToConversation } from './conversationService.js';
-import { isWithin24Hours } from './whatsappWindow.js'; 
 import { triggerNotification } from "./communication/notificationEngine.js";
-
-/**
- * Helper: Get last customer message time for a conversation
- */
-async function getLastCustomerMessageTime(conversationId) {
-  const result = await pool.query(
-    `SELECT created_at FROM chat_messages
-     WHERE conversation_id = $1 AND sender_type = 'customer'
-     ORDER BY created_at DESC LIMIT 1`,
-    [conversationId]
-  );
-  return result.rows[0]?.created_at || null;
-}
 
 /**
  * 🧮 Centralized Unread Count Calculator
@@ -229,122 +214,12 @@ export async function sendMessage({
       console.error("❌ [Socket] Error pushing global notification:", pushErr);
     }
 
-    /* =========================
-       9. WHATSAPP SEND (Outgoing Only)
-    ========================= */
-    if (conversation.channel === "whatsapp" && finalDirection === "outgoing") {
-      // Fire and forget, no await
-      handleWhatsAppSend({ conversation, message, fileUrl, fileName }).catch(err => console.error("WhatsApp send error:", err));
-    }
-
     return completeMessage;
 
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Send message error:", err);
     throw err;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * 🚀 MULTI-TENANT WHATSAPP SENDER (Native Media Support)
- */
-async function handleWhatsAppSend({ conversation, message, fileUrl, fileName }) {
-  const client = await pool.connect();
-  try {
-    const to = conversation.phone_number;
-    if (!to) return;
-
-    // 1. Check 24-Hour Customer Service Window
-    const lastCustomerTime = await getLastCustomerMessageTime(conversation.id);
-    const within24h = isWithin24Hours(lastCustomerTime);
-
-    if (!within24h) {
-      console.log(`Outside 24h window for ${to}, routing via Notification Engine.`);
-      const customerName = conversation.name ? conversation.name.replace(/Chat with |WhatsApp /ig, '').trim() : 'Customer';
-      
-      await triggerNotification({
-        eventKey: 'reengagement_message',
-        centreId: conversation.centre_id,
-        customerPhone: to,
-        templateParams: [customerName]
-      });
-      return; 
-    }
-
-    // 2. Fetch Account Credentials
-    let accountQuery;
-    if (conversation.communication_account_id) {
-      accountQuery = await client.query(`SELECT id, access_token, base_url, channel_id, name FROM communication_accounts WHERE id = $1 AND is_active = true`, [conversation.communication_account_id]);
-    } else if (conversation.centre_id) {
-      accountQuery = await client.query(`
-        SELECT ca.id, ca.access_token, ca.base_url, ca.channel_id, ca.name 
-        FROM communication_accounts ca 
-        JOIN centres c ON c.communication_account_id = ca.id 
-        WHERE c.id = $1 AND ca.is_active = true
-      `, [conversation.centre_id]);
-    }
-
-    if (!accountQuery || accountQuery.rows.length === 0) return;
-    
-    const account = accountQuery.rows[0];
-    const formattedPhone = to.startsWith('+91') ? to : `+91${to.replace(/^\+91/, '')}`;
-
-    // 3. Construct Native Media Payload
-    let payload = {
-      to: formattedPhone,
-      channel_id: account.channel_id,
-    };
-
-    if (fileUrl) {
-      // Create a publicly accessible URL for Libromi/Meta to download from your server
-      const baseUrl = process.env.VITE_API_URL || 'https://staging-api.akshayasahayi.com';
-      const safeBase = baseUrl.replace(/\/$/, '');
-      const safePath = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
-      const fullPublicUrl = `${safeBase}${safePath}`;
-
-      // Detect File Type
-      const ext = fileName ? fileName.split('.').pop().toLowerCase() : '';
-      
-      if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
-        payload.type = 'image';
-        payload.image = { link: fullPublicUrl };
-        if (message) payload.image.caption = message;
-      } 
-      else if (['mp4', '3gp'].includes(ext)) {
-        payload.type = 'video';
-        payload.video = { link: fullPublicUrl };
-        if (message) payload.video.caption = message;
-      } 
-      else if (['mp3', 'wav', 'ogg', 'aac'].includes(ext)) {
-        payload.type = 'audio';
-        payload.audio = { link: fullPublicUrl };
-      } 
-      else {
-        // 🔥 ALL PDFs AND DOCUMENTS MUST GO HERE
-        payload.type = 'document';
-        payload.document = { 
-          link: fullPublicUrl, 
-          filename: fileName || 'Document.pdf' 
-        };
-        if (message) payload.document.caption = message; 
-      }
-    } else {
-      payload.type = 'text';
-      payload.text = { body: message || "" };
-    }
-
-    // 4. Send to Libromi
-    await axios.post(`${account.base_url}/messages`, payload, {
-      headers: { Authorization: `Bearer ${account.access_token}`, 'Content-Type': 'application/json' }
-    });
-
-    console.log(`✅ WhatsApp ${payload.type} sent to ${formattedPhone} via Account: ${account.name}`);
-
-  } catch (err) {
-    console.error(`❌ Failed to send WhatsApp media:`, err.response?.data || err.message);
   } finally {
     client.release();
   }
