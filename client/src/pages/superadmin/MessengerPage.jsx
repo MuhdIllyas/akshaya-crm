@@ -1842,8 +1842,8 @@ const MessengerPage = ({ user }) => {
         } else if (conv.participants) {
           const otherParticipants = conv.participants.filter(p => p.staff_id !== currentUser.id);
           if (otherParticipants.length > 0) {
-            displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
-          }
+          displayName = otherParticipants.map(p => p.name).join(', ');
+        }
         }
       }
       if (!displayName) displayName = 'Unknown Chat';
@@ -1908,7 +1908,7 @@ const MessengerPage = ({ user }) => {
               } else if (c.participants) {
                 const otherParticipants = c.participants.filter(p => p.staff_id !== currentUser.id);
                 if (otherParticipants.length > 0) {
-                  displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
+                  displayName = otherParticipants.map(p => p.name).join(', ');
                 }
               }
             }
@@ -1974,17 +1974,25 @@ const MessengerPage = ({ user }) => {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-1 min-w-0 flex-1">
-                      <span className="font-semibold text-gray-800 truncate">{displayName}</span>
-                      {c.channel === 'whatsapp' && (
-                        <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap flex items-center gap-1">
-                          <FiSmartphone size={10} /> WhatsApp
-                        </span>
-                      )}
+                  <div className="flex justify-between items-start">
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold text-gray-800 truncate">{displayName}</span>
+                        {c.channel === 'whatsapp' && (
+                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap flex items-center gap-1">
+                            <FiSmartphone size={10} /> WhatsApp
+                          </span>
+                        )}
                       {c.context_type === 'service_entry' && (
                         <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 whitespace-nowrap">
                           Service
+                        </span>
+                      )}
+                    </div>
+                      {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
+                      {!isFunctionallyGroup && otherParticipants[0]?.centre_name && (
+                        <span className="text-[10px] text-gray-400 truncate mt-0.5 flex items-center gap-1">
+                          <FiMapPin size={10} /> {otherParticipants[0].centre_name}
                         </span>
                       )}
                     </div>
@@ -2041,7 +2049,7 @@ const MessengerPage = ({ user }) => {
       } else if (activeConversation.participants) {
         const otherParticipants = activeConversation.participants.filter(p => p.staff_id !== currentUser.id);
         if (otherParticipants.length > 0) {
-          displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
+          displayName = otherParticipants.map(p => p.name).join(', ');
         }
       }
     }
@@ -2069,6 +2077,14 @@ const MessengerPage = ({ user }) => {
             )}
           </div>
           <h3 className="text-xl font-bold text-gray-800">{displayName}</h3>
+
+          {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
+          {!isFunctionallyGroup && otherPanelParticipants[0]?.centre_name && (
+            <p className="text-gray-500 text-sm flex items-center mt-1 text-center">
+              <FiMapPin className="mr-1" size={14} /> {otherPanelParticipants[0].centre_name}
+            </p>
+          )}
+
           {activeConversation.channel === 'whatsapp' && (
             <p className="text-green-600 text-sm flex items-center mt-1">
               <FiSmartphone className="mr-1" size={14} /> WhatsApp

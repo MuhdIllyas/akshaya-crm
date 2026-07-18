@@ -356,7 +356,7 @@ const Chat = ({
     if (!displayName && !activeConversation.is_group && activeConversation.participants) {
       const otherParticipants = activeConversation.participants.filter(p => p.staff_id !== currentUser.id);
       if (otherParticipants.length > 0) {
-        displayName = otherParticipants.map(p => p.centre_name ? `${p.name} (${p.centre_name})` : p.name).join(', ');
+        displayName = otherParticipants.map(p => p.name).join(', ');
       }
     }
     return displayName || 'Unknown Chat';
@@ -883,6 +883,15 @@ const Chat = ({
                 <span className="text-xs text-gray-500">
                   {isParticipantOnline ? 'Online' : 'Offline'}
                 </span>
+                {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
+                {!isFunctionallyGroup && otherParticipants[0]?.centre_name && (
+                  <>
+                    <span className="text-gray-300 mx-2">•</span>
+                    <span className="text-xs text-gray-500 truncate flex items-center gap-1">
+                      <FiMapPin size={10}/> {otherParticipants[0].centre_name}
+                    </span>
+                  </>
+                )}
               </div>
             )}
             {serviceInfo && serviceInfo.applicationNumber && (
