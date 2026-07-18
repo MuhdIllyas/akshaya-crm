@@ -914,52 +914,31 @@ router.delete("/message/:messageId", authenticateToken, async (req, res) => {
 });
 
 /* ================================
-   GET STAFF FOR NEW CHAT
+   GET STAFF FOR NEW CHAT (Cross-Centre)
 ================================ */
 
 router.get("/staff", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
-    const centreId = req.user.centre_id;
 
-    let query;
-    let params;
+    // 🔥 Fetch all active staff across ALL centres, including their centre name
+    const query = `
+      SELECT 
+        s.id,
+        s.name,
+        s.role,
+        s.email,
+        s.phone,
+        s.centre_id,
+        c.name as centre_name,
+        COALESCE(s.status, 'active') as status
+      FROM staff s
+      LEFT JOIN centres c ON s.centre_id = c.id
+      WHERE s.id != $1 AND s.status = 'Active'
+      ORDER BY c.name ASC, s.name ASC
+    `;
 
-    if (userRole === "superadmin") {
-      query = `
-        SELECT 
-          id,
-          name,
-          role,
-          email,
-          phone,
-          centre_id,
-          COALESCE(status, 'active') as status
-        FROM staff
-        WHERE id != $1
-        ORDER BY name
-      `;
-      params = [userId];
-    } else {
-      query = `
-        SELECT 
-          id,
-          name,
-          role,
-          email,
-          phone,
-          centre_id,
-          COALESCE(status, 'active') as status
-        FROM staff
-        WHERE id != $1 
-          AND centre_id = $2
-        ORDER BY name
-      `;
-      params = [userId, centreId];
-    }
-
-    const result = await pool.query(query, params);
+    const result = await pool.query(query, [userId]);
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch staff error:", err);

@@ -61,32 +61,42 @@ import Chat from '@/components/Chat';
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 
-// ============== NEW CHAT MODAL (Enhanced for WhatsApp) ==============
-const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
+// ============== NEW CHAT MODAL (Grouped by Centre) ==============
+const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [groupName, setGroupName] = useState('');
   const [isGroup, setIsGroup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [chatType, setChatType] = useState('internal'); // 'internal' or 'whatsapp'
+  const [chatType, setChatType] = useState('internal'); 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
 
   if (!isOpen) return null;
 
+  // 1. Filter by search
   const filteredStaff = staffList.filter(staff =>
     staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // 2. Group the filtered staff by Centre Name
+  const groupedStaff = filteredStaff.reduce((acc, staff) => {
+    // Prefer backend name, fallback to map, fallback to ID
+    const cName = staff.centre_name || centresMap?.[staff.centre_id] || (staff.centre_id ? `Centre ${staff.centre_id}` : 'Other Staff');
+    if (!acc[cName]) acc[cName] = [];
+    acc[cName].push(staff);
+    return acc;
+  }, {});
+
+  const sortedCentres = Object.keys(groupedStaff).sort();
+
   const handleCreate = async () => {
     if (isCreating) return;
-
     setIsCreating(true);
     if (chatType === 'internal') {
       await onCreate(selectedUsers, isGroup ? groupName : null, 'internal');
     } else {
-      // WhatsApp: phone number required
       if (!phoneNumber.trim()) {
         toast.error('Phone number is required for WhatsApp chat');
         setIsCreating(false);
@@ -94,14 +104,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
       }
       await onCreate(null, null, 'whatsapp', phoneNumber, customerName);
     }
-    setSelectedUsers([]);
-    setGroupName('');
-    setIsGroup(false);
-    setSearchTerm('');
-    setChatType('internal');
-    setPhoneNumber('');
-    setCustomerName('');
-    setIsCreating(false);
+    handleClose();
   };
 
   const handleClose = () => {
@@ -112,6 +115,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
     setChatType('internal');
     setPhoneNumber('');
     setCustomerName('');
+    setIsCreating(false);
     onClose();
   };
 
@@ -128,131 +132,40 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 20, opacity: 0 }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="bg-white rounded-xl w-full max-w-md shadow-xl"
+        className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6">
+        <div className="p-6 pb-0">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-gray-800">
-              New Conversation
-            </h3>
-            <button
-              onClick={handleClose}
-              className="p-2 rounded-full hover:bg-gray-100 transition"
-              disabled={isCreating}
-            >
+            <h3 className="text-xl font-bold text-gray-800">New Conversation</h3>
+            <button onClick={handleClose} disabled={isCreating} className="p-2 rounded-full hover:bg-gray-100 transition">
               <IoMdClose className="text-gray-500" />
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 mb-4">
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setChatType('internal')}
-                disabled={isCreating}
-                className={`flex-1 py-2 rounded-lg transition ${chatType === 'internal' ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                Internal
-              </button>
-              <button
-                type="button"
-                onClick={() => setChatType('whatsapp')}
-                disabled={isCreating}
-                className={`flex-1 py-2 rounded-lg transition ${chatType === 'whatsapp' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                WhatsApp
-              </button>
+              <button type="button" onClick={() => setChatType('internal')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${chatType === 'internal' ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Internal</button>
+              <button type="button" onClick={() => setChatType('whatsapp')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${chatType === 'whatsapp' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>WhatsApp</button>
             </div>
 
             {chatType === 'internal' && (
               <>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsGroup(false)}
-                    disabled={isCreating}
-                    className={`flex-1 py-2 rounded-lg transition ${!isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                  >
-                    Direct
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsGroup(true)}
-                    disabled={isCreating}
-                    className={`flex-1 py-2 rounded-lg transition ${isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                  >
-                    Group
-                  </button>
+                  <button type="button" onClick={() => setIsGroup(false)} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${!isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Direct</button>
+                  <button type="button" onClick={() => setIsGroup(true)} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Group</button>
                 </div>
 
                 {isGroup && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
-                    <input
-                      type="text"
-                      value={groupName}
-                      onChange={(e) => setGroupName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent"
-                      placeholder="Enter group name"
-                      disabled={isCreating}
-                    />
+                    <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Enter group name" disabled={isCreating} />
                   </div>
                 )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Search Staff</label>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent"
-                    placeholder="Search by name or role..."
-                    disabled={isCreating}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Select Participants ({selectedUsers.length} selected)
-                  </label>
-                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
-                    {filteredStaff.length > 0 ? (
-                      filteredStaff.map(staff => (
-                        <label
-                          key={staff.id}
-                          className={`flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${isCreating ? 'opacity-50 pointer-events-none' : ''
-                            }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedUsers.includes(staff.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedUsers([...selectedUsers, staff.id]);
-                              } else {
-                                setSelectedUsers(selectedUsers.filter(id => id !== staff.id));
-                              }
-                            }}
-                            disabled={isCreating}
-                            className="w-4 h-4 text-navy-700 rounded border-gray-300 focus:ring-navy-700 mr-3"
-                          />
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-800">{staff.name}</p>
-                            <p className="text-xs text-gray-500">{staff.role || 'Staff'}</p>
-                          </div>
-                        </label>
-                      ))
-                    ) : (
-                      <div className="p-4 text-center text-gray-500">
-                        No staff members found
-                      </div>
-                    )}
-                  </div>
+                  <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Search by name or role..." disabled={isCreating} />
                 </div>
               </>
             )}
@@ -261,58 +174,108 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
-                    placeholder="+1234567890"
-                    disabled={isCreating}
-                  />
+                  <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent" placeholder="+1234567890" disabled={isCreating} />
                   <p className="text-xs text-gray-500 mt-1">Include country code (e.g., +1 for US)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name (Optional)</label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
-                    placeholder="John Doe"
-                    disabled={isCreating}
-                  />
+                  <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent" placeholder="John Doe" disabled={isCreating} />
                 </div>
               </>
             )}
           </div>
+        </div>
 
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={handleClose}
-              disabled={isCreating}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreate}
-              disabled={
-                (chatType === 'internal' && (selectedUsers.length === 0 || (isGroup && !groupName))) ||
-                (chatType === 'whatsapp' && !phoneNumber.trim()) ||
-                isCreating
-              }
-              className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2"
-            >
-              {isCreating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Creating...
-                </>
+        {/* Scrollable Staff List Area */}
+        {chatType === 'internal' && (
+          <div className="px-6 pb-2 flex-1 overflow-hidden flex flex-col">
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex-shrink-0">
+              Select Participants ({selectedUsers.length} selected)
+            </label>
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg custom-scrollbar bg-white min-h-[150px]">
+              {sortedCentres.length > 0 ? (
+                sortedCentres.map(centreName => {
+                  const members = groupedStaff[centreName];
+                  const centreStaffIds = members.map(m => m.id);
+                  const allSelected = centreStaffIds.every(id => selectedUsers.includes(id));
+
+                  return (
+                    <div key={centreName} className="mb-0 border-b border-gray-200 last:border-0">
+                      <div className="bg-gray-50 px-3 py-2 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200 shadow-sm">
+                        <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{centreName}</span>
+                        <div className="flex items-center gap-2">
+                          {/* 🔥 NEW: Select All button for easy Group creation! */}
+                          {isGroup && (
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (allSelected) {
+                                  setSelectedUsers(selectedUsers.filter(id => !centreStaffIds.includes(id)));
+                                } else {
+                                  const newSelection = new Set([...selectedUsers, ...centreStaffIds]);
+                                  setSelectedUsers(Array.from(newSelection));
+                                }
+                              }}
+                              className="text-[10px] bg-white border border-gray-300 px-2 py-0.5 rounded text-navy-700 hover:bg-gray-100 font-medium transition"
+                            >
+                              {allSelected ? 'Deselect All' : 'Select All'}
+                            </button>
+                          )}
+                          <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full font-medium">{members.length}</span>
+                        </div>
+                      </div>
+                      <div>
+                        {members.map(staff => (
+                          <label key={staff.id} className={`flex items-center p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition ${isCreating ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <input
+                              type={isGroup ? "checkbox" : "radio"}
+                              name="participantSelection"
+                              checked={selectedUsers.includes(staff.id)}
+                              onChange={(e) => {
+                                if (isGroup) {
+                                  if (e.target.checked) setSelectedUsers([...selectedUsers, staff.id]);
+                                  else setSelectedUsers(selectedUsers.filter(id => id !== staff.id));
+                                } else {
+                                  setSelectedUsers([staff.id]);
+                                }
+                              }}
+                              disabled={isCreating}
+                              className={`w-4 h-4 text-navy-700 border-gray-300 focus:ring-navy-700 mr-3 ${isGroup ? 'rounded' : ''}`}
+                            />
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-800 text-sm">{staff.name}</p>
+                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{staff.role || 'Staff'}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                'Create'
+                <div className="p-8 text-center text-gray-500 flex flex-col items-center">
+                  <FiUsers size={24} className="mb-2 text-gray-300" />
+                  <p>No staff members found</p>
+                </div>
               )}
-            </button>
+            </div>
           </div>
+        )}
+
+        <div className="p-6 pt-4 flex justify-end gap-3 border-t border-gray-100 flex-shrink-0 mt-auto">
+          <button onClick={handleClose} disabled={isCreating} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50">Cancel</button>
+          <button
+            onClick={handleCreate}
+            disabled={
+              (chatType === 'internal' && (selectedUsers.length === 0 || (isGroup && !groupName))) ||
+              (chatType === 'whatsapp' && !phoneNumber.trim()) ||
+              isCreating
+            }
+            className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            {isCreating ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : 'Create Chat'}
+          </button>
         </div>
       </motion.div>
     </motion.div>
@@ -2739,7 +2702,7 @@ const MessengerPage = ({ user }) => {
   return (
     <div className="flex h-screen bg-white overflow-hidden w-full">
       <AnimatePresence mode="wait">
-        {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} />)}
+        {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
       </AnimatePresence>
 
       {renderRegularTaskModal()}
