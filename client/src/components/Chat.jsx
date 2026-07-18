@@ -37,6 +37,14 @@ if (!API_BASE_URL) {
   throw new Error("VITE_API_URL is not defined");
 }
 
+const getAvatarUrl = (photoPath) => {
+  if (!photoPath) return null;
+  if (photoPath.startsWith('http')) return photoPath;
+  const safeBase = API_BASE_URL.replace(/\/$/, '');
+  const safePath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+  return `${safeBase}${safePath}`;
+};
+
 // Helper: check if last customer message is within 24 hours
 const isWithin24Hours = (lastMessageTime) => {
   if (!lastMessageTime) return false;
@@ -802,6 +810,17 @@ const Chat = ({
   const singleOtherParticipant = !activeConversation.is_group && !isWhatsApp && activeConversation.participants?.find(p => p.staff_id !== currentUser.id);
   const isParticipantOnline = singleOtherParticipant ? isUserOnline(singleOtherParticipant.staff_id) : false;
 
+  // 🔥 DYNAMIC PHOTO & GROUP DETECTOR
+  const otherParticipants = activeConversation.participants ? activeConversation.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
+  const isFunctionallyGroup = activeConversation.is_group || otherParticipants.length > 1;
+
+  let avatarPhoto = null;
+  if (!isFunctionallyGroup && otherParticipants.length === 1) {
+      if (otherParticipants[0]?.photo) {
+          avatarPhoto = getAvatarUrl(otherParticipants[0].photo);
+      }
+  }
+
   return (
     <div className="flex flex-col w-full bg-white h-full min-h-0">
       {/* Fixed Header */}
@@ -809,14 +828,23 @@ const Chat = ({
         <button className="md:hidden mr-3 text-gray-500 hover:text-gray-700" onClick={onBack}>
           <FiChevronLeft size={24} />
         </button>
-        <div className="relative">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${activeConversation.avatarColor || 'bg-navy-700'} mr-3 flex-shrink-0`}
-          >
-            {avatarChar}
+        <div className="relative mr-3 flex-shrink-0">
+          {avatarPhoto ? (
+            <img 
+              src={avatarPhoto} 
+              alt={displayName} 
+              className="w-10 h-10 rounded-full object-cover border border-gray-200"
+              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+            />
+          ) : null}
+          
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${activeConversation.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
+            {isFunctionallyGroup ? <FiUsers size={20} /> : avatarChar}
           </div>
-          {showOnlineStatus && singleOtherParticipant && (
-            <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+
+          {/* Online Dot */}
+          {showOnlineStatus && singleOtherParticipant && !isFunctionallyGroup && (
+            <span className={`absolute -bottom-0 -right-0 w-3 h-3 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
           )}
         </div>
         <div className="min-w-0 flex-1">
