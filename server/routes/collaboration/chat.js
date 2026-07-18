@@ -700,7 +700,7 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
         // 6. Centralized Notification Engine
         if (m.mention_type === 'staff') {
           try {
-            // 1. Use your centralized template factory (fixes the category typo)
+            // 1. Use your centralized template factory
             const template = notificationTemplates.mention({
               senderName: senderName,
               metadata: {
@@ -709,31 +709,16 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
             });
 
             // 2. Create the notification in the database
-            const createdNotifs = await notificationService.createBulkNotifications({
+            // (This service will automatically emit the 'notification' and 'notification_count' sockets!)
+            await notificationService.createBulkNotifications({
               recipientStaffIds: [m.entity_id], 
               senderStaffId: userId,            
               centreId: userCentreId,           
               relatedEntityType: 'message',
               relatedEntityId: savedMessage.id,
               conversationId: conversation_id,  
-              ...template // Spreads type, category, title, message, priority
+              ...template 
             });
-
-            // 3. 🔥 GUARANTEE REAL-TIME DELIVERY (Bypasses Circular Dependency Bugs)
-            if (req.io && createdNotifs && createdNotifs.length > 0) {
-              // Fetch the absolute latest unread count for the badge
-              const unreadCount = await notificationService.getUnreadCount(m.entity_id);
-              
-              // Fire the Spot Notification/Toast popup
-              req.io.to(`user:${m.entity_id}`).emit('notification', {
-                ...createdNotifs[0], // Has the DB ID and timestamp
-                ...template, 
-                sender_name: senderName
-              });
-              
-              // Fire the red Notification Bell badge update
-              req.io.to(`user:${m.entity_id}`).emit('notification_count', { unread: unreadCount });
-            }
 
           } catch (notifErr) {
             console.error("Non-fatal: Failed to trigger mention notification", notifErr);
