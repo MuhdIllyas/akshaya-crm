@@ -287,6 +287,36 @@ const notificationService = {
     }
   },
 
+  /**
+   * Mark all unread notifications as read for a specific user
+   */
+  async markAllAsRead(staffId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      const updateQuery = `
+        UPDATE notifications 
+        SET is_read = true 
+        WHERE recipient_staff_id = $1 AND is_read = false
+      `;
+      
+      const result = await client.query(updateQuery, [staffId]);
+      
+      // Instantly sync the new badge count (which will be 0) via Socket.IO
+      await syncUnreadCount(client, staffId);
+      
+      await client.query('COMMIT');
+      return result.rowCount; // Returns how many notifications were updated
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error("Error marking all notifications as read:", error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   async togglePin(notificationId, staffId) {
     const client = await pool.connect();
     try {
