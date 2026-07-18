@@ -186,7 +186,8 @@ router.get("/conversations", authenticateToken, async (req, res) => {
               json_build_object(
                 'staff_id', p.staff_id,
                 'name', s.name,
-                'role', s.role
+                'role', s.role,
+                'photo', s.photo
               )
             ),
             '[]'::json
@@ -322,6 +323,7 @@ router.post("/conversation", authenticateToken, async (req, res) => {
                 'staff_id', p.staff_id,
                 'name', s.name,
                 'role', s.role,
+                'photo', s.photo,
                 'joined_at', p.joined_at
               )
             ),
@@ -929,6 +931,7 @@ router.get("/staff", authenticateToken, async (req, res) => {
         s.role,
         s.email,
         s.phone,
+        s.photo,
         s.centre_id,
         c.name as centre_name,
         COALESCE(s.status, 'active') as status
