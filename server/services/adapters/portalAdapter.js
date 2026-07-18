@@ -1,4 +1,4 @@
-import { sendMessage } from '../../utils/messageRouter';
+import { sendMessage } from '../../utils/messageRouter.js';
 
 class PortalAdapter {
   async send(payload) {
