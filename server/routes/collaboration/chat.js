@@ -5,7 +5,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from 'url';
-import { resolveConversation, addParticipantsToConversation } from '../../utils/conversationService.js';
+import { resolveConversation } from '../../utils/conversationService.js';
 import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
 import notificationService from "../../utils/notificationService.js";
 
@@ -300,19 +300,6 @@ router.post("/conversation", authenticateToken, async (req, res) => {
       participant_ids: participantIds,
       communication_account_id: commAccountId 
     });
-
-    // Add participants if needed (resolveConversation might have added them, but ensure)
-    if (participantIds) {
-      for (const staffId of participantIds) {
-        await pool.query(
-          `INSERT INTO chat_participants
-          (conversation_id, staff_id, participant_type, role, joined_at)
-          VALUES ($1, $2, 'staff', $3, NOW())
-          ON CONFLICT (conversation_id, staff_id) DO NOTHING`,
-          [conversation.id, staffId, staffId === userId ? 'owner' : 'member']
-        );
-      }
-    }
 
     // Fetch the complete conversation with participants
     const fullConversation = await pool.query(
