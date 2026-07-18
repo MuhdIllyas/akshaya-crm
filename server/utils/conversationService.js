@@ -190,6 +190,7 @@ async function assignParticipants(conversation, params) {
    6. NAMING UTILITY
 ========================================================= */
 async function generateConversationName({ channel, context_type, context_id, customer_id, phone_number, is_group, participant_ids }) {
+  // 1. Service Chats
   if (context_type === "service_entry" && context_id) {
     const res = await pool.query(
       `SELECT se.id, s.name as service_name, se.customer_name FROM service_entries se
@@ -198,20 +199,23 @@ async function generateConversationName({ channel, context_type, context_id, cus
     if (res.rows.length) return `${res.rows[0].service_name || 'Service'} - ${res.rows[0].customer_name || 'Customer'}`;
   }
 
+  // 2. Portal Customer Chats
   if (customer_id) {
     const res = await pool.query(`SELECT name FROM customers WHERE id = $1`, [customer_id]);
     if (res.rows.length) return `Chat with ${res.rows[0].name}`;
   }
 
+  // 3. WhatsApp Chats
   if (channel === "whatsapp" && phone_number) return `WhatsApp: ${phone_number}`;
 
-  if (!is_group && participant_ids && participant_ids.length >= 2) {
-    const staffNames = await pool.query(`SELECT name FROM staff WHERE id = ANY($1::int[]) ORDER BY id`, [participant_ids]);
-    if (staffNames.rows.length === 2) return `${staffNames.rows[0].name} & ${staffNames.rows[1].name}`;
-    else if (staffNames.rows.length > 0) return staffNames.rows.map(s => s.name).join(', ');
+  // 4. 🔥 THE FIX: If it's a direct internal chat, return NULL! 
+  // Let the frontend dynamically render the other person's name.
+  if (channel === "internal" && !is_group) {
+    return null; 
   }
 
-  return is_group ? "Group Conversation" : "New Conversation";
+  // 5. Fallback for unnamed groups
+  return is_group ? "Group Conversation" : null;
 }
 
 /* =========================================================
