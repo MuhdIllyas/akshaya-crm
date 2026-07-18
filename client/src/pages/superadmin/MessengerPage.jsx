@@ -363,6 +363,14 @@ const MessengerPage = ({ user }) => {
       throw new Error("VITE_API_URL is not defined");
   }
 
+  const getAvatarUrl = (photoPath) => {
+    if (!photoPath) return null;
+    if (photoPath.startsWith('http')) return photoPath;
+    const safeBase = API_BASE_URL.replace(/\/$/, '');
+    const safePath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+    return `${safeBase}${safePath}`;
+  };
+
   const [taskForm, setTaskForm] = useState({
     title: "",
     description: "",
@@ -1908,6 +1916,17 @@ const MessengerPage = ({ user }) => {
 
             const isAnyOnline = c.channel !== 'whatsapp' && c.participants?.some(p => p.staff_id !== currentUser.id && onlineUsers.has(String(p.staff_id)));
 
+            // 🔥 DYNAMIC PHOTO & GROUP DETECTOR
+            const otherParticipants = c.participants ? c.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
+            const isFunctionallyGroup = c.is_group || otherParticipants.length > 1;
+
+            let avatarPhoto = null;
+            if (!isFunctionallyGroup && otherParticipants.length === 1) {
+                if (otherParticipants[0]?.photo) {
+                    avatarPhoto = getAvatarUrl(otherParticipants[0].photo);
+                }
+            }
+
             let lastMessageText = c.last_message || c.lastMessage || '';
             const lastMessageSenderName = c.last_message_sender;
             const lastMessageSenderId = c.last_message_sender_id;
@@ -1934,14 +1953,24 @@ const MessengerPage = ({ user }) => {
                     : "hover:bg-gray-50 border-l-4 border-transparent"
                   }`}
               >
-                <div className="relative">
-                  <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${c.avatarColor || 'bg-navy-700'} mr-3 flex-shrink-0`}
-                  >
-                    {displayName.charAt(0).toUpperCase()}
+                <div className="relative mr-3 flex-shrink-0">
+                  {avatarPhoto ? (
+                    <img 
+                      src={avatarPhoto} 
+                      alt={displayName} 
+                      className="w-12 h-12 rounded-xl object-cover border border-gray-200"
+                      onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                    />
+                  ) : null}
+                  
+                  {/* Fallback & Group Icon */}
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${c.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
+                    {isFunctionallyGroup ? <FiUsers size={20} /> : displayName.charAt(0).toUpperCase()}
                   </div>
-                  {!c.is_group && isAnyOnline && (
-                    <span className="absolute bottom-0 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
+                  
+                  {/* Online Dot */}
+                  {!isFunctionallyGroup && isAnyOnline && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -2018,6 +2047,16 @@ const MessengerPage = ({ user }) => {
     }
     if (!displayName) displayName = 'Unknown Chat';
 
+    const otherPanelParticipants = activeConversation.participants ? activeConversation.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
+    const isFunctionallyGroup = activeConversation.is_group || otherPanelParticipants.length > 1;
+
+    let avatarPhoto = null;
+    if (!isFunctionallyGroup && otherPanelParticipants.length === 1) {
+        if (otherPanelParticipants[0]?.photo) {
+            avatarPhoto = getAvatarUrl(otherPanelParticipants[0].photo);
+        }
+    }
+
     return (
       <div className="flex flex-col h-full bg-white border-l border-gray-200 overflow-hidden">
         <div className="flex-none p-6 flex flex-col items-center border-b border-gray-200">
@@ -2067,15 +2106,21 @@ const MessengerPage = ({ user }) => {
             {activeConversation.participants?.map((p, index) => {
               const isOnline = onlineUsers.has(String(p.staff_id));
               const isCurrentUserParticipant = p.staff_id === currentUser.id;
+              const pPhoto = getAvatarUrl(p.photo);
 
               return (
                 <div key={index} className="flex items-center">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs mr-3">
+                  <div className="relative mr-3 flex-shrink-0">
+                    {pPhoto ? (
+                       <img src={pPhoto} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-gray-200" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                    ) : null}
+                    
+                    <div className={`w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600 ${pPhoto ? 'hidden' : ''}`}>
                       {p.name?.[0] || '?'}
                     </div>
+                    
                     {isOnline && (
-                      <span className="absolute bottom-0 right-3 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>
                     )}
                   </div>
                   <div className="flex-1">
