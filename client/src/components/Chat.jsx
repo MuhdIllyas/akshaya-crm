@@ -20,7 +20,7 @@ import {
   FiClock,
   FiList,
   FiMessageSquare,
-  FiUser, FiBriefcase,
+  FiUser, FiBriefcase, FiUsers,
   FiSmartphone, FiMapPin, FiChevronRight
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
