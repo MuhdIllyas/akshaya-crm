@@ -1222,6 +1222,35 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== ASSIGN CONVERSATION ==============
+  const handleAssignChat = async (staffId) => {
+    if (!activeConversation) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${activeConversation.id}/assign`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ staff_id: staffId || null })
+      });
+
+      if (!res.ok) throw new Error('Failed to assign conversation');
+      
+      // Update local state instantly so the dropdown reflects the change
+      const newStaffId = staffId ? parseInt(staffId) : null;
+      setActiveConversation(prev => ({ ...prev, assigned_staff_id: newStaffId }));
+      setConversations(prev => prev.map(c => c.id === activeConversation.id ? { ...c, assigned_staff_id: newStaffId } : c));
+      
+      toast.success(staffId ? 'Chat assigned successfully' : 'Chat unassigned');
+      fetchConversations(); // Refresh to pull down new participants array
+      
+    } catch (err) {
+      console.error('Error assigning conversation:', err);
+      toast.error('Failed to assign chat');
+    }
+  };
+
   // ============== HELPER FUNCTIONS ==============
 
   const getAvatarColor = (id) => {
@@ -2128,6 +2157,25 @@ const MessengerPage = ({ user }) => {
               <FiAlertCircle size={12} />
               Reconnecting...
             </p>
+          )}
+
+          {/* 🔥 ASSIGNMENT DROPDOWN (For WhatsApp & External Chats) */}
+          {(activeConversation.channel === 'whatsapp' || activeConversation.context_type === 'customer') && (
+            <div className="mt-4 w-full px-2">
+              <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">Assign To</p>
+              <select
+                value={activeConversation.assigned_staff_id || ""}
+                onChange={(e) => handleAssignChat(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-navy-700"
+              >
+                <option value="">Unassigned</option>
+                {staffList.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.role ? `(${s.role})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
 

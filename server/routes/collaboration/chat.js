@@ -161,6 +161,7 @@ router.get("/conversations", authenticateToken, async (req, res) => {
         c.phone_number AS context_identifier,
         c.name AS context_name,
         c.status,
+        c.assigned_staff_id,
         c.last_message_at,
         (
           SELECT m.message
@@ -318,6 +319,7 @@ router.post("/conversation", authenticateToken, async (req, res) => {
         c.phone_number AS context_identifier,
         c.name AS context_name,
         c.status,
+        c.assigned_staff_id,
         c.last_message_at,
         (
           SELECT COALESCE(
@@ -1163,6 +1165,82 @@ router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("Tracking lookup error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/* ================================
+   ASSIGN CONVERSATION
+================================ */
+router.patch("/conversation/:conversationId/assign", authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { conversationId } = req.params;
+    const { staff_id } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Verify permission
+    const hasAccess = await checkConversationAccess(conversationId, userId);
+    if (!hasAccess && userRole !== 'superadmin' && userRole !== 'admin') {
+      return res.status(403).json({ error: "Not authorized to assign this conversation" });
+    }
+
+    await client.query('BEGIN');
+
+    // 1. Update the conversation record
+    const updateRes = await client.query(
+      `UPDATE chat_conversations SET assigned_staff_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [staff_id || null, conversationId]
+    );
+
+    if (updateRes.rows.length === 0) throw new Error("Conversation not found");
+
+    // 2. Add the newly assigned staff to participants so they can actually see the chat!
+    if (staff_id) {
+        await client.query(
+          `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+           VALUES ($1, $2, 'staff', 'owner', NOW())
+           ON CONFLICT (conversation_id, staff_id) DO UPDATE SET role = 'owner'`,
+          [conversationId, staff_id]
+        );
+        
+        // 3. Send the full conversation object to the new staff member via Socket
+        const fullConversation = await client.query(
+          `SELECT c.id, c.name, c.is_group, c.channel, c.context_type, c.context_id, c.phone_number AS context_identifier, c.name AS context_name, c.status, c.assigned_staff_id,
+             (
+               SELECT COALESCE(
+                 json_agg(
+                   json_build_object('staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'centre_name', c_staff.name)
+                 ), '[]'::json
+               )
+               FROM chat_participants p
+               JOIN staff s ON p.staff_id = s.id
+               LEFT JOIN centres c_staff ON s.centre_id = c_staff.id
+               WHERE p.conversation_id = c.id
+             ) as participants
+           FROM chat_conversations c WHERE c.id = $1`, [conversationId]
+        );
+
+        if (req.io) {
+           // Instantly pop up the chat on the new staff member's screen
+           req.io.to(`user:${staff_id}`).emit("added_to_conversation", fullConversation.rows[0]);
+           
+           // Notify everyone else that the conversation details updated
+           req.io.to(`conversation:${conversationId}`).emit("conversation_updated", {
+              conversationId: parseInt(conversationId),
+              assigned_staff_id: staff_id
+           });
+        }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, assigned_staff_id: staff_id });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Assign error:", err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
