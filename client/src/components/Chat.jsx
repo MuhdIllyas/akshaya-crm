@@ -548,22 +548,43 @@ const Chat = ({
       inputEl.focus();
     };
 
-  // 🔥 Convert Message to Note (Privacy & Mention Aware)
+  // 🔥 UPDATED: Convert Message to Note (React-Mentions Compatible)
   const handleConvertToNote = async (msg) => {
     try {
-      // 1. Extract staff IDs from the message's mentions array
-      const staffMentions = (msg.mentions || [])
-        .filter(m => m.mention_type === 'staff')
-        .map(m => m.entity_id);
+      const staffMentions = [];
+      let finalContent = msg.text;
 
-      // 2. Determine exact visibility based on mentions
-      const calculatedVisibility = staffMentions.length > 0 ? "mention" : "private";
+      // 1. Format the text for Notes.jsx (react-mentions syntax: @[Name](id))
+      if (msg.mentions && msg.mentions.length > 0) {
+        
+        // Sort mentions backwards by index so we can replace text without messing up string positions
+        const sortedMentions = [...msg.mentions].sort((a, b) => b.start_index - a.start_index);
+
+        sortedMentions.forEach(m => {
+          if (m.mention_type === 'staff') {
+            staffMentions.push(m.entity_id);
+            
+            // Remove the '@' from the display text (e.g. "@Shijin" -> "Shijin")
+            const cleanName = m.display_text.replace('@', '').trim();
+            
+            // Format it exactly how Notes.jsx expects it: @[Shijin](123)
+            const formattedMention = `@[${cleanName}](${m.entity_id})`;
+            
+            // Safely swap the raw text with the formatted string
+            finalContent = finalContent.substring(0, m.start_index) + formattedMention + finalContent.substring(m.end_index);
+          }
+        });
+      }
+
+      // 2. Deduplicate IDs and calculate privacy
+      const uniqueMentions = [...new Set(staffMentions)];
+      const calculatedVisibility = uniqueMentions.length > 0 ? "mention" : "private";
 
       const payload = {
         title: `Note from chat: ${msg.sender || 'Unknown'}`,
-        content: msg.text,
-        visibility: calculatedVisibility, // 🔥 Dynamic privacy
-        mentions: staffMentions,          // 🔥 Pass mentions to backend
+        content: finalContent, // 🔥 Now formatted perfectly for Notes.jsx!
+        visibility: calculatedVisibility,
+        mentions: uniqueMentions,
         related_conversation_id: activeConversation.id,
         origin_message_id: msg.id,
         related_service_entry_id: activeConversation.context_type === 'service_entry' ? activeConversation.context_id : null
@@ -573,7 +594,7 @@ const Chat = ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       
-      toast.success(staffMentions.length > 0 
+      toast.success(uniqueMentions.length > 0 
         ? "Note saved and staff notified ⭐" 
         : "Private note saved ⭐"
       );
