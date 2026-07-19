@@ -548,12 +548,22 @@ const Chat = ({
       inputEl.focus();
     };
 
-  // 🔥 Convert Message to Note
+  // 🔥 Convert Message to Note (Privacy & Mention Aware)
   const handleConvertToNote = async (msg) => {
     try {
+      // 1. Extract staff IDs from the message's mentions array
+      const staffMentions = (msg.mentions || [])
+        .filter(m => m.mention_type === 'staff')
+        .map(m => m.entity_id);
+
+      // 2. Determine exact visibility based on mentions
+      const calculatedVisibility = staffMentions.length > 0 ? "mention" : "private";
+
       const payload = {
         title: `Note from chat: ${msg.sender || 'Unknown'}`,
         content: msg.text,
+        visibility: calculatedVisibility, // 🔥 Dynamic privacy
+        mentions: staffMentions,          // 🔥 Pass mentions to backend
         related_conversation_id: activeConversation.id,
         origin_message_id: msg.id,
         related_service_entry_id: activeConversation.context_type === 'service_entry' ? activeConversation.context_id : null
@@ -563,7 +573,11 @@ const Chat = ({
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       
-      toast.success("Message converted to Note ⭐");
+      toast.success(staffMentions.length > 0 
+        ? "Note saved and staff notified ⭐" 
+        : "Private note saved ⭐"
+      );
+      
     } catch (error) {
       console.error("Convert to note error:", error);
       toast.error("Failed to convert message to note");
