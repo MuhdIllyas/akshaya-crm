@@ -182,7 +182,7 @@ router.post("/public/:token", async (req, res) => {
           centreId: reviewData.centre_id,
           type: 'review',
           category: 'work',
-          title: '⭐ New 5-Star Review!', // We will dynamically set the stars below
+          title: '⭐ New Review!', 
           message: `You received a ${service_rating}-star review from ${reviewData.customer_name || 'a customer'}.`,
           priority: 'normal',
           relatedEntityType: 'review',
