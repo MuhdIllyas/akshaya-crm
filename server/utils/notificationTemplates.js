@@ -8,6 +8,7 @@ export const NOTIFICATION_CATEGORIES = {
 export const NOTIFICATION_TYPES = {
   MENTION: 'mention',
   WHATSAPP_MESSAGE: 'whatsapp_message',
+  CONVERSATION_ASSIGNED: 'conversation_assigned',
   TASK_ASSIGNED: 'task_assigned',
   TASK_COMPLETED: 'task_completed',
   SERVICE_ASSIGNED: 'service_assigned',
@@ -51,6 +52,18 @@ export const notificationTemplates = {
       'Task': data.taskTitle,
       'Assigned by': data.assignedByName,
       'Due Date': data.dueDate
+    }
+  }),
+
+  chatAssigned: (data) => ({
+    type: NOTIFICATION_TYPES.CONVERSATION_ASSIGNED,
+    category: NOTIFICATION_CATEGORIES.COMMUNICATION,
+    title: '👤 Chat Assigned',
+    message: `${data.senderName} assigned you a conversation with ${data.chatName}.`,
+    priority: 'high',
+    metadata: {
+      'Customer': data.chatName,
+      'Assigned By': data.senderName
     }
   }),
 

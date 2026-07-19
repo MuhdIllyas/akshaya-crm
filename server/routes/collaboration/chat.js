@@ -656,7 +656,20 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
 
     // 🔥 Fetch the sender's real name from the database for notifications
     const senderRes = await client.query(`SELECT name FROM staff WHERE id = $1`, [userId]);
-    const senderName = senderRes.rows[0]?.name || 'A team member';
+    const senderName = senderRes.rows[0]?.name || 'Admin';
+
+    await notificationService.createNotification({
+      recipientStaffId: staff_id,
+      senderStaffId: userId,
+      centreId: fullConversation.centre_id || req.user.centre_id,
+      relatedEntityType: 'conversation',
+      relatedEntityId: conversationId,
+      conversationId,
+      ...notificationTemplates.chatAssigned({
+        senderName,
+        chatName
+      })
+    });
 
     // 5. Insert Mentions safely
     if (mentions) {
