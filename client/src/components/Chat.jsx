@@ -19,7 +19,7 @@ import {
   FiX,
   FiClock,
   FiList,
-  FiMessageSquare,
+  FiMessageSquare, FiCheckSquare,
   FiUser, FiBriefcase, FiUsers,
   FiSmartphone, FiMapPin, FiChevronRight
 } from "react-icons/fi";
