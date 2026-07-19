@@ -51,14 +51,27 @@ export const NotificationProvider = ({ children }) => {
       // Optimistically increase the bell count instantly
       setUnreadCount((prev) => prev + 1);
 
-      // Show a global toast for high-priority or communication alerts
-      if (notification.priority === 'high' || notification.type?.includes('message')) {
+      // 🔥 EXPLICIT WHITELIST: Always show toasts for these specific types, plus anything 'high' priority
+      const allowedToastTypes = ['whatsapp_message', 'mention', 'review', 'conversation_assigned'];
+
+      if (
+        notification.priority === 'high' || 
+        notification.type?.includes('message') ||
+        allowedToastTypes.includes(notification.type)
+      ) {
         toast.info(
           <div>
             <strong>{notification.title}</strong>
             <p className="text-sm">{notification.message}</p>
           </div>,
-          { position: "top-right", autoClose: 5000 }
+          { 
+            position: "top-right", 
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true
+          }
         );
       }
     };
