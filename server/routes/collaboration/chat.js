@@ -1187,7 +1187,7 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
 
     await client.query('BEGIN');
 
-    // 1. Update the conversation record
+    // 1. Update the conversation record (Handles BOTH Assign and Unassign)
     const updateRes = await client.query(
       `UPDATE chat_conversations SET assigned_staff_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
       [staff_id || null, conversationId]
@@ -1195,8 +1195,9 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
 
     if (updateRes.rows.length === 0) throw new Error("Conversation not found");
 
-    // 2. Add the newly assigned staff to participants so they can actually see the chat!
+    // 2. If we are ASSIGNING a staff member (Not unassigning)
     if (staff_id) {
+        // Add them as a participant so they have access to the chat history
         await client.query(
           `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
            VALUES ($1, $2, 'staff', 'owner', NOW())
@@ -1204,9 +1205,9 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
           [conversationId, staff_id]
         );
         
-        // 3. Send the full conversation object to the new staff member via Socket
-        const fullConversation = await client.query(
-          `SELECT c.id, c.name, c.is_group, c.channel, c.context_type, c.context_id, c.phone_number AS context_identifier, c.name AS context_name, c.status, c.assigned_staff_id,
+        // Fetch the full conversation details for the notification
+        const convRes = await client.query(
+          `SELECT c.id, c.name, c.is_group, c.channel, c.context_type, c.context_id, c.phone_number AS context_identifier, c.name AS context_name, c.status, c.assigned_staff_id, c.centre_id,
              (
                SELECT COALESCE(
                  json_agg(
@@ -1221,20 +1222,61 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
            FROM chat_conversations c WHERE c.id = $1`, [conversationId]
         );
 
+        const fullConversation = convRes.rows[0];
+
         if (req.io) {
-           // Instantly pop up the chat on the new staff member's screen
-           req.io.to(`user:${staff_id}`).emit("added_to_conversation", fullConversation.rows[0]);
-           
-           // Notify everyone else that the conversation details updated
-           req.io.to(`conversation:${conversationId}`).emit("conversation_updated", {
-              conversationId: parseInt(conversationId),
-              assigned_staff_id: staff_id
-           });
+           // Instantly pop up the chat on the new staff member's left sidebar
+           req.io.to(`user:${staff_id}`).emit("added_to_conversation", fullConversation);
+        }
+
+        // 🔥 Trigger Real-Time Spot Notification for the Assigned Staff
+        try {
+          // Figure out a friendly name for the notification
+          const chatName = fullConversation.context_name || fullConversation.context_identifier || fullConversation.name || 'a customer';
+          
+          const createdNotifs = await notificationService.createBulkNotifications({
+            recipientStaffIds: [staff_id], 
+            senderStaffId: userId,            
+            centreId: fullConversation.centre_id || req.user.centre_id,           
+            relatedEntityType: 'conversation',
+            relatedEntityId: conversationId,
+            conversationId: conversationId,  
+            type: 'system',
+            category: 'communication',
+            title: '👤 Chat Assigned to You',
+            message: `You have been assigned to handle the chat with ${chatName}.`,
+            priority: 'high'
+          });
+
+          // Force the socket push to guarantee the red bell icon updates instantly
+          if (req.io && createdNotifs && createdNotifs.length > 0) {
+            const unreadCount = await notificationService.getUnreadCount(staff_id);
+            
+            req.io.to(`user:${staff_id}`).emit('notification', {
+              ...createdNotifs[0],
+              title: '👤 Chat Assigned to You',
+              message: `You have been assigned to handle the chat with ${chatName}.`,
+              type: 'system'
+            });
+            
+            req.io.to(`user:${staff_id}`).emit('notification_count', { unread: unreadCount });
+          }
+        } catch (notifErr) {
+          console.error("Non-fatal: Failed to trigger assignment notification", notifErr);
         }
     }
 
+    // 3. 🔥 Broadcast the update to the whole room (Outside the IF block!)
+    // This ensures that when you select "Unassigned", everyone's screen updates instantly.
+    if (req.io) {
+       req.io.to(`conversation:${conversationId}`).emit("conversation_updated", {
+          conversationId: parseInt(conversationId),
+          assigned_staff_id: staff_id || null
+       });
+    }
+
     await client.query('COMMIT');
-    res.json({ success: true, assigned_staff_id: staff_id });
+    res.json({ success: true, assigned_staff_id: staff_id || null });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error("Assign error:", err);
