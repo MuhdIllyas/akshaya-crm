@@ -658,19 +658,6 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
     const senderRes = await client.query(`SELECT name FROM staff WHERE id = $1`, [userId]);
     const senderName = senderRes.rows[0]?.name || 'Admin';
 
-    await notificationService.createNotification({
-      recipientStaffId: staff_id,
-      senderStaffId: userId,
-      centreId: fullConversation.centre_id || req.user.centre_id,
-      relatedEntityType: 'conversation',
-      relatedEntityId: conversationId,
-      conversationId,
-      ...notificationTemplates.chatAssigned({
-        senderName,
-        chatName
-      })
-    });
-
     // 5. Insert Mentions safely
     if (mentions) {
       const parsedMentions = typeof mentions === 'string' ? JSON.parse(mentions) : mentions;
@@ -1267,11 +1254,12 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
             relatedEntityType: 'conversation',
             relatedEntityId: conversationId,
             conversationId: conversationId,  
-            ...notificationTemplates.system({ // 🔥 Uses your template factory for perfect category naming
-              title: '👤 Chat Assigned to You',
-              message: `You have been assigned to handle the chat with ${chatName}.`,
-              priority: 'high'
-            })
+            // 🔥 Hardcoded exactly to your system's required format
+            type: 'system',
+            category: 'communication',
+            title: '👤 Chat Assigned to You',
+            message: `You have been assigned to handle the chat with ${chatName}.`,
+            priority: 'high'
           });
         } catch (notifErr) {
           console.error("Non-fatal: Failed to trigger assignment notification", notifErr);
