@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { triggerNotification } from "../utils/communication/notificationEngine.js";
 import pool from "../db.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import notificationService from "../utils/notificationService.js";
 
 const router = express.Router();
 
@@ -172,6 +173,26 @@ router.post("/public/:token", async (req, res) => {
       [service_rating, staff_rating || null, review_text, token]
     );
 
+    // 🔥 Trigger Real-Time Notification for the Staff Member
+    const reviewData = review.rows[0];
+    if (reviewData.staff_id) {
+      try {
+        await notificationService.createNotification({
+          recipientStaffId: reviewData.staff_id,
+          centreId: reviewData.centre_id,
+          type: 'review',
+          category: 'work',
+          title: '⭐ New 5-Star Review!', // We will dynamically set the stars below
+          message: `You received a ${service_rating}-star review from ${reviewData.customer_name || 'a customer'}.`,
+          priority: 'normal',
+          relatedEntityType: 'review',
+          relatedEntityId: reviewData.id
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send review notification", notifErr);
+      }
+    }
+
     res.json({ success: true, message: "Review submitted successfully" });
 
   } catch (error) {
@@ -255,13 +276,15 @@ router.post("/booking/:bookingId", customerAuthMiddleware, async (req, res) => {
     }
 
     // Insert review with centre_id from staff table
-    await pool.query(
+    // 🔥 Added RETURNING id so we can link it to the notification!
+    const insertRes = await pool.query(
       `INSERT INTO service_reviews
        (centre_id, customer_id, booking_id,
         service_id, staff_id,
         service_rating, staff_rating,
         review_text, is_submitted, submitted_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,NOW())`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,NOW())
+       RETURNING id`,
       [
         centreId,
         customerId,
@@ -273,6 +296,31 @@ router.post("/booking/:bookingId", customerAuthMiddleware, async (req, res) => {
         review_text
       ]
     );
+
+    const newReviewId = insertRes.rows[0].id;
+
+    // 🔥 NEW: Trigger Real-Time Notification for the Staff Member
+    if (bookingData.staff_id) {
+      try {
+        // Fetch customer name for the alert
+        const custRes = await pool.query(`SELECT name FROM customers WHERE id = $1`, [customerId]);
+        const custName = custRes.rows[0]?.name || 'A customer';
+
+        await notificationService.createNotification({
+          recipientStaffId: bookingData.staff_id,
+          centreId: centreId,
+          type: 'review',
+          category: 'work',
+          title: '⭐ New Customer Review',
+          message: `You received a ${service_rating}-star review from ${custName}.`,
+          priority: 'normal',
+          relatedEntityType: 'review',
+          relatedEntityId: newReviewId
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send review notification", notifErr);
+      }
+    }
 
     res.json({ success: true, message: "Review submitted successfully" });
 
