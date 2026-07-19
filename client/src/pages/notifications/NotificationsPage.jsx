@@ -44,7 +44,9 @@ const mapDBNotificationToUI = (dbNotif) => {
   let actionUrl = '#';
   if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/${role}/tasks`; 
   if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/${role}/track_service/${dbNotif.related_entity_id}`;
-  if (dbNotif.type === 'whatsapp_message' || dbNotif.type === 'mention') actionUrl = `/dashboard/${role}/messenger`;
+  if (dbNotif.type === 'whatsapp_message' || dbNotif.type === 'mention' || dbNotif.related_entity_type === 'conversation') {
+    actionUrl = `/dashboard/${role}/messenger`;
+  }
 
   // 🔥 Route for Notes
   if (dbNotif.related_entity_type === 'note') {
@@ -580,10 +582,13 @@ const NotificationsPage = () => {
     }
 
     // Handle Messenger
-    if (action === 'reply' && (notification.type === 'whatsapp_message' || notification.type === 'mention')) {
+    if (
+      (action === 'reply' || action === 'view') && 
+      (notification.type === 'whatsapp_message' || notification.type === 'mention' || notification.related_entity_type === 'conversation')
+    ) {
       handleMarkRead(id);
       navigate(`/dashboard/${role}/messenger`, { 
-        state: { openConversationId: notification.conversationId } // 🔥 ADD STATE HERE
+        state: { openConversationId: notification.conversationId || notification.related_entity_id } 
       });
       return;
     }
