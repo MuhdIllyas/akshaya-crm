@@ -2,8 +2,9 @@ import pool from '../db.js';
 import socketNotifications from '../utils/socketNotifications.js';
 import { NOTIFICATION_TYPES } from '../utils/notificationTemplates.js';
 
-const syncUnreadCount = async (client, staffId) => {
-  const countRes = await client.query(
+// 🔥 UPDATED: Uses 'pool' instead of 'client' so it reads committed data outside the transaction
+const syncUnreadCount = async (staffId) => {
+  const countRes = await pool.query(
     `SELECT COUNT(*) FROM notifications WHERE recipient_staff_id = $1 AND is_read = false`,
     [staffId]
   );
@@ -136,16 +137,18 @@ const notificationService = {
       
       const enrichedNotification = enrichedRes.rows[0];
 
-      // 4. SYNC BADGE COUNTS & COMMIT
-      await syncUnreadCount(client, recipientStaffId);
+      // 4. 🔥 COMMIT THE TRANSACTION FIRST
       await client.query('COMMIT');
 
-      // 5. EMIT SOCKETS WITH FULL ENRICHED DATA
+      // 5. EMIT SOCKETS SECURELY AFTER COMMIT
       if (isUpdate) {
         socketNotifications.emitNotificationUpdated(recipientStaffId, enrichedNotification);
       } else {
         socketNotifications.emitNotification(recipientStaffId, enrichedNotification);
       }
+      
+      // Update the badge count securely
+      await syncUnreadCount(recipientStaffId);
 
       return enrichedNotification;
 
@@ -230,9 +233,9 @@ const notificationService = {
       
       const { rows } = await client.query(insertQuery, values);
       
-      // Emit sockets individually for real-time updates
+      // 1. Gather all enriched data inside the transaction
+      const enrichedNotifications = [];
       for (const row of rows) {
-        // Run the join query to enrich it before sending
         const enrichedRes = await client.query(`
           SELECT n.*, 
                  s.name AS sender_name, 
@@ -243,15 +246,18 @@ const notificationService = {
           LEFT JOIN centres c ON n.centre_id = c.id
           WHERE n.id = $1
         `, [row.id]);
-        
-        const enrichedNotification = enrichedRes.rows[0];
-        socketNotifications.emitNotification(row.recipient_staff_id, enrichedNotification);
-        
-        // Sync unread counts
-        await syncUnreadCount(client, row.recipient_staff_id);
+        enrichedNotifications.push(enrichedRes.rows[0]);
       }
       
+      // 2. 🔥 COMMIT THE TRANSACTION FIRST
       await client.query('COMMIT');
+
+      // 3. EMIT SOCKETS SECURELY AFTER COMMIT
+      for (const notif of enrichedNotifications) {
+        socketNotifications.emitNotification(notif.recipient_staff_id, notif);
+        await syncUnreadCount(notif.recipient_staff_id);
+      }
+      
       return rows;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -276,8 +282,12 @@ const notificationService = {
         return null; // Signals a 404 to the controller
       }
 
-      await syncUnreadCount(client, staffId);
+      // 🔥 COMMIT THE TRANSACTION FIRST
       await client.query('COMMIT');
+      
+      // Then sync the new badge count
+      await syncUnreadCount(staffId);
+      
       return res.rows[0];
     } catch (e) {
       await client.query('ROLLBACK');
@@ -303,10 +313,12 @@ const notificationService = {
       
       const result = await client.query(updateQuery, [staffId]);
       
-      // Instantly sync the new badge count (which will be 0) via Socket.IO
-      await syncUnreadCount(client, staffId);
-      
+      // 🔥 COMMIT THE TRANSACTION FIRST
       await client.query('COMMIT');
+      
+      // Instantly sync the new badge count (which will be 0) via Socket.IO
+      await syncUnreadCount(staffId);
+      
       return result.rowCount; // Returns how many notifications were updated
     } catch (error) {
       await client.query('ROLLBACK');
@@ -318,10 +330,9 @@ const notificationService = {
   },
 
   async togglePin(notificationId, staffId) {
-    const client = await pool.connect();
     try {
-      // Toggle the boolean. We use coalesce just in case it's currently null.
-      const res = await client.query(
+      // Toggle the boolean. Since this is a single query, we can just use pool.query
+      const res = await pool.query(
         `UPDATE notifications 
          SET is_pinned = NOT coalesce(is_pinned, false) 
          WHERE id = $1 AND recipient_staff_id = $2 
@@ -337,12 +348,13 @@ const notificationService = {
       socketNotifications.emitNotificationUpdated(staffId, updatedNotification);
       
       return updatedNotification;
-    } finally {
-      client.release();
+    } catch (err) {
+      console.error("Error toggling pin:", err);
+      throw err;
     }
   },
   
-  // (markAllAsRead and deleteNotification remain the same, safely wrapped in transactions)
+  // (deleteNotification remains the same, assuming it's in your controller or you can add it here)
 };
 
 export default notificationService;

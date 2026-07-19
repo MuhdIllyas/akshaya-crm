@@ -36,7 +36,9 @@ router.post('/mark-viewed', authenticateToken, async (req, res) => {
       `UPDATE staff SET last_notes_viewed = NOW() WHERE id = $1`,
       [req.user.id]
     );
-    io.to(`user_${req.user.id}`).emit('unread_notes_update', { type: 'read' });
+    // 🔥 Unified socket room format
+    io.to(`user:${req.user.id}`).emit('unread_notes_update', { type: 'read' });
+    
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating view timestamp:', err);

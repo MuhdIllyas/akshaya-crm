@@ -1169,7 +1169,7 @@ router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
 });
 
 /* ================================
-   ASSIGN CONVERSATION
+   ASSIGN CONVERSATION (The "Baton Pass")
 ================================ */
 router.patch("/conversation/:conversationId/assign", authenticateToken, async (req, res) => {
   const client = await pool.connect();
@@ -1187,7 +1187,11 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
 
     await client.query('BEGIN');
 
-    // 1. Update the conversation record (Handles BOTH Assign and Unassign)
+    // 1. Get the CURRENT owner before we change it
+    const currentConv = await client.query('SELECT assigned_staff_id FROM chat_conversations WHERE id = $1', [conversationId]);
+    const previousOwnerId = currentConv.rows[0]?.assigned_staff_id;
+
+    // 2. Update the conversation record
     const updateRes = await client.query(
       `UPDATE chat_conversations SET assigned_staff_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
       [staff_id || null, conversationId]
@@ -1195,9 +1199,21 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
 
     if (updateRes.rows.length === 0) throw new Error("Conversation not found");
 
-    // 2. If we are ASSIGNING a staff member (Not unassigning)
+    // 3. REMOVE the previous owner from participants (if they exist and are different from the new owner)
+    if (previousOwnerId && String(previousOwnerId) !== String(staff_id)) {
+      await client.query(
+        `DELETE FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2 AND role = 'owner'`, 
+        [conversationId, previousOwnerId]
+      );
+      
+      // Tell the old owner's frontend to remove this chat from their sidebar immediately
+      if (req.io) {
+        req.io.to(`user:${previousOwnerId}`).emit('conversation_deleted', { conversationId: parseInt(conversationId) });
+      }
+    }
+
+    // 4. ADD the new owner
     if (staff_id) {
-        // Add them as a participant so they have access to the chat history
         await client.query(
           `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
            VALUES ($1, $2, 'staff', 'owner', NOW())
@@ -1205,7 +1221,6 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
           [conversationId, staff_id]
         );
         
-        // Fetch the full conversation details for the notification
         const convRes = await client.query(
           `SELECT c.id, c.name, c.is_group, c.channel, c.context_type, c.context_id, c.phone_number AS context_identifier, c.name AS context_name, c.status, c.assigned_staff_id, c.centre_id,
              (
@@ -1225,49 +1240,32 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
         const fullConversation = convRes.rows[0];
 
         if (req.io) {
-           // Instantly pop up the chat on the new staff member's left sidebar
            req.io.to(`user:${staff_id}`).emit("added_to_conversation", fullConversation);
         }
 
-        // 🔥 Trigger Real-Time Spot Notification for the Assigned Staff
+        // Trigger Notification using the universal template (Ensures category matches perfectly)
         try {
-          // Figure out a friendly name for the notification
           const chatName = fullConversation.context_name || fullConversation.context_identifier || fullConversation.name || 'a customer';
           
-          const createdNotifs = await notificationService.createBulkNotifications({
+          await notificationService.createBulkNotifications({
             recipientStaffIds: [staff_id], 
             senderStaffId: userId,            
             centreId: fullConversation.centre_id || req.user.centre_id,           
             relatedEntityType: 'conversation',
             relatedEntityId: conversationId,
             conversationId: conversationId,  
-            type: 'system',
-            category: 'communication',
-            title: '👤 Chat Assigned to You',
-            message: `You have been assigned to handle the chat with ${chatName}.`,
-            priority: 'high'
-          });
-
-          // Force the socket push to guarantee the red bell icon updates instantly
-          if (req.io && createdNotifs && createdNotifs.length > 0) {
-            const unreadCount = await notificationService.getUnreadCount(staff_id);
-            
-            req.io.to(`user:${staff_id}`).emit('notification', {
-              ...createdNotifs[0],
+            ...notificationTemplates.system({ // 🔥 Uses your template factory for perfect category naming
               title: '👤 Chat Assigned to You',
               message: `You have been assigned to handle the chat with ${chatName}.`,
-              type: 'system'
-            });
-            
-            req.io.to(`user:${staff_id}`).emit('notification_count', { unread: unreadCount });
-          }
+              priority: 'high'
+            })
+          });
         } catch (notifErr) {
           console.error("Non-fatal: Failed to trigger assignment notification", notifErr);
         }
     }
 
-    // 3. 🔥 Broadcast the update to the whole room (Outside the IF block!)
-    // This ensures that when you select "Unassigned", everyone's screen updates instantly.
+    // 5. Broadcast general update to the room
     if (req.io) {
        req.io.to(`conversation:${conversationId}`).emit("conversation_updated", {
           conversationId: parseInt(conversationId),
