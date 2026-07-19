@@ -548,6 +548,28 @@ const Chat = ({
       inputEl.focus();
     };
 
+  // 🔥 Convert Message to Note
+  const handleConvertToNote = async (msg) => {
+    try {
+      const payload = {
+        title: `Note from chat: ${msg.sender || 'Unknown'}`,
+        content: msg.text,
+        related_conversation_id: activeConversation.id,
+        origin_message_id: msg.id,
+        related_service_entry_id: activeConversation.context_type === 'service_entry' ? activeConversation.context_id : null
+      };
+
+      await axios.post(`${API_BASE_URL}/api/notes`, payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      toast.success("Message converted to Note ⭐");
+    } catch (error) {
+      console.error("Convert to note error:", error);
+      toast.error("Failed to convert message to note");
+    }
+  };
+
   const handleSendMessage = () => {
     if ((!newMessage.trim() && !fileToUpload) || !activeConversation) return;
 
@@ -1088,13 +1110,33 @@ const Chat = ({
                             </div>
                           </div>
                         </div>
-                        {msg.isCurrentUser && !msg.isDeleted && !msg.isOptimistic && (
-                          <button
-                            onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
-                            className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition self-end mb-1"
-                          >
-                            <FiTrash2 size={14} />
-                          </button>
+                        {/* 🔥 Unified Hover Actions (Note, Task, Delete) */}
+                        {!msg.isOptimistic && !msg.isDeleted && msg.messageType === 'text' && (
+                          <div className={`flex items-end mb-1 opacity-0 group-hover:opacity-100 transition-opacity gap-1 ${msg.isCurrentUser ? 'mr-2' : 'ml-2'}`}>
+                            <button 
+                              onClick={() => handleConvertToNote(msg)}
+                              className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-yellow-500 rounded-full shadow-sm hover:shadow transition" 
+                              title="Convert to Note"
+                            >
+                              <FiStar size={12} />
+                            </button>
+                            <button 
+                              onClick={() => onOpenTaskModal(msg.text)} // Pass the text to optionally prepopulate the task modal later
+                              className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-green-600 rounded-full shadow-sm hover:shadow transition" 
+                              title="Create Task from Message"
+                            >
+                              <FiCheckSquare size={12} />
+                            </button>
+                            {msg.isCurrentUser && (
+                              <button
+                                onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
+                                className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-red-500 rounded-full shadow-sm hover:shadow transition"
+                                title="Delete Message"
+                              >
+                                <FiTrash2 size={12} />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}

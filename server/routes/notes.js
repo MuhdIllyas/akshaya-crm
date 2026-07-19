@@ -11,7 +11,7 @@ const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) {
-    console.log('servicemanagement.js: No token provided');
+    console.log('notes.js: No token provided');
     return res.status(403).json({ error: 'Access token required' });
   }
 
@@ -20,7 +20,7 @@ const authenticateToken = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
-    console.error('servicemanagement.js: Token verification error:', err.message);
+    console.error('notes.js: Token verification error:', err.message);
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 };
@@ -28,19 +28,15 @@ const authenticateToken = (req, res, next) => {
 // Apply middleware to all routes in this file
 router.use(authenticateToken);
 
-// 🔥 1. NEW ROUTE: Reset the counter when the user opens the page
+// 1. Reset the counter when the user opens the page
 router.post('/mark-viewed', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    // Update the timestamp to right now
     await client.query(
       `UPDATE staff SET last_notes_viewed = NOW() WHERE id = $1`,
       [req.user.id]
     );
-    
-    // Fire a socket event so the Dashboard layout clears the red badge instantly
     io.to(`user_${req.user.id}`).emit('unread_notes_update', { type: 'read' });
-    
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating view timestamp:', err);
@@ -50,7 +46,7 @@ router.post('/mark-viewed', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔥 2. UPDATED ROUTE: Count notes created AFTER the user's last_notes_viewed timestamp
+// 2. Count notes created AFTER the user's last_notes_viewed timestamp
 router.get('/unread', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -111,6 +107,8 @@ router.get('/all', authenticateToken, async (req, res) => {
         n.related_service_entry_id,
         n.related_service_tracking_id, 
         n.related_service_id, 
+        n.related_conversation_id, -- 🔥 FETCH CONVERSATION ID
+        n.origin_message_id,       -- 🔥 FETCH MESSAGE ID
         n.created_by, 
         s.name AS creator_name,
         se.customer_name,
@@ -163,7 +161,9 @@ router.post("/", async (req, res) => {
       related_customer_id,
       related_service_id,
       related_service_entry_id,
-      related_service_tracking_id
+      related_service_tracking_id,
+      related_conversation_id, // 🔥 NEW: Accepts conversation link
+      origin_message_id        // 🔥 NEW: Accepts specific message link
     } = req.body;
 
     if (!content?.trim()) {
@@ -177,9 +177,10 @@ router.post("/", async (req, res) => {
       INSERT INTO notes (
         centre_id, title, content, visibility, created_by,
         related_customer_id, related_service_id, related_service_entry_id, related_service_tracking_id,
+        related_conversation_id, origin_message_id, -- 🔥 NEW COLUMNS
         created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
       RETURNING *
       `,
       [
@@ -191,7 +192,9 @@ router.post("/", async (req, res) => {
         related_customer_id || null,
         related_service_id || null,
         related_service_entry_id || null,
-        related_service_tracking_id || null
+        related_service_tracking_id || null,
+        related_conversation_id || null, // 🔥 INJECTED
+        origin_message_id || null        // 🔥 INJECTED
       ]
     );
 
@@ -199,8 +202,6 @@ router.post("/", async (req, res) => {
 
     // Insert Mentions safely
     if (Array.isArray(mentions) && mentions.length > 0) {
-      
-      // 1. Save the mentions to the database
       for (const staffId of mentions) {
         await client.query(
           `
@@ -212,14 +213,12 @@ router.post("/", async (req, res) => {
         );
       }
 
-      // 2. Fetch the author's real name for the notification
       const authorRes = await client.query(`SELECT name FROM staff WHERE id = $1`, [req.user.id]);
       const authorName = authorRes.rows[0]?.name || 'A team member';
 
-      // 3. 🔥 Trigger the Notification Engine
       try {
         await notificationService.createBulkNotifications({
-          recipientStaffIds: mentions, // Pass the whole array! It will notify everyone at once.
+          recipientStaffIds: mentions, 
           senderStaffId: req.user.id,
           centreId: req.user.centre_id,
           relatedEntityType: 'note',
@@ -240,8 +239,6 @@ router.post("/", async (req, res) => {
 
     await client.query("COMMIT");
 
-    // 🔥 3. TRIGGER SOCKET EVENTS FOR REAL-TIME BADGE UPDATES
-    // Broadcast a global ping. The frontend will hear it, ask the database for its specific count, and update instantly.
     io.emit('unread_notes_update');
 
     res.status(201).json(note);
@@ -324,7 +321,37 @@ router.get("/service-entry/:id", async (req, res) => {
   }
 });
 
-// --- 5. Update a Note ---
+// 🔥 5. NEW: Get Notes by Conversation ID ---
+router.get("/conversation/:id", async (req, res) => {
+  if (isNaN(parseInt(req.params.id, 10))) return res.status(400).json({ error: "Invalid conversation ID" });
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT 
+        n.*, 
+        s.name AS created_by_name,
+        (
+          SELECT COALESCE(json_agg(json_build_object('staff_id', nm.staff_id, 'staff_name', ms.name)), '[]'::json)
+          FROM note_mentions nm
+          JOIN staff ms ON ms.id = nm.staff_id
+          WHERE nm.note_id = n.id
+        ) AS mentions
+      FROM notes n
+      LEFT JOIN staff s ON s.id = n.created_by
+      WHERE n.related_conversation_id = $1
+      ORDER BY n.created_at DESC
+      `,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load conversation notes" });
+  }
+});
+
+// --- 6. Update a Note ---
 router.put("/:id", async (req, res) => {
   if (isNaN(parseInt(req.params.id, 10))) return res.status(400).json({ error: "Invalid note ID" });
 
@@ -356,7 +383,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// --- 6. Delete a Note ---
+// --- 7. Delete a Note ---
 router.delete("/:id", async (req, res) => {
   const noteId = parseInt(req.params.id, 10);
   if (isNaN(noteId)) return res.status(400).json({ error: "Invalid note ID" });

@@ -316,6 +316,11 @@ const MessengerPage = ({ user }) => {
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+
+  const [conversationNotes, setConversationNotes] = useState([]);
+  const [isQuickNoteModalOpen, setIsQuickNoteModalOpen] = useState(false);
+  const [quickNoteForm, setQuickNoteForm] = useState({ title: "", content: "" });
+
   const [taskFilter, setTaskFilter] = useState("all");
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
@@ -439,6 +444,18 @@ const MessengerPage = ({ user }) => {
   };
 
   useEffect(() => {
+    // 🔥 NEW: Fetch Notes for this Conversation
+    if (activeConversation?.id) {
+      fetch(`${API_BASE_URL}/api/notes/conversation/${activeConversation.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setConversationNotes(data))
+      .catch(err => console.error("Failed to fetch notes", err));
+    } else {
+      setConversationNotes([]);
+    }
+
     if (activeConversation?.context_type === 'service_entry' && activeConversation.context_id) {
       setLoadingServiceDetails(true);
       fetch(`${API_BASE_URL}/api/servicecollaboration/${activeConversation.context_id}/summary`, {
@@ -2312,6 +2329,42 @@ const MessengerPage = ({ user }) => {
             )}
           </div>
 
+          {/* 🔥 Notes Section */}
+          {activeConversation.channel !== 'whatsapp' && (
+            <>
+              <div className="flex justify-between items-center mb-3 mt-6">
+                <h4 className="font-semibold text-gray-700 flex items-center">
+                  <FiStar className="mr-2 text-yellow-500" /> Notes
+                </h4>
+                <button 
+                  onClick={() => setIsQuickNoteModalOpen(true)} 
+                  className="text-xs bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 px-2 py-1 rounded transition shadow-sm font-medium"
+                >
+                  + Add Note
+                </button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
+                 {conversationNotes.map(note => (
+                   <div key={note.id} className="bg-[#fffdf2] border border-yellow-100 p-3 rounded-xl hover:shadow-sm transition">
+                      <p className="font-semibold text-sm text-yellow-900 truncate">{note.title || 'Note'}</p>
+                      <p className="text-xs text-yellow-800 mt-1 whitespace-pre-wrap">{note.content}</p>
+                      {note.origin_message_id && (
+                        <span className="text-[10px] text-yellow-600 mt-2 flex items-center gap-1 font-medium bg-yellow-100/50 inline-block px-1.5 py-0.5 rounded">
+                           <FiMessageSquare size={10} /> Converted from message
+                        </span>
+                      )}
+                   </div>
+                 ))}
+                 {conversationNotes.length === 0 && (
+                   <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
+                     <FiStar className="mx-auto text-gray-300 text-2xl mb-2" />
+                     <p className="text-xs text-gray-500 font-medium">No notes attached yet</p>
+                   </div>
+                 )}
+              </div>
+            </>
+          )}
+
           {/* Tasks Section (Works for BOTH Service & Normal Chats) */}
           {activeConversation.channel !== 'whatsapp' && (
             <>
@@ -2420,6 +2473,85 @@ const MessengerPage = ({ user }) => {
       </div>
     );
   };
+
+  // 🔥 Save Quick Note Logic
+  const handleCreateQuickNote = async () => {
+    if (!quickNoteForm.content.trim()) return toast.error("Note content is required");
+    setLoading(true);
+    try {
+      const payload = {
+        title: quickNoteForm.title || null,
+        content: quickNoteForm.content,
+        related_conversation_id: activeConversation?.id,
+        related_service_entry_id: activeConversation?.context_type === 'service_entry' ? activeConversation?.context_id : null
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/notes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Failed to create note");
+      const newNote = await res.json();
+      
+      setConversationNotes(prev => [newNote, ...prev]);
+      setIsQuickNoteModalOpen(false);
+      setQuickNoteForm({ title: "", content: "" });
+      toast.success("Note saved to conversation ⭐");
+    } catch (err) {
+      toast.error("Failed to save note");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔥 Quick Note Modal UI
+  const renderQuickNoteModal = () => (
+    <AnimatePresence>
+      {isQuickNoteModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setIsQuickNoteModalOpen(false)}
+        >
+          <motion.div
+            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
+            className="bg-white rounded-xl w-full max-w-md shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-gray-800">Add Quick Note</h3>
+                <button onClick={() => setIsQuickNoteModalOpen(false)} className="p-2 rounded-full hover:bg-gray-100">
+                  <IoMdClose className="text-gray-500" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title (Optional)</label>
+                  <input type="text" value={quickNoteForm.title} onChange={e => setQuickNoteForm({...quickNoteForm, title: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="e.g. Needs Follow-up" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                  <textarea value={quickNoteForm.content} onChange={e => setQuickNoteForm({...quickNoteForm, content: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Type your secure note here..." rows={4} />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={() => setIsQuickNoteModalOpen(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
+                <button onClick={handleCreateQuickNote} disabled={loading || !quickNoteForm.content.trim()} className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2">
+                  <FiStar size={16} /> Save Note
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   const renderRegularTaskModal = () => (
     <AnimatePresence>
@@ -2769,6 +2901,7 @@ const MessengerPage = ({ user }) => {
       {renderRegularTaskModal()}
       {renderTemplateModal()}
       {renderEventModal()}
+      {renderQuickNoteModal()}
 
       {apiError && (<div className="fixed top-0 left-0 right-0 bg-red-500 text-white p-2 text-center z-50">{apiError}<button onClick={() => setApiError(null)} className="ml-4 px-2 py-1 bg-white text-red-500 rounded hover:bg-red-100 transition">Dismiss</button></div>)}
 
