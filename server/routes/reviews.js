@@ -4,6 +4,7 @@ import { triggerNotification } from "../utils/communication/notificationEngine.j
 import pool from "../db.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
 import notificationService from "../utils/notificationService.js";
+import { notificationTemplates } from "../utils/notificationTemplates.js";
 
 const router = express.Router();
 
@@ -173,20 +174,19 @@ router.post("/public/:token", async (req, res) => {
       [service_rating, staff_rating || null, review_text, token]
     );
 
-    // 🔥 Trigger Real-Time Notification for the Staff Member
+    // 🔥 Trigger Real-Time Notification using the Template
     const reviewData = review.rows[0];
     if (reviewData.staff_id) {
       try {
         await notificationService.createNotification({
           recipientStaffId: reviewData.staff_id,
           centreId: reviewData.centre_id,
-          type: 'review',
-          category: 'work',
-          title: '⭐ New Review!', 
-          message: `You received a ${service_rating}-star review from ${reviewData.customer_name || 'a customer'}.`,
-          priority: 'normal',
           relatedEntityType: 'review',
-          relatedEntityId: reviewData.id
+          relatedEntityId: reviewData.id,
+          ...notificationTemplates.reviewReceived({
+            rating: service_rating,
+            customerName: reviewData.customer_name || 'a customer'
+          })
         });
       } catch (notifErr) {
         console.error("Non-fatal: Failed to send review notification", notifErr);
@@ -299,7 +299,7 @@ router.post("/booking/:bookingId", customerAuthMiddleware, async (req, res) => {
 
     const newReviewId = insertRes.rows[0].id;
 
-    // 🔥 NEW: Trigger Real-Time Notification for the Staff Member
+    // 🔥 Trigger Real-Time Notification using the Template
     if (bookingData.staff_id) {
       try {
         // Fetch customer name for the alert
@@ -309,13 +309,12 @@ router.post("/booking/:bookingId", customerAuthMiddleware, async (req, res) => {
         await notificationService.createNotification({
           recipientStaffId: bookingData.staff_id,
           centreId: centreId,
-          type: 'review',
-          category: 'work',
-          title: '⭐ New Customer Review',
-          message: `You received a ${service_rating}-star review from ${custName}.`,
-          priority: 'normal',
           relatedEntityType: 'review',
-          relatedEntityId: newReviewId
+          relatedEntityId: newReviewId,
+          ...notificationTemplates.reviewReceived({
+            rating: service_rating,
+            customerName: custName
+          })
         });
       } catch (notifErr) {
         console.error("Non-fatal: Failed to send review notification", notifErr);

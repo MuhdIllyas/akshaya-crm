@@ -67,6 +67,20 @@ export const notificationTemplates = {
     }
   }),
 
+  // 🔥 Review Template
+  reviewReceived: (data) => ({
+    type: NOTIFICATION_TYPES.REVIEW,
+    category: NOTIFICATION_CATEGORIES.WORK,
+    title: `⭐ New ${data.rating}-Star Review!`,
+    message: `You received a ${data.rating}-star review from ${data.customerName}.`,
+    // If it's a 1 or 2-star review, make it high priority so they see it instantly!
+    priority: data.rating <= 2 ? 'high' : 'normal', 
+    metadata: {
+      'Customer': data.customerName,
+      'Rating': `${data.rating} / 5 Stars`
+    }
+  }),
+
   systemAnnouncement: (data) => ({
     type: NOTIFICATION_TYPES.SYSTEM,
     category: NOTIFICATION_CATEGORIES.SYSTEM,
