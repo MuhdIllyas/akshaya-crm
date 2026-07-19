@@ -1053,7 +1053,7 @@ const MessengerPage = ({ user }) => {
           isSystem: newMsg.sender_type === 'system',
           sender_type: newMsg.sender_type,
           live_task_data: newMsg.live_task_data || null,
-          mentions: newMsg.mentions || []
+          mentions: newMsg.mentions || (optimisticMessage ? optimisticMessage.mentions : [])
         };
         
         return {
