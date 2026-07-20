@@ -45,7 +45,11 @@ const mapDBNotificationToUI = (dbNotif) => {
   // Construct a frontend route based on the entity
   let actionUrl = '#';
   if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/${role}/tasks`; 
-  if (dbNotif.related_entity_type === 'service') actionUrl = `/dashboard/${role}/track_service/${dbNotif.related_entity_id}`;
+  if (dbNotif.related_entity_type === 'service') {
+    actionUrl = ["admin", "superadmin"].includes(role)
+      ? `/dashboard/${role}/servicelogs`
+      : `/dashboard/staff/track_service/${dbNotif.related_entity_id}`;
+  }
   if (dbNotif.type === 'whatsapp_message' || dbNotif.type === 'mention' || dbNotif.related_entity_type === 'conversation') {
     actionUrl = `/dashboard/${role}/messenger`;
   }

@@ -146,11 +146,16 @@ const ReviewDetailsDrawer = ({ isOpen, onClose, reviewId }) => {
                 <button 
                   onClick={() => {
                     onClose();
-                    navigate(`/dashboard/${role}/track_service/${review.tracking_id}`);
+                    // 🔥 Route Admins to servicelogs, and Staff to track_service
+                    const targetRoute = ["admin", "superadmin"].includes(role)
+                      ? `/dashboard/${role}/servicelogs` 
+                      : `/dashboard/staff/track_service/${review.tracking_id}`;
+                      
+                    navigate(targetRoute, { state: { trackingId: review.tracking_id } });
                   }} 
                   className="w-full py-2.5 bg-yellow-500 text-white rounded-lg font-bold hover:bg-yellow-600 transition shadow-sm flex items-center justify-center gap-2"
                 >
-                  <FiMapPin /> Open Tracking Page
+                  <FiMapPin /> Open Service Logs
                 </button>
               )}
               <button onClick={onClose} className="w-full py-2.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition">
