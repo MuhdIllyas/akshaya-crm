@@ -66,9 +66,9 @@ const DATA = {
         { title: 'Fee Structure PDF', url: '/docs/passport-fees.pdf' },
       ],
       relatedTags: ['Passport', 'Police', 'Tatkal'],
-      articles: [], // will be filled from DATA.articles by category
-      trainings: [], // from DATA.training by service
-      discussions: [], // from DATA.discussions by service
+      articles: [],
+      trainings: [],
+      discussions: [],
     },
     {
       id: 'aadhaar',
@@ -151,7 +151,7 @@ const DATA = {
       lastReply: '2 hours ago',
       author: 'Admin',
       solved: true,
-      service: 'passport',        // linked to service
+      service: 'passport',
       customer: 'Muhammed',
       applicationNumber: 'A10293',
       trackingStatus: 'Police Verification – Pending',
@@ -404,14 +404,14 @@ const STAFF_SUGGESTIONS = [
 ];
 
 // =====================================================================
-// HELPER COMPONENTS (Tailwind only)
+// HELPER COMPONENTS
 // =====================================================================
 
-// Sidebar (UPDATED with Services section)
+// Sidebar
 const Sidebar = ({ active, onNavigate }) => {
   const mainNav = [
     { id: 'home', label: 'Home', icon: FiHome },
-    { id: 'services', label: 'Services', icon: FiGrid },  // New top-level
+    { id: 'services', label: 'Services', icon: FiGrid },
     { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: DATA.stats.discussions },
     { id: 'knowledge', label: 'Knowledge Base', icon: FiBook, count: DATA.stats.articles },
     { id: 'learning', label: 'Learning Center', icon: FiAward, count: DATA.stats.trainings },
@@ -426,7 +426,7 @@ const Sidebar = ({ active, onNavigate }) => {
   ];
 
   return (
-    <div className="w-60 min-h-screen bg-white border-r border-gray-200 flex flex-col sticky top-0 h-screen overflow-y-auto flex-shrink-0">
+    <div className="w-60 h-full bg-white border-r border-gray-200 flex flex-col overflow-y-auto flex-shrink-0">
       {/* Brand */}
       <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200">
         <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm">
@@ -486,11 +486,23 @@ const Sidebar = ({ active, onNavigate }) => {
           <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{DATA.allTags.length}</span>
         </a>
       </div>
+
+      {/* Footer */}
+      <div className="flex items-center gap-2.5 px-4 py-3 border-t border-gray-200">
+        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-semibold text-sm">A</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-gray-900">Admin User</div>
+          <div className="text-xs text-gray-400">System Admin</div>
+        </div>
+        <div className="text-gray-400 hover:text-gray-700 cursor-pointer" onClick={() => onNavigate('settings')}>
+          <FiSettings className="h-4 w-4" />
+        </div>
+      </div>
     </div>
   );
 };
 
-// Top Bar (with AI Assistant button)
+// Top Bar (fixed, not sticky – scrolls with content)
 const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant }) => {
   const inputRef = useRef(null);
 
@@ -506,7 +518,7 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
   }, []);
 
   return (
-    <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
       <button className="lg:hidden text-gray-500 hover:text-gray-700" onClick={toggleMobileSidebar}>
         <FiMenu className="h-5 w-5" />
       </button>
@@ -609,7 +621,7 @@ const AnnouncementItem = ({ announcement, onClick }) => {
   );
 };
 
-// Discussion Card (updated to show service badge)
+// Discussion Card
 const DiscussionCard = ({ discussion, onClick }) => {
   const typeIcons = {
     question: FiMessageSquare,
@@ -632,7 +644,6 @@ const DiscussionCard = ({ discussion, onClick }) => {
   };
   const typeClass = colorMap[discussion.type] || 'bg-gray-50 text-gray-600';
 
-  // Find service name
   const serviceObj = DATA.services.find(s => s.id === discussion.service);
   const serviceName = serviceObj ? serviceObj.name : null;
 
@@ -657,7 +668,6 @@ const DiscussionCard = ({ discussion, onClick }) => {
             )}
           </div>
           <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{discussion.preview}</div>
-          {/* CRM Context */}
           {(discussion.customer || discussion.applicationNumber || discussion.trackingStatus) && (
             <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
               {discussion.customer && <span><FiUser className="inline h-3 w-3 mr-0.5" /> {discussion.customer}</span>}
@@ -680,7 +690,7 @@ const DiscussionCard = ({ discussion, onClick }) => {
   );
 };
 
-// Knowledge Article Card (updated with service)
+// Knowledge Article Card
 const ArticleCard = ({ article, onClick }) => {
   const serviceObj = DATA.services.find(s => s.id === article.service);
   const serviceName = serviceObj ? serviceObj.name : null;
@@ -764,7 +774,7 @@ const ConvertDropdown = ({ onConvert }) => {
 };
 
 // =====================================================================
-// MAIN KNOWLEDGE HUB COMPONENT
+// MAIN KNOWLEDGE HUB COMPONENT (UPDATED LAYOUT)
 // =====================================================================
 const KnowledgeHub = () => {
   const [page, setPage] = useState('home');
@@ -783,7 +793,7 @@ const KnowledgeHub = () => {
     tags: [],
     priority: 'medium',
     visibility: 'everyone',
-    relatedTo: 'none',        // 'customer', 'serviceEntry', 'task', 'note'
+    relatedTo: 'none',
     relatedId: '',
     service: '',
     attachments: [],
@@ -884,14 +894,14 @@ const KnowledgeHub = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      {/* Desktop Sidebar - fixed */}
+      <div className="hidden lg:block flex-shrink-0">
         <Sidebar active={page} onNavigate={navigateTo} />
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Main content area - scrollable */}
+      <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar
           onSearch={handleSearch}
           query={searchQuery}
@@ -899,7 +909,7 @@ const KnowledgeHub = () => {
           toggleMobileSidebar={toggleMobileSidebar}
           onAIAssistant={() => setShowAIAssistant(true)}
         />
-        <div className="flex-1 p-4 sm:p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {renderPage()}
         </div>
       </div>
@@ -963,7 +973,7 @@ const KnowledgeHub = () => {
         )}
       </AnimatePresence>
 
-      {/* Create Discussion Modal (updated with service and related fields) */}
+      {/* Create Discussion Modal */}
       <AnimatePresence>
         {showCreateModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={() => setShowCreateModal(false)}>
@@ -1120,10 +1130,10 @@ const KnowledgeHub = () => {
 };
 
 // =====================================================================
-// PAGE COMPONENTS (UPDATED)
+// PAGE COMPONENTS
 // =====================================================================
 
-// HomePage (minor changes – added link to Services)
+// HomePage
 const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   <div className="space-y-6">
     <div>
@@ -1251,7 +1261,7 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   </div>
 );
 
-// ===== SERVICES PAGE =====
+// Services Page
 const ServicesPage = ({ navigateTo, openServiceDetail }) => {
   return (
     <div>
@@ -1289,7 +1299,7 @@ const ServicesPage = ({ navigateTo, openServiceDetail }) => {
   );
 };
 
-// ===== SERVICE DETAIL PAGE =====
+// Service Detail Page
 const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
   const service = DATA.services.find(s => s.id === serviceId);
   if (!service) return <div className="text-center py-12 text-gray-500">Service not found</div>;
@@ -1426,7 +1436,7 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
   );
 };
 
-// Discussions List (minor updates)
+// Discussions Page
 const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -1478,7 +1488,7 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
   );
 };
 
-// Discussion Detail (updated with related content)
+// Discussion Detail Page
 const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   const discussion = DATA.discussionDetail;
   if (!discussion) return <div className="text-center py-12 text-gray-500">Discussion not found</div>;
@@ -1496,13 +1506,11 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
 
   const handleConvert = (action) => toast.success(`Converting to ${action}... (demo)`);
 
-  // Find service name
   const serviceObj = DATA.services.find(s => s.id === discussion.service);
   const serviceName = serviceObj ? serviceObj.name : null;
 
   return (
     <div className="flex flex-col lg:flex-row gap-6">
-      {/* Main column */}
       <div className="flex-1 min-w-0 space-y-4">
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -1523,7 +1531,6 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
           </div>
         </div>
 
-        {/* CRM Context Bar */}
         <div className="flex flex-wrap gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-gray-700">
           {discussion.customer && <span><FiUser className="inline mr-1.5 text-indigo-500" /> Customer: <strong>{discussion.customer}</strong></span>}
           {discussion.applicationNumber && <span><FiFile className="inline mr-1.5 text-indigo-500" /> Application: <strong>{discussion.applicationNumber}</strong></span>}
@@ -1589,7 +1596,6 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
         </div>
       </div>
 
-      {/* Right Sidebar */}
       <div className="w-full lg:w-64 flex-shrink-0 space-y-4">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Discussion Details</div>
@@ -1647,7 +1653,6 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
           ))}
         </div>
 
-        {/* Related Content (Knowledge Graph) */}
         {discussion.relatedContent && (
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Related Content</div>
@@ -1682,7 +1687,7 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   );
 };
 
-// Knowledge Base (updated)
+// Knowledge Page
 const KnowledgePage = ({ navigateTo }) => (
   <div>
     <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -1705,9 +1710,8 @@ const KnowledgePage = ({ navigateTo }) => (
   </div>
 );
 
-// Learning Center (updated)
+// Learning Page
 const LearningPage = ({ navigateTo }) => {
-  const services = DATA.services.map(s => s.id);
   return (
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-4">Learning Center</h2>
@@ -1732,7 +1736,7 @@ const LearningPage = ({ navigateTo }) => {
   );
 };
 
-// Announcements (unchanged)
+// Announcements Page
 const AnnouncementsPage = ({ navigateTo }) => {
   const [filter, setFilter] = useState('all');
   const filtered = DATA.announcements.filter(a => filter === 'all' || a.category === filter);
@@ -1755,7 +1759,7 @@ const AnnouncementsPage = ({ navigateTo }) => {
   );
 };
 
-// Tags (unchanged)
+// Tags Page
 const TagsPage = ({ navigateTo, handleTagClick }) => (
   <div>
     <h2 className="text-xl font-bold text-gray-900 mb-4">All Tags</h2>
@@ -1773,7 +1777,7 @@ const TagsPage = ({ navigateTo, handleTagClick }) => (
   </div>
 );
 
-// My Workspace sub-pages (unchanged)
+// My Workspace Pages (unchanged)
 const MentionsPage = ({ navigateTo }) => (
   <div>
     <h2 className="text-xl font-bold text-gray-900 mb-4">Mentions</h2>
@@ -1873,7 +1877,7 @@ const NotificationsPage = () => (
   </div>
 );
 
-// Search Page (enhanced with service results)
+// Search Page
 const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
   const discussionResults = DATA.discussions.filter(d =>
     d.title.toLowerCase().includes(query.toLowerCase()) ||
