@@ -193,6 +193,39 @@ router.post("/public/:token", async (req, res) => {
       }
     }
 
+    // 🔥 ESCALATION ALERT for 1 or 2-star reviews
+    if (service_rating <= 2) {
+      try {
+        // Fetch all active Superadmins, AND Admins for this specific centre
+        const adminRes = await pool.query(
+          `SELECT id FROM staff 
+           WHERE (role = 'superadmin' OR (role = 'admin' AND centre_id = $1)) 
+           AND status = 'Active'`,
+          [reviewData.centre_id]
+        );
+        
+        // Extract IDs, but remove the staff_id if they happen to be an admin (so they don't get double-notified)
+        const escalationIds = adminRes.rows
+          .map(row => row.id)
+          .filter(id => id !== reviewData.staff_id);
+
+        if (escalationIds.length > 0) {
+          await notificationService.createBulkNotifications({
+            recipientStaffIds: escalationIds,
+            centreId: reviewData.centre_id,
+            relatedEntityType: 'review',
+            relatedEntityId: reviewData.id,
+            ...notificationTemplates.reviewReceived({
+              rating: service_rating,
+              customerName: reviewData.customer_name || 'a customer'
+            })
+          });
+        }
+      } catch (escErr) {
+        console.error("Non-fatal: Failed to send escalation notification", escErr);
+      }
+    }
+
     res.json({ success: true, message: "Review submitted successfully" });
 
   } catch (error) {
@@ -318,6 +351,38 @@ router.post("/booking/:bookingId", customerAuthMiddleware, async (req, res) => {
         });
       } catch (notifErr) {
         console.error("Non-fatal: Failed to send review notification", notifErr);
+      }
+    }
+
+    if (service_rating <= 2) {
+      try {
+        // Fetch all active Superadmins, AND Admins for this specific centre
+        const adminRes = await pool.query(
+          `SELECT id FROM staff 
+           WHERE (role = 'superadmin' OR (role = 'admin' AND centre_id = $1)) 
+           AND status = 'Active'`,
+          [reviewData.centre_id]
+        );
+        
+        // Extract IDs, but remove the staff_id if they happen to be an admin (so they don't get double-notified)
+        const escalationIds = adminRes.rows
+          .map(row => row.id)
+          .filter(id => id !== reviewData.staff_id);
+
+        if (escalationIds.length > 0) {
+          await notificationService.createBulkNotifications({
+            recipientStaffIds: escalationIds,
+            centreId: reviewData.centre_id,
+            relatedEntityType: 'review',
+            relatedEntityId: reviewData.id,
+            ...notificationTemplates.reviewReceived({
+              rating: service_rating,
+              customerName: reviewData.customer_name || 'a customer'
+            })
+          });
+        }
+      } catch (escErr) {
+        console.error("Non-fatal: Failed to send escalation notification", escErr);
       }
     }
 
