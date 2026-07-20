@@ -486,18 +486,6 @@ const Sidebar = ({ active, onNavigate }) => {
           <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{DATA.allTags.length}</span>
         </a>
       </div>
-
-      {/* Footer */}
-      <div className="flex items-center gap-2.5 px-4 py-3 border-t border-gray-200">
-        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-semibold text-sm">A</div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-gray-900">Admin User</div>
-          <div className="text-xs text-gray-400">System Admin</div>
-        </div>
-        <div className="text-gray-400 hover:text-gray-700 cursor-pointer" onClick={() => onNavigate('settings')}>
-          <FiSettings className="h-4 w-4" />
-        </div>
-      </div>
     </div>
   );
 };
