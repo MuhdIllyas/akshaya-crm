@@ -20,6 +20,8 @@ import { useNotifications } from '../../context/NotificationContext';
 
 import PaymentReceiptDrawer from '@/components/PaymentReceiptDrawer';
 
+import ReviewDetailsDrawer from '@/components/ReviewDetailsDrawer';
+
 const timeAgo = (dateString) => {
   if (!dateString) return 'Just now';
   
@@ -333,6 +335,10 @@ const NotificationsPage = () => {
   const [isReceiptDrawerOpen, setIsReceiptDrawerOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
 
+  // 🔥 Review Drawer State
+  const [isReviewDrawerOpen, setIsReviewDrawerOpen] = useState(false);
+  const [selectedReviewId, setSelectedReviewId] = useState(null);
+
   // --- NEW: HOOKS & VARIABLES ---
   const { decrementUnread, clearUnread } = useNotifications();
   const navigate = useNavigate();
@@ -521,6 +527,13 @@ const NotificationsPage = () => {
 
     if (action === 'mark_read') {
       handleMarkRead(id);
+      return;
+    }
+
+    if (action === 'view' && notification.related_entity_type === 'review') {
+      handleMarkRead(id);
+      setSelectedReviewId(notification.related_entity_id);
+      setIsReviewDrawerOpen(true);
       return;
     }
 
@@ -779,6 +792,12 @@ const NotificationsPage = () => {
         isOpen={isReceiptDrawerOpen} 
         onClose={() => setIsReceiptDrawerOpen(false)} 
         paymentId={selectedPaymentId} 
+      />
+      {/* Review Details Drawer */}
+      <ReviewDetailsDrawer
+        isOpen={isReviewDrawerOpen}
+        onClose={() => setIsReviewDrawerOpen(false)}
+        reviewId={selectedReviewId}
       />
     </div>
   );

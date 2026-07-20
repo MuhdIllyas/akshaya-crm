@@ -674,4 +674,41 @@ router.get("/all", async (req, res) => {
   }
 });
 
+/* -------------------------------------------------------
+   🔟 GET SINGLE REVIEW BY ID (For Drawer)
+------------------------------------------------------- */
+router.get("/single/:id", async (req, res) => {
+  try {
+    const review = await pool.query(
+      `SELECT sr.*, 
+              s.name as service_name,
+              st.name as staff_name,
+              c.name as portal_customer_name,
+              cen.name as centre_name,
+              se.customer_name as tracking_customer_name
+       FROM service_reviews sr
+       LEFT JOIN services s ON sr.service_id = s.id
+       LEFT JOIN staff st ON sr.staff_id = st.id
+       LEFT JOIN customers c ON sr.customer_id = c.id
+       LEFT JOIN centres cen ON sr.centre_id = cen.id
+       LEFT JOIN service_entries se ON sr.tracking_id = se.id
+       WHERE sr.id = $1`,
+      [req.params.id]
+    );
+
+    if (review.rows.length === 0) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    const data = review.rows[0];
+    // Normalize customer name depending on whether it was a public or portal review
+    data.display_customer_name = data.customer_name || data.portal_customer_name || data.tracking_customer_name || "A Customer";
+
+    res.json(data);
+  } catch (error) {
+    console.error("Fetch single review error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 export default router;
