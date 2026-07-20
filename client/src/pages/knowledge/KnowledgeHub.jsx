@@ -12,13 +12,14 @@ import {
   FiMoreHorizontal, FiShare2, FiUserPlus, FiRefreshCw,
   FiArchive, FiClipboard, FiVideo, FiFileText, FiLifeBuoy,
   FiUsers, FiBriefcase, FiTarget, FiCheckSquare, FiMessageCircle as FiMessageCircleOutline,
+  FiGrid, FiList, FiFilePlus, FiDatabase, FiServer, FiCloud,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 
 // =====================================================================
-// FULL MOCK DATA
+// FULL MOCK DATA (ENHANCED)
 // =====================================================================
 const DATA = {
   stats: {
@@ -47,6 +48,97 @@ const DATA = {
     { pinned: false, title: 'CRM Software Update v2.4.1', time: '1 day ago', category: 'software' },
     { pinned: false, title: 'Training Session on eDistrict', time: '3 days ago', category: 'training' },
   ],
+  // Service-centric data
+  services: [
+    {
+      id: 'passport',
+      name: 'Passport',
+      icon: FiFileText,
+      description: 'All services related to passport issuance, renewal, and police verification.',
+      overview: 'Passport services include new applications, renewals, tatkal, and police verification. We handle the entire lifecycle.',
+      sop: '1. Collect application form. 2. Verify documents. 3. Schedule appointment. 4. Process payment. 5. Track status.',
+      faqs: [
+        { q: 'How long does police verification take?', a: 'Usually 7-15 days, but can vary by location.' },
+        { q: 'Can I apply for Tatkal without a prior appointment?', a: 'No, you need to book a Tatkal slot online.' },
+      ],
+      resources: [
+        { title: 'Official Passport Website', url: 'https://passport.gov.in' },
+        { title: 'Fee Structure PDF', url: '/docs/passport-fees.pdf' },
+      ],
+      relatedTags: ['Passport', 'Police', 'Tatkal'],
+      articles: [], // will be filled from DATA.articles by category
+      trainings: [], // from DATA.training by service
+      discussions: [], // from DATA.discussions by service
+    },
+    {
+      id: 'aadhaar',
+      name: 'Aadhaar',
+      icon: FiServer,
+      description: 'Aadhaar enrolment, update, and correction services.',
+      overview: 'We assist with Aadhaar enrolment, demographic updates, biometric corrections, and linking to services.',
+      sop: '1. Fill enrolment form. 2. Provide supporting documents. 3. Biometric capture. 4. Acknowledgement.',
+      faqs: [
+        { q: 'How to correct DOB?', a: 'Visit an enrolment centre with valid proof (birth certificate, school cert).' },
+        { q: 'Can I update address online?', a: 'Yes, through the UIDAI portal using OTP or by visiting a centre.' },
+      ],
+      resources: [
+        { title: 'UIDAI Official', url: 'https://uidai.gov.in' },
+        { title: 'Update Form', url: '/docs/aadhaar-update.pdf' },
+      ],
+      relatedTags: ['Aadhaar', 'UIDAI'],
+    },
+    {
+      id: 'edistrict',
+      name: 'eDistrict',
+      icon: FiCloud,
+      description: 'eDistrict services including income certificate, caste certificate, and more.',
+      overview: 'eDistrict portal for various certificates and government services.',
+      sop: '1. Login to eDistrict. 2. Select service. 3. Fill details. 4. Upload documents. 5. Submit.',
+      faqs: [
+        { q: 'Why was my income certificate rejected?', a: 'Common reasons: missing signature, incorrect details, or document mismatch.' },
+        { q: 'How to track application status?', a: 'Use the reference number on the eDistrict portal.' },
+      ],
+      resources: [
+        { title: 'eDistrict Portal', url: 'https://edistrict.gov.in' },
+        { title: 'User Manual', url: '/docs/edistrict-manual.pdf' },
+      ],
+      relatedTags: ['eDistrict', 'Income Certificate'],
+    },
+    {
+      id: 'rationcard',
+      name: 'Ration Card',
+      icon: FiDatabase,
+      description: 'Ration card issuance, updates, portability, and grievances.',
+      overview: 'We handle new ration cards, family member updates, inter-state portability, and grievance redressal.',
+      sop: '1. Fill application. 2. Submit documents. 3. Verification. 4. Issue card.',
+      faqs: [
+        { q: 'Can I transfer my ration card to another state?', a: 'Yes, under the portability scheme, you can apply for inter-state transfer.' },
+        { q: 'How to add a family member?', a: 'Visit the local food and civil supplies office with required proof.' },
+      ],
+      resources: [
+        { title: 'Food & Civil Supplies Portal', url: 'https://fcsca.gov.in' },
+        { title: 'Portability Guidelines', url: '/docs/ration-portability.pdf' },
+      ],
+      relatedTags: ['Ration Card', 'Portability'],
+    },
+    {
+      id: 'psc',
+      name: 'Kerala PSC',
+      icon: FiUsers,
+      description: 'Kerala PSC exam registration, updates, and training.',
+      overview: 'We provide guidance for one-time registration, exam notifications, and training materials.',
+      sop: '1. One-time registration on PSC portal. 2. Apply for exams. 3. Download admit card. 4. Check results.',
+      faqs: [
+        { q: 'What is the one-time registration fee?', a: 'It is free for all candidates.' },
+        { q: 'How to update profile details?', a: 'Login to the PSC portal and edit your profile.' },
+      ],
+      resources: [
+        { title: 'Kerala PSC Official', url: 'https://keralapsc.gov.in' },
+        { title: 'Exam Calendar', url: '/docs/psc-calendar.pdf' },
+      ],
+      relatedTags: ['Kerala PSC', 'Exam'],
+    },
+  ],
   discussions: [
     {
       id: 1,
@@ -59,10 +151,11 @@ const DATA = {
       lastReply: '2 hours ago',
       author: 'Admin',
       solved: true,
-      service: 'Passport',
+      service: 'passport',        // linked to service
       customer: 'Muhammed',
       applicationNumber: 'A10293',
       trackingStatus: 'Police Verification – Pending',
+      relatedRecords: { customerId: 101, serviceEntryId: 202, taskId: 303 },
     },
     {
       id: 2,
@@ -75,7 +168,7 @@ const DATA = {
       lastReply: 'Yesterday',
       author: 'Rahul K',
       solved: false,
-      service: 'eDistrict',
+      service: 'edistrict',
       customer: 'Sreelakshmi',
       applicationNumber: 'E202456',
       trackingStatus: 'Rejected – Resubmission needed',
@@ -91,7 +184,7 @@ const DATA = {
       lastReply: '3 hours ago',
       author: 'Dev Team',
       solved: false,
-      service: 'CRM',
+      service: null,
       customer: null,
       applicationNumber: null,
       trackingStatus: null,
@@ -107,7 +200,7 @@ const DATA = {
       lastReply: '1 day ago',
       author: 'Sneha M',
       solved: false,
-      service: 'CRM',
+      service: null,
       customer: null,
       applicationNumber: null,
       trackingStatus: null,
@@ -123,10 +216,26 @@ const DATA = {
       lastReply: '4 days ago',
       author: 'Govt Desk',
       solved: false,
-      service: 'Ration Card',
+      service: 'rationcard',
       customer: null,
       applicationNumber: null,
       trackingStatus: null,
+    },
+    {
+      id: 6,
+      type: 'question',
+      title: 'Aadhaar DOB Correction Process',
+      preview: 'How to correct date of birth in Aadhaar? Customer visited centre but was asked for additional documents.',
+      tags: ['Aadhaar', 'Correction'],
+      replies: 15,
+      views: 210,
+      lastReply: '1 hour ago',
+      author: 'Sneha M',
+      solved: false,
+      service: 'aadhaar',
+      customer: 'Anjali',
+      applicationNumber: 'AAD-3456',
+      trackingStatus: 'In Progress',
     },
   ],
   popular: [
@@ -151,6 +260,7 @@ const DATA = {
       updated: '2 days ago',
       readingTime: '8 min',
       author: 'Admin',
+      service: 'passport',
     },
     {
       id: 2,
@@ -160,6 +270,7 @@ const DATA = {
       updated: '1 week ago',
       readingTime: '6 min',
       author: 'Rahul K',
+      service: 'edistrict',
     },
     {
       id: 3,
@@ -169,6 +280,7 @@ const DATA = {
       updated: '3 days ago',
       readingTime: '5 min',
       author: 'Govt Desk',
+      service: 'rationcard',
     },
     {
       id: 4,
@@ -178,6 +290,7 @@ const DATA = {
       updated: '2 weeks ago',
       readingTime: '4 min',
       author: 'Training Team',
+      service: 'psc',
     },
   ],
   allTags: [
@@ -193,9 +306,9 @@ const DATA = {
     { name: 'Feature Request', count: 15 },
   ],
   training: [
-    { id: 1, title: 'Passport Services – Complete Training', type: 'Video', duration: '45 min', modules: 6, updated: '1 week ago', service: 'Passport' },
-    { id: 2, title: 'Aadhaar Update & Correction', type: 'PDF + Quiz', duration: '30 min', modules: 4, updated: '2 weeks ago', service: 'Aadhaar' },
-    { id: 3, title: 'eDistrict Portal Masterclass', type: 'Video + PDF', duration: '60 min', modules: 8, updated: '3 days ago', service: 'eDistrict' },
+    { id: 1, title: 'Passport Services – Complete Training', type: 'Video', duration: '45 min', modules: 6, updated: '1 week ago', service: 'passport' },
+    { id: 2, title: 'Aadhaar Update & Correction', type: 'PDF + Quiz', duration: '30 min', modules: 4, updated: '2 weeks ago', service: 'aadhaar' },
+    { id: 3, title: 'eDistrict Portal Masterclass', type: 'Video + PDF', duration: '60 min', modules: 8, updated: '3 days ago', service: 'edistrict' },
   ],
   discussionDetail: {
     id: 1,
@@ -203,7 +316,7 @@ const DATA = {
     solved: true,
     type: 'question',
     tags: ['Passport', 'Urgent', 'Police'],
-    service: 'Passport',
+    service: 'passport',
     customer: 'Muhammed',
     applicationNumber: 'A10293',
     trackingStatus: 'Police Verification – Pending',
@@ -257,7 +370,12 @@ Please suggest any other escalation channels or contacts.`,
       { title: 'Police Verification Not Updating on Portal', replies: 7 },
       { title: 'Passport Application Stuck – No Verification', replies: 12 },
       { title: 'How to Expedite Police Verification?', replies: 5 },
-    ]
+    ],
+    relatedContent: {
+      articles: [{ id: 1, title: 'Passport Application SOP – Complete Guide' }],
+      trainings: [{ id: 1, title: 'Passport Services – Complete Training' }],
+      announcements: [{ id: 1, title: 'New Passport Verification SOP' }],
+    }
   },
   categories: [
     { id: 'questions', label: 'Questions', icon: FiMessageSquare, color: '#6366f1' },
@@ -289,10 +407,11 @@ const STAFF_SUGGESTIONS = [
 // HELPER COMPONENTS (Tailwind only)
 // =====================================================================
 
-// Sidebar
+// Sidebar (UPDATED with Services section)
 const Sidebar = ({ active, onNavigate }) => {
   const mainNav = [
     { id: 'home', label: 'Home', icon: FiHome },
+    { id: 'services', label: 'Services', icon: FiGrid },  // New top-level
     { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: DATA.stats.discussions },
     { id: 'knowledge', label: 'Knowledge Base', icon: FiBook, count: DATA.stats.articles },
     { id: 'learning', label: 'Learning Center', icon: FiAward, count: DATA.stats.trainings },
@@ -383,8 +502,8 @@ const Sidebar = ({ active, onNavigate }) => {
   );
 };
 
-// Top Bar
-const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar }) => {
+// Top Bar (with AI Assistant button)
+const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant }) => {
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -416,6 +535,13 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar }) => {
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded border border-gray-300 font-mono">⌘K</span>
       </div>
       <div className="flex items-center gap-1.5">
+        <button
+          onClick={onAIAssistant}
+          className="relative p-2 rounded-full hover:bg-indigo-50 text-indigo-500 hover:text-indigo-700 transition"
+          title="Ask Akshaya Assistant"
+        >
+          <FiZap className="h-5 w-5" />
+        </button>
         <button onClick={() => onNavigate('notifications')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
           <FiBell className="h-5 w-5" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
@@ -495,7 +621,7 @@ const AnnouncementItem = ({ announcement, onClick }) => {
   );
 };
 
-// Discussion Card (with CRM context)
+// Discussion Card (updated to show service badge)
 const DiscussionCard = ({ discussion, onClick }) => {
   const typeIcons = {
     question: FiMessageSquare,
@@ -518,6 +644,10 @@ const DiscussionCard = ({ discussion, onClick }) => {
   };
   const typeClass = colorMap[discussion.type] || 'bg-gray-50 text-gray-600';
 
+  // Find service name
+  const serviceObj = DATA.services.find(s => s.id === discussion.service);
+  const serviceName = serviceObj ? serviceObj.name : null;
+
   return (
     <div className="p-3 bg-white border border-gray-200 rounded-xl mb-2.5 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={() => onClick(discussion.id)}>
       <div className="flex gap-3">
@@ -534,8 +664,8 @@ const DiscussionCard = ({ discussion, onClick }) => {
                 {discussion.solved ? 'Solved' : 'Open'}
               </span>
             )}
-            {discussion.service && (
-              <span className="text-[10px] font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{discussion.service}</span>
+            {serviceName && (
+              <span className="text-[10px] font-medium bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{serviceName}</span>
             )}
           </div>
           <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{discussion.preview}</div>
@@ -562,19 +692,24 @@ const DiscussionCard = ({ discussion, onClick }) => {
   );
 };
 
-// Knowledge Article Card
-const ArticleCard = ({ article, onClick }) => (
-  <div className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
-    <div className="font-semibold text-sm text-gray-900">{article.title}</div>
-    <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{article.desc}</div>
-    <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-gray-400">
-      <span><FiFolder className="inline h-3 w-3 mr-0.5" /> {article.category}</span>
-      <span><FiUser className="inline h-3 w-3 mr-0.5" /> {article.author}</span>
-      <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.updated}</span>
-      <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.readingTime}</span>
+// Knowledge Article Card (updated with service)
+const ArticleCard = ({ article, onClick }) => {
+  const serviceObj = DATA.services.find(s => s.id === article.service);
+  const serviceName = serviceObj ? serviceObj.name : null;
+  return (
+    <div className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
+      <div className="font-semibold text-sm text-gray-900">{article.title}</div>
+      <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{article.desc}</div>
+      <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-gray-400">
+        <span><FiFolder className="inline h-3 w-3 mr-0.5" /> {article.category}</span>
+        <span><FiUser className="inline h-3 w-3 mr-0.5" /> {article.author}</span>
+        <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.updated}</span>
+        <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.readingTime}</span>
+        {serviceName && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">{serviceName}</span>}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // Activity Feed
 const ActivityFeed = ({ activities }) => (
@@ -647,9 +782,11 @@ const KnowledgeHub = () => {
   const [page, setPage] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDiscussionId, setSelectedDiscussionId] = useState(null);
+  const [selectedServiceId, setSelectedServiceId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showAIAnswer, setShowAIAnswer] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   const [newDiscussion, setNewDiscussion] = useState({
     title: '',
@@ -658,7 +795,9 @@ const KnowledgeHub = () => {
     tags: [],
     priority: 'medium',
     visibility: 'everyone',
-    relatedTo: 'none',
+    relatedTo: 'none',        // 'customer', 'serviceEntry', 'task', 'note'
+    relatedId: '',
+    service: '',
     attachments: [],
   });
   const [tagInput, setTagInput] = useState('');
@@ -667,9 +806,13 @@ const KnowledgeHub = () => {
     if (target === 'discussion-detail' && id) {
       setPage('discussion-detail');
       setSelectedDiscussionId(id);
+    } else if (target === 'service-detail' && id) {
+      setPage('service-detail');
+      setSelectedServiceId(id);
     } else {
       setPage(target);
       setSelectedDiscussionId(null);
+      setSelectedServiceId(null);
       if (target !== 'search') setSearchQuery('');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -680,7 +823,12 @@ const KnowledgeHub = () => {
     setSearchQuery(query);
     if (query.trim()) {
       setPage('search');
-      setShowAIAnswer(query.toLowerCase().includes('aadhaar') || query.toLowerCase().includes('dob'));
+      setShowAIAnswer(
+        query.toLowerCase().includes('aadhaar') ||
+        query.toLowerCase().includes('dob') ||
+        query.toLowerCase().includes('passport') ||
+        query.toLowerCase().includes('ration')
+      );
     } else {
       setPage('home');
     }
@@ -692,6 +840,7 @@ const KnowledgeHub = () => {
   };
 
   const openDiscussionDetail = (id) => navigateTo('discussion-detail', id);
+  const openServiceDetail = (id) => navigateTo('service-detail', id);
 
   const addTag = () => {
     if (tagInput.trim() && !newDiscussion.tags.includes(tagInput.trim())) {
@@ -715,6 +864,8 @@ const KnowledgeHub = () => {
       priority: 'medium',
       visibility: 'everyone',
       relatedTo: 'none',
+      relatedId: '',
+      service: '',
       attachments: [],
     });
     setTagInput('');
@@ -725,6 +876,8 @@ const KnowledgeHub = () => {
   const renderPage = () => {
     switch (page) {
       case 'home': return <HomePage navigateTo={navigateTo} handleTagClick={handleTagClick} openDiscussion={openDiscussionDetail} />;
+      case 'services': return <ServicesPage navigateTo={navigateTo} openServiceDetail={openServiceDetail} />;
+      case 'service-detail': return <ServiceDetailPage serviceId={selectedServiceId} navigateTo={navigateTo} openDiscussion={openDiscussionDetail} />;
       case 'discussions': return <DiscussionsPage navigateTo={navigateTo} openDiscussion={openDiscussionDetail} />;
       case 'discussion-detail': return <DiscussionDetailPage discussionId={selectedDiscussionId} navigateTo={navigateTo} />;
       case 'knowledge': return <KnowledgePage navigateTo={navigateTo} />;
@@ -744,7 +897,7 @@ const KnowledgeHub = () => {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Desktop Sidebar - hidden on mobile */}
+      {/* Desktop Sidebar */}
       <div className="hidden lg:block">
         <Sidebar active={page} onNavigate={navigateTo} />
       </div>
@@ -756,6 +909,7 @@ const KnowledgeHub = () => {
           query={searchQuery}
           onNavigate={navigateTo}
           toggleMobileSidebar={toggleMobileSidebar}
+          onAIAssistant={() => setShowAIAssistant(true)}
         />
         <div className="flex-1 p-4 sm:p-6">
           {renderPage()}
@@ -779,7 +933,49 @@ const KnowledgeHub = () => {
         <FiPlus className="h-6 w-6" />
       </button>
 
-      {/* Create Discussion Modal */}
+      {/* AI Assistant Modal */}
+      <AnimatePresence>
+        {showAIAssistant && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={() => setShowAIAssistant(false)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[80vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <FiZap className="text-indigo-500" /> Akshaya Assistant
+                </h2>
+                <button className="p-2 hover:bg-gray-100 rounded-lg transition" onClick={() => setShowAIAssistant(false)}>
+                  <FiX className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-600">
+                  Ask me anything about services, SOPs, or common issues. I'll search the knowledge base and provide the best answer.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g., How to correct Aadhaar DOB?"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Ask</button>
+                </div>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                  <p className="text-sm text-gray-700">
+                    <strong>Example:</strong> To correct Aadhaar DOB, visit the nearest enrolment centre with valid proof (birth certificate, school certificate). You can also update online via the UIDAI portal using OTP.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Discussion Modal (updated with service and related fields) */}
       <AnimatePresence>
         {showCreateModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={() => setShowCreateModal(false)}>
@@ -849,13 +1045,14 @@ const KnowledgeHub = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Related To</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
                     <select
-                      value={newDiscussion.relatedTo}
-                      onChange={e => setNewDiscussion(prev => ({ ...prev, relatedTo: e.target.value }))}
+                      value={newDiscussion.service}
+                      onChange={e => setNewDiscussion(prev => ({ ...prev, service: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     >
-                      <option value="none">None</option><option value="customer">Customer</option><option value="service">Service</option><option value="task">Task</option><option value="team">Team</option>
+                      <option value="">None</option>
+                      {DATA.services.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                     </select>
                   </div>
                   <div>
@@ -867,6 +1064,32 @@ const KnowledgeHub = () => {
                     >
                       <option value="everyone">Everyone</option><option value="centre">Centre</option><option value="private">Private</option><option value="admins">Admins</option>
                     </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Related To</label>
+                    <select
+                      value={newDiscussion.relatedTo}
+                      onChange={e => setNewDiscussion(prev => ({ ...prev, relatedTo: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="none">None</option>
+                      <option value="customer">Customer</option>
+                      <option value="serviceEntry">Service Entry</option>
+                      <option value="task">Task</option>
+                      <option value="note">Note</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Related ID (optional)</label>
+                    <input
+                      type="text"
+                      value={newDiscussion.relatedId}
+                      onChange={e => setNewDiscussion(prev => ({ ...prev, relatedId: e.target.value }))}
+                      placeholder="e.g., CUST-123"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
                   </div>
                 </div>
                 <div>
@@ -909,9 +1132,10 @@ const KnowledgeHub = () => {
 };
 
 // =====================================================================
-// PAGE COMPONENTS (all Tailwind only)
+// PAGE COMPONENTS (UPDATED)
 // =====================================================================
 
+// HomePage (minor changes – added link to Services)
 const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   <div className="space-y-6">
     <div>
@@ -926,6 +1150,29 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
       <StatCard label="Training Materials" value={DATA.stats.trainings} icon={FiAward} color="purple" />
       <StatCard label="Open Questions" value={DATA.stats.openQuestions} icon={FiAlertCircle} color="rose" />
       <StatCard label="Unread Mentions" value={DATA.stats.unreadMentions} icon={FiAtSign} color="indigo" />
+    </div>
+
+    {/* Quick Service Access */}
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+          <FiGrid className="h-4 w-4 text-indigo-500" /> Popular Services
+        </h3>
+        <span className="text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer font-medium" onClick={() => navigateTo('services')}>View all →</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {DATA.services.slice(0, 4).map(service => (
+          <div
+            key={service.id}
+            className="p-3 bg-gray-50 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 rounded-xl cursor-pointer transition"
+            onClick={() => navigateTo('service-detail', service.id)}
+          >
+            <service.icon className="h-6 w-6 text-indigo-500 mb-1" />
+            <div className="font-medium text-sm text-gray-900">{service.name}</div>
+            <div className="text-xs text-gray-500 line-clamp-1">{service.description}</div>
+          </div>
+        ))}
+      </div>
     </div>
 
     {/* Government Updates */}
@@ -1016,21 +1263,198 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   </div>
 );
 
-// Discussions List
+// ===== SERVICES PAGE =====
+const ServicesPage = ({ navigateTo, openServiceDetail }) => {
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-gray-900 mb-4">All Services</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {DATA.services.map(service => (
+          <div
+            key={service.id}
+            className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer"
+            onClick={() => openServiceDetail(service.id)}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                <service.icon className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">{service.name}</h3>
+                <p className="text-xs text-gray-500">{service.description}</p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {service.relatedTags.map(tag => (
+                <span key={tag} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">#{tag}</span>
+              ))}
+            </div>
+            <div className="mt-2 text-xs text-gray-400">
+              {DATA.articles.filter(a => a.service === service.id).length} articles ·{' '}
+              {DATA.training.filter(t => t.service === service.id).length} trainings ·{' '}
+              {DATA.discussions.filter(d => d.service === service.id).length} discussions
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ===== SERVICE DETAIL PAGE =====
+const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
+  const service = DATA.services.find(s => s.id === serviceId);
+  if (!service) return <div className="text-center py-12 text-gray-500">Service not found</div>;
+
+  const [activeTab, setActiveTab] = useState('overview');
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: FiInfo },
+    { id: 'sop', label: 'SOP', icon: FiFileText },
+    { id: 'faqs', label: 'FAQs', icon: FiMessageSquare },
+    { id: 'resources', label: 'Resources', icon: FiLink },
+    { id: 'discussions', label: 'Discussions', icon: FiMessageCircle },
+    { id: 'training', label: 'Training', icon: FiAward },
+  ];
+
+  const relatedDiscussions = DATA.discussions.filter(d => d.service === serviceId);
+  const relatedArticles = DATA.articles.filter(a => a.service === serviceId);
+  const relatedTrainings = DATA.training.filter(t => t.service === serviceId);
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <button className="p-2 hover:bg-gray-100 rounded-lg transition" onClick={() => navigateTo('services')}>
+          <FiChevronLeft className="h-5 w-5 text-gray-500" />
+        </button>
+        <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+          <service.icon className="h-6 w-6" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900">{service.name}</h2>
+        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Service</span>
+      </div>
+
+      <div className="border-b border-gray-200 mb-4">
+        <div className="flex flex-wrap gap-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition ${
+                activeTab === tab.id
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <tab.icon className="h-4 w-4" /> {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-4 min-h-[300px]">
+        {activeTab === 'overview' && (
+          <div>
+            <p className="text-gray-700 whitespace-pre-wrap">{service.overview}</p>
+            <div className="mt-4 p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+              <h4 className="font-semibold text-sm text-gray-900">Quick Stats</h4>
+              <div className="flex gap-4 mt-1 text-sm">
+                <span><strong>{relatedDiscussions.length}</strong> Discussions</span>
+                <span><strong>{relatedArticles.length}</strong> Articles</span>
+                <span><strong>{relatedTrainings.length}</strong> Trainings</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'sop' && (
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-2">Standard Operating Procedure</h3>
+            <p className="text-gray-700 whitespace-pre-wrap">{service.sop}</p>
+          </div>
+        )}
+        {activeTab === 'faqs' && (
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-2">Frequently Asked Questions</h3>
+            <div className="space-y-3">
+              {service.faqs.map((faq, idx) => (
+                <div key={idx} className="border-b border-gray-100 pb-2">
+                  <div className="font-medium text-sm text-gray-800">Q: {faq.q}</div>
+                  <div className="text-sm text-gray-600 mt-0.5">A: {faq.a}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeTab === 'resources' && (
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-2">Resources & Links</h3>
+            <ul className="space-y-2">
+              {service.resources.map((res, idx) => (
+                <li key={idx} className="flex items-center gap-2 text-sm">
+                  <FiExternalLink className="h-4 w-4 text-indigo-500" />
+                  <a href={res.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">{res.title}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {activeTab === 'discussions' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">Related Discussions ({relatedDiscussions.length})</h3>
+              <button className="text-xs text-indigo-600 hover:text-indigo-800" onClick={() => navigateTo('discussions')}>View all</button>
+            </div>
+            {relatedDiscussions.length > 0 ? (
+              relatedDiscussions.map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)
+            ) : (
+              <p className="text-sm text-gray-500">No discussions yet for this service.</p>
+            )}
+          </div>
+        )}
+        {activeTab === 'training' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">Training Materials ({relatedTrainings.length})</h3>
+              <button className="text-xs text-indigo-600 hover:text-indigo-800" onClick={() => navigateTo('learning')}>View all</button>
+            </div>
+            {relatedTrainings.length > 0 ? (
+              <div className="space-y-2">
+                {relatedTrainings.map(t => (
+                  <div key={t.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                    <span className="text-xl">{t.type.includes('Video') ? '🎬' : t.type.includes('PDF') ? '📄' : '📚'}</span>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">{t.title}</div>
+                      <div className="text-xs text-gray-400">{t.duration} · {t.modules} modules · Updated {t.updated}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No training materials yet.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Discussions List (minor updates)
 const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterService, setFilterService] = useState('all');
   const [sortBy, setSortBy] = useState('latest');
 
   const filtered = useMemo(() => {
     let list = DATA.discussions;
     if (filterCategory !== 'all') list = list.filter(d => d.type === filterCategory);
     if (filterStatus !== 'all') list = list.filter(d => filterStatus === 'solved' ? d.solved : !d.solved);
+    if (filterService !== 'all') list = list.filter(d => d.service === filterService);
     if (sortBy === 'latest') list = list.slice().sort((a, b) => new Date(b.lastReply) - new Date(a.lastReply));
     else if (sortBy === 'replies') list = list.slice().sort((a, b) => b.replies - a.replies);
     else if (sortBy === 'views') list = list.slice().sort((a, b) => b.views - a.views);
     return list;
-  }, [filterCategory, filterStatus, sortBy]);
+  }, [filterCategory, filterStatus, filterService, sortBy]);
 
   return (
     <div>
@@ -1043,6 +1467,10 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
             <option value="all">All Status</option><option value="open">Open</option><option value="solved">Solved</option>
+          </select>
+          <select value={filterService} onChange={e => setFilterService(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+            <option value="all">All Services</option>
+            {DATA.services.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
           </select>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
             <option value="latest">Latest</option><option value="replies">Most Replies</option><option value="views">Most Views</option>
@@ -1062,7 +1490,7 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
   );
 };
 
-// Discussion Detail
+// Discussion Detail (updated with related content)
 const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   const discussion = DATA.discussionDetail;
   if (!discussion) return <div className="text-center py-12 text-gray-500">Discussion not found</div>;
@@ -1080,6 +1508,10 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
 
   const handleConvert = (action) => toast.success(`Converting to ${action}... (demo)`);
 
+  // Find service name
+  const serviceObj = DATA.services.find(s => s.id === discussion.service);
+  const serviceName = serviceObj ? serviceObj.name : null;
+
   return (
     <div className="flex flex-col lg:flex-row gap-6">
       {/* Main column */}
@@ -1092,7 +1524,7 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${discussion.solved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
               {discussion.solved ? 'Solved' : 'Open'}
             </span>
-            <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">{discussion.service}</span>
+            {serviceName && <span className="text-xs font-medium bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">{serviceName}</span>}
           </div>
           <h2 className="text-2xl font-bold text-gray-900">{discussion.title}</h2>
           <div className="flex flex-wrap gap-4 text-sm text-gray-500 mt-1">
@@ -1110,6 +1542,9 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
           {discussion.trackingStatus && <span><FiTarget className="inline mr-1.5 text-indigo-500" /> Status: <strong>{discussion.trackingStatus}</strong></span>}
           {discussion.relatedServiceEntries && (
             <span><FiBriefcase className="inline mr-1.5 text-indigo-500" /> Service Entries: <strong>{discussion.relatedServiceEntries.length}</strong></span>
+          )}
+          {discussion.relatedRecords && (
+            <span className="text-xs text-gray-500">Linked to CRM records</span>
           )}
         </div>
 
@@ -1174,7 +1609,7 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
             <div className="flex justify-between"><span className="text-gray-500">Status</span><span className="font-medium text-gray-900">{discussion.status}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Priority</span><span className="font-medium text-gray-900">{discussion.priority}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Category</span><span className="font-medium text-gray-900">{discussion.category}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Service</span><span className="font-medium text-gray-900">{discussion.service || 'None'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Service</span><span className="font-medium text-gray-900">{serviceName || 'None'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Created</span><span className="font-medium text-gray-900">{discussion.author}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Views</span><span className="font-medium text-gray-900">{discussion.views}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Replies</span><span className="font-medium text-gray-900">{discussion.replies}</span></div>
@@ -1223,12 +1658,43 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
             </div>
           ))}
         </div>
+
+        {/* Related Content (Knowledge Graph) */}
+        {discussion.relatedContent && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Related Content</div>
+            {discussion.relatedContent.articles && discussion.relatedContent.articles.length > 0 && (
+              <div className="mb-2">
+                <div className="text-xs font-medium text-gray-600">Articles</div>
+                {discussion.relatedContent.articles.map(a => (
+                  <div key={a.id} className="text-sm text-indigo-600 hover:underline cursor-pointer" onClick={() => navigateTo('knowledge')}>{a.title}</div>
+                ))}
+              </div>
+            )}
+            {discussion.relatedContent.trainings && discussion.relatedContent.trainings.length > 0 && (
+              <div className="mb-2">
+                <div className="text-xs font-medium text-gray-600">Trainings</div>
+                {discussion.relatedContent.trainings.map(t => (
+                  <div key={t.id} className="text-sm text-indigo-600 hover:underline cursor-pointer" onClick={() => navigateTo('learning')}>{t.title}</div>
+                ))}
+              </div>
+            )}
+            {discussion.relatedContent.announcements && discussion.relatedContent.announcements.length > 0 && (
+              <div>
+                <div className="text-xs font-medium text-gray-600">Announcements</div>
+                {discussion.relatedContent.announcements.map(a => (
+                  <div key={a.id} className="text-sm text-indigo-600 hover:underline cursor-pointer" onClick={() => navigateTo('announcements')}>{a.title}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-// Knowledge Base
+// Knowledge Base (updated)
 const KnowledgePage = ({ navigateTo }) => (
   <div>
     <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -1239,6 +1705,10 @@ const KnowledgePage = ({ navigateTo }) => (
           <option>All Categories</option>
           {DATA.categories.map(cat => (<option key={cat.id}>{cat.label}</option>))}
         </select>
+        <select className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option>All Services</option>
+          {DATA.services.map(s => (<option key={s.id}>{s.name}</option>))}
+        </select>
       </div>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1247,18 +1717,18 @@ const KnowledgePage = ({ navigateTo }) => (
   </div>
 );
 
-// Learning Center
+// Learning Center (updated)
 const LearningPage = ({ navigateTo }) => {
-  const services = ['Passport', 'Aadhaar', 'eDistrict', 'Ration Card'];
+  const services = DATA.services.map(s => s.id);
   return (
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-4">Learning Center</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {services.map(service => {
-          const materials = DATA.training.filter(t => t.service === service);
+        {DATA.services.map(service => {
+          const materials = DATA.training.filter(t => t.service === service.id);
           return (
-            <div key={service} className="bg-white border border-gray-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition" onClick={() => navigateTo('training')}>
-              <div className="font-semibold text-gray-900 mb-2">{service}</div>
+            <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition" onClick={() => navigateTo('learning')}>
+              <div className="font-semibold text-gray-900 mb-2">{service.name}</div>
               {materials.length > 0 ? materials.map(m => (
                 <div key={m.id} className="flex items-center gap-2 text-sm py-1 border-b border-gray-50 last:border-0">
                   <span className="text-lg">{m.type.includes('Video') ? '🎬' : m.type.includes('PDF') ? '📄' : '📚'}</span>
@@ -1274,7 +1744,7 @@ const LearningPage = ({ navigateTo }) => {
   );
 };
 
-// Announcements
+// Announcements (unchanged)
 const AnnouncementsPage = ({ navigateTo }) => {
   const [filter, setFilter] = useState('all');
   const filtered = DATA.announcements.filter(a => filter === 'all' || a.category === filter);
@@ -1297,7 +1767,7 @@ const AnnouncementsPage = ({ navigateTo }) => {
   );
 };
 
-// Tags
+// Tags (unchanged)
 const TagsPage = ({ navigateTo, handleTagClick }) => (
   <div>
     <h2 className="text-xl font-bold text-gray-900 mb-4">All Tags</h2>
@@ -1315,7 +1785,7 @@ const TagsPage = ({ navigateTo, handleTagClick }) => (
   </div>
 );
 
-// My Workspace sub-pages (Mentions, Drafts, etc.)
+// My Workspace sub-pages (unchanged)
 const MentionsPage = ({ navigateTo }) => (
   <div>
     <h2 className="text-xl font-bold text-gray-900 mb-4">Mentions</h2>
@@ -1415,7 +1885,7 @@ const NotificationsPage = () => (
   </div>
 );
 
-// Search Page with AI answer
+// Search Page (enhanced with service results)
 const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
   const discussionResults = DATA.discussions.filter(d =>
     d.title.toLowerCase().includes(query.toLowerCase()) ||
@@ -1425,12 +1895,16 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
     a.title.toLowerCase().includes(query.toLowerCase()) ||
     a.desc.toLowerCase().includes(query.toLowerCase())
   );
+  const serviceResults = DATA.services.filter(s =>
+    s.name.toLowerCase().includes(query.toLowerCase()) ||
+    s.description.toLowerCase().includes(query.toLowerCase())
+  );
 
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-xl font-bold text-gray-900">Search: "{query}"</h2>
-        <p className="text-sm text-gray-500">{discussionResults.length + articleResults.length} results found</p>
+        <p className="text-sm text-gray-500">{discussionResults.length + articleResults.length + serviceResults.length} results found</p>
       </div>
       {showAIAnswer && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
@@ -1438,8 +1912,26 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
             <FiZap className="h-5 w-5" /> AI Answer
           </div>
           <p className="text-sm text-gray-700">
-            Based on your query about Aadhaar correction, here's the summary: You can correct your Aadhaar DOB by visiting the e-Aadhaar portal or nearest enrolment centre. The process requires supporting documents (birth certificate, school certificate, etc.). For more details, see the <strong>Knowledge Article</strong> below.
+            Based on your query, here's a summary: {query.toLowerCase().includes('aadhaar') ? 'You can correct Aadhaar DOB by visiting the enrolment centre with valid proof (birth certificate, school certificate). Online updates are also available via UIDAI portal.' :
+            query.toLowerCase().includes('passport') ? 'Passport police verification usually takes 7-15 days. For delays, contact the DCP office or file a grievance on CPGRAMS.' :
+            'Please refine your query for more specific guidance.'}
           </p>
+        </div>
+      )}
+      {serviceResults.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-gray-900 mb-2">Services</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {serviceResults.map(s => (
+              <div key={s.id} className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 cursor-pointer" onClick={() => navigateTo('service-detail', s.id)}>
+                <div className="flex items-center gap-2">
+                  <s.icon className="h-5 w-5 text-indigo-500" />
+                  <span className="font-medium text-gray-900">{s.name}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {discussionResults.length > 0 && (
@@ -1458,7 +1950,7 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
           </div>
         </div>
       )}
-      {discussionResults.length === 0 && articleResults.length === 0 && (
+      {discussionResults.length === 0 && articleResults.length === 0 && serviceResults.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           <FiSearch className="h-12 w-12 mx-auto mb-3 text-gray-300" />
           <p>No results found. Try adjusting your search terms.</p>
