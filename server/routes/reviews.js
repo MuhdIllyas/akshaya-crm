@@ -681,17 +681,37 @@ router.get("/single/:id", async (req, res) => {
   try {
     const review = await pool.query(
       `SELECT sr.*, 
-              s.name as service_name,
-              st.name as staff_name,
+              -- 🔥 Smart Service Name Fallbacks
+              COALESCE(s1.name, s2.name, s3.name) as service_name,
+              
+              -- 🔥 Smart Staff & Role Fallbacks
+              COALESCE(st1.name, st2.name) as staff_name,
+              COALESCE(st1.role, st2.role) as staff_role,
+              
+              -- Smart Customer Name Fallbacks
               c.name as portal_customer_name,
               cen.name as centre_name,
-              se.customer_name as tracking_customer_name
+              se.customer_name as tracking_customer_name,
+              cs_cust.name as cs_customer_name
        FROM service_reviews sr
-       LEFT JOIN services s ON sr.service_id = s.id
-       LEFT JOIN staff st ON sr.staff_id = st.id
+       
+       -- Direct Joins
+       LEFT JOIN services s1 ON sr.service_id = s1.id
+       LEFT JOIN staff st1 ON sr.staff_id = st1.id
        LEFT JOIN customers c ON sr.customer_id = c.id
        LEFT JOIN centres cen ON sr.centre_id = cen.id
-       LEFT JOIN service_entries se ON sr.tracking_id = se.id
+       
+       -- Walk-in Tracking Rescue Joins (sr.tracking_id -> service_tracking)
+       LEFT JOIN service_tracking track ON sr.tracking_id = track.id
+       LEFT JOIN service_entries se ON track.service_entry_id = se.id
+       LEFT JOIN services s2 ON se.category_id = s2.id
+       LEFT JOIN staff st2 ON track.assigned_to = st2.id
+       
+       -- Portal Booking Rescue Joins (sr.booking_id -> customer_services)
+       LEFT JOIN customer_services cs ON sr.booking_id = cs.id
+       LEFT JOIN services s3 ON cs.service_id = s3.id
+       LEFT JOIN customers cs_cust ON cs.customer_id = cs_cust.id
+
        WHERE sr.id = $1`,
       [req.params.id]
     );
@@ -701,8 +721,7 @@ router.get("/single/:id", async (req, res) => {
     }
 
     const data = review.rows[0];
-    // Normalize customer name depending on whether it was a public or portal review
-    data.display_customer_name = data.customer_name || data.portal_customer_name || data.tracking_customer_name || "A Customer";
+    data.display_customer_name = data.customer_name || data.portal_customer_name || data.tracking_customer_name || data.cs_customer_name || "A Customer";
 
     res.json(data);
   } catch (error) {

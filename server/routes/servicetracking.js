@@ -2263,7 +2263,7 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
             createReviewRequest({
               centreId: centreId,
               trackingId: updatedEntry.id,
-              serviceId: null,
+              serviceId: entryData.category_id,
               staffId: entryData.staff_id,
               customerName: entryData.customer_name,
               customerPhone: entryData.phone,

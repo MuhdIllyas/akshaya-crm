@@ -131,7 +131,7 @@ const ReviewDetailsDrawer = ({ isOpen, onClose, reviewId }) => {
                       <FiUser className="h-4 w-4 text-indigo-400 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-indigo-900">{review.staff_name || "Unassigned"}</p>
-                        <p className="text-xs text-indigo-500">Staff Member</p>
+                        <p className="text-xs text-indigo-500 uppercase tracking-wider">{review.staff_role || "Staff Member"}</p>
                       </div>
                     </div>
                   </div>
