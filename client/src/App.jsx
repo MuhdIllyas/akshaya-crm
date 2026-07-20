@@ -286,6 +286,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
+              path="admin/knowledge_hub"
+              element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><KnowledgeHub /></ProtectedRoute>}
+            />
+            <Route
               path="admin/notifications"
               element={<ProtectedRoute allowedRoles={["admin"]}><NotificationsPage /></ProtectedRoute>}
             />
@@ -368,6 +372,10 @@ const App = () => {
             <Route
               path="superadmin/messenger"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><Messenger /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/knowledge_hub"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><KnowledgeHub /></ProtectedRoute>}
             /> 
             <Route
               path="superadmin/notifications"
