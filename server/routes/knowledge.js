@@ -2,6 +2,8 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import * as knowledgeController from './knowledge/controller.js';
 
+const router = express.Router();
+
 // Middleware to verify token and role
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
