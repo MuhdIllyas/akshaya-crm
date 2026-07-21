@@ -63,6 +63,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
 
   if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;
   if (error) return <div className="p-12 flex justify-center text-red-500 gap-2"><FiAlertCircle /> {error}</div>;
+  if (!workspace) return <div className="p-12 flex justify-center text-gray-500"><FiLoader className="animate-spin h-5 w-5 mr-2" /> Initializing Workspace Data...</div>;
 
   // 1. Map Documents to Tabs
   const documentTabs = documents.map(doc => {
