@@ -314,7 +314,7 @@ app.use("/api/communication", communicationRoutes);
 /* Notification */
 app.use("/api/notifications", notificationRoutes);
 
-/* Notification */
+/* Knowledge Hub */
 app.use("/api/knowledge", knowledgeRoutes);
 
 /* ================================
