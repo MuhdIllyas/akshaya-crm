@@ -219,19 +219,41 @@ const OperationsHub = () => {
 
   const renderPage = () => {
     switch (page) {
+      case 'home': 
+        return <HomePage navigateTo={navigateTo} handleTagClick={handleTagClick} openDiscussion={openDiscussionDetail} />;
       case 'services': 
         return <ServicesPage navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
       case 'service-detail': 
-        // WE INJECT OUR DYNAMIC TABS HERE!
-        return (
-          <ServiceWorkspace 
-            serviceId={selectedServiceId} 
-            navigateTo={navigateTo} 
-            mockService={DATA.services.find(s => s.id === selectedServiceId)} 
-          />
-        );
+        // Our new dynamic workspace!
+        return <ServiceWorkspace serviceId={selectedServiceId} navigateTo={navigateTo} mockService={DATA.services.find(s => s.id === selectedServiceId)} />;
+      case 'discussions': 
+        return <DiscussionsPage navigateTo={navigateTo} openDiscussion={openDiscussionDetail} />;
+      case 'discussion-detail': 
+        return <DiscussionDetailPage discussionId={selectedDiscussionId} navigateTo={navigateTo} />;
+      case 'learning': 
+        return <LearningPage navigateTo={navigateTo} />;
+      case 'announcements': 
+        return <AnnouncementsPage navigateTo={navigateTo} />;
+      case 'tags': 
+        return <TagsPage navigateTo={navigateTo} handleTagClick={handleTagClick} />;
+      case 'bookmarks': 
+        return <BookmarksPage />;
+      case 'mentions': 
+        return <MentionsPage navigateTo={navigateTo} />;
+      case 'drafts': 
+        return <DraftsPage navigateTo={navigateTo} />;
+      case 'following': 
+        return <FollowingPage />;
+      case 'history': 
+        return <HistoryPage />;
+      case 'notifications': 
+        return <NotificationsPage />;
+      case 'ai-assistant': 
+        return <AIAssistantPage navigateTo={navigateTo} aiQuery={aiQuery} setAiQuery={setAiQuery} />;
+      case 'search': 
+        return <SearchPage query={searchQuery} navigateTo={navigateTo} openDiscussion={openDiscussionDetail} showAIAnswer={showAIAnswer} />;
       default: 
-        return <ServicesPage navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
+        return <HomePage navigateTo={navigateTo} handleTagClick={handleTagClick} openDiscussion={openDiscussionDetail} />;
     }
   };
 

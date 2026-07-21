@@ -93,7 +93,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     if (activeTab === 'dashboard') {
       return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} />;
     }
-    if (activeTab === 'discussions') { // <--- Add this block!
+    if (activeTab === 'discussions') { 
       return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} />;
     }
     if (activeTab === 'resources') {
