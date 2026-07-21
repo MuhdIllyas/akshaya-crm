@@ -1,94 +1,256 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { FiLoader, FiAlertCircle } from 'react-icons/fi';
-import { fetchWorkspace } from '../../services/knowledge';
-import WorkspaceSidebar from './WorkspaceSidebar';
-import WorkspaceHeader from './WorkspaceHeader';
+import {
+  FiHome, FiMessageCircle, FiBook, FiBell, FiAward,
+  FiTag, FiBookmark, FiAtSign, FiClock, FiPlus, FiSearch,
+  FiUser, FiChevronRight, FiChevronLeft, FiX,
+  FiStar, FiTrendingUp, FiCalendar, FiEye, FiMessageSquare,
+  FiPaperclip, FiLink, FiCheckCircle, FiAlertCircle, FiFilter,
+  FiChevronDown, FiCornerDownLeft, FiEdit2, FiTrash2, FiSave,
+  FiExternalLink, FiLock, FiMapPin, FiGlobe, FiHeart, FiZap,
+  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo,
+  FiMenu, FiSettings, FiFile, FiLayers, FiFolder,
+  FiMoreHorizontal, FiShare2, FiUserPlus, FiRefreshCw,
+  FiArchive, FiClipboard, FiVideo, FiFileText, FiLifeBuoy,
+  FiUsers, FiBriefcase, FiTarget, FiCheckSquare, FiMessageCircle as FiMessageCircleOutline,
+  FiGrid, FiList, FiFilePlus, FiDatabase, FiServer, FiCloud,
+  FiMessageCircle as FiChat, FiFileMinus, FiFilePlus as FiFileAdd,
+} from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MentionsInput, Mention } from 'react-mentions';
+import { toast } from 'react-toastify';
+import ServiceWorkspace from './ServiceWorkspace';
 
-// The Bespoke Views
-import OverviewDashboard from './views/OverviewDashboard';
-import ResourcesGrid from './views/ResourcesGrid';
-import DocumentView from './views/DocumentView';
-import ComingSoon from './views/ComingSoon';
+// =====================================================================
+// FULL MOCK DATA 
+// =====================================================================
+const DATA = {
+  stats: { discussions: 145, articles: 48, announcements: 18, trainings: 27, openQuestions: 13, unreadMentions: 3, cases: 76 },
+  governmentUpdates: [
+    { id: 1, title: 'New Passport Verification SOP – Effective 1st April', date: '2 hours ago', type: 'circular', priority: 'high' },
+    { id: 2, title: 'Aadhaar Enrolment Guidelines Updated', date: 'Yesterday', type: 'order', priority: 'medium' },
+    { id: 3, title: 'Ration Card Portability Scheme Announced', date: '3 days ago', type: 'circular', priority: 'high' },
+  ],
+  trending: [
+    { name: 'Passport Delay', count: 23 }, { name: 'Income Certificate', count: 18 }, { name: 'Ration Card', count: 14 }
+  ],
+  announcements: [
+    { pinned: true, title: 'Office Closed on 26th Jan', time: '2 hours ago', category: 'centre' },
+    { pinned: false, title: 'CRM Software Update v2.4.1', time: '1 day ago', category: 'software' },
+  ],
+  services: [
+    {
+      id: 'passport', name: 'Passport', icon: FiFileText,
+      description: 'All services related to passport issuance, renewal, and police verification.',
+      todayApplications: 12, pending: 8, latestCircular: 'New Passport Verification SOP – Effective 1st April',
+      relatedTags: ['Passport', 'Police', 'Tatkal']
+    },
+    {
+      id: 'aadhaar', name: 'Aadhaar', icon: FiServer,
+      description: 'Aadhaar enrolment, update, and correction services.',
+      todayApplications: 5, pending: 3, latestCircular: 'Aadhaar Enrolment Guidelines Updated',
+      relatedTags: ['Aadhaar', 'UIDAI']
+    },
+    {
+      id: 'edistrict', name: 'eDistrict', icon: FiCloud,
+      description: 'eDistrict services including income certificate, caste certificate, and more.',
+      todayApplications: 8, pending: 5, latestCircular: 'New eDistrict Services Launched',
+      relatedTags: ['eDistrict', 'Income Certificate']
+    }
+  ],
+  discussions: [], solvedCases: [], popular: [], myMentions: [], drafts: [], articles: [], allTags: [], training: [],
+  categories: [
+    { id: 'question', label: 'Question', icon: FiMessageSquare, color: '#6366f1' },
+    { id: 'solved case', label: 'Solved Case', icon: FiCheckCircle, color: '#10b981' }
+  ]
+};
 
-const OperationsHub = () => { 
-  const { serviceId } = useParams(); 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // Data State
-  const [workspace, setWorkspace] = useState(null);
-  const [documents, setDocuments] = useState([]);
-  const [resources, setResources] = useState([]);
-  const [stats, setStats] = useState({});
-  const [contributors, setContributors] = useState([]);
-  
-  // UI State: Now strictly relies on a string 'tab' identifier
-  const [activeTab, setActiveTab] = useState('overview');
+const STAFF_SUGGESTIONS = [
+  { id: 1, display: 'Admin' }, { id: 2, display: 'Sneha M' }, { id: 3, display: 'Rahul K' }
+];
 
+// =====================================================================
+// HELPER COMPONENTS
+// =====================================================================
+
+const Sidebar = ({ active, onNavigate }) => {
+  const mainNav = [
+    { id: 'home', label: 'Home', icon: FiHome },
+    { id: 'services', label: 'Services', icon: FiGrid },
+    { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: DATA.stats.discussions },
+    { id: 'learning', label: 'Learning Center', icon: FiAward, count: DATA.stats.trainings },
+    { id: 'announcements', label: 'Announcements', icon: FiBell, count: DATA.stats.announcements },
+    { id: 'ai-assistant', label: 'AI Assistant', icon: FiZap },
+  ];
+  const workspaceItems = [
+    { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: DATA.stats.unreadMentions },
+    { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
+    { id: 'drafts', label: 'Drafts', icon: FiFile, count: DATA.drafts.length },
+    { id: 'following', label: 'Following', icon: FiUserPlus },
+    { id: 'history', label: 'History', icon: FiClock },
+  ];
+
+  return (
+    <div className="w-60 h-full bg-white border-r border-gray-200 flex flex-col overflow-y-auto flex-shrink-0">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200">
+        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm">
+          <FiZap className="h-5 w-5" />
+        </div>
+        <h1 className="text-lg font-bold text-gray-900">Operations Hub</h1>
+        <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full ml-auto">v4.0</span>
+      </div>
+
+      <div className="flex-1 px-2.5 py-3">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5">⚡ Operations</div>
+        {mainNav.map(item => (
+          <a
+            key={item.id}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+              active === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+            onClick={() => onNavigate(item.id)}
+          >
+            <item.icon className="h-4 w-4" />
+            <span>{item.label}</span>
+            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+          </a>
+        ))}
+
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5 mt-4">⭐ My Workspace</div>
+        {workspaceItems.map(item => (
+          <a
+            key={item.id}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+              active === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+            onClick={() => onNavigate(item.id)}
+          >
+            <item.icon className="h-4 w-4" />
+            <span>{item.label}</span>
+            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant }) => {
+  const inputRef = useRef(null);
+
+  return (
+    <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <button className="lg:hidden text-gray-500 hover:text-gray-700" onClick={toggleMobileSidebar}>
+        <FiMenu className="h-5 w-5" />
+      </button>
+      <div className="flex-1 min-w-[180px] max-w-xl relative">
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Ask Operations Hub (e.g., 'How to correct Aadhaar DOB?')"
+          value={query}
+          onChange={(e) => onSearch(e.target.value)}
+          className="w-full pl-9 pr-14 py-2 bg-gray-100 border border-transparent rounded-full text-sm focus:outline-none focus:bg-white focus:border-gray-300 transition-all shadow-inner"
+        />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded border border-gray-300 font-mono">⌘K</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button onClick={onAIAssistant} className="relative p-2 rounded-full hover:bg-indigo-50 text-indigo-500 hover:text-indigo-700 transition" title="Ask Akshaya Assistant">
+          <FiZap className="h-5 w-5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const ServicesPage = ({ navigateTo, openServiceDetail }) => {
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-gray-900 mb-4">All Services</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {DATA.services.map(service => (
+          <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer" onClick={() => openServiceDetail(service.id)}>
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><service.icon className="h-6 w-6" /></div>
+              <div>
+                <h3 className="font-semibold text-gray-900">{service.name}</h3>
+                <p className="text-xs text-gray-500">{service.description}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// =====================================================================
+// MAIN SHELL COMPONENT
+// =====================================================================
+const OperationsHub = () => {
+  const { serviceId } = useParams(); // Gets ID from React Router
+
+  // Initialize page to 'service-detail' if URL has an ID, else 'home'
+  const [page, setPage] = useState(serviceId ? 'service-detail' : 'home');
+  const [selectedServiceId, setSelectedServiceId] = useState(serviceId || null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // Sync with URL changes
   useEffect(() => {
-    loadWorkspace();
+    if (serviceId) {
+      setPage('service-detail');
+      setSelectedServiceId(serviceId);
+    }
   }, [serviceId]);
 
-  const loadWorkspace = async () => {
-    try {
-      setLoading(true);
-      const data = await fetchWorkspace(serviceId);
-      
-      setWorkspace(data.workspace);
-      setDocuments(data.documents || data.pages || []); 
-      setResources(data.resources || []);
-      setStats(data.stats || {});
-      setContributors(data.contributors || []);
-      
-    } catch (err) {
-      setError('Failed to load the Operations Workspace.');
-    } finally {
-      setLoading(false);
+  const navigateTo = (target, id = null) => {
+    if (target === 'service-detail' && id) {
+      setPage('service-detail');
+      setSelectedServiceId(id);
+    } else {
+      setPage(target);
+      setSelectedServiceId(null);
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setMobileSidebarOpen(false);
   };
 
-  if (loading) return <div className="flex h-screen items-center justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-600" /></div>;
-  if (error) return <div className="p-8 text-red-500 flex justify-center gap-2"><FiAlertCircle /> {error}</div>;
-
-  // ==========================================
-  // THE DOCUMENT ROUTER
-  // ==========================================
-  const renderContent = () => {
-    // 1. Bespoke Dashboards & Grids
-    if (activeTab === 'overview') return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} />;
-    if (activeTab === 'resources') return <ResourcesGrid resources={resources} workspaceId={workspace.id} onUpdate={loadWorkspace} />;
-    if (['discussions', 'cases', 'tasks'].includes(activeTab)) return <ComingSoon moduleName={activeTab} />;
-
-    // 2. Document Rendering (SOP, FAQ, Custom Pages)
-    // Find the document by system_key OR by the dynamic doc-id
-    const activeDoc = documents.find(d => d.system_key === activeTab || `doc-${d.id}` === activeTab);
-    
-    if (activeDoc) {
-      return <DocumentView key={activeDoc.id} document={activeDoc} workspaceId={workspace.id} onUpdate={loadWorkspace} />;
+  const renderPage = () => {
+    switch (page) {
+      case 'services': 
+        return <ServicesPage navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
+      case 'service-detail': 
+        // WE INJECT OUR DYNAMIC TABS HERE!
+        return (
+          <ServiceWorkspace 
+            serviceId={selectedServiceId} 
+            navigateTo={navigateTo} 
+            mockService={DATA.services.find(s => s.id === selectedServiceId)} 
+          />
+        );
+      default: 
+        return <ServicesPage navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
     }
-
-    return <div className="text-center text-gray-400 mt-20">Document not found.</div>;
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 text-gray-900 font-sans">
-      <WorkspaceSidebar 
-        workspace={workspace}
-        documents={documents} 
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      <div className="hidden lg:block flex-shrink-0">
+        <Sidebar active={page} onNavigate={navigateTo} />
+      </div>
+
       <div className="flex-1 flex flex-col overflow-hidden">
-        <WorkspaceHeader 
-          workspace={workspace} 
-          stats={stats}
-          onStatusChange={loadWorkspace} 
+        <TopBar
+          onSearch={(q) => setSearchQuery(q)}
+          query={searchQuery}
+          onNavigate={navigateTo}
+          toggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+          onAIAssistant={() => navigateTo('ai-assistant')}
         />
-        <div className="flex-1 overflow-y-auto p-6 lg:p-10">
-          <div className="max-w-5xl mx-auto">
-            {renderContent()}
-          </div>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {renderPage()}
         </div>
       </div>
     </div>
