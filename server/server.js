@@ -63,6 +63,9 @@ import communicationRoutes from "./routes/communication.js";
 //notification routes
 import notificationRoutes from "./routes/notifications.js";
 
+//Operation Hub
+import knowledegeRoutes from "./routes/knowledge.js";
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -310,6 +313,9 @@ app.use("/api/communication", communicationRoutes);
 
 /* Notification */
 app.use("/api/notifications", notificationRoutes);
+
+/* Notification */
+app.use("/api/knowledege", knowledegeRoutes);
 
 /* ================================
    STATIC FILES
