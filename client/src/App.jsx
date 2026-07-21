@@ -51,7 +51,7 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 
 //Operations Hub
-import OperationsHub from './pages/knowledge/OperationsHub';
+import OperationsHub from './pages/operationshub/OperationsHub';
 
 //Notification Page
 import NotificationsPage from './pages/notifications/NotificationsPage';
@@ -286,7 +286,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="admin/knowledge_hub/:serviceId"
+              path="admin/operationshub/:serviceId"
               element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
@@ -374,7 +374,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["superadmin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="superadmin/knowledge_hub/:serviceId"
+              path="superadmin/operationshub/:serviceId"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
             /> 
             <Route
@@ -450,7 +450,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="staff/knowledge_hub/:serviceId"
+              path="staff/operationshub/:serviceId"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
