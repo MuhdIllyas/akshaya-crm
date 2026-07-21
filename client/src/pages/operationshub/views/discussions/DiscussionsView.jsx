@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import DiscussionsList from './DiscussionsList';
 import DiscussionThread from './DiscussionThread';
 import CreateDiscussionModal from './CreateDiscussionModal';
-import { fetchDiscussions, createDiscussion } from '../../../../service/knowledge'; // Adjust path
+import { fetchDiscussions, createDiscussion } from '@/services/knowledge';
 import { FiLoader } from 'react-icons/fi';
 
 const DiscussionsView = ({ workspaceId }) => {
