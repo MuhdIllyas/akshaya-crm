@@ -27,6 +27,41 @@ const OverviewDashboard = ({ stats, contributors, workspace, documents, setActiv
         ))}
       </div>
 
+      {/* Quick Actions Action Pad */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-6">
+        <h3 className="font-bold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <button 
+            onClick={() => setActiveTab('discussions')} 
+            className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-gray-100 hover:border-indigo-200"
+            >
+            <FiMessageSquare className="h-5 w-5" />
+            <span className="text-sm font-medium">New Discussion</span>
+            </button>
+            <button 
+            onClick={() => setActiveTab('resources')} 
+            className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gray-50 hover:bg-blue-50 hover:text-blue-700 transition-colors border border-gray-100 hover:border-blue-200"
+            >
+            <FiLink className="h-5 w-5" />
+            <span className="text-sm font-medium">Add Resource</span>
+            </button>
+            <button 
+            onClick={() => setActiveTab('cases')} 
+            className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 transition-colors border border-gray-100 hover:border-emerald-200"
+            >
+            <FiCheckSquare className="h-5 w-5" />
+            <span className="text-sm font-medium">Log Solved Case</span>
+            </button>
+            <button 
+            onClick={() => setActiveTab('government_orders')} 
+            className="flex flex-col items-center justify-center gap-2 p-4 rounded-lg bg-gray-50 hover:bg-purple-50 hover:text-purple-700 transition-colors border border-gray-100 hover:border-purple-200"
+            >
+            <FiBriefcase className="h-5 w-5" />
+            <span className="text-sm font-medium">Upload Circular</span>
+            </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Core Documents Quick Links */}
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">

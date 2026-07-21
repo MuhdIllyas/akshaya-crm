@@ -11,6 +11,7 @@ import OverviewDashboard from './views/OverviewDashboard';
 import DocumentView from './views/DocumentView';
 import ResourcesGrid from './views/ResourcesGrid';
 import ComingSoon from './views/ComingSoon';
+import DiscussionsView from './views/discussions/DiscussionsView';
 
 const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const [loading, setLoading] = useState(true);
@@ -82,6 +83,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: FiGrid },
     ...documentTabs,
+    { id: 'discussions', label: 'Discussions', icon: FiMessageSquare }, // <--- Add this!
     { id: 'resources', label: 'Resources', icon: FiLink },
     { id: 'cases', label: 'Cases', icon: FiCheckCircle },
   ];
@@ -90,6 +92,9 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const renderContent = () => {
     if (activeTab === 'dashboard') {
       return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} />;
+    }
+    if (activeTab === 'discussions') { // <--- Add this block!
+      return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} />;
     }
     if (activeTab === 'resources') {
       return <ResourcesGrid resources={resources} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
