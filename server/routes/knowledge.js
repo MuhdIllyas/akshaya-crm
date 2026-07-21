@@ -74,9 +74,9 @@ router.delete('/resources/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.
 // ==========================================
 // DISCUSSIONS
 // ==========================================
-router.get('/workspaces/:workspaceId/discussions', authMiddleware(ALL_STAFF), knowledgeController.getDiscussions);
-router.post('/workspaces/:workspaceId/discussions', authMiddleware(ALL_STAFF), knowledgeController.createDiscussion);
-router.post('/discussions/:discussionId/replies', authMiddleware(ALL_STAFF), knowledgeController.addReply);
-router.put('/discussions/:discussionId/solve', authMiddleware(ALL_STAFF), knowledgeController.solveDiscussion);
+router.get('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.getDiscussions);
+router.post('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.createDiscussion);
+router.post('/discussions/:discussionId/replies', authorizeRoles(ALL_STAFF), knowledgeController.addReply);
+router.put('/discussions/:discussionId/solve', authorizeRoles(ALL_STAFF), knowledgeController.solveDiscussion);
 
 export default router;
