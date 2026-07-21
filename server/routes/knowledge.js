@@ -4,7 +4,7 @@ import * as knowledgeController from './knowledge/controller.js';
 
 const router = express.Router();
 
-// Middleware to verify token and role
+// 1. Middleware to verify token only (applied globally)
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -15,7 +15,7 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    req.user = decoded; // Assumes your token payload includes a `role` property (e.g., req.user.role)
     next();
   } catch (err) {
     console.error('notes.js: Token verification error:', err.message);
@@ -23,8 +23,18 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-// Apply middleware to all routes in this file
+// Apply authentication to all routes in this file
 router.use(authenticateToken);
+
+// 2. Middleware factory to check user roles
+const authorizeRoles = (allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Access denied: Insufficient permissions' });
+    }
+    next();
+  };
+};
 
 // Role definitions 
 const ALL_STAFF = ['staff', 'admin', 'superadmin'];
@@ -34,31 +44,31 @@ const SUPERADMIN_ONLY = ['superadmin'];
 // ==========================================
 // WORKSPACE
 // ==========================================
-router.get('/workspace/:serviceId', authenticateToken(ALL_STAFF), knowledgeController.getWorkspace);
-router.put('/workspace/:id/status', authenticateToken(SUPERADMIN_ONLY), knowledgeController.updateWorkspaceStatus);
+router.get('/workspace/:serviceId', authorizeRoles(ALL_STAFF), knowledgeController.getWorkspace);
+router.put('/workspace/:id/status', authorizeRoles(SUPERADMIN_ONLY), knowledgeController.updateWorkspaceStatus);
 
 // ==========================================
 // CONTRIBUTORS
 // ==========================================
-router.post('/workspace/:workspaceId/contributors', authenticateToken(ADMIN_ONLY), knowledgeController.addContributor);
-router.delete('/workspace/:workspaceId/contributors/:staffId', authenticateToken(ADMIN_ONLY), knowledgeController.removeContributor);
+router.post('/workspace/:workspaceId/contributors', authorizeRoles(ADMIN_ONLY), knowledgeController.addContributor);
+router.delete('/workspace/:workspaceId/contributors/:staffId', authorizeRoles(ADMIN_ONLY), knowledgeController.removeContributor);
 
 // ==========================================
 // DOCUMENTS 
 // ==========================================
-router.post('/documents', authenticateToken(ADMIN_ONLY), knowledgeController.createDocument);
-router.put('/documents/:id', authenticateToken(ADMIN_ONLY), knowledgeController.updateDocument);
-router.delete('/documents/:id', authenticateToken(ADMIN_ONLY), knowledgeController.deleteDocument); 
+router.post('/documents', authorizeRoles(ADMIN_ONLY), knowledgeController.createDocument);
+router.put('/documents/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.updateDocument);
+router.delete('/documents/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.deleteDocument); 
 
 // ==========================================
 // BLOCKS 
 // ==========================================
-router.post('/documents/:documentId/blocks/batch', authenticateToken(ADMIN_ONLY), knowledgeController.batchUpdateBlocks);
+router.post('/documents/:documentId/blocks/batch', authorizeRoles(ADMIN_ONLY), knowledgeController.batchUpdateBlocks);
 
 // ==========================================
 // RESOURCES
 // ==========================================
-router.post('/workspace/:workspaceId/resources', authenticateToken(ADMIN_ONLY), knowledgeController.addResource);
-router.delete('/resources/:id', authenticateToken(ADMIN_ONLY), knowledgeController.deleteResource);
+router.post('/workspace/:workspaceId/resources', authorizeRoles(ADMIN_ONLY), knowledgeController.addResource);
+router.delete('/resources/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.deleteResource);
 
 export default router;
