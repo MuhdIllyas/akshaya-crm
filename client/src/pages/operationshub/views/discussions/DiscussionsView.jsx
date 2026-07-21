@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import { FiLoader } from 'react-icons/fi';
 import DiscussionsList from './DiscussionsList';
 import DiscussionThread from './DiscussionThread';
 import CreateDiscussionModal from './CreateDiscussionModal';
-import { fetchDiscussions, createDiscussion } from '@/services/knowledge';
-import { FiLoader } from 'react-icons/fi';
+import { fetchDiscussions, createDiscussion } from '@/services/knowledge'; // Adjust path if needed
 
 const DiscussionsView = ({ workspaceId }) => {
   const [activeThreadId, setActiveThreadId] = useState(null);
@@ -22,15 +22,17 @@ const DiscussionsView = ({ workspaceId }) => {
       // Format backend data to match our UI expectations
       const formatted = data.map(d => ({
         ...d,
-        preview: d.content.substring(0, 100) + '...',
+        preview: d.content ? d.content.substring(0, 100) + '...' : '',
         description: d.content,
         solved: d.status === 'solved',
-        author: d.author_name,
+        author: d.author_name || 'Staff',
         lastReply: new Date(d.updated_at).toLocaleDateString(),
+        replies_count: d.replies ? d.replies.length : 0,
+        tags: d.tags || [],
         // Format replies
-        replies: d.replies.map(r => ({
+        replies: (d.replies || []).map(r => ({
           id: r.id,
-          author: r.author_name,
+          author: r.author_name || 'Staff',
           time: new Date(r.created_at).toLocaleDateString(),
           content: r.content,
           is_best: r.is_best_answer
@@ -39,7 +41,8 @@ const DiscussionsView = ({ workspaceId }) => {
 
       setDiscussions(formatted);
     } catch (err) {
-      toast.error('Failed to load discussions.');
+      console.error(err);
+      toast.error('Failed to load discussions from database.');
     } finally {
       setIsLoading(false);
     }
@@ -54,7 +57,7 @@ const DiscussionsView = ({ workspaceId }) => {
       await createDiscussion(workspaceId, formData);
       toast.success('Discussion posted successfully!');
       setIsModalOpen(false);
-      loadDiscussions(); // Refresh the list
+      loadDiscussions(); // Refresh the list from the database
     } catch (err) {
       toast.error('Failed to post discussion.');
     }
@@ -65,12 +68,12 @@ const DiscussionsView = ({ workspaceId }) => {
   const activeDiscussion = discussions.find(d => d.id === activeThreadId);
 
   return (
-    <div className="relative">
+    <div className="relative animate-in fade-in duration-300">
       {activeThreadId && activeDiscussion ? (
         <DiscussionThread 
           discussion={activeDiscussion} 
           onBack={() => setActiveThreadId(null)} 
-          onUpdate={loadDiscussions} // Pass this down so Thread can refresh after reply/solve
+          onUpdate={loadDiscussions} // Passes down so Thread can refresh after reply/solve
         />
       ) : (
         <DiscussionsList 

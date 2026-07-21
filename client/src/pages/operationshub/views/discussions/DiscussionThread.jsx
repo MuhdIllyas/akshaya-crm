@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
 import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { addDiscussionReply, markDiscussionSolved } from '@/services/knowledge';
+import { addDiscussionReply, markDiscussionSolved } from '@/services/knowledge'; // Adjust path if needed
 
-const DiscussionThread = ({ discussion, onBack }) => {
+const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [replyText, setReplyText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handlePostReply = async () => {
     if (!replyText.trim()) return;
     try {
+        setIsSubmitting(true);
         await addDiscussionReply(discussion.id, replyText);
         toast.success('Reply posted successfully!');
         setReplyText('');
-        onUpdate(); 
+        onUpdate(); // Reload thread from database
     } catch (err) {
         toast.error('Failed to post reply.');
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
@@ -22,7 +26,7 @@ const DiscussionThread = ({ discussion, onBack }) => {
     try {
         await markDiscussionSolved(discussion.id, replyId);
         toast.success('Discussion marked as Solved! Added to Cases library.');
-        onUpdate(); // Reload thread
+        onUpdate(); // Reload thread from database
     } catch (err) {
         toast.error('Failed to mark as solved.');
     }
@@ -46,7 +50,7 @@ const DiscussionThread = ({ discussion, onBack }) => {
             )}
           </div>
           {!discussion.solved && (
-            <button onClick={handleMarkSolved} className="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors flex items-center gap-1.5">
+            <button onClick={() => handleMarkSolved()} className="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors flex items-center gap-1.5">
               <FiCheckCircle className="h-4 w-4" /> Mark as Solved
             </button>
           )}
@@ -55,8 +59,11 @@ const DiscussionThread = ({ discussion, onBack }) => {
         <h1 className="text-2xl font-bold text-gray-900 mb-3">{discussion.title}</h1>
         
         <div className="flex items-center gap-4 text-sm text-gray-500 font-medium mb-6 pb-6 border-b border-gray-100">
-          <span className="flex items-center gap-1.5"><img src={`https://ui-avatars.com/api/?name=${discussion.author}&background=e0e7ff&color=4338ca`} className="w-5 h-5 rounded-full" /> {discussion.author}</span>
-          <span className="flex items-center gap-1.5"><FiClock /> {discussion.created_at}</span>
+          <span className="flex items-center gap-1.5">
+            <img src={`https://ui-avatars.com/api/?name=${discussion.author}&background=e0e7ff&color=4338ca`} className="w-5 h-5 rounded-full" alt="Avatar" /> 
+            {discussion.author}
+          </span>
+          <span className="flex items-center gap-1.5"><FiClock /> {discussion.created_at || discussion.lastReply}</span>
         </div>
 
         {/* CRM Context Block */}
@@ -85,13 +92,22 @@ const DiscussionThread = ({ discussion, onBack }) => {
           <div key={reply.id} className={`p-5 rounded-2xl border ${reply.is_best ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-gray-200 shadow-sm'}`}>
             <div className="flex justify-between items-start mb-3">
               <div className="flex items-center gap-2">
-                <img src={`https://ui-avatars.com/api/?name=${reply.author}&background=f3f4f6&color=4b5563`} className="w-6 h-6 rounded-full" />
+                <img src={`https://ui-avatars.com/api/?name=${reply.author}&background=f3f4f6&color=4b5563`} className="w-6 h-6 rounded-full" alt="Avatar" />
                 <span className="text-sm font-bold text-gray-900">{reply.author}</span>
                 <span className="text-xs font-medium text-gray-400">{reply.time}</span>
               </div>
               {reply.is_best && <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full flex items-center gap-1"><FiCheckCircle/> Solution</span>}
             </div>
             <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{reply.content}</div>
+            
+            {/* Mark specific reply as solution */}
+            {!discussion.solved && (
+               <div className="mt-3 flex justify-end">
+                   <button onClick={() => handleMarkSolved(reply.id)} className="text-xs font-medium text-gray-500 hover:text-emerald-600 transition-colors">
+                       Mark as Best Answer
+                   </button>
+               </div>
+            )}
           </div>
         ))}
       </div>
@@ -106,8 +122,8 @@ const DiscussionThread = ({ discussion, onBack }) => {
             className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px] resize-y mb-3"
           />
           <div className="flex justify-end">
-            <button onClick={handlePostReply} className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-              Post Reply
+            <button onClick={handlePostReply} disabled={isSubmitting} className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50">
+              {isSubmitting ? 'Posting...' : 'Post Reply'}
             </button>
           </div>
         </div>
