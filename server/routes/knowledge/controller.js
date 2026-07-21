@@ -1,4 +1,4 @@
-import * as knowledgeService from '../services/knowledgeService.js';
+import * as knowledgeService from './service.js';
 
 export const getWorkspace = async (req, res) => {
     try {
