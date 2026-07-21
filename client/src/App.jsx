@@ -450,7 +450,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="staff/operationshub/:serviceId"
+              path="staff/operationshub"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
