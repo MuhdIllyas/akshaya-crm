@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { FiLoader, FiAlertCircle } from 'react-icons/fi';
-import { fetchWorkspace } from '../../service/knowledge';
+import { fetchWorkspace } from '../../services/knowledge';
 import WorkspaceSidebar from './WorkspaceSidebar';
 import WorkspaceHeader from './WorkspaceHeader';
 
