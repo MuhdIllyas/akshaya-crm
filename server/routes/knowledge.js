@@ -71,4 +71,12 @@ router.post('/documents/:documentId/blocks/batch', authorizeRoles(ADMIN_ONLY), k
 router.post('/workspace/:workspaceId/resources', authorizeRoles(ADMIN_ONLY), knowledgeController.addResource);
 router.delete('/resources/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.deleteResource);
 
+// ==========================================
+// DISCUSSIONS
+// ==========================================
+router.get('/workspaces/:workspaceId/discussions', authMiddleware(ALL_STAFF), knowledgeController.getDiscussions);
+router.post('/workspaces/:workspaceId/discussions', authMiddleware(ALL_STAFF), knowledgeController.createDiscussion);
+router.post('/discussions/:discussionId/replies', authMiddleware(ALL_STAFF), knowledgeController.addReply);
+router.put('/discussions/:discussionId/solve', authMiddleware(ALL_STAFF), knowledgeController.solveDiscussion);
+
 export default router;

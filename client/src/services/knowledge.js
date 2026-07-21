@@ -37,3 +37,23 @@ export const createDocument = async (payload) => {
     const { data } = await api.post('/documents', payload);
     return data;
 };
+
+export const fetchDiscussions = async (workspaceId) => {
+  const { data } = await api.get(`/workspaces/${workspaceId}/discussions`);
+  return data;
+};
+
+export const createDiscussion = async (workspaceId, payload) => {
+  const { data } = await api.post(`/workspaces/${workspaceId}/discussions`, payload);
+  return data;
+};
+
+export const addDiscussionReply = async (discussionId, content) => {
+  const { data } = await api.post(`/discussions/${discussionId}/replies`, { content });
+  return data;
+};
+
+export const markDiscussionSolved = async (discussionId, replyId = null) => {
+  const { data } = await api.put(`/discussions/${discussionId}/solve`, { replyId });
+  return data;
+};

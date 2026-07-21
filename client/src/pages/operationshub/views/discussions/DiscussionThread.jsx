@@ -1,20 +1,31 @@
 import React, { useState } from 'react';
 import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import { addDiscussionReply, markDiscussionSolved } from '@/services/knowledge';
 
 const DiscussionThread = ({ discussion, onBack }) => {
   const [replyText, setReplyText] = useState('');
 
-  const handlePostReply = () => {
+  const handlePostReply = async () => {
     if (!replyText.trim()) return;
-    toast.success('Reply posted successfully!');
-    setReplyText('');
-    // TODO: Wire to backend POST request
+    try {
+        await addDiscussionReply(discussion.id, replyText);
+        toast.success('Reply posted successfully!');
+        setReplyText('');
+        onUpdate(); // Reload thread
+    } catch (err) {
+        toast.error('Failed to post reply.');
+    }
   };
 
-  const handleMarkSolved = () => {
-    toast.success('Discussion marked as Solved! Added to Cases library.');
-    // TODO: Wire to backend PUT request (is_solved = true) -> Auto-trigger Case Creation
+  const handleMarkSolved = async (replyId = null) => {
+    try {
+        await markDiscussionSolved(discussion.id, replyId);
+        toast.success('Discussion marked as Solved! Added to Cases library.');
+        onUpdate(); // Reload thread
+    } catch (err) {
+        toast.error('Failed to mark as solved.');
+    }
   };
 
   return (

@@ -1,3 +1,4 @@
+//knowledge - service.js
 import pool from '../../db.js';
 
 // ==========================================
@@ -248,6 +249,92 @@ const logHistory = async (workspaceId, entityType, entityId, action, oldContent,
     const client = await pool.connect();
     try {
         await logHistoryTransaction(client, workspaceId, entityType, entityId, action, oldContent, newContent, staffId);
+    } finally {
+        client.release();
+    }
+};
+
+// ==========================================
+// DISCUSSIONS
+// ==========================================
+export const getDiscussions = async (workspaceId) => {
+    // Fetch discussions with author name and reply count
+    const res = await pool.query(
+        `SELECT d.*, s.name as author_name, 
+        (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count
+        FROM knowledge_discussions d
+        JOIN staff s ON d.author_id = s.id
+        WHERE d.workspace_id = $1
+        ORDER BY d.created_at DESC`,
+        [workspaceId]
+    );
+
+    // Fetch replies for all these discussions
+    const repliesRes = await pool.query(
+        `SELECT r.*, s.name as author_name 
+         FROM knowledge_discussion_replies r
+         JOIN staff s ON r.author_id = s.id
+         WHERE r.discussion_id IN (SELECT id FROM knowledge_discussions WHERE workspace_id = $1)
+         ORDER BY r.created_at ASC`,
+        [workspaceId]
+    );
+
+    // Attach replies to their respective discussions
+    return res.rows.map(discussion => ({
+        ...discussion,
+        replies: repliesRes.rows.filter(r => r.discussion_id === discussion.id)
+    }));
+};
+
+export const createDiscussion = async (workspaceId, payload, staffId) => {
+    const { title, content, category, priority, tags, relatedTo, relatedId } = payload;
+    
+    const customerStr = relatedTo === 'customer' ? relatedId : null;
+    const appStr = relatedTo === 'serviceEntry' ? relatedId : null;
+
+    const res = await pool.query(
+        `INSERT INTO knowledge_discussions 
+        (workspace_id, title, content, category, priority, tags, author_id, crm_customer, crm_application) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [workspaceId, title, content, category, priority, tags || [], staffId, customerStr, appStr]
+    );
+    
+    // Increment workspace updated_at
+    await pool.query(`UPDATE knowledge_workspaces SET updated_at = NOW() WHERE id = $1`, [workspaceId]);
+    return res.rows[0];
+};
+
+export const addReply = async (discussionId, content, staffId) => {
+    const res = await pool.query(
+        `INSERT INTO knowledge_discussion_replies (discussion_id, content, author_id) 
+         VALUES ($1, $2, $3) RETURNING *`,
+        [discussionId, content, staffId]
+    );
+    
+    // Update discussion timestamp
+    await pool.query(`UPDATE knowledge_discussions SET updated_at = NOW() WHERE id = $1`, [discussionId]);
+    return res.rows[0];
+};
+
+export const markDiscussionSolved = async (discussionId, replyId) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // 1. Mark discussion as solved
+        await client.query(`UPDATE knowledge_discussions SET status = 'solved', updated_at = NOW() WHERE id = $1`, [discussionId]);
+        
+        // 2. Mark specific reply as the best answer (if provided)
+        if (replyId) {
+            await client.query(`UPDATE knowledge_discussion_replies SET is_best_answer = true WHERE id = $1`, [replyId]);
+        }
+
+        // TODO in Phase 2: Copy this discussion and best reply into knowledge_cases table!
+
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
     } finally {
         client.release();
     }

@@ -1,3 +1,4 @@
+//knowledge - controller.js
 import * as knowledgeService from './service.js';
 
 export const getWorkspace = async (req, res) => {
@@ -112,5 +113,41 @@ export const deleteResource = async (req, res) => {
         res.json({ message: 'Resource deleted' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to delete resource' });
+    }
+};
+
+export const getDiscussions = async (req, res) => {
+    try {
+        const discussions = await knowledgeService.getDiscussions(req.params.workspaceId);
+        res.json(discussions);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch discussions' });
+    }
+};
+
+export const createDiscussion = async (req, res) => {
+    try {
+        const discussion = await knowledgeService.createDiscussion(req.params.workspaceId, req.body, req.user.id);
+        res.status(201).json(discussion);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create discussion' });
+    }
+};
+
+export const addReply = async (req, res) => {
+    try {
+        const reply = await knowledgeService.addReply(req.params.discussionId, req.body.content, req.user.id);
+        res.status(201).json(reply);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to post reply' });
+    }
+};
+
+export const solveDiscussion = async (req, res) => {
+    try {
+        await knowledgeService.markDiscussionSolved(req.params.discussionId, req.body.replyId);
+        res.json({ message: 'Marked as solved' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to mark as solved' });
     }
 };
