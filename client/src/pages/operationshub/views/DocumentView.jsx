@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiEdit2, FiSave, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { batchUpdateBlocks } from '../../../service/knowledge'; // Adjust path if needed
+import { batchUpdateBlocks } from '@/services/knowledge';
 import BlockRenderer from '../blocks/BlockRenderer';
 
 const DocumentView = ({ document, workspaceId, onUpdate }) => {
