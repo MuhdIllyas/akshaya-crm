@@ -29,7 +29,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo }) => {
       setLoading(true);
       const data = await fetchWorkspace(serviceId);
       setWorkspace(data.workspace);
-      setDocuments(data.documents);
+      setDocuments(data.documents || data.pages || []);
       setResources(data.resources);
       setStats(data.stats);
     } catch (err) {
@@ -58,7 +58,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo }) => {
   ];
 
   // Helper to find if the current active tab is a Document
-  const activeDocument = documents.find(d => `doc-${d.id}` === activeTab);
+  const activeDocument = (documents || []).find(d => d.id === activeDocumentId);
 
   return (
     <div className="max-w-6xl mx-auto">
