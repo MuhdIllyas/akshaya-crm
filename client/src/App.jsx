@@ -50,8 +50,8 @@ import axios from "axios";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 
-//Knowledge Hub
-import KnowledgeHub from './pages/knowledge/KnowledgeHub';
+//Operations Hub
+import OperationsHub from './pages/knowledge/OperationsHub';
 
 //Notification Page
 import NotificationsPage from './pages/notifications/NotificationsPage';
@@ -287,7 +287,7 @@ const App = () => {
             />
             <Route
               path="admin/knowledge_hub"
-              element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><KnowledgeHub /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
               path="admin/notifications"
@@ -375,7 +375,7 @@ const App = () => {
             />
             <Route
               path="superadmin/knowledge_hub"
-              element={<ProtectedRoute allowedRoles={["superadmin"]}><KnowledgeHub /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
             /> 
             <Route
               path="superadmin/notifications"
@@ -451,7 +451,7 @@ const App = () => {
             />
             <Route
               path="staff/knowledge_hub"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><KnowledgeHub /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
               path="staff/track_service"
