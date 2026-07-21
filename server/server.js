@@ -64,7 +64,7 @@ import communicationRoutes from "./routes/communication.js";
 import notificationRoutes from "./routes/notifications.js";
 
 //Operation Hub
-import knowledegeRoutes from "./routes/knowledge.js";
+import knowledgeRoutes from "./routes/knowledge.js";
 
 import "./routes/scheduler.js";
 
@@ -315,7 +315,7 @@ app.use("/api/communication", communicationRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 /* Notification */
-app.use("/api/knowledege", knowledegeRoutes);
+app.use("/api/knowledge", knowledgeRoutes);
 
 /* ================================
    STATIC FILES
