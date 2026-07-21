@@ -3,8 +3,8 @@ import {
   FiGrid, FiFileText, FiMessageSquare, FiLink, 
   FiGlobe, FiCheckCircle, FiClock, FiChevronLeft, FiLoader, FiAlertCircle 
 } from 'react-icons/fi';
-import { fetchWorkspace } from '../api/knowledge'; // Adjust path
-import DocumentEditor from './DocumentEditor'; // We will build this next
+import { fetchWorkspace } from '@/services/knowledge'; 
+import DocumentEditor from './DocumentEditor'; 
 
 const ServiceWorkspace = ({ serviceId, navigateTo }) => {
   const [loading, setLoading] = useState(true);
