@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FiEdit2, FiEye, FiCheck, FiUsers, FiClock } from 'react-icons/fi';
-import { updateWorkspaceStatus } from '../../api/knowledge';
+import { updateWorkspaceStatus } from '@/services/knowledge';
 import { toast } from 'react-toastify';
 
 const WorkspaceHeader = ({ workspace, stats, contributors, isEditMode, setIsEditMode, onStatusChange }) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiSave, FiPlus, FiTrash2, FiAlignLeft, FiAlertTriangle } from 'react-icons/fi';
-import { batchUpdateBlocks } from '../../api/knowledge';
+import { batchUpdateBlocks } from '@/services/knowledge';
 import { toast } from 'react-toastify';
 
 const DocumentEditor = ({ workspaceId, document, isEditMode, onSaveSuccess }) => {
