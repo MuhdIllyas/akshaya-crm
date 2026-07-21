@@ -286,7 +286,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="admin/knowledge_hub"
+              path="admin/knowledge_hub/:serviceId"
               element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
@@ -374,7 +374,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["superadmin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="superadmin/knowledge_hub"
+              path="superadmin/knowledge_hub/:serviceId"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
             /> 
             <Route
@@ -450,7 +450,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="staff/knowledge_hub"
+              path="staff/knowledge_hub/:serviceId"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route

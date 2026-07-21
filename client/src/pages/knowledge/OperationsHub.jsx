@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { FiLoader, FiAlertCircle } from 'react-icons/fi';
 import { fetchWorkspace } from '../../services/knowledge';
 import WorkspaceSidebar from './WorkspaceSidebar';
 import WorkspaceHeader from './WorkspaceHeader';
 import DocumentEditor from './DocumentEditor'; 
 
-const OperationsHub = ({ serviceId = 10 }) => { 
+const OperationsHub = () => { 
+  const { serviceId } = useParams(); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
