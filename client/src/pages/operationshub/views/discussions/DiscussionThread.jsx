@@ -12,7 +12,7 @@ const DiscussionThread = ({ discussion, onBack }) => {
         await addDiscussionReply(discussion.id, replyText);
         toast.success('Reply posted successfully!');
         setReplyText('');
-        onUpdate(); // Reload thread
+        onUpdate(); 
     } catch (err) {
         toast.error('Failed to post reply.');
     }
