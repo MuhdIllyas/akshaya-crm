@@ -57,6 +57,8 @@ import eventsRoutes from "./routes/events.js";
 
 import notesRoutes from "./routes/notes.js";
 
+import printingRoutes from "./routes/printing.js"
+
 //communication routes
 import communicationRoutes from "./routes/communication.js";
 
@@ -307,6 +309,9 @@ app.use("/api/events", eventsRoutes);
 
 /* Notes */
 app.use("/api/notes", notesRoutes);
+
+/* Printing */
+app.use("/api/printing", printingRoutes);
 
 /* Communication */
 app.use("/api/communication", communicationRoutes);

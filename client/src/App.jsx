@@ -50,6 +50,9 @@ import axios from "axios";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 
+// Self Service Print Portal
+import SelfServicePrint from './pages/printing/SelfServicePrint';
+
 //Operations Hub
 import OperationsHub from './pages/operationshub/OperationsHub';
 
@@ -221,7 +224,8 @@ const App = () => {
         <Route path="/home" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
-        <Route path="/review/:token" element={<PublicReview />} /> 
+        <Route path="/review/:token" element={<PublicReview />} />
+        <Route path="/print" element={<SelfServicePrint />} /> 
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardLayout />}>
