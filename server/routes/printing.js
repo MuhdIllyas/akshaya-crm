@@ -259,4 +259,41 @@ router.put('/settings/prices/:centre_id', async (req, res) => {
     }
 });
 
+// POST: Add a new printer to a centre
+router.post('/settings/printers', async (req, res) => {
+    try {
+        const { 
+            centre_id, 
+            name, 
+            driver_name, 
+            paper_sizes, 
+            supports_color, 
+            supports_duplex 
+        } = req.body;
+
+        const insertQuery = `
+            INSERT INTO printers 
+            (centre_id, name, driver_name, paper_sizes, supports_color, supports_duplex, status)
+            VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')
+            RETURNING *;
+        `;
+        
+        const values = [
+            centre_id, 
+            name, 
+            driver_name, 
+            paper_sizes, 
+            supports_color, 
+            supports_duplex
+        ];
+
+        const dbResult = await req.db.query(insertQuery, values);
+        
+        res.status(201).json(dbResult.rows[0]);
+    } catch (error) {
+        console.error("Add Printer Error:", error);
+        res.status(500).json({ error: 'Failed to add printer' });
+    }
+});
+
 export default router;

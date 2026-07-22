@@ -17,6 +17,16 @@ const AdminPrintSettings = () => {
     const [loading, setLoading] = useState(true);
     const [printers, setPrinters] = useState([]);
     const [prices, setPrices] = useState([]);
+
+    const [showAddPrinter, setShowAddPrinter] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [newPrinter, setNewPrinter] = useState({
+        name: '',
+        driver_name: '',
+        paper_sizes: 'A4',
+        supports_color: false,
+        supports_duplex: false
+    });
     
     const centreId = localStorage.getItem("centre_id") ; 
 
@@ -42,6 +52,34 @@ const AdminPrintSettings = () => {
             toast.error("Failed to load print settings", { position: "top-right", autoClose: 5000, theme: "light" });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAddPrinterSubmit = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        
+        try {
+            const payload = { ...newPrinter, centre_id: centreId };
+            
+            const res = await axios.post(
+                `${import.meta.env.VITE_API_URL}/api/printing/settings/printers`, 
+                payload,
+                { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+            
+            // Add the newly created printer directly to the UI state
+            setPrinters([...printers, res.data]);
+            
+            toast.success("Printer added successfully!", { position: "top-right", autoClose: 3000, theme: "light" });
+            
+            // Reset form and close modal
+            setNewPrinter({ name: '', driver_name: '', paper_sizes: 'A4', supports_color: false, supports_duplex: false });
+            setShowAddPrinter(false);
+        } catch (error) {
+            toast.error("Failed to add printer", { position: "top-right", autoClose: 5000, theme: "light" });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -140,6 +178,7 @@ const AdminPrintSettings = () => {
                             </button>
                         ) : (
                             <button
+                                onClick={() => setShowAddPrinter(true)} // <-- Update this line
                                 className="flex items-center gap-3 px-6 py-3.5 rounded-xl font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg transition-all duration-300 group"
                             >
                                 <FiPlus className="text-xl group-hover:scale-110 transition-transform" />
@@ -269,6 +308,104 @@ const AdminPrintSettings = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+                {/* Add Printer Modal */}
+                {showAddPrinter && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn scrollbar-hide">
+                        <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-gray-200 overflow-hidden">
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                                    <FiPrinter className="text-blue-600" /> Add New Printer
+                                </h2>
+                                <button
+                                    onClick={() => setShowAddPrinter(false)}
+                                    className="text-gray-400 hover:text-gray-500 text-2xl p-2 hover:bg-gray-100 rounded-xl transition-all"
+                                >
+                                    <FiXCircle />
+                                </button>
+                            </div>
+                            
+                            <form onSubmit={handleAddPrinterSubmit} className="p-6 space-y-5">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Display Name</label>
+                                    <input 
+                                        type="text" 
+                                        required
+                                        placeholder="e.g., Main Counter B&W"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                                        value={newPrinter.name}
+                                        onChange={(e) => setNewPrinter({...newPrinter, name: e.target.value})}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Windows Spooler Driver Name</label>
+                                    <input 
+                                        type="text" 
+                                        required
+                                        placeholder="e.g., Canon iR2270/2870 PCL5e"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white font-mono text-sm"
+                                        value={newPrinter.driver_name}
+                                        onChange={(e) => setNewPrinter({...newPrinter, driver_name: e.target.value})}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Must exactly match the name shown in the local PC's "Printers & scanners" settings.</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Supported Paper Sizes</label>
+                                    <input 
+                                        type="text" 
+                                        required
+                                        placeholder="e.g., A4, A3"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                                        value={newPrinter.paper_sizes}
+                                        onChange={(e) => setNewPrinter({...newPrinter, paper_sizes: e.target.value})}
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                    <label className="flex items-center space-x-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition">
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                            checked={newPrinter.supports_color}
+                                            onChange={(e) => setNewPrinter({...newPrinter, supports_color: e.target.checked})}
+                                        />
+                                        <span className="font-medium text-gray-700">Supports Color</span>
+                                    </label>
+
+                                    <label className="flex items-center space-x-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition">
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                            checked={newPrinter.supports_duplex}
+                                            onChange={(e) => setNewPrinter({...newPrinter, supports_duplex: e.target.checked})}
+                                        />
+                                        <span className="font-medium text-gray-700">Supports Duplex</span>
+                                    </label>
+                                </div>
+
+                                <div className="pt-4 flex justify-end gap-3">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowAddPrinter(false)}
+                                        className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="px-6 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {isSubmitting ? (
+                                            <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span> Saving...</>
+                                        ) : 'Save Printer'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 )}
             </div>
