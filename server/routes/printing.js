@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import pdfParse from 'pdf-parse';
 import fs from 'fs';
 import path from 'path';
 
