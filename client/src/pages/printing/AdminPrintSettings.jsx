@@ -18,8 +18,6 @@ const AdminPrintSettings = () => {
     const [printers, setPrinters] = useState([]);
     const [prices, setPrices] = useState([]);
     
-    // Assuming admin is viewing settings for Centre 1. 
-    // Pull this from localStorage just like in your StaffManagement.jsx
     const centreId = localStorage.getItem("centre_id") || 1; 
 
     useEffect(() => {
