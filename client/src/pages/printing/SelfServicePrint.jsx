@@ -67,7 +67,7 @@ export default function SelfServicePrint() {
         if (jobDetails && jobDetails.jobId && jobDetails.status !== 'COMPLETED') {
             interval = setInterval(async () => {
                 try {
-                    const res = await axios.get(`${API_BASE_URL}/status/${jobDetails.jobId}`);
+                    const res = await axios.get(`${API_BASE_URL}/api/printing/status/${jobDetails.jobId}`);
                     setJobDetails(prev => ({ ...prev, status: res.data.status }));
                     if (res.data.status === 'COMPLETED') clearInterval(interval);
                 } catch (err) {
