@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // Replace with your actual VPS API URL
 const API_BASE_URL = 'https://api.akshayasahayi.com/api/printing';
-const CENTRE_ID = 1; 
+const centreId = localStorage.getItem("centre_id") ;
 
 export default function SelfServicePrint() {
     const [file, setFile] = useState(null);
@@ -39,7 +39,7 @@ export default function SelfServicePrint() {
 
         const formData = new FormData();
         formData.append('document', file);
-        formData.append('centre_id', CENTRE_ID);
+        formData.append('centre_id', centreId);
         formData.append('copies', copies);
         formData.append('color', color);
         formData.append('paper_size', paperSize); // Added
