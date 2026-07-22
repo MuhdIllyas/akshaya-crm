@@ -109,12 +109,13 @@ router.post('/upload', upload.single('document'), async (req, res) => {
         // C. Auto-Select Printer dynamically (Fetch from printers table)
         const printerQuery = `
             SELECT id 
-            FROM printers 
-            WHERE centre_id = $1 
-              AND supports_color = $2 
-              AND paper_sizes LIKE $3 
-              AND status = 'ACTIVE'
-            LIMIT 1
+                FROM printers 
+                WHERE centre_id = $1 
+                AND supports_color = $2 
+                AND paper_sizes LIKE $3 
+                AND status = 'ACTIVE'
+                ORDER BY RANDOM() -- Adds simple load balancing
+            LIMIT 1;
         `;
         const printerResult = await req.db.query(printerQuery, [centre_id, isColor, `%${selectedPaperSize}%`]);
 
@@ -312,6 +313,48 @@ router.get('/settings/:centre_id', async (req, res) => {
     } catch (error) {
         console.error("Settings Fetch Error:", error);
         res.status(500).json({ error: 'Failed to load settings' });
+    }
+});
+
+// PUT: Edit an existing printer
+router.put('/settings/printers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, driver_name, paper_sizes, supports_color, supports_duplex, status } = req.body;
+
+        const updateQuery = `
+            UPDATE printers 
+            SET name = $1, driver_name = $2, paper_sizes = $3, supports_color = $4, supports_duplex = $5, status = $6
+            WHERE id = $7
+            RETURNING *;
+        `;
+        
+        const values = [name, driver_name, paper_sizes, supports_color, supports_duplex, status || 'ACTIVE', id];
+        const dbResult = await req.db.query(updateQuery, values);
+        
+        res.json(dbResult.rows[0]);
+    } catch (error) {
+        console.error("Edit Printer Error:", error);
+        res.status(500).json({ error: 'Failed to update printer' });
+    }
+});
+
+// DELETE: Remove a printer
+router.delete('/settings/printers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Try to hard delete first
+        await req.db.query('DELETE FROM printers WHERE id = $1', [id]);
+        res.json({ success: true, hardDeleted: true });
+    } catch (error) {
+        // If hard delete fails (usually because this printer has past print jobs attached to it),
+        // we safely "Soft Delete" it by taking it OFFLINE so historical reports don't break.
+        if (error.code === '23503') { // PostgreSQL Foreign Key Violation Code
+            await req.db.query("UPDATE printers SET status = 'OFFLINE' WHERE id = $1", [req.params.id]);
+            return res.json({ success: true, hardDeleted: false, message: 'Printer moved offline to preserve history.' });
+        }
+        console.error("Delete Printer Error:", error);
+        res.status(500).json({ error: 'Failed to delete printer' });
     }
 });
 
