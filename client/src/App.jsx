@@ -52,6 +52,7 @@ import Home from "./pages/Home";
 
 // Self Service Print Portal
 import SelfServicePrint from './pages/printing/SelfServicePrint';
+import AdminPrintSettings from './pages/printing/AdminPrintSettings';
 
 //Operations Hub
 import OperationsHub from './pages/operationshub/OperationsHub';
@@ -316,6 +317,10 @@ const App = () => {
             <Route
               path="admin/campaigns"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><CampaignManagement /></ProtectedRoute>}
+            />
+            <Route
+              path="admin/settings"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminPrintSettings /></ProtectedRoute>}
             />
             <Route
               path="admin/reports"
