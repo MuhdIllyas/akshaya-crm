@@ -3,9 +3,15 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 
+// Robust ESM/CJS Import for pdf-parse
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+const rawPdfParse = require('pdf-parse');
+
+// Safely unwrap the function regardless of how the Node environment packages it
+const pdfParse = typeof rawPdfParse === 'function' 
+    ? rawPdfParse 
+    : (rawPdfParse.default || rawPdfParse.PDFParse);
 
 const router = express.Router();
 
@@ -60,10 +66,20 @@ router.post('/upload', upload.single('document'), async (req, res) => {
         const selectedPaperSize = paper_size || 'A4';
         const totalCopies = parseInt(copies) || 1;
 
-        // A. Read the PDF to get the page count
+        // A. Read the PDF to get the page count (WITH SAFETY FALLBACK)
         const dataBuffer = fs.readFileSync(file.path);
-        const pdfData = await pdfParse(dataBuffer);
-        const numPages = pdfData.numpages;
+        let numPages = 1; // Default to 1 page if anything fails
+        
+        try {
+            if (typeof pdfParse === 'function') {
+                const pdfData = await pdfParse(dataBuffer);
+                numPages = pdfData.numpages || 1;
+            } else {
+                console.warn("[Print Module] pdf-parse unwrap failed. Defaulting to 1 page.");
+            }
+        } catch (parseError) {
+            console.error("[Print Module] Could not read PDF pages (possibly corrupted/encrypted). Defaulting to 1 page.");
+        }
 
         // B. Dynamic Pricing Logic (Fetch from printing_prices table)
         const priceQuery = `
