@@ -207,31 +207,6 @@ router.post('/complete', async (req, res) => {
    ADMIN SETTINGS ENDPOINTS
 ================================ */
 
-// GET: Fetch current printers and pricing
-router.get('/settings/:centre_id', async (req, res) => {
-    try {
-        const { centre_id } = req.params;
-        
-        const printersResult = await req.db.query(
-            `SELECT * FROM printers WHERE centre_id = $1 ORDER BY id ASC`, 
-            [centre_id]
-        );
-        
-        const pricesResult = await req.db.query(
-            `SELECT * FROM printing_prices WHERE centre_id = $1`, 
-            [centre_id]
-        );
-
-        res.json({
-            printers: printersResult.rows,
-            prices: pricesResult.rows
-        });
-    } catch (error) {
-        console.error("Settings Fetch Error:", error);
-        res.status(500).json({ error: 'Failed to load settings' });
-    }
-});
-
 // PUT: Update pricing matrix
 router.put('/settings/prices/:centre_id', async (req, res) => {
     try {
@@ -293,6 +268,31 @@ router.post('/settings/printers', async (req, res) => {
     } catch (error) {
         console.error("Add Printer Error:", error);
         res.status(500).json({ error: 'Failed to add printer' });
+    }
+});
+
+// GET: Fetch current printers and pricing (catch‑all for :centre_id)
+router.get('/settings/:centre_id', async (req, res) => {
+    try {
+        const { centre_id } = req.params;
+        
+        const printersResult = await req.db.query(
+            `SELECT * FROM printers WHERE centre_id = $1 ORDER BY id ASC`, 
+            [centre_id]
+        );
+        
+        const pricesResult = await req.db.query(
+            `SELECT * FROM printing_prices WHERE centre_id = $1`, 
+            [centre_id]
+        );
+
+        res.json({
+            printers: printersResult.rows,
+            prices: pricesResult.rows
+        });
+    } catch (error) {
+        console.error("Settings Fetch Error:", error);
+        res.status(500).json({ error: 'Failed to load settings' });
     }
 });
 
