@@ -46,11 +46,11 @@ export default function SelfServicePrint() {
         formData.append('centre_id', centreId);
         formData.append('copies', copies);
         formData.append('color', color);
-        formData.append('paper_size', paperSize); // Added
-        formData.append('duplex', duplex);       // Added
+        formData.append('paper_size', paperSize); 
+        formData.append('duplex', duplex);       
 
         try {
-            const response = await axios.post(`${API_BASE_URL}/upload`, formData, {
+            const response = await axios.post(`${API_BASE_URL}/api/printing/upload`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             setJobDetails(response.data);
