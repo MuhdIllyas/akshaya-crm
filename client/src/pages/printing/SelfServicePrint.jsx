@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 // Replace with your actual VPS API URL
-const API_BASE_URL = 'https://api.akshayasahayi.com/api/printing';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+ if (!API_BASE_URL) {
+    throw new Error("VITE_API_URL is not defined");
+}
+
 const centreId = localStorage.getItem("centre_id") ;
 
 export default function SelfServicePrint() {
