@@ -18,7 +18,7 @@ const AdminPrintSettings = () => {
     const [printers, setPrinters] = useState([]);
     const [prices, setPrices] = useState([]);
     
-    const centreId = localStorage.getItem("centre_id") || 1; 
+    const centreId = localStorage.getItem("centre_id") ; 
 
     useEffect(() => {
         fetchSettings();
