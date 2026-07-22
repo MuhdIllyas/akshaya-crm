@@ -216,20 +216,23 @@ router.put('/settings/prices/:centre_id', async (req, res) => {
         // Start a transaction for safe updating
         await req.db.query('BEGIN');
         
+        // 1. DELETE all existing prices for this centre to prevent duplicates
+        await req.db.query('DELETE FROM printing_prices WHERE centre_id = $1', [centre_id]);
+        
+        // 2. INSERT the fresh pricing matrix
         for (const p of prices) {
-            // Upsert logic (Update if exists, Insert if not)
             await req.db.query(`
                 INSERT INTO printing_prices (centre_id, paper_size, color, price_per_page, duplex_price)
                 VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (id) DO UPDATE 
-                SET price_per_page = EXCLUDED.price_per_page, duplex_price = EXCLUDED.duplex_price
             `, [centre_id, p.paper_size, p.color, p.price_per_page, p.duplex_price]);
         }
         
+        // 3. Commit the changes
         await req.db.query('COMMIT');
         res.json({ success: true });
     } catch (error) {
         await req.db.query('ROLLBACK');
+        console.error("Pricing Update Error:", error);
         res.status(500).json({ error: 'Failed to update prices' });
     }
 });
