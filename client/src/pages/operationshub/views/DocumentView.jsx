@@ -1,30 +1,24 @@
 import React, { useState } from 'react';
 import { FiEdit2, FiInfo, FiAlertTriangle, FiCheckCircle, FiFileText } from 'react-icons/fi';
-// import BlockEditor from './BlockEditor'; // We will build this in the next step!
+import BlockEditor from './BlockEditor';
 
 const DocumentView = ({ document, workspaceId, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
 
   // If the user clicks Edit, we will eventually show the interactive Block Editor
   if (isEditing) {
-    return (
-      <div className="animate-in fade-in duration-300">
-        <div className="p-12 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-300">
-          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FiEdit2 className="h-5 w-5" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-2">Block Editor (Coming Next)</h3>
-          <p className="text-gray-500 mb-6">This is where the Notion-style interactive editor will go.</p>
-          <button 
-            onClick={() => setIsEditing(false)} 
-            className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Go Back to Viewer
-          </button>
-        </div>
-      </div>
-    );
-  }
+      return (
+        <BlockEditor 
+          document={document} 
+          workspaceId={workspaceId} 
+          onCancel={() => setIsEditing(false)} 
+          onSaveSuccess={() => {
+            setIsEditing(false);
+            onUpdate(); // Reloads the latest JSON from Postgres!
+          }} 
+        />
+      );
+    }
 
   // ==========================================
   // THE RENDERING ENGINE
