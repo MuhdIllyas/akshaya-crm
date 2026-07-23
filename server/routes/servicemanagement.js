@@ -167,6 +167,84 @@ router.get('/services', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/servicemanagement/workflow_services
+// Dedicated route for Operations Hub / Service Tracking (Only returns true workflow services)
+router.get('/workflow_services', authenticateToken, async (req, res) => {
+  const { search } = req.query;
+  const client = await pool.connect();
+  try {
+    let query = `
+      SELECT s.*, (
+        SELECT COALESCE(json_agg(sc), '[]'::json)
+        FROM (
+          SELECT sc.*, (
+            SELECT COALESCE(json_agg(rd), '[]'::json)
+            FROM required_documents rd
+            WHERE rd.sub_category_id = sc.id
+          ) AS required_documents
+          FROM subcategories sc
+          WHERE sc.service_id = s.id
+        ) sc
+      ) AS subcategories,
+      (
+        SELECT COALESCE(json_agg(rd), '[]'::json)
+        FROM required_documents rd
+        WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
+      ) AS required_documents
+      FROM services s
+      WHERE s.requires_workflow = true
+    `;
+    
+    let values = [];
+    if (search && (typeof search !== 'string' || search.length > 100)) {
+      return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
+    }
+    
+    if (search) {
+      query += ` AND (s.name ILIKE $1 OR s.description ILIKE $1
+                OR EXISTS (
+                  SELECT 1 FROM subcategories sc
+                  WHERE sc.service_id = s.id AND sc.name ILIKE $1
+                ))`;
+      values = [`%${search}%`];
+    }
+    
+    const result = await client.query(query, values);
+    const services = result.rows.map(service => ({
+      ...service,
+      wallet_name: null,
+      balance: null,
+      wallet_type: null,
+      is_shared: null,
+      wallet_status: null,
+      assigned_staff_id: null
+    }));
+
+    for (let service of services) {
+      if (service.wallet_id) {
+        const walletQuery = `SELECT * FROM wallets WHERE id = $1`;
+        const walletResult = await client.query(walletQuery, [service.wallet_id]);
+        if (walletResult.rows.length > 0) {
+          const wallet = walletResult.rows[0];
+          service.wallet_name = wallet.name;
+          service.balance = wallet.balance;
+          service.wallet_type = wallet.wallet_type;
+          service.is_shared = wallet.is_shared;
+          service.wallet_status = wallet.status;
+          service.assigned_staff_id = wallet.assigned_staff_id;
+        }
+      }
+    }
+
+    res.json(services);
+  } catch (err) {
+    console.error('Error fetching workflow services:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/servicemanagement/services
 router.post('/services', authenticateToken, async (req, res) => {
   const {

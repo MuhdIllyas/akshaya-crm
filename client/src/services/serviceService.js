@@ -93,6 +93,12 @@ export const getServices = async (searchQuery = '') => {
   return await api.get('/services', { params: { search: searchQuery } });
 };
 
+// Get all workflow-required services (Operations Hub / Service Tracking only)
+export const getWorkflowServices = async (searchQuery = '') => {
+  console.log('serviceService.js: Fetching workflow services with query:', searchQuery);
+  return await api.get('/workflow_services', { params: { search: searchQuery } });
+};
+
 // Get all categories (staff)
 export const getCategories = async () => {
   console.log('serviceService.js: Fetching categories');

@@ -20,7 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 import ServiceWorkspace from './ServiceWorkspace'; // Our new dynamic component
-import { getServices } from '@/services/serviceService.js';
+import { getWorkflowServices } from '@/services/serviceService';
 
 // =====================================================================
 // FULL MOCK DATA (ENHANCED with all new features)
@@ -595,13 +595,13 @@ const OperationsHub = () => {
     const fetchRealServices = async () => {
       try {
         setIsLoadingServices(true);
-        const response = await getServices(); // Call your existing API function
+        // CHANGE THIS LINE to use the new function:
+        const response = await getWorkflowServices(); 
         
-        // Map the backend DB structure to what our UI needs
         const formatted = response.data.map(s => ({
           id: s.id, 
           name: s.name,
-          icon: FiLayers, // Generic icon for DB services
+          icon: FiLayers,
           description: s.description || 'Manage operations for this service.',
           todayApplications: 0, 
           pending: 0,
