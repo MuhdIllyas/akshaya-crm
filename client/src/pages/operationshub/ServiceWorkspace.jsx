@@ -123,7 +123,11 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
             <FiChevronLeft className="h-5 w-5 text-gray-500" />
           </button>
           <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
-            {mockService ? <mockService.icon className="h-6 w-6" /> : <FiFileText className="h-6 w-6" />}
+            {mockService?.icon ? (
+              <mockService.icon className="h-6 w-6" />
+            ) : (
+              <FiFileText className="h-6 w-6" />
+            )}
           </div>
           <h2 className="text-xl font-bold text-gray-900">{mockService ? mockService.name : 'Workspace'}</h2>
           

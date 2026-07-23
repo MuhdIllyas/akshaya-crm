@@ -655,9 +655,8 @@ const OperationsHub = () => {
         const formatted = servicesResponse.data.map(s => ({
           id: s.id, 
           name: s.name,
+          icon: FiLayers, 
           description: s.description || 'Manage operations for this service.',
-          // Note: If your getWorkflowServices backend doesn't return today_count yet, 
-          // you can replace these with the real DB columns later!
           todayApplications: s.today_count || 0, 
           pending: s.pending_count || 0,
         }));
