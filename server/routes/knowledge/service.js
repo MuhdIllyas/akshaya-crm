@@ -316,30 +316,6 @@ export const addReply = async (discussionId, content, staffId) => {
     return res.rows[0];
 };
 
-export const markDiscussionSolved = async (discussionId, replyId) => {
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-        
-        // 1. Mark discussion as solved
-        await client.query(`UPDATE knowledge_discussions SET status = 'solved', updated_at = NOW() WHERE id = $1`, [discussionId]);
-        
-        // 2. Mark specific reply as the best answer (if provided)
-        if (replyId) {
-            await client.query(`UPDATE knowledge_discussion_replies SET is_best_answer = true WHERE id = $1`, [replyId]);
-        }
-
-        // TODO in Phase 2: Copy this discussion and best reply into knowledge_cases table!
-
-        await client.query('COMMIT');
-    } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-    } finally {
-        client.release();
-    }
-};
-
 export const getCases = async (workspaceId) => {
     const res = await pool.query(
         `SELECT c.*, s.name as solver_name 
