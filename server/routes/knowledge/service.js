@@ -351,3 +351,55 @@ export const getCases = async (workspaceId) => {
     );
     return res.rows;
 };
+
+export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // 1. Mark discussion as solved
+        await client.query(`UPDATE knowledge_discussions SET status = 'solved', updated_at = NOW() WHERE id = $1`, [discussionId]);
+        
+        let solutionText = "This issue was manually marked as resolved by staff.";
+
+        // 2. Mark specific reply as best answer AND grab the text for the Case
+        if (replyId) {
+            await client.query(`UPDATE knowledge_discussion_replies SET is_best_answer = true WHERE id = $1`, [replyId]);
+            
+            const replyRes = await client.query(`SELECT content FROM knowledge_discussion_replies WHERE id = $1`, [replyId]);
+            if (replyRes.rows.length > 0) {
+                solutionText = replyRes.rows[0].content;
+            }
+        }
+
+        // 3. Fetch the original discussion details
+        const discussionRes = await client.query(
+            `SELECT workspace_id, title, content, tags FROM knowledge_discussions WHERE id = $1`, 
+            [discussionId]
+        );
+        const discussion = discussionRes.rows[0];
+
+        // 4. 🔥 THE FIX: Insert everything into the Solved Cases table!
+        await client.query(
+            `INSERT INTO knowledge_cases 
+            (workspace_id, title, description, solution, original_discussion_id, tags, solved_by) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+                discussion.workspace_id, 
+                discussion.title, 
+                discussion.content, 
+                solutionText, 
+                discussionId, 
+                discussion.tags, 
+                staffId
+            ]
+        );
+
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};

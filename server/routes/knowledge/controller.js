@@ -173,3 +173,14 @@ export const getCases = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch cases', details: err.message });
     }
 };
+
+export const solveDiscussion = async (req, res) => {
+    try {
+        // ADDED: req.user.id so the database knows who solved it!
+        await knowledgeService.markDiscussionSolved(req.params.discussionId, req.body.replyId, req.user.id);
+        res.json({ message: 'Marked as solved' });
+    } catch (err) {
+        console.error("💥 SOLVE CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to mark as solved', details: err.message });
+    }
+};
