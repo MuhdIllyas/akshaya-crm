@@ -42,15 +42,10 @@ export const fetchDiscussions = async (workspaceId) => {
   return data;
 };
 
-export const createDiscussion = async (req, res) => {
-    try {
-        const discussion = await knowledgeService.createDiscussion(req.params.workspaceId, req.body, req.user.id);
-        res.status(201).json(discussion);
-    } catch (err) {
-        // 👇 ADD THESE TWO LINES TO REVEAL THE ERROR 👇
-        console.error("💥 DISCUSSION CRASH INFO:", err); 
-        res.status(500).json({ error: 'Failed to create discussion', details: err.message });
-    }
+export const createDiscussion = async (workspaceId, payload) => {
+  // This tells React to send the data to your backend!
+  const { data } = await api.post(`/workspaces/${workspaceId}/discussions`, payload);
+  return data;
 };
 
 export const addDiscussionReply = async (discussionId, content) => {

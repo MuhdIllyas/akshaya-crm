@@ -130,7 +130,9 @@ export const createDiscussion = async (req, res) => {
         const discussion = await knowledgeService.createDiscussion(req.params.workspaceId, req.body, req.user.id);
         res.status(201).json(discussion);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to create discussion' });
+        // This prints the real error to your SERVER terminal, not the browser!
+        console.error("💥 DISCUSSION CRASH INFO:", err); 
+        res.status(500).json({ error: 'Failed to create discussion', details: err.message });
     }
 };
 
