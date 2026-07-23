@@ -1,14 +1,13 @@
 import axios from 'axios';
 
-// Set up the base API instance. 
-// Note: If your backend runs on a different port during dev, you might need the full URL here (e.g., 'http://localhost:5000/api/knowledge')
+// USE YOUR VITE_API_URL SO IT HITS YOUR NODE.JS BACKEND
 const api = axios.create({ 
-    baseURL: '/api/knowledge', 
+    baseURL: `${import.meta.env.VITE_API_URL}/api/knowledge`, 
 });
 
-// Add a request interceptor to dynamically get the token (safer than grabbing it once on load)
+// Add a request interceptor to dynamically get the token
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token'); // Adjust if you store it as 'userToken' or similar
+    const token = localStorage.getItem('token'); 
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -57,3 +56,5 @@ export const markDiscussionSolved = async (discussionId, replyId = null) => {
   const { data } = await api.put(`/discussions/${discussionId}/solve`, { replyId });
   return data;
 };
+
+export default api;

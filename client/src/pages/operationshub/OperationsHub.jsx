@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 import ServiceWorkspace from './ServiceWorkspace'; // Our new dynamic component
+import { getServices } from '@/services/serviceService.js';
 
 // =====================================================================
 // FULL MOCK DATA (ENHANCED with all new features)
@@ -398,7 +399,7 @@ const ConvertDropdown = ({ onConvert }) => {
 // PAGE COMPONENTS
 // =====================================================================
 
-const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
+const HomePage = ({ services, navigateTo, handleTagClick, openDiscussion }) => (
   <div className="space-y-6">
     <div>
       <h2 className="text-2xl font-bold text-gray-900">Welcome back, Admin 👋</h2>
@@ -415,7 +416,8 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
     </div>
 
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {DATA.services.map(service => {
+      {/* 2. Map over the "services" prop instead of DATA.services */}
+      {services.map(service => {
         return (
           <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition cursor-pointer" onClick={() => navigateTo('service-detail', service.id)}>
             <div className="flex items-center gap-3">
@@ -426,8 +428,8 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
               </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">Today: {service.todayApplications}</span>
-              <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded">Pending: {service.pending}</span>
+              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">Today: {service.todayApplications || 0}</span>
+              <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded">Pending: {service.pending || 0}</span>
             </div>
           </div>
         );
@@ -479,11 +481,12 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   </div>
 );
 
-const ServicesPage = ({ navigateTo, openServiceDetail }) => (
+const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
   <div>
     <h2 className="text-xl font-bold text-gray-900 mb-4">All Services</h2>
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {DATA.services.map(service => (
+      {/* 2. Map over the "services" prop instead of DATA.services */}
+      {services.map(service => (
         <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer" onClick={() => openServiceDetail(service.id)}>
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><service.icon className="h-6 w-6" /></div>
@@ -575,14 +578,46 @@ const SearchPage = ({ query }) => (
 // MAIN SHELL COMPONENT
 // =====================================================================
 const OperationsHub = () => {
-  const { serviceId } = useParams(); // Gets ID from React Router
+  const { serviceId } = useParams(); 
 
-  // Initialize page to 'service-detail' if URL has an ID, else 'home'
   const [page, setPage] = useState(serviceId ? 'service-detail' : 'home');
   const [selectedServiceId, setSelectedServiceId] = useState(serviceId || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // === 1. ADD THIS REAL DATABASE STATE ===
+  const [realServices, setRealServices] = useState([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+
+  // === 2. ADD THIS FETCH EFFECT ===
+  useEffect(() => {
+    const fetchRealServices = async () => {
+      try {
+        setIsLoadingServices(true);
+        const response = await getServices(); // Call your existing API function
+        
+        // Map the backend DB structure to what our UI needs
+        const formatted = response.data.map(s => ({
+          id: s.id, 
+          name: s.name,
+          icon: FiLayers, // Generic icon for DB services
+          description: s.description || 'Manage operations for this service.',
+          todayApplications: 0, 
+          pending: 0,
+        }));
+        
+        setRealServices(formatted);
+      } catch (error) {
+        console.error("Failed to load real services:", error);
+        toast.error("Failed to load services");
+      } finally {
+        setIsLoadingServices(false);
+      }
+    };
+    
+    fetchRealServices();
+  }, []);
 
   // Sync with URL changes
   useEffect(() => {
@@ -605,18 +640,21 @@ const OperationsHub = () => {
   };
 
   const renderPage = () => {
+    // Show a loader while fetching services from PostgreSQL
+    if (isLoadingServices) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;
+
     switch (page) {
       case 'home': 
-        return <HomePage navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
+        return <HomePage services={realServices} navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
       case 'services': 
-        return <ServicesPage navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
+        return <ServicesPage services={realServices} navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
       case 'service-detail': 
-        // WE INJECT OUR DYNAMIC TABS HERE!
         return (
           <ServiceWorkspace 
             serviceId={selectedServiceId} 
             navigateTo={navigateTo} 
-            mockService={DATA.services.find(s => s.id === selectedServiceId)} 
+            // We use String() here just in case selectedServiceId from URL is a string but DB id is a number
+            mockService={realServices.find(s => String(s.id) === String(selectedServiceId))} 
           />
         );
       case 'discussions': 
