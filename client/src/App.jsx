@@ -295,6 +295,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
+              path="admin/operationshub/:serviceId"
+              element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
+            />
+            <Route
               path="admin/notifications"
               element={<ProtectedRoute allowedRoles={["admin"]}><NotificationsPage /></ProtectedRoute>}
             />
