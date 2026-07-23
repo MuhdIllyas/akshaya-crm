@@ -580,8 +580,10 @@ const SearchPage = ({ query }) => (
 const OperationsHub = () => {
   const { serviceId } = useParams(); 
 
-  const [page, setPage] = useState(serviceId ? 'service-detail' : 'home');
-  const [selectedServiceId, setSelectedServiceId] = useState(serviceId || null);
+  const isDbId = serviceId && !isNaN(serviceId);
+
+  const [page, setPage] = useState(isDbId ? 'service-detail' : (serviceId || 'home'));
+  const [selectedServiceId, setSelectedServiceId] = useState(isDbId ? serviceId : null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -621,10 +623,17 @@ const OperationsHub = () => {
 
   // Sync with URL changes
   useEffect(() => {
-    if (serviceId) {
-      setPage('service-detail');
-      setSelectedServiceId(serviceId);
-    }
+      if (serviceId) {
+        if (!isNaN(serviceId)) {
+          // It's a real database ID, open the workspace!
+          setPage('service-detail');
+          setSelectedServiceId(serviceId);
+        } else {
+          // It's just a text page like 'services' or 'home'
+          setPage(serviceId); 
+          setSelectedServiceId(null);
+        }
+      }
   }, [serviceId]);
 
   const navigateTo = (target, id = null) => {
