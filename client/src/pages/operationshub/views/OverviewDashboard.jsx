@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiUsers, FiMessageSquare, FiShield, FiLink, FiClock, FiCheckSquare } from 'react-icons/fi';
+import { FiUsers, FiMessageSquare, FiShield, FiLink, FiClock, FiCheckSquare, FiBriefcase } from 'react-icons/fi';
 
 const OverviewDashboard = ({ stats, contributors, workspace, documents, setActiveTab }) => {
   return (
