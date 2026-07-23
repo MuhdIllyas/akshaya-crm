@@ -97,12 +97,18 @@ export const batchUpdateBlocks = async (req, res) => {
 export const addResource = async (req, res) => {
     try {
         const { workspaceId } = req.params;
-        const { type, title, url, fileId } = req.body;
+        
+        // ADDED: Fallbacks so they default to null if missing!
+        const type = req.body.type || 'portal';
+        const title = req.body.title;
+        const url = req.body.url || null;
+        const fileId = req.body.fileId || null; 
 
-        const resource = await knowledgeService.addResource(workspaceId, type, title, url, fileId, req.user.id);
+        const resource = await knowledgeService.addResource(
+            workspaceId, type, title, url, fileId, req.user.id
+        );
         res.status(201).json(resource);
     } catch (err) {
-        // 👇 ADD THIS CONSOLE LOG 👇
         console.error("💥 RESOURCE CRASH INFO:", err);
         res.status(500).json({ error: 'Failed to add resource', details: err.message });
     }
