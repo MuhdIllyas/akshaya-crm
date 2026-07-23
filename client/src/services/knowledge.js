@@ -73,4 +73,13 @@ export const deleteResource = async (resourceId) => {
   return data;
 };
 
+// ==========================================
+// CASES ENDPOINT
+// ==========================================
+
+export const fetchCases = async (workspaceId) => {
+  const { data } = await api.get(`/workspaces/${workspaceId}/cases`);
+  return data;
+};
+
 export default api;

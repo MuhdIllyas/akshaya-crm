@@ -46,6 +46,7 @@ const SUPERADMIN_ONLY = ['superadmin'];
 // ==========================================
 router.get('/workspace/:serviceId', authorizeRoles(ALL_STAFF), knowledgeController.getWorkspace);
 router.put('/workspace/:id/status', authorizeRoles(SUPERADMIN_ONLY), knowledgeController.updateWorkspaceStatus);
+router.get('/workspaces/:workspaceId/cases', authorizeRoles(ALL_STAFF), knowledgeController.getCases);
 
 // ==========================================
 // CONTRIBUTORS

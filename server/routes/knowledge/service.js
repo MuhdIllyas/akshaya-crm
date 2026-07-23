@@ -339,3 +339,15 @@ export const markDiscussionSolved = async (discussionId, replyId) => {
         client.release();
     }
 };
+
+export const getCases = async (workspaceId) => {
+    const res = await pool.query(
+        `SELECT c.*, s.name as solver_name 
+         FROM knowledge_cases c
+         LEFT JOIN staff s ON c.solved_by = s.id
+         WHERE c.workspace_id = $1
+         ORDER BY c.created_at DESC`,
+        [workspaceId]
+    );
+    return res.rows;
+};

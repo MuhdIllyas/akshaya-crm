@@ -12,6 +12,7 @@ import DocumentView from './views/DocumentView';
 import ResourcesGrid from './views/ResourcesGrid';
 import ComingSoon from './views/ComingSoon';
 import DiscussionsView from './views/discussions/DiscussionsView';
+import CasesView from './views/CasesView';
 
 const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const [loading, setLoading] = useState(true);
@@ -101,7 +102,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       return <ResourcesGrid resources={resources} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
     }
     if (activeTab === 'cases') {
-      return <ComingSoon moduleName="Solved Cases" />;
+      return <CasesView workspaceId={workspace.id} />;
     }
     
     const activeDoc = documents.find(d => d.system_key === activeTab || `doc-${d.id}` === activeTab);

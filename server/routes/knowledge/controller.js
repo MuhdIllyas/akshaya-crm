@@ -161,3 +161,15 @@ export const solveDiscussion = async (req, res) => {
         res.status(500).json({ error: 'Failed to mark as solved' });
     }
 };
+
+export const getCases = async (req, res) => {
+    try {
+        // We can just write the query right here for simplicity, or put it in service.js
+        const { workspaceId } = req.params;
+        const result = await knowledgeService.getCases(workspaceId);
+        res.json(result);
+    } catch (err) {
+        console.error("💥 CASES CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to fetch cases', details: err.message });
+    }
+};
