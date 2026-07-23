@@ -102,7 +102,9 @@ export const addResource = async (req, res) => {
         const resource = await knowledgeService.addResource(workspaceId, type, title, url, fileId, req.user.id);
         res.status(201).json(resource);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to add resource' });
+        // 👇 ADD THIS CONSOLE LOG 👇
+        console.error("💥 RESOURCE CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to add resource', details: err.message });
     }
 };
 

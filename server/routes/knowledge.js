@@ -68,7 +68,7 @@ router.post('/documents/:documentId/blocks/batch', authorizeRoles(ADMIN_ONLY), k
 // ==========================================
 // RESOURCES
 // ==========================================
-router.post('/workspace/:workspaceId/resources', authorizeRoles(ADMIN_ONLY), knowledgeController.addResource);
+router.post('/workspaces/:workspaceId/resources', authorizeRoles(ADMIN_ONLY), knowledgeController.addResource);
 router.delete('/resources/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.deleteResource);
 
 // ==========================================
