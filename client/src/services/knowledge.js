@@ -58,4 +58,19 @@ export const markDiscussionSolved = async (discussionId, replyId = null) => {
   return data;
 };
 
+// ==========================================
+// RESOURCES ENDPOINTS
+// ==========================================
+
+export const addResource = async (workspaceId, payload) => {
+  // payload should include: { type, title, url, fileId }
+  const { data } = await knowledgeApi.post(`/workspaces/${workspaceId}/resources`, payload);
+  return data;
+};
+
+export const deleteResource = async (resourceId) => {
+  const { data } = await knowledgeApi.delete(`/resources/${resourceId}`);
+  return data;
+};
+
 export default api;
