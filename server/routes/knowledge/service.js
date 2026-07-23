@@ -62,7 +62,8 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
         workspace = workspaceRes.rows[0];
     }
 
-    const [docsRes, blocksRes, resourcesRes, contributorsRes] = await Promise.all([
+    // 1. Added the COUNT queries to the Promise.all array (and added discussionsRes, casesRes to the destructured array)
+    const [docsRes, blocksRes, resourcesRes, contributorsRes, discussionsRes, casesRes] = await Promise.all([
         pool.query('SELECT * FROM knowledge_documents WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY sort_order ASC', [workspace.id]),
         pool.query(
             `SELECT kb.* FROM knowledge_blocks kb
@@ -72,7 +73,9 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
             [workspace.id]
         ),
         pool.query('SELECT * FROM knowledge_resources WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY id DESC', [workspace.id]),
-        pool.query('SELECT c.*, s.name as staff_name FROM knowledge_contributors c JOIN staff s ON c.staff_id = s.id WHERE c.workspace_id = $1', [workspace.id])
+        pool.query('SELECT c.*, s.name as staff_name FROM knowledge_contributors c JOIN staff s ON c.staff_id = s.id WHERE c.workspace_id = $1', [workspace.id]),
+        pool.query('SELECT COUNT(*) FROM knowledge_discussions WHERE workspace_id = $1', [workspace.id]),
+        pool.query('SELECT COUNT(*) FROM knowledge_cases WHERE workspace_id = $1', [workspace.id])
     ]);
 
     const formattedDocs = docsRes.rows.map(doc => ({
@@ -80,9 +83,10 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
         blocks: blocksRes.rows.filter(b => b.document_id === doc.id)
     }));
 
+    // 2. Updated the stats object to use the real database counts!
     const stats = {
-        discussionCount: 0, 
-        caseCount: 0,
+        discussionCount: parseInt(discussionsRes.rows[0].count, 10) || 0, 
+        caseCount: parseInt(casesRes.rows[0].count, 10) || 0,
         resourceCount: resourcesRes.rows.length,
         contributors: contributorsRes.rows.length,
         lastUpdated: workspace.updated_at
