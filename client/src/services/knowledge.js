@@ -64,12 +64,12 @@ export const markDiscussionSolved = async (discussionId, replyId = null) => {
 
 export const addResource = async (workspaceId, payload) => {
   // payload should include: { type, title, url, fileId }
-  const { data } = await knowledgeApi.post(`/workspaces/${workspaceId}/resources`, payload);
+  const { data } = await api.post(`/workspaces/${workspaceId}/resources`, payload);
   return data;
 };
 
 export const deleteResource = async (resourceId) => {
-  const { data } = await knowledgeApi.delete(`/resources/${resourceId}`);
+  const { data } = await api.delete(`/resources/${resourceId}`);
   return data;
 };
 
