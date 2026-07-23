@@ -153,15 +153,6 @@ export const addReply = async (req, res) => {
     }
 };
 
-export const solveDiscussion = async (req, res) => {
-    try {
-        await knowledgeService.markDiscussionSolved(req.params.discussionId, req.body.replyId);
-        res.json({ message: 'Marked as solved' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to mark as solved' });
-    }
-};
-
 export const getCases = async (req, res) => {
     try {
         // We can just write the query right here for simplicity, or put it in service.js
