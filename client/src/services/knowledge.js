@@ -82,4 +82,9 @@ export const fetchCases = async (workspaceId) => {
   return data;
 };
 
+export const fetchGlobalHubStats = async () => {
+  const { data } = await api.get('/hub/stats');
+  return data;
+};
+
 export default api;

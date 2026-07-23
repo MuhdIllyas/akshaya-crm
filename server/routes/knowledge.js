@@ -80,4 +80,7 @@ router.post('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), k
 router.post('/discussions/:discussionId/replies', authorizeRoles(ALL_STAFF), knowledgeController.addReply);
 router.put('/discussions/:discussionId/solve', authorizeRoles(ALL_STAFF), knowledgeController.solveDiscussion);
 
+// Add this near your other routes
+router.get('/hub/stats', authorizeRoles(ALL_STAFF), knowledgeController.getGlobalStats);
+
 export default router;

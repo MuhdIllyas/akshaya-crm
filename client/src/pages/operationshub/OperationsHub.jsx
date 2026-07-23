@@ -21,6 +21,7 @@ import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 import ServiceWorkspace from './ServiceWorkspace'; // Our new dynamic component
 import { getWorkflowServices } from '@/services/serviceService';
+import { fetchGlobalHubStats } from '@/services/knowledge';
 
 // =====================================================================
 // FULL MOCK DATA (ENHANCED with all new features)
@@ -399,42 +400,58 @@ const ConvertDropdown = ({ onConvert }) => {
 // PAGE COMPONENTS
 // =====================================================================
 
-const HomePage = ({ services, navigateTo, handleTagClick, openDiscussion }) => (
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-2xl font-bold text-gray-900">Welcome back, Admin 👋</h2>
-      <p className="text-gray-500">Your operations hub – everything about your services at a glance.</p>
-    </div>
+const HomePage = ({ services, hubStats, navigateTo, openDiscussion }) => {
+  // THE FIX: Sort services by most pending, then slice to only show the Top 6!
+  const topServices = [...services]
+    .sort((a, b) => (b.pending || 0) - (a.pending || 0))
+    .slice(0, 6);
 
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      <StatCard label="Discussions" value={DATA.stats.discussions} icon={FiMessageCircle} color="blue" />
-      <StatCard label="Services" value={DATA.services.length} icon={FiGrid} color="green" />
-      <StatCard label="Announcements" value={DATA.stats.announcements} icon={FiBell} color="amber" />
-      <StatCard label="Training Materials" value={DATA.stats.trainings} icon={FiAward} color="purple" />
-      <StatCard label="Solved Cases" value={DATA.stats.cases} icon={FiCheckCircle} color="rose" />
-      <StatCard label="Unread Mentions" value={DATA.stats.unreadMentions} icon={FiAtSign} color="indigo" />
-    </div>
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Welcome back, Admin 👋</h2>
+        <p className="text-gray-500">Your operations hub – everything about your services at a glance.</p>
+      </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {/* 2. Map over the "services" prop instead of DATA.services */}
-      {services.map(service => {
-        return (
+      {/* THE FIX: Real Live Data for the Stat Cards! */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatCard label="Discussions" value={hubStats.discussions} icon={FiMessageCircle} color="blue" />
+        <StatCard label="Services" value={services.length} icon={FiGrid} color="green" />
+        <StatCard label="Announcements" value={hubStats.announcements} icon={FiBell} color="amber" />
+        <StatCard label="Trainings" value={hubStats.trainings} icon={FiAward} color="purple" />
+        <StatCard label="Solved Cases" value={hubStats.cases} icon={FiCheckCircle} color="rose" />
+        <StatCard label="Mentions" value={hubStats.mentions} icon={FiAtSign} color="indigo" />
+      </div>
+
+      <div className="flex items-center justify-between mt-8 mb-2">
+        <h3 className="text-lg font-bold text-gray-900">High Priority Services</h3>
+        <button onClick={() => navigateTo('services')} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+          View All {services.length} Services &rarr;
+        </button>
+      </div>
+
+      {/* THE FIX: Only map over the topServices (Max 6) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {topServices.map(service => (
           <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition cursor-pointer" onClick={() => navigateTo('service-detail', service.id)}>
-            <div className="flex items-center gap-3">
-              <service.icon className="h-8 w-8 text-indigo-500" />
-              <div>
-                <h4 className="font-bold text-gray-900">{service.name}</h4>
-                <div className="text-xs text-gray-500">{service.description}</div>
+            <div className="flex items-start gap-3 mb-3">
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                <FiLayers className="h-6 w-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-gray-900 truncate">{service.name}</h4>
+                <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{service.description}</div>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">Today: {service.todayApplications || 0}</span>
-              <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded">Pending: {service.pending || 0}</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium border-t border-gray-100 pt-3">
+              <span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg">Today: {service.todayApplications || 0}</span>
+              <span className={`${(service.pending > 0) ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'} px-2 py-1 rounded-lg`}>
+                Pending: {service.pending || 0}
+              </span>
             </div>
           </div>
-        );
-      })}
-    </div>
+        ))}
+      </div>
 
     <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-4">
       <div className="flex items-center justify-between mb-3">
@@ -479,7 +496,8 @@ const HomePage = ({ services, navigateTo, handleTagClick, openDiscussion }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
   <div>
@@ -590,6 +608,7 @@ const OperationsHub = () => {
 
   // === 1. ADD THIS REAL DATABASE STATE ===
   const [realServices, setRealServices] = useState([]);
+  const [hubStats, setHubStats] = useState({ discussions: 0, cases: 0, resources: 0, announcements: 0, trainings: 0, mentions: 0 });
   const [isLoadingServices, setIsLoadingServices] = useState(true);
 
   // === 2. ADD THIS FETCH EFFECT ===
@@ -619,6 +638,42 @@ const OperationsHub = () => {
     };
     
     fetchRealServices();
+  }, []);
+
+  // === UPDATE THE FETCH EFFECT ===
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoadingServices(true);
+        
+        // Fetch Services AND Global Stats simultaneously
+        const [servicesResponse, statsResponse] = await Promise.all([
+           getWorkflowServices(),
+           fetchGlobalHubStats() // The new API function we just added!
+        ]);
+        
+        const formatted = servicesResponse.data.map(s => ({
+          id: s.id, 
+          name: s.name,
+          description: s.description || 'Manage operations for this service.',
+          // Note: If your getWorkflowServices backend doesn't return today_count yet, 
+          // you can replace these with the real DB columns later!
+          todayApplications: s.today_count || 0, 
+          pending: s.pending_count || 0,
+        }));
+        
+        setRealServices(formatted);
+        setHubStats(statsResponse);
+
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+        toast.error("Failed to load operations dashboard");
+      } finally {
+        setIsLoadingServices(false);
+      }
+    };
+    
+    fetchDashboardData();
   }, []);
 
   // Sync with URL changes
@@ -654,7 +709,7 @@ const OperationsHub = () => {
 
     switch (page) {
       case 'home': 
-        return <HomePage services={realServices} navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
+        return <HomePage services={realServices} hubStats={hubStats} navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
       case 'services': 
         return <ServicesPage services={realServices} navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
       case 'service-detail': 

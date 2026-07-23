@@ -175,3 +175,12 @@ export const solveDiscussion = async (req, res) => {
         res.status(500).json({ error: 'Failed to mark as solved', details: err.message });
     }
 };
+
+export const getGlobalStats = async (req, res) => {
+    try {
+        const stats = await knowledgeService.getGlobalStats();
+        res.json(stats);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch global stats' });
+    }
+};
