@@ -15,18 +15,10 @@ import DiscussionsView from './views/discussions/DiscussionsView';
 
 const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  // ==========================================
-  // THE FIX: We provide a default fallback workspace!
-  // This guarantees `workspace.scope` will NEVER crash the app.
-  // ==========================================
-  const [workspace, setWorkspace] = useState({
-    id: 1, // Fallback ID so Discussions can link to something
-    name: mockService?.name || 'Workspace',
-    scope: 'GLOBAL',
-    status: 'published'
-  });
-  
+  // Real Database State
+  const [workspace, setWorkspace] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [resources, setResources] = useState([]);
   const [stats, setStats] = useState({});
@@ -43,17 +35,14 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     try {
       setLoading(true);
       const data = await fetchWorkspace(serviceId);
-      
-      // If the backend returns REAL data, overwrite the fallback
-      if (data && data.workspace) {
-        setWorkspace(data.workspace);
-        setDocuments(data.documents || data.pages || []);
-        setResources(data.resources || []);
-        setStats(data.stats || {});
-        setContributors(data.contributors || []);
-      }
+      setWorkspace(data.workspace);
+      setDocuments(data.documents || data.pages || []);
+      setResources(data.resources || []);
+      setStats(data.stats || {});
+      setContributors(data.contributors || []);
     } catch (err) {
-      console.warn('Backend workspace not found, using fallback UI so you can test Discussions.');
+      console.error(err);
+      setError('Failed to load workspace from database.');
     } finally {
       setLoading(false);
     }
@@ -64,7 +53,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       setIsPublishing(true);
       await updateWorkspaceStatus(workspace.id, 'published');
       toast.success('Workspace published successfully!');
-      loadWorkspaceData(); 
+      loadWorkspaceData(); // Refresh UI
     } catch (err) {
       toast.error('Failed to publish workspace.');
     } finally {
@@ -73,6 +62,8 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   };
 
   if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;
+  if (error) return <div className="p-12 flex justify-center text-red-500 gap-2"><FiAlertCircle /> {error}</div>;
+  if (!workspace) return <div className="p-12 flex justify-center text-gray-500"><FiLoader className="animate-spin h-5 w-5 mr-2" /> Initializing Workspace Data...</div>;
 
   // 1. Map Documents to Tabs
   const documentTabs = documents.map(doc => {
@@ -87,13 +78,13 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       label: doc.title,
       icon: icon
     };
-  }).filter(tab => tab.id !== 'overview'); 
+  }).filter(tab => tab.id !== 'overview'); // Keep Overview separate as 'dashboard'
 
   // 2. Build Final Tabs Array
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: FiGrid },
     ...documentTabs,
-    { id: 'discussions', label: 'Discussions', icon: FiMessageSquare }, 
+    { id: 'discussions', label: 'Discussions', icon: FiMessageSquare }, // <--- Add this!
     { id: 'resources', label: 'Resources', icon: FiLink },
     { id: 'cases', label: 'Cases', icon: FiCheckCircle },
   ];
@@ -103,7 +94,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     if (activeTab === 'dashboard') {
       return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} />;
     }
-    if (activeTab === 'discussions') {
+    if (activeTab === 'discussions') { 
       return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} />;
     }
     if (activeTab === 'resources') {
@@ -115,6 +106,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     
     const activeDoc = documents.find(d => d.system_key === activeTab || `doc-${d.id}` === activeTab);
     if (activeDoc) {
+      // DocumentView now handles its own Edit mode and block rendering!
       return <DocumentView key={activeDoc.id} document={activeDoc} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
     }
 
@@ -123,7 +115,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
 
   return (
     <div className="max-w-6xl mx-auto font-sans">
-      {/* HEADER */}
+      {/* HEADER (Restored Original Layout) */}
       <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-3">
           <button className="p-2 hover:bg-gray-100 rounded-lg transition" onClick={() => navigateTo('services')}>
@@ -132,7 +124,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
           <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
             {mockService ? <mockService.icon className="h-6 w-6" /> : <FiFileText className="h-6 w-6" />}
           </div>
-          <h2 className="text-xl font-bold text-gray-900">{workspace.name}</h2>
+          <h2 className="text-xl font-bold text-gray-900">{mockService ? mockService.name : 'Workspace'}</h2>
           
           <span className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wide ${
             workspace.scope === 'GLOBAL' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
@@ -141,11 +133,12 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
           </span>
         </div>
 
+        {/* Publish Controls moved to the top right of the workspace */}
         <div className="flex items-center gap-3">
           <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border ${
             workspace.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-700 border-gray-200'
           }`}>
-            {workspace.status?.replace('_', ' ')}
+            {workspace.status.replace('_', ' ')}
           </span>
           {workspace.status !== 'published' && (
             <button 
