@@ -453,22 +453,34 @@ const HomePage = ({ services, hubStats, navigateTo, openDiscussion }) => {
         ))}
       </div>
 
-    <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-          <FiFileText className="h-4 w-4 text-red-500" /> Government Updates
-        </h3>
+      {/* Real Live Government Updates / Announcements */}
+      <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <FiFileText className="h-4 w-4 text-red-500" /> Government Updates & Announcements
+          </h3>
+        </div>
+        <div className="space-y-2">
+          {liveAnnouncements.length === 0 ? (
+             <p className="text-sm text-gray-500">No active announcements.</p>
+          ) : (
+            liveAnnouncements.map(update => (
+              <div key={update.id} className="flex items-center gap-3 text-sm p-2 hover:bg-gray-50 rounded-lg transition">
+                {update.is_pinned && <FiHeart className="text-amber-500 h-3 w-3 flex-shrink-0" />}
+                <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                  update.priority === 'high' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {update.priority}
+                </span>
+                <span className="text-gray-700 font-medium flex-1">{update.title}</span>
+                <span className="text-xs text-gray-400">
+                  {new Date(update.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
       </div>
-      <div className="space-y-2">
-        {DATA.governmentUpdates.map(update => (
-          <div key={update.id} className="flex items-center gap-3 text-sm">
-            <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-700">{update.priority}</span>
-            <span className="text-gray-700 flex-1">{update.title}</span>
-            <span className="text-xs text-gray-400">{update.date}</span>
-          </div>
-        ))}
-      </div>
-    </div>
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
@@ -609,6 +621,7 @@ const OperationsHub = () => {
   // === 1. ADD THIS REAL DATABASE STATE ===
   const [realServices, setRealServices] = useState([]);
   const [hubStats, setHubStats] = useState({ discussions: 0, cases: 0, resources: 0, announcements: 0, trainings: 0, mentions: 0 });
+  const [liveAnnouncements, setLiveAnnouncements] = useState([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
 
   // === 2. ADD THIS FETCH EFFECT ===
@@ -647,9 +660,10 @@ const OperationsHub = () => {
         setIsLoadingServices(true);
         
         // Fetch Services AND Global Stats simultaneously
-        const [servicesResponse, statsResponse] = await Promise.all([
+        const [servicesResponse, statsResponse, announcementsResponse] = await Promise.all([
            getWorkflowServices(),
-           fetchGlobalHubStats() // The new API function we just added!
+           fetchGlobalHubStats(),
+           api.get('/hub/announcements')
         ]);
         
         const formatted = servicesResponse.data.map(s => ({
@@ -663,6 +677,7 @@ const OperationsHub = () => {
         
         setRealServices(formatted);
         setHubStats(statsResponse);
+        setLiveAnnouncements(announcementsResponse.data);
 
       } catch (error) {
         console.error("Failed to load dashboard data:", error);

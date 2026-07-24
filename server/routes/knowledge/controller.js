@@ -184,3 +184,13 @@ export const getGlobalStats = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch global stats' });
     }
 };
+
+export const getAnnouncements = async (req, res) => {
+    try {
+        const announcements = await knowledgeService.getAnnouncements();
+        res.json(announcements);
+    } catch (err) {
+        console.error("💥 ANNOUNCEMENTS CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to fetch announcements', details: err.message });
+    }
+};
