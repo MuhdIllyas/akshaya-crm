@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 import GlobalDiscussions from './views/GlobalDiscussions';
+import DiscussionDetailPage from './views/DiscussionDetailPage';
 import LearningView from './views/LearningView';
 import AnnouncementsView from './views/AnnouncementsView';
 import ServiceWorkspace from './ServiceWorkspace'; 
@@ -544,30 +545,6 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => (
     </div>
   </div>
 );
-
-const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
-  const discussion = DATA.discussionDetail;
-  if (!discussion) return <div>Not found</div>;
-  return (
-    <div className="flex flex-col lg:flex-row gap-6">
-      <div className="flex-1 min-w-0 space-y-4">
-        <h2 className="text-2xl font-bold text-gray-900">{discussion.title}</h2>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-          <div className="text-sm text-gray-800 whitespace-pre-wrap">{discussion.description}</div>
-        </div>
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Replies</h3>
-        <div className="space-y-3">
-          {discussion.repliesList.map(reply => (
-            <div key={reply.id} className="bg-white border border-gray-200 rounded-xl p-4">
-              <strong className="text-sm text-gray-900">{reply.author}</strong>
-              <div className="text-sm text-gray-700 mt-2">{reply.content}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const LearningPage = () => <div className="p-4">Learning Center - Coming Soon</div>;
 const AnnouncementsPage = () => <div className="p-4">Announcements - Coming Soon</div>;
