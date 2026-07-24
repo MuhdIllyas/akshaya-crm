@@ -739,7 +739,7 @@ const OperationsHub = () => {
           />
         );
       case 'discussions': 
-        return <GlobalDiscussions />;
+        return <GlobalDiscussions navigateTo={navigateTo} />;
       case 'discussion-detail': 
         return <DiscussionDetailPage discussionId={activeId} navigateTo={navigateTo} />;
       case 'learning': return <LearningView />;
