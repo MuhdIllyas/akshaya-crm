@@ -31,19 +31,19 @@ import { fetchGlobalHubStats, fetchAnnouncements } from '@/services/knowledge';
 // HELPER COMPONENTS
 // =====================================================================
 
-const Sidebar = ({ active, onNavigate }) => {
+const Sidebar = ({ active, onNavigate, hubStats = {} }) => { 
   const mainNav = [
     { id: 'home', label: 'Home', icon: FiHome },
     { id: 'services', label: 'Services', icon: FiGrid },
-    { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: DATA.stats.discussions },
-    { id: 'learning', label: 'Learning Center', icon: FiAward, count: DATA.stats.trainings },
-    { id: 'announcements', label: 'Announcements', icon: FiBell, count: DATA.stats.announcements },
+    { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: hubStats.discussions },
+    { id: 'learning', label: 'Learning Center', icon: FiAward, count: hubStats.trainings },
+    { id: 'announcements', label: 'Announcements', icon: FiBell, count: hubStats.announcements },
     { id: 'ai-assistant', label: 'AI Assistant', icon: FiZap },
   ];
   const workspaceItems = [
-    { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: DATA.stats.unreadMentions },
+    { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: hubStats.mentions },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
-    { id: 'drafts', label: 'Drafts', icon: FiFile, count: DATA.drafts.length },
+    { id: 'drafts', label: 'Drafts', icon: FiFile, count: 0 }, // Set to 0 until built
     { id: 'following', label: 'Following', icon: FiUserPlus },
     { id: 'history', label: 'History', icon: FiClock },
   ];
@@ -93,7 +93,7 @@ const Sidebar = ({ active, onNavigate }) => {
   );
 };
 
-const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant }) => {
+const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant, hubStats = {} }) => {
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -137,7 +137,7 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
         </button>
         <button onClick={() => onNavigate('mentions')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
           <FiAtSign className="h-5 w-5" />
-          {DATA.stats.unreadMentions > 0 && (
+          {hubStats.mentions > 0 && (    
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
           )}
         </button>
@@ -190,7 +190,7 @@ const DiscussionCard = ({ discussion, onClick }) => {
     bug: { icon: FiAlertCircle, color: 'bg-yellow-50 text-yellow-600' },
   };
   const { icon: Icon, color: typeClass } = typeMap[discussion.type] || { icon: FiMessageSquare, color: 'bg-gray-50 text-gray-600' };
-  const serviceObj = DATA.services.find(s => s.id === discussion.service);
+  const serviceObj = null;
   const serviceName = serviceObj ? serviceObj.name : null;
 
   return (
@@ -220,7 +220,7 @@ const DiscussionCard = ({ discussion, onClick }) => {
 };
 
 const ArticleCard = ({ article, onClick }) => {
-  const serviceObj = DATA.services.find(s => s.id === article.service);
+  const serviceObj = null; // <--- Safe fallback!
   const serviceName = serviceObj ? serviceObj.name : null;
   return (
     <div className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
@@ -368,29 +368,19 @@ const HomePage = ({ services, hubStats, liveAnnouncements = [], navigateTo, open
         </div>
       </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><FiMessageCircle className="h-4 w-4 text-indigo-500" /> Unread Discussions</h3>
-          {DATA.discussions.slice(0, 3).map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
+          <p className="text-sm text-gray-500">No unread discussions.</p>
         </div>
       </div>
       <div className="space-y-6">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><FiAtSign className="h-4 w-4 text-purple-500" /> My Mentions</h3>
-          {DATA.myMentions.map((m, idx) => (
-            <div key={idx} className="p-2 bg-white border border-gray-200 rounded-xl mb-2 cursor-pointer" onClick={() => navigateTo('mentions')}>
-              <div className="flex gap-2">
-                <div className="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><FiAtSign className="h-4 w-4" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900">{m.title}</div>
-                  <div className="text-xs text-gray-500 line-clamp-1">{m.excerpt}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+          <p className="text-sm text-gray-500">No new mentions.</p>
         </div>
-        <ActivityFeed activities={DATA.activityFeed} />
+        <ActivityFeed activities={[]} /> 
       </div>
     </div>
   </div>
@@ -413,17 +403,6 @@ const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
           </div>
         </div>
       ))}
-    </div>
-  </div>
-);
-
-const DiscussionsPage = ({ navigateTo, openDiscussion }) => (
-  <div>
-    <div className="flex justify-between mb-4">
-      <h2 className="text-xl font-bold text-gray-900">Discussions</h2>
-    </div>
-    <div className="space-y-2">
-      {DATA.discussions.map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
     </div>
   </div>
 );
@@ -615,7 +594,8 @@ const OperationsHub = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <div className="hidden lg:block flex-shrink-0">
-        <Sidebar active={page} onNavigate={navigateTo} />
+        {/* PASSED hubStats */}
+        <Sidebar active={page} onNavigate={navigateTo} hubStats={hubStats} /> 
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -625,6 +605,7 @@ const OperationsHub = () => {
           onNavigate={navigateTo}
           toggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
           onAIAssistant={() => navigateTo('ai-assistant')}
+          hubStats={hubStats} // <--- PASSED hubStats
         />
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {renderPage()}
