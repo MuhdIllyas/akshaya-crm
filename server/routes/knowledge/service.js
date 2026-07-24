@@ -402,12 +402,23 @@ export const getGlobalStats = async () => {
     };
 };
 
+export const createAnnouncement = async (title, content, category, priority, isPinned, staffId) => {
+    const res = await pool.query(
+        `INSERT INTO knowledge_announcements (title, content, category, priority, is_pinned, created_by) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [title, content, category, priority, isPinned, staffId]
+    );
+    return res.rows[0];
+};
+
+// Update your getAnnouncements function to pull the staff name!
 export const getAnnouncements = async () => {
-    // Fetches the latest 10 announcements, pinned ones at the top!
     const res = await pool.query(`
-        SELECT * FROM knowledge_announcements 
-        ORDER BY is_pinned DESC, created_at DESC 
-        LIMIT 10
+        SELECT a.*, s.name as author_name 
+        FROM knowledge_announcements a
+        LEFT JOIN staff s ON a.created_by = s.id
+        ORDER BY a.is_pinned DESC, a.created_at DESC 
+        LIMIT 50
     `);
     return res.rows;
 };

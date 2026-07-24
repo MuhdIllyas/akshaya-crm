@@ -84,5 +84,6 @@ router.put('/discussions/:discussionId/solve', authorizeRoles(ALL_STAFF), knowle
 router.get('/hub/stats', authorizeRoles(ALL_STAFF), knowledgeController.getGlobalStats);
 // Fetch the latest global announcements
 router.get('/hub/announcements', authorizeRoles(ALL_STAFF), knowledgeController.getAnnouncements);
+router.post('/hub/announcements', authorizeRoles(ADMIN_ONLY), knowledgeController.createAnnouncement);
 
 export default router;

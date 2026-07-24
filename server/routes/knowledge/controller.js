@@ -185,6 +185,19 @@ export const getGlobalStats = async (req, res) => {
     }
 };
 
+export const createAnnouncement = async (req, res) => {
+    try {
+        const { title, content, category, priority, isPinned } = req.body;
+        const announcement = await knowledgeService.createAnnouncement(
+            title, content, category, priority, isPinned, req.user.id
+        );
+        res.status(201).json(announcement);
+    } catch (err) {
+        console.error("💥 CREATE ANNOUNCEMENT CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to create announcement', details: err.message });
+    }
+};
+
 export const getAnnouncements = async (req, res) => {
     try {
         const announcements = await knowledgeService.getAnnouncements();
