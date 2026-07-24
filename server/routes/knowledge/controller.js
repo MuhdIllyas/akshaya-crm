@@ -167,9 +167,36 @@ export const getCases = async (req, res) => {
 
 export const solveDiscussion = async (req, res) => {
     try {
-        // ADDED: req.user.id so the database knows who solved it!
-        await knowledgeService.markDiscussionSolved(req.params.discussionId, req.body.replyId, req.user.id);
-        res.json({ message: 'Marked as solved' });
+        const { discussionId } = req.params;
+        const { replyId } = req.body;
+        const userId = req.user.id;
+        const userRole = req.user.role;
+
+        // 1. Fetch the discussion to see who owns it and its current status
+        // (Reusing the service function you already built!)
+        const discussion = await knowledgeService.getDiscussionById(discussionId);
+        
+        if (!discussion) {
+            return res.status(404).json({ error: 'Discussion not found' });
+        }
+
+        // 2. Prevent altering an already solved case
+        if (discussion.status === 'solved') {
+            return res.status(400).json({ error: 'This discussion is already closed and archived.' });
+        }
+
+        // 3. THE GATEKEEPER: Check Ownership OR Admin Status
+        // If they are NOT the author, and NOT an admin/superadmin, kick them out.
+        if (discussion.author_id !== userId && !['admin', 'superadmin'].includes(userRole)) {
+            return res.status(403).json({ 
+                error: 'Forbidden: Only the original author or an Admin can mark this solved.' 
+            });
+        }
+
+        // 4. If they pass the checks, proceed with solving!
+        await knowledgeService.markDiscussionSolved(discussionId, replyId, userId);
+        res.json({ message: 'Discussion securely locked and marked as solved.' });
+
     } catch (err) {
         console.error("💥 SOLVE CRASH INFO:", err);
         res.status(500).json({ error: 'Failed to mark as solved', details: err.message });

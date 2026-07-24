@@ -79,7 +79,7 @@ router.get('/hub/discussions/all', authorizeRoles(ALL_STAFF), knowledgeControlle
 router.get('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.getDiscussions);
 router.post('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.createDiscussion);
 router.post('/discussions/:discussionId/replies', authorizeRoles(ALL_STAFF), knowledgeController.addReply);
-router.put('/discussions/:discussionId/solve', authorizeRoles(ALL_STAFF), knowledgeController.solveDiscussion);
+router.put('/discussions/:discussionId/solve', authorizeRoles(ADMIN_ONLY), knowledgeController.solveDiscussion);
 router.get('/hub/discussions/:id', authorizeRoles(ALL_STAFF), knowledgeController.getDiscussionById);
 
 // Add this near your other routes
