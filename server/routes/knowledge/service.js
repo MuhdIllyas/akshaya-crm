@@ -384,24 +384,6 @@ export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
     }
 };
 
-export const getGlobalStats = async () => {
-    const [discussions, cases, resources, announcements] = await Promise.all([
-        pool.query("SELECT COUNT(*) FROM knowledge_discussions WHERE deleted_at IS NULL"),
-        pool.query("SELECT COUNT(*) FROM knowledge_cases"),
-        pool.query("SELECT COUNT(*) FROM knowledge_resources WHERE deleted_at IS NULL"),
-        pool.query("SELECT COUNT(*) FROM knowledge_announcements")
-    ]);
-
-    return {
-        discussions: parseInt(discussions.rows[0].count, 10) || 0,
-        cases: parseInt(cases.rows[0].count, 10) || 0,
-        resources: parseInt(resources.rows[0].count, 10) || 0,
-        announcements: parseInt(announcements.rows[0].count, 10) || 0, 
-        trainings: 0,     
-        mentions: 0       
-    };
-};
-
 export const createAnnouncement = async (title, content, category, priority, isPinned, staffId) => {
     const res = await pool.query(
         `INSERT INTO knowledge_announcements (title, content, category, priority, is_pinned, created_by) 
