@@ -222,3 +222,12 @@ export const createTraining = async (req, res) => {
         res.status(500).json({ error: 'Failed to create training' });
     }
 };
+
+export const getAllDiscussions = async (req, res) => {
+    try {
+        const discussions = await knowledgeService.getAllDiscussions();
+        res.json(discussions);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch global discussions' });
+    }
+};

@@ -19,6 +19,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
+import GlobalDiscussions from './views/GlobalDiscussions';
 import LearningView from './views/LearningView';
 import AnnouncementsView from './views/AnnouncementsView';
 import ServiceWorkspace from './ServiceWorkspace'; 
@@ -738,7 +739,7 @@ const OperationsHub = () => {
           />
         );
       case 'discussions': 
-        return <DiscussionsPage navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
+        return <GlobalDiscussions />;
       case 'discussion-detail': 
         return <DiscussionDetailPage discussionId={1} navigateTo={navigateTo} />;
       case 'learning': return <LearningView />;

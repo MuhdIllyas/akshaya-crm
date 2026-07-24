@@ -443,3 +443,21 @@ export const createTraining = async (title, description, type, url, duration, st
     );
     return res.rows[0];
 };
+
+export const getAllDiscussions = async () => {
+    // Fetches discussions across all workspaces, includes author name and service name
+    const res = await pool.query(`
+        SELECT 
+            d.*, 
+            s.name as author_name, 
+            srv.name as service_name,
+            (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count
+        FROM knowledge_discussions d
+        JOIN staff s ON d.author_id = s.id
+        JOIN knowledge_workspaces kw ON d.workspace_id = kw.id
+        LEFT JOIN services srv ON kw.service_id = srv.id
+        ORDER BY d.created_at DESC
+        LIMIT 50
+    `);
+    return res.rows;
+};

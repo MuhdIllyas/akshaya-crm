@@ -107,4 +107,9 @@ export const createTraining = async (payload) => {
   return data;
 };
 
+export const fetchAllDiscussions = async () => {
+  const { data } = await api.get('/hub/discussions/all');
+  return data;
+};
+
 export default api;
