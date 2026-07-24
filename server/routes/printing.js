@@ -52,11 +52,41 @@ router.get('/status/:jobId', async (req, res) => {
     }
 });
 
+// Helper function to calculate exact page count from a range string
+function calculateEffectivePages(rangeStr, totalPdfPages) {
+    if (!rangeStr || rangeStr.trim().toUpperCase() === 'ALL') {
+        return { count: totalPdfPages, formattedRange: 'ALL' };
+    }
+    
+    const pages = new Set();
+    const parts = rangeStr.split(',');
+    
+    for (let part of parts) {
+        part = part.trim();
+        if (part.includes('-')) {
+            const [start, end] = part.split('-').map(Number);
+            if (start > 0 && end >= start && start <= totalPdfPages) {
+                const actualEnd = Math.min(end, totalPdfPages);
+                for (let i = start; i <= actualEnd; i++) pages.add(i);
+            }
+        } else {
+            const page = Number(part);
+            if (page > 0 && page <= totalPdfPages) pages.add(page);
+        }
+    }
+    
+    // If they typed invalid things like "xyz", default to all pages
+    if (pages.size === 0) return { count: totalPdfPages, formattedRange: 'ALL' };
+    
+    // Return the actual number of pages they will consume
+    return { count: pages.size, formattedRange: rangeStr.trim() };
+}
+
 // POST /api/printing/upload
 router.post('/upload', upload.single('document'), async (req, res) => {
     try {
         const file = req.file;
-        const { centre_id, customer_name, phone, copies, color, paper_size, duplex } = req.body;
+        const { centre_id, customer_name, phone, copies, color, paper_size, duplex, page_range } = req.body;
 
         if (!file) return res.status(400).json({ error: 'No document uploaded' });
 
@@ -66,7 +96,7 @@ router.post('/upload', upload.single('document'), async (req, res) => {
         const selectedPaperSize = paper_size || 'A4';
         const totalCopies = parseInt(copies) || 1;
 
-        // A. Read the PDF to get the page count (WITH SAFETY FALLBACK)
+        // A. Read the PDF to get the total document page count (WITH SAFETY FALLBACK)
         const dataBuffer = fs.readFileSync(file.path);
         let numPages = 1; // Default to 1 page if anything fails
         
@@ -80,6 +110,10 @@ router.post('/upload', upload.single('document'), async (req, res) => {
         } catch (parseError) {
             console.error("[Print Module] Could not read PDF pages (possibly corrupted/encrypted). Defaulting to 1 page.");
         }
+
+        // NEW: Calculate the effective pages based on what the user wants to print
+        const rawPageRange = page_range || 'ALL';
+        const { count: effectivePages, formattedRange } = calculateEffectivePages(rawPageRange, numPages);
 
         // B. Dynamic Pricing Logic (Fetch from printing_prices table)
         const priceQuery = `
@@ -100,21 +134,21 @@ router.post('/upload', upload.single('document'), async (req, res) => {
         let totalPrice = 0;
         if (isDuplex) {
             // A 5 page document double-sided uses 3 physical sheets of paper
-            const sheets = Math.ceil(numPages / 2);
+            const sheets = Math.ceil(effectivePages / 2);
             totalPrice = sheets * parseFloat(duplex_price) * totalCopies;
         } else {
-            totalPrice = numPages * parseFloat(price_per_page) * totalCopies;
+            totalPrice = effectivePages * parseFloat(price_per_page) * totalCopies;
         }
 
         // C. Auto-Select Printer dynamically (Fetch from printers table)
         const printerQuery = `
             SELECT id 
-                FROM printers 
-                WHERE centre_id = $1 
-                AND supports_color = $2 
-                AND paper_sizes LIKE $3 
-                AND status = 'ACTIVE'
-                ORDER BY RANDOM() -- Adds simple load balancing
+            FROM printers 
+            WHERE centre_id = $1 
+              AND supports_color = $2 
+              AND paper_sizes LIKE $3 
+              AND status = 'ACTIVE'
+            ORDER BY RANDOM() -- Adds simple load balancing
             LIMIT 1;
         `;
         const printerResult = await req.db.query(printerQuery, [centre_id, isColor, `%${selectedPaperSize}%`]);
@@ -125,12 +159,12 @@ router.post('/upload', upload.single('document'), async (req, res) => {
 
         const targetPrinterId = printerResult.rows[0].id;
 
-        // D. Save the job to PostgreSQL using your existing req.db
+        // D. Save the job to PostgreSQL as a DRAFT
         const insertQuery = `
             INSERT INTO print_jobs 
-            (centre_id, customer_name, phone, filename, filepath, printer_id, copies, paper_size, color, duplex, pages, price, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'WAITING')
-            RETURNING id, status, price, pages;
+            (centre_id, customer_name, phone, filename, filepath, printer_id, copies, paper_size, color, duplex, pages, page_range, price, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'DRAFT')
+            RETURNING id, status, price, pages, page_range;
         `;
         
         // Note: Using 'uploads/printjobs/filename' so it works with your static file server
@@ -147,7 +181,8 @@ router.post('/upload', upload.single('document'), async (req, res) => {
             selectedPaperSize,
             isColor,
             isDuplex,
-            numPages, 
+            effectivePages, 
+            formattedRange,
             totalPrice
         ];
 
@@ -158,6 +193,7 @@ router.post('/upload', upload.single('document'), async (req, res) => {
             message: 'File processed and queued',
             jobId: savedJob.id,
             pages: savedJob.pages,
+            pageRange: savedJob.page_range,
             totalPrice: savedJob.price,
             status: savedJob.status
         });
@@ -165,6 +201,29 @@ router.post('/upload', upload.single('document'), async (req, res) => {
     } catch (error) {
         console.error('Print Upload Error:', error);
         res.status(500).json({ error: 'Failed to process document' });
+    }
+});
+
+// POST /api/printing/confirm
+router.post('/confirm', async (req, res) => {
+    const { jobId } = req.body;
+    try {
+        const query = `
+            UPDATE print_jobs 
+            SET status = 'WAITING' 
+            WHERE id = $1 
+            RETURNING status
+        `;
+        const result = await req.db.query(query, [jobId]);
+        
+        if (result.rows.length > 0) {
+            res.json({ success: true, status: result.rows[0].status });
+        } else {
+            res.status(404).json({ error: 'Job not found' });
+        }
+    } catch (error) {
+        console.error('Print Confirm Error:', error);
+        res.status(500).json({ error: 'Failed to confirm job' });
     }
 });
 
