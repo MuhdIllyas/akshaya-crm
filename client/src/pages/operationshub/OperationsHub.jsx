@@ -678,7 +678,7 @@ const OperationsHub = () => {
         
         setRealServices(formatted);
         setHubStats(statsResponse);
-        setLiveAnnouncements(announcementsResponse.data);
+        setLiveAnnouncements(announcementsResponse);
 
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
