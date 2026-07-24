@@ -709,13 +709,8 @@ const OperationsHub = () => {
   }, [serviceId]);
 
   const navigateTo = (target, id = null) => {
-    if (target === 'service-detail' && id) {
-      setPage('service-detail');
-      setSelectedServiceId(id);
-    } else {
-      setPage(target);
-      setSelectedServiceId(null);
-    }
+    setPage(target);
+    setSelectedServiceId(id); // <--- This now safely accepts the ID for ANY page!
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setMobileSidebarOpen(false);
   };
@@ -741,7 +736,7 @@ const OperationsHub = () => {
       case 'discussions': 
         return <GlobalDiscussions navigateTo={navigateTo} />;
       case 'discussion-detail': 
-        return <DiscussionDetailPage discussionId={activeId} navigateTo={navigateTo} />;
+        return <DiscussionDetailPage discussionId={selectedServiceId} navigateTo={navigateTo} />;
       case 'learning': return <LearningView />;
       case 'announcements': return <AnnouncementsView />;
       case 'tags': return <TagsPage navigateTo={navigateTo} />;
