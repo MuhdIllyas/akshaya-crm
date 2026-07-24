@@ -19,9 +19,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
-import ServiceWorkspace from './ServiceWorkspace'; // Our new dynamic component
+import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
-import { fetchGlobalHubStats } from '@/services/knowledge';
+import { fetchGlobalHubStats, fetchAnnouncements } from '@/services/knowledge';
 
 // =====================================================================
 // FULL MOCK DATA (ENHANCED with all new features)
@@ -400,7 +400,7 @@ const ConvertDropdown = ({ onConvert }) => {
 // PAGE COMPONENTS
 // =====================================================================
 
-const HomePage = ({ services, hubStats, navigateTo, openDiscussion }) => {
+const HomePage = ({ services, hubStats, liveAnnouncements = [], navigateTo, openDiscussion }) => {
   // THE FIX: Sort services by most pending, then slice to only show the Top 6!
   const topServices = [...services]
     .sort((a, b) => (b.pending || 0) - (a.pending || 0))
@@ -663,7 +663,7 @@ const OperationsHub = () => {
         const [servicesResponse, statsResponse, announcementsResponse] = await Promise.all([
            getWorkflowServices(),
            fetchGlobalHubStats(),
-           api.get('/hub/announcements')
+           fetchAnnouncements()
         ]);
         
         const formatted = servicesResponse.data.map(s => ({
@@ -723,7 +723,7 @@ const OperationsHub = () => {
 
     switch (page) {
       case 'home': 
-        return <HomePage services={realServices} hubStats={hubStats} navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
+        return <HomePage services={realServices} hubStats={hubStats} liveAnnouncements={liveAnnouncements} navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
       case 'services': 
         return <ServicesPage services={realServices} navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
       case 'service-detail': 

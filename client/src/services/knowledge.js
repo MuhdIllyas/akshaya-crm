@@ -87,4 +87,9 @@ export const fetchGlobalHubStats = async () => {
   return data;
 };
 
+export const fetchAnnouncements = async () => {
+  const { data } = await api.get('/hub/announcements');
+  return data;
+};
+
 export default api;
