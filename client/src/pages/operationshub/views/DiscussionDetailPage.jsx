@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiLoader, FiAlertCircle } from 'react-icons/fi';
 import { fetchDiscussionById } from '@/services/knowledge';
-import DiscussionThread from './DiscussionThread'; // Your existing component!
+import DiscussionThread from './discussions/DiscussionThread';
 
 const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   const [discussion, setDiscussion] = useState(null);
