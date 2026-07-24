@@ -207,3 +207,18 @@ export const getAnnouncements = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch announcements', details: err.message });
     }
 };
+
+export const getTrainings = async (req, res) => {
+    try { res.json(await knowledgeService.getTrainings()); } 
+    catch (err) { res.status(500).json({ error: 'Failed to fetch trainings' }); }
+};
+
+export const createTraining = async (req, res) => {
+    try {
+        const { title, description, type, url, duration } = req.body;
+        const training = await knowledgeService.createTraining(title, description, type, url, duration, req.user.id);
+        res.status(201).json(training);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create training' });
+    }
+};

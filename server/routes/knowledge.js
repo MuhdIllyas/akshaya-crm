@@ -86,4 +86,10 @@ router.get('/hub/stats', authorizeRoles(ALL_STAFF), knowledgeController.getGloba
 router.get('/hub/announcements', authorizeRoles(ALL_STAFF), knowledgeController.getAnnouncements);
 router.post('/hub/announcements', authorizeRoles(ADMIN_ONLY), knowledgeController.createAnnouncement);
 
+// ==========================================
+// TRAININGS
+// ==========================================
+router.get('/hub/trainings', authorizeRoles(ALL_STAFF), knowledgeController.getTrainings);
+router.post('/hub/trainings', authorizeRoles(ALL_STAFF), knowledgeController.createTraining);
+
 export default router;

@@ -19,6 +19,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
+import LearningView from './views/LearningView';
 import AnnouncementsView from './views/AnnouncementsView';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
@@ -740,7 +741,7 @@ const OperationsHub = () => {
         return <DiscussionsPage navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
       case 'discussion-detail': 
         return <DiscussionDetailPage discussionId={1} navigateTo={navigateTo} />;
-      case 'learning': return <LearningPage navigateTo={navigateTo} />;
+      case 'learning': return <LearningView />;
       case 'announcements': return <AnnouncementsView />;
       case 'tags': return <TagsPage navigateTo={navigateTo} />;
       case 'bookmarks': return <BookmarksPage />;

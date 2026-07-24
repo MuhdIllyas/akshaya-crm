@@ -97,4 +97,14 @@ export const fetchAnnouncements = async () => {
   return data;
 };
 
+export const fetchTrainings = async () => {
+  const { data } = await api.get('/hub/trainings');
+  return data;
+};
+
+export const createTraining = async (payload) => {
+  const { data } = await api.post('/hub/trainings', payload);
+  return data;
+};
+
 export default api;

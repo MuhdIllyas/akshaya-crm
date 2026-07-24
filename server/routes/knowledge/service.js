@@ -422,3 +422,42 @@ export const getAnnouncements = async () => {
     `);
     return res.rows;
 };
+
+export const getGlobalStats = async () => {
+    // ADDED the trainings query to the array
+    const [discussions, cases, resources, announcements, trainings] = await Promise.all([
+        pool.query("SELECT COUNT(*) FROM knowledge_discussions WHERE deleted_at IS NULL"),
+        pool.query("SELECT COUNT(*) FROM knowledge_cases"),
+        pool.query("SELECT COUNT(*) FROM knowledge_resources WHERE deleted_at IS NULL"),
+        pool.query("SELECT COUNT(*) FROM knowledge_announcements"),
+        pool.query("SELECT COUNT(*) FROM knowledge_trainings") // <--- NEW!
+    ]);
+
+    return {
+        discussions: parseInt(discussions.rows[0].count, 10) || 0,
+        cases: parseInt(cases.rows[0].count, 10) || 0,
+        resources: parseInt(resources.rows[0].count, 10) || 0,
+        announcements: parseInt(announcements.rows[0].count, 10) || 0,
+        trainings: parseInt(trainings.rows[0].count, 10) || 0, // <--- NOW LIVE!
+        mentions: 0       
+    };
+};
+
+export const getTrainings = async () => {
+    const res = await pool.query(`
+        SELECT t.*, s.name as author_name 
+        FROM knowledge_trainings t
+        LEFT JOIN staff s ON t.created_by = s.id
+        ORDER BY t.created_at DESC
+    `);
+    return res.rows;
+};
+
+export const createTraining = async (title, description, type, url, duration, staffId) => {
+    const res = await pool.query(
+        `INSERT INTO knowledge_trainings (title, description, type, url, duration, created_by) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [title, description, type, url, duration, staffId]
+    );
+    return res.rows[0];
+};
