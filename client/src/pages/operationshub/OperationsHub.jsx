@@ -741,7 +741,7 @@ const OperationsHub = () => {
       case 'discussions': 
         return <GlobalDiscussions />;
       case 'discussion-detail': 
-        return <DiscussionDetailPage discussionId={1} navigateTo={navigateTo} />;
+        return <DiscussionDetailPage discussionId={activeId} navigateTo={navigateTo} />;
       case 'learning': return <LearningView />;
       case 'announcements': return <AnnouncementsView />;
       case 'tags': return <TagsPage navigateTo={navigateTo} />;

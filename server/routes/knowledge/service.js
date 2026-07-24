@@ -461,3 +461,29 @@ export const getAllDiscussions = async () => {
     `);
     return res.rows;
 };
+
+export const getDiscussionById = async (id) => {
+    // 1. Get the main post
+    const discussionRes = await pool.query(`
+        SELECT d.*, s.name as author_name, srv.name as service_name
+        FROM knowledge_discussions d
+        JOIN staff s ON d.author_id = s.id
+        JOIN knowledge_workspaces kw ON d.workspace_id = kw.id
+        LEFT JOIN services srv ON kw.service_id = srv.id
+        WHERE d.id = $1
+    `, [id]);
+
+    if (discussionRes.rows.length === 0) throw new Error("Discussion not found");
+    const discussion = discussionRes.rows[0];
+
+    // 2. Get the replies
+    const repliesRes = await pool.query(`
+        SELECT r.*, s.name as author_name 
+        FROM knowledge_discussion_replies r
+        JOIN staff s ON r.author_id = s.id
+        WHERE r.discussion_id = $1
+        ORDER BY r.created_at ASC
+    `, [id]);
+
+    return { ...discussion, replies: repliesRes.rows };
+};

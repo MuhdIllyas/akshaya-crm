@@ -231,3 +231,12 @@ export const getAllDiscussions = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch global discussions' });
     }
 };
+
+export const getDiscussionById = async (req, res) => {
+    try {
+        const discussion = await knowledgeService.getDiscussionById(req.params.id);
+        res.json(discussion);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch discussion details' });
+    }
+};

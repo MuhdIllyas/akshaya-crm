@@ -112,4 +112,9 @@ export const fetchAllDiscussions = async () => {
   return data;
 };
 
+export const fetchDiscussionById = async (id) => {
+  const { data } = await api.get(`/hub/discussions/${id}`);
+  return data;
+};
+
 export default api;

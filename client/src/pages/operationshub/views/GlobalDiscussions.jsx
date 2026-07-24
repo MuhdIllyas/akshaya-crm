@@ -3,7 +3,7 @@ import { FiMessageSquare, FiCheckCircle, FiSearch, FiFilter, FiUser, FiClock, Fi
 import { fetchAllDiscussions } from '@/services/knowledge'; // Adjust path based on your folder structure
 import { toast } from 'react-toastify';
 
-const GlobalDiscussions = () => {
+const GlobalDiscussions = ({ navigateTo }) => {
   const [discussions, setDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,6 +66,7 @@ const GlobalDiscussions = () => {
           filteredDiscussions.map(discussion => (
             <div 
               key={discussion.id} 
+              onClick={() => navigateTo('discussion-detail', discussion.id)} 
               className="bg-white border border-gray-200 p-4 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group"
             >
               <div className="flex items-start gap-4">
