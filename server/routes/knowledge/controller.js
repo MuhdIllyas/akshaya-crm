@@ -313,7 +313,11 @@ export const toggleFollow = async (req, res) => {
     try {
         const result = await knowledgeService.toggleFollow(req.user.id, req.body.discussionId);
         res.json(result);
-    } catch (err) { res.status(500).json({ error: 'Failed to toggle follow' }); }
+    } catch (err) { 
+        // ADD THIS LINE so we can see the real crash in your terminal!
+        console.error("💥 FOLLOW CRASH INFO:", err); 
+        res.status(500).json({ error: 'Failed to toggle follow' }); 
+    }
 };
 
 export const getMyFollowing = async (req, res) => {
