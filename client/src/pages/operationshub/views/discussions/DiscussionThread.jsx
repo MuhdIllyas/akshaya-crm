@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase } from 'react-icons/fi';
+import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase, FiBookmark } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { addDiscussionReply, markDiscussionSolved } from '@/services/knowledge'; // Adjust path if needed
+import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/services/knowledge';
 
 const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [replyText, setReplyText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   const handlePostReply = async () => {
     if (!replyText.trim()) return;
@@ -32,6 +33,16 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     }
   };
 
+  const handleToggleBookmark = async () => {
+    try {
+      const result = await toggleBookmark('discussion', discussion.id);
+      setIsBookmarked(result.bookmarked);
+      toast.success(result.bookmarked ? 'Saved to Bookmarks!' : 'Removed from Bookmarks');
+    } catch (err) {
+      toast.error('Failed to update bookmark.');
+    }
+  };
+
   return (
     <div className="animate-in fade-in duration-300">
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-gray-500 hover:text-indigo-600 mb-6 font-medium transition-colors">
@@ -49,11 +60,23 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
               <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">Open</span>
             )}
           </div>
-          {!discussion.solved && (
-            <button onClick={() => handleMarkSolved()} className="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors flex items-center gap-1.5">
-              <FiCheckCircle className="h-4 w-4" /> Mark as Solved
+          
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleToggleBookmark} 
+              className={`p-2 rounded-lg transition-colors border ${isBookmarked ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 hover:text-indigo-600 border-gray-200 hover:border-indigo-200'}`}
+              title="Bookmark this discussion"
+            >
+              <FiBookmark className={`h-4 w-4 ${isBookmarked ? 'fill-current' : ''}`} />
             </button>
-          )}
+
+            {!discussion.solved && (
+              <button onClick={() => handleMarkSolved()} className="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors flex items-center gap-1.5">
+                <FiCheckCircle className="h-4 w-4" /> Mark as Solved
+              </button>
+            )}
+          </div>
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-3">{discussion.title}</h1>
