@@ -121,6 +121,20 @@ export const updateWorkspaceStatus = async (workspaceId, newStatus, staffId) => 
 };
 
 // ==========================================
+// MENTIONS
+// ==========================================
+const extractMentions = (content) => {
+    if (!content) return [];
+    const mentionRegex = /@\[.*?\]\((\d+)\)/g;
+    const mentionedIds = new Set();
+    let match;
+    while ((match = mentionRegex.exec(content)) !== null) {
+        mentionedIds.add(parseInt(match[1], 10));
+    }
+    return Array.from(mentionedIds);
+};
+
+// ==========================================
 // CONTRIBUTORS
 // ==========================================
 export const addContributor = async (workspaceId, staffId, role) => {
@@ -308,15 +322,24 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
     return res.rows[0];
 };
 
-export const addReply = async (discussionId, content, staffId) => {
+export const addReply = async (discussionId, content, authorId) => {
+    // 1. Insert the reply (Keep your existing code)
     const res = await pool.query(
-        `INSERT INTO knowledge_discussion_replies (discussion_id, content, author_id) 
-         VALUES ($1, $2, $3) RETURNING *`,
-        [discussionId, content, staffId]
+        'INSERT INTO knowledge_discussion_replies (discussion_id, author_id, content) VALUES ($1, $2, $3) RETURNING *',
+        [discussionId, authorId, content]
     );
     
-    // Update discussion timestamp
-    await pool.query(`UPDATE knowledge_discussions SET updated_at = NOW() WHERE id = $1`, [discussionId]);
+    // 2. NEW: Extract and save mentions!
+    const mentionedIds = extractMentions(content);
+    for (const targetId of mentionedIds) {
+        if (targetId !== authorId) { // Don't notify yourself!
+            await pool.query(
+                'INSERT INTO knowledge_mentions (staff_id, author_id, discussion_id) VALUES ($1, $2, $3)',
+                [targetId, authorId, discussionId]
+            );
+        }
+    }
+    
     return res.rows[0];
 };
 
@@ -545,4 +568,23 @@ export const getDiscussionById = async (id, userId) => {
     `, [id]);
 
     return { ...discussion, replies: repliesRes.rows };
+};
+
+export const getMyMentions = async (staffId) => {
+    const res = await pool.query(`
+        SELECT m.*, d.title as discussion_title, s.name as author_name 
+        FROM knowledge_mentions m
+        JOIN knowledge_discussions d ON m.discussion_id = d.id
+        LEFT JOIN staff s ON m.author_id = s.id
+        WHERE m.staff_id = $1
+        ORDER BY m.is_read ASC, m.created_at DESC
+    `, [staffId]);
+    return res.rows;
+};
+
+export const markMentionsRead = async (staffId, discussionId) => {
+    await pool.query(
+        'UPDATE knowledge_mentions SET is_read = true WHERE staff_id = $1 AND discussion_id = $2',
+        [staffId, discussionId]
+    );
 };

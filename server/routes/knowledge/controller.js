@@ -287,3 +287,15 @@ export const getMyBookmarks = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch bookmarks' });
     }
 };
+
+export const getMyMentions = async (req, res) => {
+    try { res.json(await knowledgeService.getMyMentions(req.user.id)); } 
+    catch (err) { res.status(500).json({ error: 'Failed to fetch mentions' }); }
+};
+
+export const markMentionsRead = async (req, res) => {
+    try {
+        await knowledgeService.markMentionsRead(req.user.id, req.body.discussionId);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to mark read' }); }
+};

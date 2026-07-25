@@ -127,4 +127,13 @@ export const toggleBookmark = async (targetType, targetId) => {
   return data;
 };
 
+export const fetchMyMentions = async () => {
+  const { data } = await api.get('/hub/me/mentions');
+  return data;
+};
+
+export const markMentionsRead = async (discussionId) => {
+  await api.put('/hub/me/mentions/read', { discussionId });
+};
+
 export default api;

@@ -100,5 +100,11 @@ router.post('/hub/trainings', authorizeRoles(ALL_STAFF), knowledgeController.cre
 router.get('/hub/me/bookmarks', authorizeRoles(ALL_STAFF), knowledgeController.getMyBookmarks);
 router.post('/hub/me/bookmarks/toggle', authorizeRoles(ALL_STAFF), knowledgeController.toggleBookmark);
 
+// ==========================================
+// MENTIONS
+// ==========================================
+router.get('/hub/me/mentions', authorizeRoles(ALL_STAFF), knowledgeController.getMyMentions);
+router.put('/hub/me/mentions/read', authorizeRoles(ALL_STAFF), knowledgeController.markMentionsRead);
+
 
 export default router;
