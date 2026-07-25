@@ -413,7 +413,6 @@ const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
 );
 
 const TagsPage = () => <div className="p-4">Tags - Coming Soon</div>;
-const DraftsPage = () => <div className="p-4">Drafts - Coming Soon</div>;
 const NotificationsPage = () => <div className="p-4">Notifications - Coming Soon</div>;
 
 const AIAssistantPage = () => {
