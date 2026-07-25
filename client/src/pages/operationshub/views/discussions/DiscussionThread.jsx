@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase, FiBookmark } from 'react-icons/fi';
+import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/services/knowledge';
+
+const STAFF_SUGGESTIONS = [
+  { id: 1, display: 'Admin' }, 
+  { id: 2, display: 'Sneha M' }, 
+  { id: 3, display: 'Rahul K' }
+];
 
 const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [replyText, setReplyText] = useState('');
@@ -142,12 +149,30 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       {/* Reply Input */}
       {!discussion.solved && (
         <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-          <textarea
-            value={replyText}
-            onChange={e => setReplyText(e.target.value)}
-            placeholder="Write your reply... Use @ to mention staff"
-            className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px] resize-y mb-3"
-          />
+          <div className="mb-3 border border-gray-200 rounded-xl bg-gray-50 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:bg-white transition-colors">
+            <MentionsInput
+              value={replyText}
+              onChange={(e, val) => setReplyText(val)}
+              placeholder="Write your reply... Use @ to tag a team member"
+              className="w-full"
+              style={{
+                control: { minHeight: '100px' },
+                input: { padding: '12px', border: 'none', outline: 'none' },
+                suggestions: { 
+                  list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }, 
+                  item: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' } 
+                }
+              }}
+            >
+              <Mention 
+                trigger="@" 
+                data={STAFF_SUGGESTIONS} 
+                markup="@[__display__](__id__)" 
+                displayTransform={(id, display) => `@${display}`} 
+                style={{ backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '4px', zIndex: 1 }}
+              />
+            </MentionsInput>
+          </div>
           <div className="flex justify-end">
             <button onClick={handlePostReply} disabled={isSubmitting} className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50">
               {isSubmitting ? 'Posting...' : 'Post Reply'}
