@@ -6,7 +6,7 @@ import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/serv
 
 const STAFF_SUGGESTIONS = [
   { id: 1, display: 'Admin' }, 
-  { id: 2, display: 'Sneha M' }, 
+  { id: 53, display: 'Prajitha P' }, 
   { id: 3, display: 'Rahul K' }
 ];
 
