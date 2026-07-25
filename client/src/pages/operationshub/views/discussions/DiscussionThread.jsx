@@ -189,39 +189,12 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
               placeholder="Write your reply... Use @ to tag a team member"
               className="w-full"
               style={{
-                control: { 
-                  minHeight: '100px', 
-                  fontFamily: 'inherit', // Forces it to match your app's font
-                  fontSize: '14px',
-                  lineHeight: '1.5'
-                },
-                input: { 
-                  padding: '12px', 
-                  border: 'none', 
-                  outline: 'none', 
-                  margin: 0, 
-                  boxSizing: 'border-box',
-                  overflow: 'auto'
-                },
-                highlighter: { 
-                  padding: '12px', 
-                  margin: 0, 
-                  boxSizing: 'border-box' // Essential for matching the input padding!
-                },
+                control: { minHeight: '100px', fontSize: '14px' },
+                input: { padding: '12px', border: 'none', outline: 'none', margin: 0, overflow: 'auto' },
+                highlighter: { padding: '12px', margin: 0 }, 
                 suggestions: { 
-                  list: { 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e2e8f0', 
-                    borderRadius: '0.5rem', 
-                    zIndex: 100, 
-                    overflow: 'hidden', 
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
-                  }, 
-                  item: { 
-                    padding: '8px 12px', 
-                    borderBottom: '1px solid #f1f5f9', 
-                    fontSize: '14px' 
-                  } 
+                  list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }, 
+                  item: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' } 
                 }
               }}
             >
