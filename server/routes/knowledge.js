@@ -119,4 +119,11 @@ router.post('/hub/me/following/toggle', authorizeRoles(ALL_STAFF), knowledgeCont
 router.get('/hub/me/history', authorizeRoles(ALL_STAFF), knowledgeController.getMyHistory);
 router.post('/hub/me/history/log', authorizeRoles(ALL_STAFF), knowledgeController.logView);
 
+// ==========================================
+// Drafts
+// ==========================================
+router.get('/hub/me/drafts', authorizeRoles(ALL_STAFF), knowledgeController.getMyDrafts);
+router.post('/hub/me/drafts', authorizeRoles(ALL_STAFF), knowledgeController.saveDraft);
+router.delete('/hub/me/drafts/:id', authorizeRoles(ALL_STAFF), knowledgeController.deleteDraft);
+
 export default router;

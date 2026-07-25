@@ -336,3 +336,23 @@ export const getMyHistory = async (req, res) => {
     try { res.json(await knowledgeService.getMyHistory(req.user.id)); } 
     catch (err) { res.status(500).json({ error: 'Failed to fetch history' }); }
 };
+
+export const saveDraft = async (req, res) => {
+    try {
+        const { entityType, title, payload, draftId } = req.body;
+        const draft = await knowledgeService.saveDraft(req.user.id, entityType, title, payload, draftId);
+        res.json(draft);
+    } catch (err) { res.status(500).json({ error: 'Failed to save draft' }); }
+};
+
+export const getMyDrafts = async (req, res) => {
+    try { res.json(await knowledgeService.getMyDrafts(req.user.id)); } 
+    catch (err) { res.status(500).json({ error: 'Failed to fetch drafts' }); }
+};
+
+export const deleteDraft = async (req, res) => {
+    try {
+        await knowledgeService.deleteDraft(req.user.id, req.params.id);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to delete draft' }); }
+};

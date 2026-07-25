@@ -648,3 +648,35 @@ export const getMyHistory = async (staffId) => {
     `, [staffId]);
     return res.rows;
 };
+
+export const saveDraft = async (staffId, entityType, title, payload, draftId = null) => {
+    // If we pass an existing draftId, we update it. Otherwise, create a new one!
+    if (draftId) {
+        const res = await pool.query(
+            `UPDATE knowledge_drafts 
+             SET title = $1, payload = $2, updated_at = NOW() 
+             WHERE id = $3 AND staff_id = $4 RETURNING *`,
+            [title, JSON.stringify(payload), draftId, staffId]
+        );
+        return res.rows[0];
+    } else {
+        const res = await pool.query(
+            `INSERT INTO knowledge_drafts (staff_id, entity_type, title, payload) 
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [staffId, entityType, title, JSON.stringify(payload)]
+        );
+        return res.rows[0];
+    }
+};
+
+export const getMyDrafts = async (staffId) => {
+    const res = await pool.query(
+        `SELECT * FROM knowledge_drafts WHERE staff_id = $1 ORDER BY updated_at DESC`, 
+        [staffId]
+    );
+    return res.rows;
+};
+
+export const deleteDraft = async (staffId, draftId) => {
+    await pool.query('DELETE FROM knowledge_drafts WHERE id = $1 AND staff_id = $2', [draftId, staffId]);
+};

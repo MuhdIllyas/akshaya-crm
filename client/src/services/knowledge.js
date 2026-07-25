@@ -158,4 +158,17 @@ export const logRecentView = async (targetType, targetId) => {
   await api.post('/hub/me/history/log', { targetType, targetId });
 };
 
+/* Drafts */
+export const fetchMyDrafts = async () => {
+  const { data } = await api.get('/hub/me/drafts');
+  return data;
+};
+export const saveDraft = async (payload) => {
+  const { data } = await api.post('/hub/me/drafts', payload);
+  return data;
+};
+export const deleteDraft = async (draftId) => {
+  await api.delete(`/hub/me/drafts/${draftId}`);
+};
+
 export default api;

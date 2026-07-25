@@ -26,6 +26,7 @@ import BookmarksPage from './views/BookmarksPage';
 import MentionsPage from './views/MentionsPage';
 import FollowingPage from './views/FollowingPage';
 import HistoryPage from './views/HistoryPage';
+import DraftsPage from './views/DraftsPage';
 import AnnouncementsView from './views/AnnouncementsView';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
