@@ -174,7 +174,7 @@ export const solveDiscussion = async (req, res) => {
 
         // 1. Fetch the discussion to see who owns it and its current status
         // (Reusing the service function you already built!)
-        const discussion = await knowledgeService.getDiscussionById(discussionId);
+        const discussion = await knowledgeService.getDiscussionById(discussionId, userId);
         
         if (!discussion) {
             return res.status(404).json({ error: 'Discussion not found' });
