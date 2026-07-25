@@ -28,7 +28,7 @@ import FollowingPage from './views/FollowingPage';
 import HistoryPage from './views/HistoryPage';
 import DraftsPage from './views/DraftsPage';
 import AnnouncementsView from './views/AnnouncementsView';
-import CreateDiscussionModal from './views/CreateDiscussionModal';
+import CreateDiscussionModal from './views/discussions/CreateDiscussionModal';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
 import { fetchGlobalHubStats, fetchAnnouncements } from '@/services/knowledge';
