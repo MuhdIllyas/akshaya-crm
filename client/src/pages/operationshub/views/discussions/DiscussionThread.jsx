@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase, FiBookmark } from 'react-icons/fi';
+import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase, FiBookmark, FiEye } from 'react-icons/fi';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/services/knowledge';
@@ -9,10 +9,23 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [replyText, setReplyText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(discussion.is_bookmarked || false);
+  const [isFollowing, setIsFollowing] = useState(discussion.is_following || false);
 
   useEffect(() => {
     setIsBookmarked(discussion.is_bookmarked || false);
   }, [discussion.is_bookmarked]);
+
+  useEffect(() => {
+    setIsFollowing(discussion.is_following || false);
+  }, [discussion.is_following]);
+
+  const handleToggleFollow = async () => {
+    try {
+      const result = await toggleFollow(discussion.id); // Assuming you imported toggleFollow
+      setIsFollowing(result.isFollowing);
+      toast.success(result.isFollowing ? 'You are now following this thread 👀' : 'Unfollowed thread');
+    } catch (err) { toast.error('Failed to update follow status.'); }
+  };
 
   const renderContentWithMentions = (text) => {
     if (!text) return null;
@@ -115,6 +128,14 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
               title="Bookmark this discussion"
             >
               <FiBookmark className={`h-4 w-4 ${isBookmarked ? 'fill-current' : ''}`} />
+            </button>
+
+            <button 
+              onClick={handleToggleFollow} 
+              className={`p-2 rounded-lg transition-colors border ${isFollowing ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 hover:text-indigo-600 border-gray-200 hover:border-indigo-200'}`}
+              title="Follow this discussion"
+            >
+              <FiEye className="h-4 w-4" />
             </button>
 
             {!discussion.solved && (

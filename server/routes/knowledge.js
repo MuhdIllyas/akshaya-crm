@@ -107,4 +107,10 @@ router.get('/hub/me/mentions', authorizeRoles(ALL_STAFF), knowledgeController.ge
 router.put('/hub/me/mentions/read', authorizeRoles(ALL_STAFF), knowledgeController.markMentionsRead);
 router.get('/hub/staff/search', authorizeRoles(ALL_STAFF), knowledgeController.searchStaff);
 
+// ==========================================
+// FOLLOWINGS
+// ==========================================
+router.get('/hub/me/following', authorizeRoles(ALL_STAFF), knowledgeController.getMyFollowing);
+router.post('/hub/me/following/toggle', authorizeRoles(ALL_STAFF), knowledgeController.toggleFollow);
+
 export default router;

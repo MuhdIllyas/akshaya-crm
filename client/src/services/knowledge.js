@@ -141,4 +141,13 @@ export const fetchStaffSuggestions = async (query) => {
   return data;
 };
 
+export const fetchMyFollowing = async () => {
+  const { data } = await api.get('/hub/me/following');
+  return data;
+};
+export const toggleFollow = async (discussionId) => {
+  const { data } = await api.post('/hub/me/following/toggle', { discussionId });
+  return data;
+};
+
 export default api;

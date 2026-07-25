@@ -535,6 +535,10 @@ export const getDiscussionById = async (id, userId) => {
                 SELECT 1 FROM knowledge_bookmarks 
                 WHERE target_type = 'discussion' AND target_id = d.id AND staff_id = $2
             ) as is_bookmarked
+            EXISTS(
+                SELECT 1 FROM knowledge_followers 
+                WHERE discussion_id = d.id AND staff_id = $2
+            ) as is_following 
         FROM knowledge_discussions d
         JOIN staff s ON d.author_id = s.id
         JOIN knowledge_workspaces kw ON d.workspace_id = kw.id
@@ -584,5 +588,39 @@ export const searchStaffForMentions = async (searchQuery) => {
          LIMIT 10`,
         [`%${searchQuery}%`]
     );
+    return res.rows;
+};
+
+export const toggleFollow = async (staffId, discussionId) => {
+    const check = await pool.query(
+        'SELECT id FROM knowledge_followers WHERE staff_id = $1 AND discussion_id = $2',
+        [staffId, discussionId]
+    );
+
+    if (check.rows.length > 0) {
+        await pool.query('DELETE FROM knowledge_followers WHERE id = $1', [check.rows[0].id]);
+        return { isFollowing: false };
+    } else {
+        await pool.query(
+            'INSERT INTO knowledge_followers (staff_id, discussion_id) VALUES ($1, $2)',
+            [staffId, discussionId]
+        );
+        return { isFollowing: true };
+    }
+};
+
+export const getMyFollowing = async (staffId) => {
+    // Fetches all followed discussions and counts their replies
+    const res = await pool.query(`
+        SELECT d.*, s.name as author_name, srv.name as service_name,
+        (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count
+        FROM knowledge_followers f
+        JOIN knowledge_discussions d ON f.discussion_id = d.id
+        JOIN staff s ON d.author_id = s.id
+        LEFT JOIN knowledge_workspaces kw ON d.workspace_id = kw.id
+        LEFT JOIN services srv ON kw.service_id = srv.id
+        WHERE f.staff_id = $1
+        ORDER BY d.updated_at DESC
+    `, [staffId]);
     return res.rows;
 };

@@ -308,3 +308,15 @@ export const searchStaff = async (req, res) => {
         res.status(500).json({ error: 'Failed to search staff' });
     }
 };
+
+export const toggleFollow = async (req, res) => {
+    try {
+        const result = await knowledgeService.toggleFollow(req.user.id, req.body.discussionId);
+        res.json(result);
+    } catch (err) { res.status(500).json({ error: 'Failed to toggle follow' }); }
+};
+
+export const getMyFollowing = async (req, res) => {
+    try { res.json(await knowledgeService.getMyFollowing(req.user.id)); } 
+    catch (err) { res.status(500).json({ error: 'Failed to fetch followed threads' }); }
+};

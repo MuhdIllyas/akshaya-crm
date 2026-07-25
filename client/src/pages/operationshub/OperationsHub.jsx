@@ -24,6 +24,7 @@ import DiscussionDetailPage from './views/DiscussionDetailPage';
 import LearningView from './views/LearningView';
 import BookmarksPage from './views/BookmarksPage';
 import MentionsPage from './views/MentionsPage';
+import FollowingPage from './views/FollowingPage';
 import AnnouncementsView from './views/AnnouncementsView';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
@@ -410,7 +411,6 @@ const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
 );
 
 const TagsPage = () => <div className="p-4">Tags - Coming Soon</div>;
-const FollowingPage = () => <div className="p-4">Following - Coming Soon</div>;
 const HistoryPage = () => <div className="p-4">History - Coming Soon</div>;
 const DraftsPage = () => <div className="p-4">Drafts - Coming Soon</div>;
 const NotificationsPage = () => <div className="p-4">Notifications - Coming Soon</div>;
@@ -579,7 +579,7 @@ const OperationsHub = () => {
       case 'bookmarks': return <BookmarksPage navigateTo={navigateTo} />;
       case 'mentions': return <MentionsPage navigateTo={navigateTo} />;
       case 'drafts': return <DraftsPage navigateTo={navigateTo} />;
-      case 'following': return <FollowingPage />;
+      case 'following': return <FollowingPage navigateTo={navigateTo} />;
       case 'history': return <HistoryPage />;
       case 'notifications': return <NotificationsPage />;
       case 'ai-assistant': return <AIAssistantPage navigateTo={navigateTo} />;
