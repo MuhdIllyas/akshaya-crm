@@ -19,6 +19,37 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     setIsBookmarked(discussion.is_bookmarked || false);
   }, [discussion.is_bookmarked]);
 
+  const renderContentWithMentions = (text) => {
+    if (!text) return null;
+    
+    // Regex to match the @[Name](id) pattern
+    const mentionRegex = /@\[(.*?)\]\((\d+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = mentionRegex.exec(text)) !== null) {
+      // 1. Push normal text before the mention
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      // 2. Push the beautifully styled mention badge!
+      parts.push(
+        <span key={match.index} className="font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+          @{match[1]}
+        </span>
+      );
+      lastIndex = mentionRegex.lastIndex;
+    }
+    
+    // 3. Push any remaining text after the last mention
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts;
+  };
+
   const handlePostReply = async () => {
     if (!replyText.trim()) return;
     try {
@@ -109,7 +140,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         )}
 
         <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm md:text-base">
-          {discussion.description}
+          {renderContentWithMentions(discussion.description)}
         </div>
 
         {/* Tags */}
@@ -132,7 +163,9 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
               </div>
               {reply.is_best && <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full flex items-center gap-1"><FiCheckCircle/> Solution</span>}
             </div>
-            <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">{reply.content}</div>
+            <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+              {renderContentWithMentions(reply.content)}
+            </div>
             
             {/* Mark specific reply as solution */}
             {!discussion.solved && (
