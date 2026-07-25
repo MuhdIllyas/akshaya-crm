@@ -31,7 +31,13 @@ import AnnouncementsView from './views/AnnouncementsView';
 import CreateDiscussionModal from './views/discussions/CreateDiscussionModal';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
-import { fetchGlobalHubStats, fetchAnnouncements } from '@/services/knowledge';
+import { 
+  fetchGlobalHubStats, 
+  fetchAnnouncements,
+  fetchAllDiscussions,
+  fetchMyMentions,
+  fetchRecentActivity
+} from '@/services/knowledge';
 
 // =====================================================================
 // HELPER COMPONENTS
@@ -573,14 +579,21 @@ const OperationsHub = () => {
       try {
         setIsLoadingServices(true);
         
-        // Fetch Services AND Global Stats simultaneously
-        const [servicesResponse, statsResponse, announcementsResponse, discussionsRes, mentionsRes, activityRes] = await Promise.all([
+        // THE FIX: Fetch everything concurrently for the Home Page
+        const [
+          servicesResponse, 
+          statsResponse, 
+          announcementsResponse, 
+          discussionsRes, 
+          mentionsRes, 
+          activityRes
+        ] = await Promise.all([
            getWorkflowServices(),
            fetchGlobalHubStats(),
            fetchAnnouncements(),
            fetchAllDiscussions(),       
-           setHomeMentions(),          
-           fetchRecentActivity()
+           fetchMyMentions(),           
+           fetchRecentActivity()        
         ]);
         
         const formatted = servicesResponse.data.map(s => ({
@@ -595,6 +608,11 @@ const OperationsHub = () => {
         setRealServices(formatted);
         setHubStats(statsResponse);
         setLiveAnnouncements(announcementsResponse);
+
+        // THE FIX: Save the new data to state!
+        setHomeDiscussions(discussionsRes.slice(0, 5)); 
+        setHomeMentions(mentionsRes.slice(0, 5));
+        setHomeActivity(activityRes);
 
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
