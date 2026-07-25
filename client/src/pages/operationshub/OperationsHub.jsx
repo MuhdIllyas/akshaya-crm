@@ -292,7 +292,7 @@ const ConvertDropdown = ({ onConvert }) => {
 // PAGE COMPONENTS
 // =====================================================================
 
-const HomePage = ({ services, hubStats, liveAnnouncements = [], navigateTo, openDiscussion }) => {
+const HomePage = ({ services, hubStats, liveAnnouncements = [], recentDiscussions = [], recentMentions = [], recentActivity = [], navigateTo, openDiscussion }) => {
   // THE FIX: Sort services by most pending, then slice to only show the Top 6!
   const topServices = [...services]
     .sort((a, b) => (b.pending || 0) - (a.pending || 0))
@@ -374,21 +374,90 @@ const HomePage = ({ services, hubStats, liveAnnouncements = [], navigateTo, open
         </div>
       </div>
 
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="space-y-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><FiMessageCircle className="h-4 w-4 text-indigo-500" /> Unread Discussions</h3>
-          <p className="text-sm text-gray-500">No unread discussions.</p>
+      {/* --- THE 3 BOTTOM WIDGETS --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div className="space-y-6">
+          
+          {/* LATEST DISCUSSIONS */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <FiMessageCircle className="h-4 w-4 text-indigo-500" /> Latest Discussions
+              </h3>
+              <button onClick={() => navigateTo('discussions')} className="text-xs font-medium text-indigo-600 hover:underline">View All</button>
+            </div>
+            
+            {recentDiscussions.length === 0 ? (
+               <p className="text-sm text-gray-500 py-2">No active discussions.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentDiscussions.map(d => (
+                  <div key={d.id} onClick={() => openDiscussion(d.id)} className="group cursor-pointer border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                    <h4 className="text-sm font-semibold text-gray-800 group-hover:text-indigo-600 truncate">{d.title}</h4>
+                    <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-1">
+                      <span><FiUser className="inline h-3 w-3 mr-1"/>{d.author_name}</span>
+                      <span><FiMessageSquare className="inline h-3 w-3 mr-1"/>{d.replies_count} replies</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* MY MENTIONS */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+             <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <FiAtSign className="h-4 w-4 text-purple-500" /> Recent Mentions
+              </h3>
+              <button onClick={() => navigateTo('mentions')} className="text-xs font-medium text-purple-600 hover:underline">Inbox</button>
+            </div>
+            
+            {recentMentions.length === 0 ? (
+               <p className="text-sm text-gray-500 py-2">No new mentions.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentMentions.map(m => (
+                  <div key={m.id} onClick={() => openDiscussion(m.discussion_id)} className="cursor-pointer bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100 transition border border-purple-100">
+                    <div className="text-xs font-medium text-purple-800 mb-1">
+                      <strong className="font-bold">{m.author_name}</strong> tagged you:
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 truncate">{m.discussion_title}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* RECENT ACTIVITY */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
+              <FiRefreshCw className="h-4 w-4 text-indigo-500" /> Global Activity
+            </h3>
+            
+            <div className="space-y-3">
+              {recentActivity.map((act, i) => (
+                <div key={i} className="flex items-start gap-3 text-sm">
+                  <div className={`mt-0.5 p-1.5 rounded-md ${act.type === 'solved' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                    {act.type === 'solved' ? <FiCheckCircle className="h-3 w-3" /> : <FiMessageSquare className="h-3 w-3" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-gray-700">
+                      <strong className="font-semibold text-gray-900">{act.user_name}</strong> {act.type === 'solved' ? 'solved the case:' : 'started a discussion:'}
+                    </span>
+                    <span className="block text-indigo-600 font-medium truncate mt-0.5">{act.target}</span>
+                    <span className="block text-[10px] text-gray-400 mt-1 uppercase tracking-wider">
+                      {new Date(act.time).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
-      <div className="space-y-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><FiAtSign className="h-4 w-4 text-purple-500" /> My Mentions</h3>
-          <p className="text-sm text-gray-500">No new mentions.</p>
-        </div>
-        <ActivityFeed activities={[]} /> 
-      </div>
-    </div>
   </div>
   );
 };
@@ -465,6 +534,10 @@ const OperationsHub = () => {
   const [liveAnnouncements, setLiveAnnouncements] = useState([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
 
+  const [homeDiscussions, setHomeDiscussions] = useState([]);
+  const [homeMentions, setHomeMentions] = useState([]);
+  const [homeActivity, setHomeActivity] = useState([]);
+
   // === 2. ADD THIS FETCH EFFECT ===
   useEffect(() => {
     const fetchRealServices = async () => {
@@ -501,10 +574,13 @@ const OperationsHub = () => {
         setIsLoadingServices(true);
         
         // Fetch Services AND Global Stats simultaneously
-        const [servicesResponse, statsResponse, announcementsResponse] = await Promise.all([
+        const [servicesResponse, statsResponse, announcementsResponse, discussionsRes, mentionsRes, activityRes] = await Promise.all([
            getWorkflowServices(),
            fetchGlobalHubStats(),
-           fetchAnnouncements()
+           fetchAnnouncements(),
+           fetchAllDiscussions(),       
+           setHomeMentions(),          
+           fetchRecentActivity()
         ]);
         
         const formatted = servicesResponse.data.map(s => ({
@@ -559,7 +635,18 @@ const OperationsHub = () => {
 
     switch (page) {
       case 'home': 
-        return <HomePage services={realServices} hubStats={hubStats} liveAnnouncements={liveAnnouncements} navigateTo={navigateTo} openDiscussion={(id) => navigateTo('discussion-detail', id)} />;
+        return (
+          <HomePage 
+            services={realServices} 
+            hubStats={hubStats} 
+            liveAnnouncements={liveAnnouncements} 
+            recentDiscussions={homeDiscussions} 
+            recentMentions={homeMentions}       
+            recentActivity={homeActivity}       
+            navigateTo={navigateTo} 
+            openDiscussion={(id) => navigateTo('discussion-detail', id)} 
+          />
+        );
       case 'services': 
         return <ServicesPage services={realServices} navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
       case 'service-detail': 

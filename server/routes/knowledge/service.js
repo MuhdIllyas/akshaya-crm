@@ -682,3 +682,18 @@ export const getMyDrafts = async (staffId) => {
 export const deleteDraft = async (staffId, draftId) => {
     await pool.query('DELETE FROM knowledge_drafts WHERE id = $1 AND staff_id = $2', [draftId, staffId]);
 };
+
+//Recent Activity
+export const getRecentActivity = async (workspaceId = null) => {
+    // Merges new discussions and solved cases into one chronological feed
+    const res = await pool.query(`
+        (SELECT 'discussion' as type, d.title as target, s.name as user_name, d.created_at as time
+         FROM knowledge_discussions d JOIN staff s ON d.author_id = s.id)
+        UNION ALL
+        (SELECT 'solved' as type, c.title as target, s.name as user_name, c.created_at as time
+         FROM knowledge_cases c JOIN staff s ON c.solved_by = s.id)
+        ORDER BY time DESC 
+        LIMIT 10
+    `);
+    return res.rows;
+};

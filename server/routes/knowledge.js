@@ -126,4 +126,9 @@ router.get('/hub/me/drafts', authorizeRoles(ALL_STAFF), knowledgeController.getM
 router.post('/hub/me/drafts', authorizeRoles(ALL_STAFF), knowledgeController.saveDraft);
 router.delete('/hub/me/drafts/:id', authorizeRoles(ALL_STAFF), knowledgeController.deleteDraft);
 
+// ==========================================
+// Recent Activity
+// ==========================================
+router.get('/hub/activity', authorizeRoles(ALL_STAFF), knowledgeController.getRecentActivity);
+
 export default router;

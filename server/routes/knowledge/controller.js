@@ -356,3 +356,8 @@ export const deleteDraft = async (req, res) => {
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Failed to delete draft' }); }
 };
+
+export const getRecentActivity = async (req, res) => {
+    try { res.json(await knowledgeService.getRecentActivity()); } 
+    catch (err) { res.status(500).json({ error: 'Failed to fetch activity feed' }); }
+};

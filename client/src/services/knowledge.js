@@ -171,4 +171,9 @@ export const deleteDraft = async (draftId) => {
   await api.delete(`/hub/me/drafts/${draftId}`);
 };
 
+export const fetchRecentActivity = async () => {
+  const { data } = await api.get('/hub/activity');
+  return data;
+};
+
 export default api;
