@@ -28,6 +28,7 @@ import FollowingPage from './views/FollowingPage';
 import HistoryPage from './views/HistoryPage';
 import DraftsPage from './views/DraftsPage';
 import AnnouncementsView from './views/AnnouncementsView';
+import CreateDiscussionModal from './views/CreateDiscussionModal';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
 import { fetchGlobalHubStats, fetchAnnouncements } from '@/services/knowledge';
@@ -48,7 +49,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
   const workspaceItems = [
     { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: hubStats.mentions },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
-    { id: 'drafts', label: 'Drafts', icon: FiFile, count: 0 }, 
+    { id: 'drafts', label: 'Drafts', icon: FiFile, count: hubStats.drafts || 0 }, 
     { id: 'following', label: 'Following', icon: FiUserPlus },
     { id: 'history', label: 'History', icon: FiClock },
   ];
@@ -456,6 +457,7 @@ const OperationsHub = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingDraft, setEditingDraft] = useState(null);
 
   // === 1. ADD THIS REAL DATABASE STATE ===
   const [realServices, setRealServices] = useState([]);
@@ -578,7 +580,11 @@ const OperationsHub = () => {
       case 'tags': return <TagsPage navigateTo={navigateTo} />;
       case 'bookmarks': return <BookmarksPage navigateTo={navigateTo} />;
       case 'mentions': return <MentionsPage navigateTo={navigateTo} />;
-      case 'drafts': return <DraftsPage navigateTo={navigateTo} />;
+      case 'drafts': 
+        return <DraftsPage navigateTo={navigateTo} onResumeDraft={(draft) => { 
+          setEditingDraft(draft); 
+          setShowCreateModal(true); 
+        }} />;
       case 'following': return <FollowingPage navigateTo={navigateTo} />;
       case 'history': return <HistoryPage navigateTo={navigateTo} />;
       case 'notifications': return <NotificationsPage />;
@@ -609,6 +615,24 @@ const OperationsHub = () => {
           {renderPage()}
         </div>
       </div>
+
+      {/* GLOBAL DRAFTS MODAL - ADDED HERE */}
+      {showCreateModal && (
+        <CreateDiscussionModal
+          isOpen={showCreateModal}
+          existingDraft={editingDraft} // <--- Passes the draft data into the form!
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditingDraft(null); // Clears it when closed
+          }}
+          onSubmit={(formData) => {
+             // For now, if they click publish from the drafts page, just close it
+             // (We can add global publishing logic here later if needed)
+             setShowCreateModal(false);
+             setEditingDraft(null);
+          }}
+        />
+      )}
     </div>
   );
 };

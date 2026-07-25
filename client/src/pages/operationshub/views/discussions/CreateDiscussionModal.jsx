@@ -12,8 +12,8 @@ const CATEGORIES = [
   { id: 'suggestion', label: 'Suggestion' }
 ];
 
-const CreateDiscussionModal = ({ isOpen, onClose, onSubmit }) => {
-  const [formData, setFormData] = useState({
+const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => {
+  const [formData, setFormData] = useState(existingDraft?.payload || {
     title: '', content: '', category: 'question', priority: 'medium', tags: [], relatedTo: 'none', relatedId: ''
   });
   const [tagInput, setTagInput] = useState('');
@@ -44,15 +44,15 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit }) => {
     try {
       setIsSavingDraft(true);
       
-      // We pass the entire formData object as the payload!
       await saveDraft({
         entityType: 'discussion',
         title: formData.title || 'Untitled Discussion',
-        payload: formData
+        payload: formData,
+        draftId: existingDraft?.id || null // Updates the draft if it already exists!
       });
       
       toast.success('Saved to Drafts!');
-      onClose(); // Close the modal so they can go back to work
+      onClose();
     } catch (err) {
       toast.error('Failed to save draft.');
     } finally {

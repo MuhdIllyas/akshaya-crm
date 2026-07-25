@@ -465,14 +465,15 @@ export const getAnnouncements = async () => {
 };
 
 export const getGlobalStats = async (staffId) => { 
-    // ADDED: mentions to the destructured array, and the query to Promise.all
-    const [discussions, cases, resources, announcements, trainings, mentions] = await Promise.all([
+    // ADDED: drafts to the destructured array and the Promise.all
+    const [discussions, cases, resources, announcements, trainings, mentions, drafts] = await Promise.all([
         pool.query("SELECT COUNT(*) FROM knowledge_discussions WHERE deleted_at IS NULL"),
         pool.query("SELECT COUNT(*) FROM knowledge_cases"),
         pool.query("SELECT COUNT(*) FROM knowledge_resources WHERE deleted_at IS NULL"),
         pool.query("SELECT COUNT(*) FROM knowledge_announcements"),
         pool.query("SELECT COUNT(*) FROM knowledge_trainings"),
-        pool.query("SELECT COUNT(*) FROM knowledge_mentions WHERE staff_id = $1 AND is_read = false", [staffId])
+        pool.query("SELECT COUNT(*) FROM knowledge_mentions WHERE staff_id = $1 AND is_read = false", [staffId]),
+        pool.query("SELECT COUNT(*) FROM knowledge_drafts WHERE staff_id = $1", [staffId]) 
     ]);
 
     return {
@@ -481,7 +482,8 @@ export const getGlobalStats = async (staffId) => {
         resources: parseInt(resources.rows[0].count, 10) || 0,
         announcements: parseInt(announcements.rows[0].count, 10) || 0,
         trainings: parseInt(trainings.rows[0].count, 10) || 0,
-        mentions: parseInt(mentions.rows[0].count, 10) || 0 
+        mentions: parseInt(mentions.rows[0].count, 10) || 0,
+        drafts: parseInt(drafts.rows[0].count, 10) || 0 
     };
 };
 

@@ -3,7 +3,7 @@ import { FiEdit2, FiTrash2, FiMessageSquare, FiBell, FiAward } from 'react-icons
 import { fetchMyDrafts, deleteDraft } from '@/services/knowledge';
 import { toast } from 'react-toastify';
 
-const DraftsPage = ({ navigateTo }) => {
+const DraftsPage = ({ navigateTo, onResumeDraft }) => {
   const [drafts, setDrafts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -61,8 +61,7 @@ const DraftsPage = ({ navigateTo }) => {
           {drafts.map(draft => (
             <div 
               key={draft.id} 
-              // TODO: Wire this click to open the specific modal and pass the draft.payload!
-              onClick={() => toast.info('Resume draft feature coming soon!')}
+              onClick={() => onResumeDraft(draft)}
               className="bg-white border border-gray-200 p-4 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col"
             >
               <div className="flex justify-between items-start mb-3">

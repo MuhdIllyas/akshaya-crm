@@ -85,6 +85,7 @@ const DiscussionsView = ({ workspaceId }) => {
 
       <CreateDiscussionModal 
         isOpen={isModalOpen} 
+        existingDraft={null} 
         onClose={() => setIsModalOpen(false)} 
         onSubmit={handleCreateDiscussion} 
       />
