@@ -323,24 +323,26 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
 };
 
 export const addReply = async (discussionId, content, authorId) => {
-    // 1. Insert the reply (Keep your existing code)
-    const res = await pool.query(
-        'INSERT INTO knowledge_discussion_replies (discussion_id, author_id, content) VALUES ($1, $2, $3) RETURNING *',
-        [discussionId, authorId, content]
+    // 1. Save the actual reply
+    const replyRes = await pool.query(
+        'INSERT INTO knowledge_discussion_replies (discussion_id, content, author_id) VALUES ($1, $2, $3) RETURNING *',
+        [discussionId, content, authorId]
     );
-    
-    // 2. NEW: Extract and save mentions!
+
+    // 2. THE ENGINE: Scan the text for mentions and notify them!
     const mentionedIds = extractMentions(content);
+    
     for (const targetId of mentionedIds) {
-        if (targetId !== authorId) { // Don't notify yourself!
+        // NOTE: If you WANT to notify yourself for testing, delete this "if" statement!
+        if (targetId !== authorId) { 
             await pool.query(
-                'INSERT INTO knowledge_mentions (staff_id, author_id, discussion_id) VALUES ($1, $2, $3)',
-                [targetId, authorId, discussionId]
+                'INSERT INTO knowledge_mentions (staff_id, author_id, discussion_id, reply_id) VALUES ($1, $2, $3, $4)',
+                [targetId, authorId, discussionId, replyRes.rows[0].id]
             );
         }
     }
-    
-    return res.rows[0];
+
+    return replyRes.rows[0];
 };
 
 export const getCases = async (workspaceId) => {
