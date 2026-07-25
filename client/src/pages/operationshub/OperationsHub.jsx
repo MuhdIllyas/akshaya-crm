@@ -298,16 +298,19 @@ const ConvertDropdown = ({ onConvert }) => {
 // PAGE COMPONENTS
 // =====================================================================
 
-const HomePage = ({ services, hubStats, liveAnnouncements = [], recentDiscussions = [], recentMentions = [], recentActivity = [], navigateTo, openDiscussion }) => {
+const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], recentDiscussions = [], recentMentions = [], recentActivity = [], navigateTo, openDiscussion }) => {
   // THE FIX: Sort services by most pending, then slice to only show the Top 6!
   const topServices = [...services]
     .sort((a, b) => (b.pending || 0) - (a.pending || 0))
     .slice(0, 6);
 
+  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Staff';
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Welcome back, Admin 👋</h2>
+        {/* SWAP OUT "Admin" for the dynamic firstName! */}
+        <h2 className="text-2xl font-bold text-gray-900">Welcome back, {firstName} 👋</h2>
         <p className="text-gray-500">Your operations hub – everything about your services at a glance.</p>
       </div>
 
@@ -522,7 +525,7 @@ const SearchPage = ({ query }) => (
 // =====================================================================
 // MAIN SHELL COMPONENT
 // =====================================================================
-const OperationsHub = () => {
+const OperationsHub = ({ currentUser }) => {
   const { serviceId } = useParams(); 
 
   const isDbId = serviceId && !isNaN(serviceId);
@@ -654,7 +657,8 @@ const OperationsHub = () => {
     switch (page) {
       case 'home': 
         return (
-          <HomePage 
+          <HomePage
+            currentUser={currentUser} 
             services={realServices} 
             hubStats={hubStats} 
             liveAnnouncements={liveAnnouncements} 
