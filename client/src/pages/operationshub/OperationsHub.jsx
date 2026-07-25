@@ -304,14 +304,16 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
     .sort((a, b) => (b.pending || 0) - (a.pending || 0))
     .slice(0, 6);
 
+  // SMART GREETING LOGIC
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Staff';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
-        {/* SWAP OUT "Admin" for the dynamic firstName! */}
-        <h2 className="text-2xl font-bold text-gray-900">Welcome back, {firstName} 👋</h2>
-        <p className="text-gray-500">Your operations hub – everything about your services at a glance.</p>
+        <h2 className="text-2xl font-bold text-gray-900">{greeting}, {firstName} 👋</h2>
+        <p className="text-gray-500">Welcome to the Operations Hub. Here is everything at a glance.</p>
       </div>
 
       {/* THE FIX: Real Live Data for the Stat Cards! */}
@@ -525,7 +527,18 @@ const SearchPage = ({ query }) => (
 // =====================================================================
 // MAIN SHELL COMPONENT
 // =====================================================================
-const OperationsHub = ({ currentUser }) => {
+const OperationsHub = () => { // <--- Removed the prop!
+  
+  // GRAB USER DIRECTLY FROM LOCAL STORAGE
+  const currentUser = useMemo(() => ({
+    id: localStorage.getItem("id"),
+    name: localStorage.getItem("name"),
+    username: localStorage.getItem("username"),
+    role: localStorage.getItem("role"),
+    centre_id: localStorage.getItem("centre_id"),
+    photo: localStorage.getItem("photo"),
+  }), []);
+
   const { serviceId } = useParams(); 
 
   const isDbId = serviceId && !isNaN(serviceId);
