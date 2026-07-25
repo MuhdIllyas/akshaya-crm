@@ -67,7 +67,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
           <FiZap className="h-5 w-5" />
         </div>
         <h1 className="text-lg font-bold text-gray-900">Operations Hub</h1>
-        <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full ml-auto">v4.0</span>
+        <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full ml-auto">v1.0</span>
       </div>
 
       <div className="flex-1 px-2.5 py-3">
