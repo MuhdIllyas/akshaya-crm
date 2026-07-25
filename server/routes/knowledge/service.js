@@ -534,7 +534,7 @@ export const getDiscussionById = async (id, userId) => {
             EXISTS(
                 SELECT 1 FROM knowledge_bookmarks 
                 WHERE target_type = 'discussion' AND target_id = d.id AND staff_id = $2
-            ) as is_bookmarked
+            ) as is_bookmarked,
             EXISTS(
                 SELECT 1 FROM knowledge_followers 
                 WHERE discussion_id = d.id AND staff_id = $2
