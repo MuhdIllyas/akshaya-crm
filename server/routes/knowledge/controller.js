@@ -261,7 +261,8 @@ export const getAllDiscussions = async (req, res) => {
 
 export const getDiscussionById = async (req, res) => {
     try {
-        const discussion = await knowledgeService.getDiscussionById(req.params.id);
+        // Pass req.user.id as the second argument!
+        const discussion = await knowledgeService.getDiscussionById(req.params.id, req.user.id);
         res.json(discussion);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch discussion details' });

@@ -512,21 +512,30 @@ export const getAllDiscussions = async () => {
     return res.rows;
 };
 
-export const getDiscussionById = async (id) => {
+// THE FIX: Added userId parameter
+export const getDiscussionById = async (id, userId) => { 
     // 1. Get the main post
     const discussionRes = await pool.query(`
-        SELECT d.*, s.name as author_name, srv.name as service_name
+        SELECT 
+            d.*, 
+            s.name as author_name, 
+            srv.name as service_name,
+            -- THE FIX: Check if this specific user has bookmarked this specific thread
+            EXISTS(
+                SELECT 1 FROM knowledge_bookmarks 
+                WHERE target_type = 'discussion' AND target_id = d.id AND staff_id = $2
+            ) as is_bookmarked
         FROM knowledge_discussions d
         JOIN staff s ON d.author_id = s.id
         JOIN knowledge_workspaces kw ON d.workspace_id = kw.id
         LEFT JOIN services srv ON kw.service_id = srv.id
         WHERE d.id = $1
-    `, [id]);
+    `, [id, userId]); // <-- Passed userId to the SQL array
 
     if (discussionRes.rows.length === 0) throw new Error("Discussion not found");
     const discussion = discussionRes.rows[0];
 
-    // 2. Get the replies
+    // 2. Get the replies 
     const repliesRes = await pool.query(`
         SELECT r.*, s.name as author_name 
         FROM knowledge_discussion_replies r

@@ -6,7 +6,11 @@ import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/serv
 const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [replyText, setReplyText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(discussion.is_bookmarked || false);
+
+  useEffect(() => {
+    setIsBookmarked(discussion.is_bookmarked || false);
+  }, [discussion.is_bookmarked]);
 
   const handlePostReply = async () => {
     if (!replyText.trim()) return;
