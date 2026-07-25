@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { FiX, FiPaperclip } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
-
-const STAFF_SUGGESTIONS = [
-  { id: 1, display: 'Admin' }, { id: 2, display: 'Sneha M' }, { id: 3, display: 'Rahul K' }
-];
+import { createDiscussion, saveDraft, fetchStaffSuggestions } from '@/services/knowledge';
 
 const CATEGORIES = [
   { id: 'question', label: 'Question' },
@@ -29,6 +26,37 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit }) => {
 
   const handleRemoveTag = (tag) => {
     setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
+  };
+
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+
+  const loadSuggestions = async (query, callback) => {
+    try {
+      const data = await fetchStaffSuggestions(query);
+      callback(data);
+    } catch (err) {
+      console.error("Failed to load staff for mentions");
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setIsSavingDraft(true);
+      
+      // We pass the entire formData object as the payload!
+      await saveDraft({
+        entityType: 'discussion',
+        title: formData.title || 'Untitled Discussion',
+        payload: formData
+      });
+      
+      toast.success('Saved to Drafts!');
+      onClose(); // Close the modal so they can go back to work
+    } catch (err) {
+      toast.error('Failed to save draft.');
+    } finally {
+      setIsSavingDraft(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -62,22 +90,31 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit }) => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Details & Context</label>
-              <MentionsInput
-                value={formData.content}
-                onChange={(e, val) => setFormData(prev => ({ ...prev, content: val }))}
-                placeholder="Provide details... Use @ to tag a team member"
-                className="w-full"
-                style={{
-                  control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '100px' },
-                  input: { padding: '0.75rem', border: 'none', outline: 'none' },
-                  suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100 }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
-                }}
-              >
-                <Mention trigger="@" data={STAFF_SUGGESTIONS} markup="@[__display__](__id__)" displayTransform={(id, display) => `@${display}`} />
-              </MentionsInput>
-            </div>
+              <div className="border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 overflow-hidden bg-white">
+                <MentionsInput
+                  value={formData.content}
+                  onChange={(e, val) => setFormData(prev => ({ ...prev, content: val }))}
+                  placeholder="Provide details... Use @ to tag a team member"
+                  className="w-full"
+                  style={{
+                    control: { fontFamily: 'inherit', fontSize: '14px', lineHeight: '1.5', minHeight: '100px' },
+                    input: { padding: '12px', border: 'none', outline: 'none', margin: 0, boxSizing: 'border-box', overflow: 'auto' },
+                    highlighter: { padding: '12px', margin: 0, boxSizing: 'border-box' },
+                    suggestions: { 
+                      list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }, 
+                      item: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' } 
+                    }
+                  }}
+                >
+                  <Mention 
+                    trigger="@" 
+                    data={loadSuggestions} 
+                    markup="@[__display__](__id__)" 
+                    displayTransform={(id, display) => `@${display}`} 
+                    style={{ backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '4px', zIndex: 1 }}
+                  />
+                </MentionsInput>
+              </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -124,8 +161,30 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit }) => {
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-6">
-              <button type="button" className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50" onClick={onClose}>Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Publish Discussion</button>
+              <button 
+                type="button" 
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition" 
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={isSavingDraft}
+                className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition disabled:opacity-50"
+              >
+                {isSavingDraft ? 'Saving...' : 'Save Draft'}
+              </button>
+
+              <button 
+                type="submit" 
+                disabled={!formData.title.trim() || !formData.content.trim()}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50"
+              >
+                Publish Discussion
+              </button>
             </div>
           </form>
         </motion.div>

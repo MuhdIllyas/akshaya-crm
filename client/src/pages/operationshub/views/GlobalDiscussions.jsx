@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiMessageSquare, FiCheckCircle, FiSearch, FiFilter, FiUser, FiClock, FiLayers } from 'react-icons/fi';
-import { fetchAllDiscussions } from '@/services/knowledge'; // Adjust path based on your folder structure
+import { fetchAllDiscussions } from '@/services/knowledge'; 
 import { toast } from 'react-toastify';
 
 const GlobalDiscussions = ({ navigateTo }) => {
