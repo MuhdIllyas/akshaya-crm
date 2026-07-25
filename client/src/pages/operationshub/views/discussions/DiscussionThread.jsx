@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase, FiBookmark, FiEye } from 'react-icons/fi';
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
-import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/services/knowledge';
+import { addDiscussionReply, markDiscussionSolved, toggleBookmark, toggleFollow } from '@/services/knowledge';
 import { fetchStaffSuggestions } from '@/services/knowledge';
 
 const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
@@ -21,7 +21,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
   const handleToggleFollow = async () => {
     try {
-      const result = await toggleFollow(discussion.id); // Assuming you imported toggleFollow
+      const result = await toggleFollow(discussion.id); 
       setIsFollowing(result.isFollowing);
       toast.success(result.isFollowing ? 'You are now following this thread 👀' : 'Unfollowed thread');
     } catch (err) { toast.error('Failed to update follow status.'); }
