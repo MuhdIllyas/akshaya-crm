@@ -441,22 +441,6 @@ export const getMyBookmarks = async (staffId) => {
     return res.rows;
 };
 
-// Utility to extract mentioned Staff IDs from react-mentions formatted text
-export const extractMentions = (content) => {
-    if (!content) return [];
-    
-    const mentionRegex = /@\[.*?\]\((\d+)\)/g;
-    const mentionedIds = new Set();
-    let match;
-
-    while ((match = mentionRegex.exec(content)) !== null) {
-        // match[1] is the ID captured inside the parentheses
-        mentionedIds.add(parseInt(match[1], 10));
-    }
-
-    return Array.from(mentionedIds);
-};
-
 export const createAnnouncement = async (title, content, category, priority, isPinned, staffId) => {
     const res = await pool.query(
         `INSERT INTO knowledge_announcements (title, content, category, priority, is_pinned, created_by) 
