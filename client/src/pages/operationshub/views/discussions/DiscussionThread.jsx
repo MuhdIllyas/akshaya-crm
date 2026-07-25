@@ -3,12 +3,7 @@ import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarge
 import { MentionsInput, Mention } from 'react-mentions';
 import { toast } from 'react-toastify';
 import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/services/knowledge';
-
-const STAFF_SUGGESTIONS = [
-  { id: 1, display: 'Admin' }, 
-  { id: 53, display: 'Prajitha P' }, 
-  { id: 3, display: 'Rahul K' }
-];
+import { fetchStaffSuggestions } from '@/services/knowledge';
 
 const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [replyText, setReplyText] = useState('');
@@ -82,6 +77,15 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       toast.success(result.bookmarked ? 'Saved to Bookmarks!' : 'Removed from Bookmarks');
     } catch (err) {
       toast.error('Failed to update bookmark.');
+    }
+  };
+
+  const loadSuggestions = async (query, callback) => {
+    try {
+      const data = await fetchStaffSuggestions(query);
+      callback(data); // Hands the live database results directly to the popup!
+    } catch (err) {
+      console.error("Failed to load staff for mentions");
     }
   };
 
@@ -200,7 +204,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
             >
               <Mention 
                 trigger="@" 
-                data={STAFF_SUGGESTIONS} 
+                data={loadSuggestions} 
                 markup="@[__display__](__id__)" 
                 displayTransform={(id, display) => `@${display}`} 
                 style={{ backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '4px', zIndex: 1 }}

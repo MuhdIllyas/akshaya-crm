@@ -105,6 +105,6 @@ router.post('/hub/me/bookmarks/toggle', authorizeRoles(ALL_STAFF), knowledgeCont
 // ==========================================
 router.get('/hub/me/mentions', authorizeRoles(ALL_STAFF), knowledgeController.getMyMentions);
 router.put('/hub/me/mentions/read', authorizeRoles(ALL_STAFF), knowledgeController.markMentionsRead);
-
+router.get('/hub/staff/search', authorizeRoles(ALL_STAFF), knowledgeController.searchStaff);
 
 export default router;

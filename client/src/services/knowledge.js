@@ -136,4 +136,9 @@ export const markMentionsRead = async (discussionId) => {
   await api.put('/hub/me/mentions/read', { discussionId });
 };
 
+export const fetchStaffSuggestions = async (query) => {
+  const { data } = await api.get(`/hub/staff/search?q=${query}`);
+  return data;
+};
+
 export default api;

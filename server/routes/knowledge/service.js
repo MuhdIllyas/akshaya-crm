@@ -572,3 +572,14 @@ export const markMentionsRead = async (staffId, discussionId) => {
         [staffId, discussionId]
     );
 };
+
+export const searchStaffForMentions = async (searchQuery) => {
+    const res = await pool.query(
+        `SELECT id, name as display 
+         FROM staff 
+         WHERE name ILIKE $1 
+         LIMIT 10`,
+        [`%${searchQuery}%`]
+    );
+    return res.rows;
+};

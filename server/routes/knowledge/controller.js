@@ -299,3 +299,12 @@ export const markMentionsRead = async (req, res) => {
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Failed to mark read' }); }
 };
+
+export const searchStaff = async (req, res) => {
+    try {
+        const staff = await knowledgeService.searchStaffForMentions(req.query.q || '');
+        res.json(staff);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to search staff' });
+    }
+};
