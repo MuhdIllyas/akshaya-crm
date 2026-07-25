@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiChevronLeft, FiCheckCircle, FiUser, FiClock, FiMessageSquare, FiTarget, FiBriefcase, FiBookmark } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { addDiscussionReply, markDiscussionSolved, toggleBookmark } from '@/services/knowledge';
