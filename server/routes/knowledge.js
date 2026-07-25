@@ -94,4 +94,11 @@ router.post('/hub/announcements', authorizeRoles(ADMIN_ONLY), knowledgeControlle
 router.get('/hub/trainings', authorizeRoles(ALL_STAFF), knowledgeController.getTrainings);
 router.post('/hub/trainings', authorizeRoles(ALL_STAFF), knowledgeController.createTraining);
 
+// ==========================================
+// BOOKMARKS
+// ==========================================
+router.get('/hub/me/bookmarks', authorizeRoles(ALL_STAFF), knowledgeController.getMyBookmarks);
+router.post('/hub/me/bookmarks/toggle', authorizeRoles(ALL_STAFF), knowledgeController.toggleBookmark);
+
+
 export default router;

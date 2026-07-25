@@ -384,6 +384,40 @@ export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
     }
 };
 
+export const toggleBookmark = async (staffId, targetType, targetId) => {
+    // 1. Check if it's already bookmarked
+    const check = await pool.query(
+        'SELECT id FROM knowledge_bookmarks WHERE staff_id = $1 AND target_type = $2 AND target_id = $3',
+        [staffId, targetType, targetId]
+    );
+
+    if (check.rows.length > 0) {
+        // Un-bookmark it
+        await pool.query('DELETE FROM knowledge_bookmarks WHERE id = $1', [check.rows[0].id]);
+        return { bookmarked: false };
+    } else {
+        // Bookmark it
+        await pool.query(
+            'INSERT INTO knowledge_bookmarks (staff_id, target_type, target_id) VALUES ($1, $2, $3)',
+            [staffId, targetType, targetId]
+        );
+        return { bookmarked: true };
+    }
+};
+
+export const getMyBookmarks = async (staffId) => {
+    // join the discussions table to grab the titles of bookmarked discussions
+    // (easily expand this query later to JOIN your documents/trainings tables too)
+    const res = await pool.query(`
+        SELECT b.*, d.title, d.status
+        FROM knowledge_bookmarks b
+        LEFT JOIN knowledge_discussions d ON b.target_id = d.id AND b.target_type = 'discussion'
+        WHERE b.staff_id = $1
+        ORDER BY b.created_at DESC
+    `, [staffId]);
+    return res.rows;
+};
+
 export const createAnnouncement = async (title, content, category, priority, isPinned, staffId) => {
     const res = await pool.query(
         `INSERT INTO knowledge_announcements (title, content, category, priority, is_pinned, created_by) 

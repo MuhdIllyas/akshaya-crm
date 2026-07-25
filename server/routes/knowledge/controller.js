@@ -267,3 +267,22 @@ export const getDiscussionById = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch discussion details' });
     }
 };
+
+export const toggleBookmark = async (req, res) => {
+    try {
+        const { targetType, targetId } = req.body;
+        const result = await knowledgeService.toggleBookmark(req.user.id, targetType, targetId);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to toggle bookmark' });
+    }
+};
+
+export const getMyBookmarks = async (req, res) => {
+    try {
+        const bookmarks = await knowledgeService.getMyBookmarks(req.user.id);
+        res.json(bookmarks);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch bookmarks' });
+    }
+};

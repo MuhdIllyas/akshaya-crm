@@ -117,4 +117,14 @@ export const fetchDiscussionById = async (id) => {
   return data;
 };
 
+export const fetchMyBookmarks = async () => {
+  const { data } = await api.get('/hub/me/bookmarks');
+  return data;
+};
+
+export const toggleBookmark = async (targetType, targetId) => {
+  const { data } = await api.post('/hub/me/bookmarks/toggle', { targetType, targetId });
+  return data;
+};
+
 export default api;

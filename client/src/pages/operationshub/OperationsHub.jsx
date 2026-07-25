@@ -22,6 +22,7 @@ import { toast } from 'react-toastify';
 import GlobalDiscussions from './views/GlobalDiscussions';
 import DiscussionDetailPage from './views/DiscussionDetailPage';
 import LearningView from './views/LearningView';
+import BookmarksPage from './views/BookmarksPage';
 import AnnouncementsView from './views/AnnouncementsView';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
@@ -407,10 +408,7 @@ const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
   </div>
 );
 
-const LearningPage = () => <div className="p-4">Learning Center - Coming Soon</div>;
-const AnnouncementsPage = () => <div className="p-4">Announcements - Coming Soon</div>;
 const TagsPage = () => <div className="p-4">Tags - Coming Soon</div>;
-const BookmarksPage = () => <div className="p-4">Bookmarks - Coming Soon</div>;
 const FollowingPage = () => <div className="p-4">Following - Coming Soon</div>;
 const HistoryPage = () => <div className="p-4">History - Coming Soon</div>;
 const MentionsPage = () => <div className="p-4">Mentions - Coming Soon</div>;
@@ -578,7 +576,7 @@ const OperationsHub = () => {
       case 'learning': return <LearningView />;
       case 'announcements': return <AnnouncementsView />;
       case 'tags': return <TagsPage navigateTo={navigateTo} />;
-      case 'bookmarks': return <BookmarksPage />;
+      case 'bookmarks': return <BookmarksPage navigateTo={navigateTo} />;
       case 'mentions': return <MentionsPage navigateTo={navigateTo} />;
       case 'drafts': return <DraftsPage navigateTo={navigateTo} />;
       case 'following': return <FollowingPage />;
