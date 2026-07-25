@@ -624,3 +624,27 @@ export const getMyFollowing = async (staffId) => {
     `, [staffId]);
     return res.rows;
 };
+
+//History View
+export const logRecentView = async (staffId, targetType, targetId) => {
+    await pool.query(
+        `INSERT INTO knowledge_recent_views (staff_id, target_type, target_id, last_viewed_at) 
+         VALUES ($1, $2, $3, NOW()) 
+         ON CONFLICT (staff_id, target_type, target_id) 
+         DO UPDATE SET last_viewed_at = NOW()`,
+        [staffId, targetType, targetId]
+    );
+};
+
+export const getMyHistory = async (staffId) => {
+    // Fetches the last 50 viewed items, pulling the title from the discussions table
+    const res = await pool.query(`
+        SELECT v.*, d.title, d.status
+        FROM knowledge_recent_views v
+        JOIN knowledge_discussions d ON v.target_id = d.id AND v.target_type = 'discussion'
+        WHERE v.staff_id = $1
+        ORDER BY v.last_viewed_at DESC
+        LIMIT 50
+    `, [staffId]);
+    return res.rows;
+};

@@ -113,4 +113,10 @@ router.get('/hub/staff/search', authorizeRoles(ALL_STAFF), knowledgeController.s
 router.get('/hub/me/following', authorizeRoles(ALL_STAFF), knowledgeController.getMyFollowing);
 router.post('/hub/me/following/toggle', authorizeRoles(ALL_STAFF), knowledgeController.toggleFollow);
 
+// ==========================================
+// History - View
+// ==========================================
+router.get('/hub/me/history', authorizeRoles(ALL_STAFF), knowledgeController.getMyHistory);
+router.post('/hub/me/history/log', authorizeRoles(ALL_STAFF), knowledgeController.logView);
+
 export default router;

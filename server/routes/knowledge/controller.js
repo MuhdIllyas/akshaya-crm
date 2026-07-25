@@ -324,3 +324,15 @@ export const getMyFollowing = async (req, res) => {
     try { res.json(await knowledgeService.getMyFollowing(req.user.id)); } 
     catch (err) { res.status(500).json({ error: 'Failed to fetch followed threads' }); }
 };
+
+export const logView = async (req, res) => {
+    try {
+        await knowledgeService.logRecentView(req.user.id, req.body.targetType, req.body.targetId);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to log view' }); }
+};
+
+export const getMyHistory = async (req, res) => {
+    try { res.json(await knowledgeService.getMyHistory(req.user.id)); } 
+    catch (err) { res.status(500).json({ error: 'Failed to fetch history' }); }
+};

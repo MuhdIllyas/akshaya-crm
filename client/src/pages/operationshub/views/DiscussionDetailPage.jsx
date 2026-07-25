@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiLoader, FiAlertCircle } from 'react-icons/fi';
-import { fetchDiscussionById } from '@/services/knowledge';
+import { fetchDiscussionById, logRecentView } from '@/services/knowledge';
 import DiscussionThread from './discussions/DiscussionThread';
 
 const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
@@ -41,6 +41,12 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
 
   useEffect(() => {
     loadDiscussion();
+  }, [discussionId]);
+
+  useEffect(() => {
+    if (discussionId) {
+      logRecentView('discussion', discussionId).catch(console.error);
+    }
   }, [discussionId]);
 
   if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;

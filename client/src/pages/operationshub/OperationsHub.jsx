@@ -25,6 +25,7 @@ import LearningView from './views/LearningView';
 import BookmarksPage from './views/BookmarksPage';
 import MentionsPage from './views/MentionsPage';
 import FollowingPage from './views/FollowingPage';
+import HistoryPage from './views/HistoryPage';
 import AnnouncementsView from './views/AnnouncementsView';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
@@ -46,7 +47,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
   const workspaceItems = [
     { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: hubStats.mentions },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
-    { id: 'drafts', label: 'Drafts', icon: FiFile, count: 0 }, // Set to 0 until built
+    { id: 'drafts', label: 'Drafts', icon: FiFile, count: 0 }, 
     { id: 'following', label: 'Following', icon: FiUserPlus },
     { id: 'history', label: 'History', icon: FiClock },
   ];
@@ -411,7 +412,6 @@ const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
 );
 
 const TagsPage = () => <div className="p-4">Tags - Coming Soon</div>;
-const HistoryPage = () => <div className="p-4">History - Coming Soon</div>;
 const DraftsPage = () => <div className="p-4">Drafts - Coming Soon</div>;
 const NotificationsPage = () => <div className="p-4">Notifications - Coming Soon</div>;
 
@@ -580,7 +580,7 @@ const OperationsHub = () => {
       case 'mentions': return <MentionsPage navigateTo={navigateTo} />;
       case 'drafts': return <DraftsPage navigateTo={navigateTo} />;
       case 'following': return <FollowingPage navigateTo={navigateTo} />;
-      case 'history': return <HistoryPage />;
+      case 'history': return <HistoryPage navigateTo={navigateTo} />;
       case 'notifications': return <NotificationsPage />;
       case 'ai-assistant': return <AIAssistantPage navigateTo={navigateTo} />;
       case 'search': return <SearchPage query={searchQuery} navigateTo={navigateTo} />;

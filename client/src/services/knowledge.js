@@ -150,4 +150,12 @@ export const toggleFollow = async (discussionId) => {
   return data;
 };
 
+export const fetchMyHistory = async () => {
+  const { data } = await api.get('/hub/me/history');
+  return data;
+};
+export const logRecentView = async (targetType, targetId) => {
+  await api.post('/hub/me/history/log', { targetType, targetId });
+};
+
 export default api;
