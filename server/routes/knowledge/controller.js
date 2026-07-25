@@ -205,7 +205,7 @@ export const solveDiscussion = async (req, res) => {
 
 export const getGlobalStats = async (req, res) => {
     try {
-        const stats = await knowledgeService.getGlobalStats();
+        const stats = await knowledgeService.getGlobalStats(req.user.id);
         res.json(stats);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch global stats' });
