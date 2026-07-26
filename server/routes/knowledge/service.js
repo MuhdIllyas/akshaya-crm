@@ -701,13 +701,12 @@ export const getRecentActivity = async (workspaceId = null) => {
 export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) => {
     if (type !== 'serviceEntry') throw new Error("Currently only service applications are supported");
 
-    // 1. Force the input to be an integer (Tracking ID)
     const numericId = parseInt(recordId.trim(), 10);
     if (isNaN(numericId)) {
-        throw new Error("Please enter a valid numeric Tracking ID (e.g., 6687).");
+        throw new Error("Please enter a valid numeric ID (e.g., 6687).");
     }
 
-    // 2. Lookup by service_tracking.id
+    // 🔥 THE FIX: Check BOTH st.id AND se.id just like your tracking router does!
     const res = await pool.query(`
         SELECT 
             st.id as tracking_id, st.application_number, st.status, st.current_step, 
@@ -715,28 +714,28 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) =
             s.name as service_name, st_staff.centre_id
         FROM service_tracking st
         JOIN service_entries se ON st.service_entry_id = se.id
-        JOIN services s ON se.category_id = s.id
-        JOIN staff st_staff ON se.staff_id = st_staff.id
-        WHERE st.id = $1
+        LEFT JOIN services s ON se.category_id = s.id
+        LEFT JOIN staff st_staff ON se.staff_id = st_staff.id
+        WHERE st.id = $1 OR se.id = $1
     `, [numericId]);
 
     if (res.rows.length === 0) {
-        throw new Error(`Tracking ID ${numericId} not found.`);
+        throw new Error(`Record ${numericId} not found in database.`);
     }
 
     const record = res.rows[0];
 
-    // 3. THE FIX: Parse both to integers so "1" === 1 
+    // THE FIX: Secure Centre Verification
     if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
-        throw new Error("Access Denied: This record belongs to another centre.");
+        throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}, but you are in Centre ${centreId}.`);
     }
 
     return {
         id: record.application_number || `TRK-${record.tracking_id}`,
-        trackingId: record.tracking_id, // We strictly pass the tracking ID back
+        trackingId: record.tracking_id, 
         internalId: record.service_entry_id,
-        title: record.service_name,
-        customer: record.customer_name,
+        title: record.service_name || 'Service Application',
+        customer: record.customer_name || 'Customer',
         status: record.status,
         step: record.current_step
     };

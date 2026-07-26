@@ -24,12 +24,15 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
     if (!formData.relatedId) return;
     try {
       setIsLookingUp(true);
-      // You will need to import lookupCrmRecord from your services at the top!
       const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId);
       setCrmPreview(data);
       toast.success("Record found and linked!");
     } catch (err) {
       setCrmPreview(null);
+      
+      // 🔥 ADD THIS SO WE CAN SEE THE REAL ERROR IN THE BROWSER CONSOLE:
+      console.error("LOOKUP FAILED:", err.response || err);
+      
       toast.error(err.response?.data?.error || "Record not found or access denied");
     } finally {
       setIsLookingUp(false);
