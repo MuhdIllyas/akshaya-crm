@@ -701,13 +701,10 @@ export const getRecentActivity = async (workspaceId = null) => {
 export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) => {
     if (type !== 'serviceEntry') throw new Error("Currently only service applications are supported");
 
-    const numericId = parseInt(recordId.trim(), 10);
-    if (isNaN(numericId)) {
-        throw new Error("Please enter a valid numeric ID (e.g., 6687).");
-    }
+    const searchParam = recordId.trim();
+    const numericId = parseInt(searchParam, 10);
 
-    // 🔥 THE FIX: Check BOTH st.id AND se.id just like your tracking router does!
-    const res = await pool.query(`
+    let queryStr = `
         SELECT 
             st.id as tracking_id, st.application_number, st.status, st.current_step, 
             se.customer_name, se.id as service_entry_id,
@@ -716,22 +713,34 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) =
         JOIN service_entries se ON st.service_entry_id = se.id
         LEFT JOIN services s ON se.category_id = s.id
         LEFT JOIN staff st_staff ON se.staff_id = st_staff.id
-        WHERE st.id = $1 OR se.id = $1
-    `, [numericId]);
+        WHERE st.application_number ILIKE $1
+    `;
+    const params = [searchParam];
+
+    // 🔥 THE FIX: Strictly search ONLY the service_tracking table's ID!
+    if (!isNaN(numericId)) {
+        queryStr += ` OR st.id = $2`;
+        params.push(numericId);
+    }
+
+    const res = await pool.query(queryStr, params);
 
     if (res.rows.length === 0) {
-        throw new Error(`Record ${numericId} not found in database.`);
+        throw new Error(`Tracking record '${searchParam}' not found.`);
     }
 
     const record = res.rows[0];
 
-    // THE FIX: Secure Centre Verification
+    // Secure Centre Verification
     if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
-        throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}, but you are in Centre ${centreId}.`);
+        throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}.`);
     }
 
+    // Display it exactly as a Tracking Record
+    const displayId = record.application_number || `TRK-${record.tracking_id}`;
+
     return {
-        id: record.application_number || `TRK-${record.tracking_id}`,
+        id: displayId,
         trackingId: record.tracking_id, 
         internalId: record.service_entry_id,
         title: record.service_name || 'Service Application',
