@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FiX, FiPaperclip, FiLink } from 'react-icons/fi';
+import { FiX, FiPaperclip, FiLink, FiLayers } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
