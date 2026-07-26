@@ -176,19 +176,25 @@ router.get('/workflow_services', authenticateToken, async (req, res) => {
     let query = `
       SELECT s.*, 
       
-      -- 🔥 ADDED: Count of pending entries for this service
+      -- 🔥 NEW: COUNTS OPEN DISCUSSIONS FOR THIS SERVICE
       (
         SELECT COUNT(*) 
-        FROM service_entries se 
-        WHERE se.category_id::integer = s.id AND se.status = 'pending'
-      ) AS pending_count,
+        FROM knowledge_discussions kd
+        JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+        WHERE kw.service_id = s.id 
+          AND (kd.status != 'solved' OR kd.status IS NULL) 
+          AND kd.deleted_at IS NULL
+      ) AS open_discussions,
 
-      -- 🔥 ADDED: Count of entries created today for this service
+      -- 🔥 NEW: COUNTS SOLVED DISCUSSIONS FOR THIS SERVICE
       (
         SELECT COUNT(*) 
-        FROM service_entries se 
-        WHERE se.category_id::integer = s.id AND se.created_at::date = CURRENT_DATE
-      ) AS today_count,
+        FROM knowledge_discussions kd
+        JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+        WHERE kw.service_id = s.id 
+          AND kd.status = 'solved' 
+          AND kd.deleted_at IS NULL
+      ) AS closed_discussions,
 
       (
         SELECT COALESCE(json_agg(sc), '[]'::json)
@@ -229,9 +235,9 @@ router.get('/workflow_services', authenticateToken, async (req, res) => {
     
     const services = result.rows.map(service => ({
       ...service,
-      // 🔥 FIX: Parse the PostgreSQL string counts into actual integers for React
-      pending_count: parseInt(service.pending_count, 10) || 0,
-      today_count: parseInt(service.today_count, 10) || 0,
+      // 🔥 NEW: Map the Discussion counts as integers!
+      open_discussions: parseInt(service.open_discussions, 10) || 0,
+      closed_discussions: parseInt(service.closed_discussions, 10) || 0,
       wallet_name: null,
       balance: null,
       wallet_type: null,

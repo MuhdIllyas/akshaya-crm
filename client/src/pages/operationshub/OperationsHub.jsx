@@ -301,7 +301,7 @@ const ConvertDropdown = ({ onConvert }) => {
 const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], recentDiscussions = [], recentMentions = [], recentActivity = [], navigateTo, openDiscussion }) => {
   // THE FIX: Sort services by most pending, then slice to only show the Top 6!
   const topServices = [...services]
-    .sort((a, b) => (b.pending || 0) - (a.pending || 0))
+    .sort((a, b) => (b.openDiscussions || 0) - (a.openDiscussions || 0))
     .slice(0, 6);
 
   // SMART GREETING LOGIC
@@ -347,9 +347,11 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs font-medium border-t border-gray-100 pt-3">
-              <span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg">Today: {service.todayApplications || 0}</span>
-              <span className={`${(service.pending > 0) ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'} px-2 py-1 rounded-lg`}>
-                Pending: {service.pending || 0}
+              <span className={`${(service.openDiscussions > 0) ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'} px-2 py-1 rounded-lg flex items-center gap-1`}>
+                <FiMessageCircle className="h-3 w-3" /> {service.openDiscussions || 0} Open
+              </span>
+              <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg flex items-center gap-1">
+                <FiCheckCircle className="h-3 w-3" /> {service.closedDiscussions || 0} Solved
               </span>
             </div>
           </div>
@@ -617,8 +619,8 @@ const OperationsHub = () => { // <--- Removed the prop!
           name: s.name,
           icon: FiLayers, 
           description: s.description || 'Manage operations for this service.',
-          todayApplications: s.today_count || 0, 
-          pending: s.pending_count || 0,
+          openDiscussions: parseInt(s.open_discussions, 10) || 0,
+          closedDiscussions: parseInt(s.closed_discussions, 10) || 0,
         }));
         
         setRealServices(formatted);
