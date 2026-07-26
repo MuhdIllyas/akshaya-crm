@@ -171,14 +171,14 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
                 {formData.relatedTo !== 'none' && (
                   <div className="sm:col-span-2 flex gap-2">
                     <input 
-                      type="text" 
+                      type="number" 
                       value={formData.relatedId} 
                       onChange={e => {
                         setFormData(prev => ({ ...prev, relatedId: e.target.value }));
-                        setCrmPreview(null); // Clear preview if they start typing again
+                        setCrmPreview(null); 
                       }} 
-                      placeholder="e.g., APP-9821 or TKN-123" 
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm uppercase" 
+                      placeholder="e.g., 6687 (Tracking ID)" 
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm" 
                     />
                     <button 
                       type="button"

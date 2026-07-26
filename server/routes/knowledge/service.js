@@ -699,32 +699,41 @@ export const getRecentActivity = async (workspaceId = null) => {
 };
 
 export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) => {
-    if (type !== 'serviceEntry') throw new Error("Currently only service entries are supported");
+    if (type !== 'serviceEntry') throw new Error("Currently only service applications are supported");
 
-    // Search service_tracking by application_number (e.g. APP123 or TKN-456)
+    // 1. Force the input to be an integer (Tracking ID)
+    const numericId = parseInt(recordId.trim(), 10);
+    if (isNaN(numericId)) {
+        throw new Error("Please enter a valid numeric Tracking ID (e.g., 6687).");
+    }
+
+    // 2. Lookup by service_tracking.id
     const res = await pool.query(`
         SELECT 
-            st.application_number, st.status, st.current_step, 
+            st.id as tracking_id, st.application_number, st.status, st.current_step, 
             se.customer_name, se.id as service_entry_id,
             s.name as service_name, st_staff.centre_id
         FROM service_tracking st
         JOIN service_entries se ON st.service_entry_id = se.id
         JOIN services s ON se.category_id = s.id
         JOIN staff st_staff ON se.staff_id = st_staff.id
-        WHERE st.application_number ILIKE $1
-    `, [recordId.trim()]);
+        WHERE st.id = $1
+    `, [numericId]);
 
-    if (res.rows.length === 0) throw new Error("Record not found");
+    if (res.rows.length === 0) {
+        throw new Error(`Tracking ID ${numericId} not found.`);
+    }
 
     const record = res.rows[0];
 
-    // Security Check: Only allow if they are Superadmin, Admin of that centre, or the record belongs to their centre
-    if (role !== 'superadmin' && record.centre_id !== centreId) {
-        throw new Error("You do not have permission to link records from other centres.");
+    // 3. THE FIX: Parse both to integers so "1" === 1 
+    if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
+        throw new Error("Access Denied: This record belongs to another centre.");
     }
 
     return {
-        id: record.application_number,
+        id: record.application_number || `TRK-${record.tracking_id}`,
+        trackingId: record.tracking_id, // We strictly pass the tracking ID back
         internalId: record.service_entry_id,
         title: record.service_name,
         customer: record.customer_name,
