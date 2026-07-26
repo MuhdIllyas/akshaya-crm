@@ -614,8 +614,6 @@ const OperationsHub = () => { // <--- Removed the prop!
            fetchRecentActivity()        
         ]);
 
-        console.log("BACKEND PAYLOAD:", servicesResponse.data[0]);
-
         const formatted = servicesResponse.data.map(s => ({
           id: s.id, 
           name: s.name,
