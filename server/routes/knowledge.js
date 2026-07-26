@@ -131,4 +131,9 @@ router.delete('/hub/me/drafts/:id', authorizeRoles(ALL_STAFF), knowledgeControll
 // ==========================================
 router.get('/hub/activity', authorizeRoles(ALL_STAFF), knowledgeController.getRecentActivity);
 
+// ==========================================
+// CRM - LINK
+// ==========================================
+router.get('/hub/crm-lookup', authorizeRoles(ALL_STAFF), knowledgeController.lookupCrm);
+
 export default router;

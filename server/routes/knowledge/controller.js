@@ -361,3 +361,15 @@ export const getRecentActivity = async (req, res) => {
     try { res.json(await knowledgeService.getRecentActivity()); } 
     catch (err) { res.status(500).json({ error: 'Failed to fetch activity feed' }); }
 };
+
+export const lookupCrm = async (req, res) => {
+    try {
+        const { type, id } = req.query;
+        const record = await knowledgeService.lookupCrmRecord(
+            req.user.id, req.user.centre_id, req.user.role, type, id
+        );
+        res.json(record);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};

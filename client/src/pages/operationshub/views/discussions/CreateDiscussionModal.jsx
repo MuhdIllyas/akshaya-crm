@@ -17,6 +17,24 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
     title: '', content: '', category: 'question', priority: 'medium', tags: [], relatedTo: 'none', relatedId: ''
   });
   const [tagInput, setTagInput] = useState('');
+  const [crmPreview, setCrmPreview] = useState(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+
+  const handleLookup = async () => {
+    if (!formData.relatedId) return;
+    try {
+      setIsLookingUp(true);
+      // You will need to import lookupCrmRecord from your services at the top!
+      const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId);
+      setCrmPreview(data);
+      toast.success("Record found and linked!");
+    } catch (err) {
+      setCrmPreview(null);
+      toast.error(err.response?.data?.error || "Record not found or access denied");
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
 
   const handleAddTag = () => {
     if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
@@ -132,19 +150,65 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Link to CRM Record</label>
-                <select value={formData.relatedTo} onChange={e => setFormData(prev => ({ ...prev, relatedTo: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none">
-                  <option value="none">None</option>
-                  <option value="customer">Customer Profile</option>
-                  <option value="serviceEntry">Service Entry / Application</option>
+            <div className="border-t border-gray-100 pt-4 mt-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <FiLink className="text-gray-400" /> Link to CRM Record (Optional)
+              </label>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <select 
+                  value={formData.relatedTo} 
+                  onChange={e => {
+                    setFormData(prev => ({ ...prev, relatedTo: e.target.value, relatedId: '' }));
+                    setCrmPreview(null);
+                  }} 
+                  className="px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm"
+                >
+                  <option value="none">No Link</option>
+                  <option value="serviceEntry">Service Application</option>
                 </select>
+
+                {formData.relatedTo !== 'none' && (
+                  <div className="sm:col-span-2 flex gap-2">
+                    <input 
+                      type="text" 
+                      value={formData.relatedId} 
+                      onChange={e => {
+                        setFormData(prev => ({ ...prev, relatedId: e.target.value }));
+                        setCrmPreview(null); // Clear preview if they start typing again
+                      }} 
+                      placeholder="e.g., APP-9821 or TKN-123" 
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm uppercase" 
+                    />
+                    <button 
+                      type="button"
+                      onClick={handleLookup}
+                      disabled={isLookingUp || !formData.relatedId}
+                      className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 transition disabled:opacity-50"
+                    >
+                      {isLookingUp ? 'Searching...' : 'Verify'}
+                    </button>
+                  </div>
+                )}
               </div>
-              {formData.relatedTo !== 'none' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Record ID</label>
-                  <input type="text" value={formData.relatedId} onChange={e => setFormData(prev => ({ ...prev, relatedId: e.target.value }))} placeholder="e.g., APP-9821" className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none" />
+
+              {/* THE PREVIEW CARD */}
+              {crmPreview && (
+                <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                  <div className="p-2 bg-white rounded-lg shadow-sm text-indigo-600">
+                    <FiLayers className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      {crmPreview.id} 
+                      <span className="text-[10px] uppercase tracking-wider bg-white px-2 py-0.5 rounded text-indigo-600 border border-indigo-100">
+                        {crmPreview.status}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      <span className="font-semibold">{crmPreview.title}</span> • Customer: {crmPreview.customer}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

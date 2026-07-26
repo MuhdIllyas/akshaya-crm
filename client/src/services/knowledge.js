@@ -176,4 +176,9 @@ export const fetchRecentActivity = async () => {
   return data;
 };
 
+export const lookupCrmRecord = async (type, id) => {
+  const { data } = await api.get(`/hub/crm-lookup?type=${type}&id=${id}`);
+  return data;
+};
+
 export default api;

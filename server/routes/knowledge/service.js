@@ -697,3 +697,38 @@ export const getRecentActivity = async (workspaceId = null) => {
     `);
     return res.rows;
 };
+
+export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) => {
+    if (type !== 'serviceEntry') throw new Error("Currently only service entries are supported");
+
+    // Search service_tracking by application_number (e.g. APP123 or TKN-456)
+    const res = await pool.query(`
+        SELECT 
+            st.application_number, st.status, st.current_step, 
+            se.customer_name, se.id as service_entry_id,
+            s.name as service_name, st_staff.centre_id
+        FROM service_tracking st
+        JOIN service_entries se ON st.service_entry_id = se.id
+        JOIN services s ON se.category_id = s.id
+        JOIN staff st_staff ON se.staff_id = st_staff.id
+        WHERE st.application_number ILIKE $1
+    `, [recordId.trim()]);
+
+    if (res.rows.length === 0) throw new Error("Record not found");
+
+    const record = res.rows[0];
+
+    // Security Check: Only allow if they are Superadmin, Admin of that centre, or the record belongs to their centre
+    if (role !== 'superadmin' && record.centre_id !== centreId) {
+        throw new Error("You do not have permission to link records from other centres.");
+    }
+
+    return {
+        id: record.application_number,
+        internalId: record.service_entry_id,
+        title: record.service_name,
+        customer: record.customer_name,
+        status: record.status,
+        step: record.current_step
+    };
+};
