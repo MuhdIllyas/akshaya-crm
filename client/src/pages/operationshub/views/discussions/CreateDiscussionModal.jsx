@@ -3,7 +3,7 @@ import { FiX, FiPaperclip, FiLink } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
-import { createDiscussion, saveDraft, fetchStaffSuggestions } from '@/services/knowledge';
+import { createDiscussion, saveDraft, fetchStaffSuggestions, lookupCrmRecord } from '@/services/knowledge';
 
 const CATEGORIES = [
   { id: 'question', label: 'Question' },
