@@ -174,7 +174,23 @@ router.get('/workflow_services', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     let query = `
-      SELECT s.*, (
+      SELECT s.*, 
+      
+      -- 🔥 ADDED: Count of pending entries for this service
+      (
+        SELECT COUNT(*) 
+        FROM service_entries se 
+        WHERE se.category_id::integer = s.id AND se.status = 'pending'
+      ) AS pending_count,
+
+      -- 🔥 ADDED: Count of entries created today for this service
+      (
+        SELECT COUNT(*) 
+        FROM service_entries se 
+        WHERE se.category_id::integer = s.id AND se.created_at::date = CURRENT_DATE
+      ) AS today_count,
+
+      (
         SELECT COALESCE(json_agg(sc), '[]'::json)
         FROM (
           SELECT sc.*, (
@@ -210,8 +226,12 @@ router.get('/workflow_services', authenticateToken, async (req, res) => {
     }
     
     const result = await client.query(query, values);
+    
     const services = result.rows.map(service => ({
       ...service,
+      // 🔥 FIX: Parse the PostgreSQL string counts into actual integers for React
+      pending_count: parseInt(service.pending_count, 10) || 0,
+      today_count: parseInt(service.today_count, 10) || 0,
       wallet_name: null,
       balance: null,
       wallet_type: null,
