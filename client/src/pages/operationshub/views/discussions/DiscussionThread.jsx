@@ -4,7 +4,7 @@ import {
   FiCheckCircle, FiImage, FiPaperclip, FiSmile, FiArrowUp, FiArrowDown 
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { addReply } from '@/services/knowledge'; // Make sure this matches your actual import path!
+import { addReply } from '@/services/knowledge'; 
 
 // --- UI HELPER: Generates a color-coded avatar based on a name ---
 const Avatar = ({ name, size = "md" }) => {

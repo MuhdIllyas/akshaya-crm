@@ -183,4 +183,9 @@ export const lookupCrmRecord = async (type, id, serviceId = null) => {
   return data;
 };
 
+export const addReply = async () => {
+  const { data } = await api.get('/hub/activity');
+  return data;
+};
+
 export default api;
