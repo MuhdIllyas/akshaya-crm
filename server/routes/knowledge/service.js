@@ -709,7 +709,7 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
         SELECT 
             st.id as tracking_id, st.application_number, st.status, st.current_step, 
             se.customer_name, NULLIF(se.phone, '') as phone, se.id as service_entry_id,
-            se.category_id, -- 🔥 FETCH THE SERVICE CATEGORY ID
+            se.category_id,
             s.name as service_name, sub.name as subcategory_name,
             st_staff.centre_id, assigned_staff.name as assigned_staff_name
         FROM service_tracking st
@@ -718,29 +718,46 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
         LEFT JOIN subcategories sub ON se.subcategory_id::integer = sub.id
         LEFT JOIN staff st_staff ON se.staff_id::integer = st_staff.id
         LEFT JOIN staff assigned_staff ON st.assigned_to::integer = assigned_staff.id
-        WHERE st.application_number ILIKE $1
+        WHERE 1=1 
     `;
-    const params = [searchParam];
+    const params = [];
+    let paramIndex = 1;
 
+    // 1. The ID Filter (Checks both TRK-123 and 123)
     if (!isNaN(numericId)) {
-        queryStr += ` OR st.id = $2`;
-        params.push(numericId);
+        queryStr += ` AND (st.application_number ILIKE $${paramIndex} OR st.id = $${paramIndex + 1})`;
+        params.push(searchParam, numericId);
+        paramIndex += 2;
+    } else {
+        queryStr += ` AND st.application_number ILIKE $${paramIndex}`;
+        params.push(searchParam);
+        paramIndex += 1;
+    }
+
+    // ====================================================================
+    // 🔥 THE FIX: STRICT SERVICE FILTER AT THE DATABASE LEVEL
+    // ====================================================================
+    if (expectedServiceId) {
+        queryStr += ` AND se.category_id::integer = $${paramIndex}`;
+        params.push(parseInt(expectedServiceId, 10));
+        paramIndex += 1;
     }
 
     const res = await pool.query(queryStr, params);
 
-    if (res.rows.length === 0) throw new Error(`Tracking record '${searchParam}' not found.`);
-    const record = res.rows[0];
-
-    if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
-        throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}.`);
+    // Provide a smart error message so they know exactly why it failed
+    if (res.rows.length === 0) {
+        if (expectedServiceId) {
+            throw new Error(`Record not found in this workspace. Please ensure the tracking ID is correct and belongs to this specific service.`);
+        }
+        throw new Error(`Tracking record '${searchParam}' not found.`);
     }
 
-    // ====================================================================
-    // 🔥 NEW: STRICT SERVICE VALIDATION
-    // ====================================================================
-    if (expectedServiceId && parseInt(record.category_id) !== parseInt(expectedServiceId)) {
-        throw new Error(`Service Mismatch: You are posting in a different workspace, but this application is for "${record.service_name}".`);
+    const record = res.rows[0];
+
+    // Final security check: Ensure it belongs to their centre (if they aren't superadmin)
+    if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
+        throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}.`);
     }
 
     return {
