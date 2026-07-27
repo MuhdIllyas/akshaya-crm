@@ -15,7 +15,7 @@ const CATEGORIES = [
   { id: 'suggestion', label: 'Suggestion' }
 ];
 
-const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, preselectedServiceId }) => {
+const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, preselectedServiceId, preselectedServiceName }) => {
   const [formData, setFormData] = useState(existingDraft?.payload || {
     title: '', content: '', category: 'question', priority: 'medium', tags: [], 
     relatedTo: 'none', relatedId: '', serviceId: preselectedServiceId || ''
