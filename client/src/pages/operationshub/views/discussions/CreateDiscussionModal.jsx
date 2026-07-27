@@ -5,7 +5,6 @@ import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
 import { saveDraft, fetchStaffSuggestions, lookupCrmRecord } from '@/services/knowledge';
 
-// 🔥 IMPORT YOUR SERVICES API
 import { getWorkflowServices } from '@/services/serviceService';
 
 const CATEGORIES = [
