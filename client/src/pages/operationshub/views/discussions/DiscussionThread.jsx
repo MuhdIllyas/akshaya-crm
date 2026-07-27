@@ -102,6 +102,14 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     }
   };
 
+  const formatDate = (dateString) => {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleString('en-IN', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+};
+
   return (
     <div className="animate-in fade-in duration-300">
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-gray-500 hover:text-indigo-600 mb-6 font-medium transition-colors">
@@ -153,7 +161,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
             <img src={`https://ui-avatars.com/api/?name=${discussion.author}&background=e0e7ff&color=4338ca`} className="w-5 h-5 rounded-full" alt="Avatar" /> 
             {discussion.author}
           </span>
-          <span className="flex items-center gap-1.5"><FiClock /> {discussion.created_at || discussion.lastReply}</span>
+          <span className="flex items-center gap-1.5"><FiClock /> {formatDate(discussion.created_at || discussion.lastReply)}</span>
         </div>
 
         <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm md:text-base">
@@ -176,7 +184,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
               <div className="flex items-center gap-2">
                 <img src={`https://ui-avatars.com/api/?name=${reply.author}&background=f3f4f6&color=4b5563`} className="w-6 h-6 rounded-full" alt="Avatar" />
                 <span className="text-sm font-bold text-gray-900">{reply.author}</span>
-                <span className="text-xs font-medium text-gray-400">{reply.time}</span>
+                <span className="text-xs font-medium text-gray-400">{formatDate(reply.created_at || reply.time)}</span>
               </div>
               {reply.is_best && <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full flex items-center gap-1"><FiCheckCircle/> Solution</span>}
             </div>
