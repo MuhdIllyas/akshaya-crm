@@ -57,9 +57,9 @@ const DiscussionsView = ({ workspaceId }) => {
       await createDiscussion(workspaceId, formData);
       toast.success('Discussion posted successfully!');
       setIsModalOpen(false);
-      loadDiscussions(); // Refresh the list from the database
+      loadDiscussions(); 
     } catch (err) {
-      toast.error('Failed to post discussion.');
+      throw err; 
     }
   };
 
@@ -88,6 +88,7 @@ const DiscussionsView = ({ workspaceId }) => {
         existingDraft={null} 
         onClose={() => setIsModalOpen(false)} 
         onSubmit={handleCreateDiscussion} 
+        preselectedServiceId={workspaceId}
       />
     </div>
   );
