@@ -137,7 +137,7 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
           
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             
-            {/* 🔥 NEW: THE WORKSPACE & TITLE ROW */}
+            {/* THE WORKSPACE & TITLE ROW */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Service Workspace *</label>
@@ -157,10 +157,17 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                   }} 
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   required
-                  disabled={!!preselectedServiceId} // Locks it if opened from a specific service page!
+                  disabled={!!preselectedServiceId} 
                 >
-                  <option value="">Select a Workspace...</option>
-                  {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {/* 🔥 THE FIX: If locked, show the name immediately. If global, show the list. */}
+                  {preselectedServiceId ? (
+                    <option value={preselectedServiceId}>{preselectedServiceName || 'Current Service Workspace'}</option>
+                  ) : (
+                    <>
+                      <option value="">Select a Workspace...</option>
+                      {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </>
+                  )}
                 </select>
               </div>
 

@@ -745,6 +745,9 @@ const OperationsHub = () => { // <--- Removed the prop!
         <CreateDiscussionModal
           isOpen={showCreateModal}
           preselectedServiceId={serviceId}
+          // 🔥 THE FIX: Find the service name from your realServices array and pass it in!
+          preselectedServiceName={realServices.find(s => String(s.id) === String(serviceId))?.name}
+          
           existingDraft={editingDraft} 
           onClose={() => {
             setShowCreateModal(false);
@@ -752,11 +755,10 @@ const OperationsHub = () => { // <--- Removed the prop!
           }}
           onSubmit={async (formData) => {
              try {
-                 // We must import and call the API here for the global modal!
                  const { createDiscussion } = await import('@/services/knowledge');
                  
-                 // Uses formData.serviceId from the new dropdown we just added!
-                 await createDiscussion(formData.serviceId, formData, currentUser.id);
+                 // 🔥 THE FIX: Removed the 3rd argument so it matches your frontend API perfectly!
+                 await createDiscussion(formData.serviceId, formData);
                  
                  toast.success("Discussion published!");
                  setShowCreateModal(false);

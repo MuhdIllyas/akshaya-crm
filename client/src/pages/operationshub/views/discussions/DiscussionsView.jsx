@@ -88,7 +88,8 @@ const DiscussionsView = ({ workspaceId }) => {
         existingDraft={null} 
         onClose={() => setIsModalOpen(false)} 
         onSubmit={handleCreateDiscussion} 
-        preselectedServiceId={workspaceId}
+        preselectedServiceId={workspaceId} 
+        preselectedServiceName="Current Workspace" 
       />
     </div>
   );
