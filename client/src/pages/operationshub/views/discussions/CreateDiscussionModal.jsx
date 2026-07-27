@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
 import { saveDraft, fetchStaffSuggestions, lookupCrmRecord } from '@/services/knowledge';
-
 import { getWorkflowServices } from '@/services/serviceService';
 
 const CATEGORIES = [
@@ -14,10 +13,17 @@ const CATEGORIES = [
   { id: 'suggestion', label: 'Suggestion' }
 ];
 
-const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, preselectedServiceId, preselectedServiceName }) => {
+// 🔥 THE FIX: Strictly separated Service ID and Workspace ID
+const CreateDiscussionModal = ({ 
+  isOpen, onClose, onSubmit, existingDraft, 
+  lockedServiceId, lockedServiceName, lockedWorkspaceId 
+}) => {
+  
   const [formData, setFormData] = useState(existingDraft?.payload || {
     title: '', content: '', category: 'question', priority: 'medium', tags: [], 
-    relatedTo: 'none', relatedId: '', serviceId: preselectedServiceId || ''
+    relatedTo: 'none', relatedId: '', 
+    serviceId: lockedServiceId || '',     // Used for CRM Validation
+    workspaceId: lockedWorkspaceId || ''  // Used for Database Insertion
   });
   
   const [tagInput, setTagInput] = useState('');
@@ -25,21 +31,16 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-
-  // 🔥 FETCH ALL SERVICES SO THEY CAN SELECT THE WORKSPACE
   const [services, setServices] = useState([]);
+
   useEffect(() => {
-    if (isOpen) {
-      getWorkflowServices()
-        .then(res => setServices(res.data))
-        .catch(console.error);
+    if (isOpen && !lockedServiceId) {
+      getWorkflowServices().then(res => setServices(res.data)).catch(console.error);
     }
-  }, [isOpen]);
+  }, [isOpen, lockedServiceId]);
 
   const handleLookup = async () => {
     if (!formData.relatedId) return;
-    
-    // 🚨 Prevent lookup if they haven't selected a Workspace yet!
     if (!formData.serviceId) {
       toast.error("Please select a Service Workspace first!");
       return;
@@ -47,6 +48,7 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
 
     try {
       setIsLookingUp(true);
+      // 🔥 Passes the true Service ID (e.g., 4) to the CRM validator!
       const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId, formData.serviceId);
       setCrmPreview(data);
       toast.success("✅ Record found and linked!");
@@ -79,7 +81,7 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
       const data = await fetchStaffSuggestions(query);
       callback(data);
     } catch (err) {
-      console.error("Failed to load staff for mentions");
+      console.error("Failed to load staff");
     }
   };
 
@@ -121,9 +123,7 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm" onClick={onClose}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
           className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
           onClick={e => e.stopPropagation()}
         >
@@ -136,7 +136,6 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
           
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             
-            {/* THE WORKSPACE & TITLE ROW */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Service Workspace *</label>
@@ -149,6 +148,7 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                     setFormData(prev => ({ 
                       ...prev, 
                       serviceId: e.target.value,
+                      workspaceId: '', // Wipe workspace ID so it fetches a new one!
                       relatedTo: 'none',
                       relatedId: ''
                     }));
@@ -156,11 +156,10 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                   }} 
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   required
-                  disabled={!!preselectedServiceId} 
+                  disabled={!!lockedServiceId} 
                 >
-                  {/* 🔥 THE FIX: If locked, show the name immediately. If global, show the list. */}
-                  {preselectedServiceId ? (
-                    <option value={preselectedServiceId}>{preselectedServiceName || 'Current Service Workspace'}</option>
+                  {lockedServiceId ? (
+                    <option value={lockedServiceId}>{lockedServiceName || 'Current Service'}</option>
                   ) : (
                     <>
                       <option value="">Select a Workspace...</option>
@@ -173,8 +172,7 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Discussion Title *</label>
                 <input
-                  type="text" required
-                  value={formData.title}
+                  type="text" required value={formData.title}
                   onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="Brief summary..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -184,10 +182,8 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
 
             <div className="border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 overflow-hidden bg-white">
               <MentionsInput
-                value={formData.content}
-                onChange={(e, val) => setFormData(prev => ({ ...prev, content: val }))}
-                placeholder="Provide details... Use @ to tag a team member"
-                className="w-full"
+                value={formData.content} onChange={(e, val) => setFormData(prev => ({ ...prev, content: val }))}
+                placeholder="Provide details... Use @ to tag a team member" className="w-full"
                 style={{
                   control: { fontFamily: 'inherit', fontSize: '14px', lineHeight: '1.5', minHeight: '100px' },
                   input: { padding: '12px', border: 'none', outline: 'none', margin: 0, boxSizing: 'border-box', overflow: 'auto' },
@@ -198,26 +194,20 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                   }
                 }}
               >
-                <Mention 
-                  trigger="@" 
-                  data={loadSuggestions} 
-                  markup="@[__display__](__id__)" 
-                  displayTransform={(id, display) => `@${display}`} 
-                  style={{ backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '4px', zIndex: 1 }}
-                />
+                <Mention trigger="@" data={loadSuggestions} markup="@[__display__](__id__)" displayTransform={(id, display) => `@${display}`} style={{ backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '4px', zIndex: 1 }}/>
               </MentionsInput>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select value={formData.category} onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <select value={formData.category} onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none">
                   {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                <select value={formData.priority} onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none">
                   <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical 🚨</option>
                 </select>
               </div>
@@ -232,11 +222,7 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                 <select 
                     value={formData.relatedTo} 
                     onChange={e => {
-                      setFormData(prev => ({ 
-                        ...prev, 
-                        relatedTo: e.target.value,
-                        relatedId: ''
-                      }));
+                      setFormData(prev => ({ ...prev, relatedTo: e.target.value, relatedId: '' }));
                       setCrmPreview(null); 
                     }} 
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm"
@@ -248,21 +234,12 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                 {formData.relatedTo !== 'none' && (
                   <div className="sm:col-span-2 flex gap-2">
                     <input 
-                      type="number" 
-                      value={formData.relatedId} 
-                      onChange={e => {
-                        setFormData(prev => ({ ...prev, relatedId: e.target.value }));
-                        setCrmPreview(null); 
-                      }} 
+                      type="number" value={formData.relatedId} 
+                      onChange={e => { setFormData(prev => ({ ...prev, relatedId: e.target.value })); setCrmPreview(null); }} 
                       placeholder="e.g., 6687 (Tracking ID)" 
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm" 
                     />
-                    <button 
-                      type="button"
-                      onClick={handleLookup}
-                      disabled={isLookingUp || !formData.relatedId}
-                      className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 transition disabled:opacity-50"
-                    >
+                    <button type="button" onClick={handleLookup} disabled={isLookingUp || !formData.relatedId} className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-200 transition disabled:opacity-50">
                       {isLookingUp ? 'Searching...' : 'Verify'}
                     </button>
                   </div>
@@ -271,19 +248,12 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
 
               {crmPreview && (
                 <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
-                  <div className="p-2 bg-white rounded-lg shadow-sm text-indigo-600">
-                    <FiLayers className="h-5 w-5" />
-                  </div>
+                  <div className="p-2 bg-white rounded-lg shadow-sm text-indigo-600"><FiLayers className="h-5 w-5" /></div>
                   <div>
                     <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                      {crmPreview.id} 
-                      <span className="text-[10px] uppercase tracking-wider bg-white px-2 py-0.5 rounded text-indigo-600 border border-indigo-100">
-                        {crmPreview.status}
-                      </span>
+                      {crmPreview.id} <span className="text-[10px] uppercase tracking-wider bg-white px-2 py-0.5 rounded text-indigo-600 border border-indigo-100">{crmPreview.status}</span>
                     </div>
-                    <div className="text-xs text-gray-600 mt-0.5">
-                      <span className="font-semibold">{crmPreview.title}</span> • Customer: {crmPreview.customer}
-                    </div>
+                    <div className="text-xs text-gray-600 mt-0.5"><span className="font-semibold">{crmPreview.title}</span> • Customer: {crmPreview.customer}</div>
                   </div>
                 </div>
               )}
@@ -302,28 +272,11 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-6">
-              <button 
-                type="button" 
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition" 
-                onClick={onClose}
-              >
-                Cancel
-              </button>
-              
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={isSavingDraft}
-                className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition disabled:opacity-50"
-              >
+              <button type="button" className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition" onClick={onClose}>Cancel</button>
+              <button type="button" onClick={handleSaveDraft} disabled={isSavingDraft} className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition disabled:opacity-50">
                 {isSavingDraft ? 'Saving...' : 'Save Draft'}
               </button>
-
-              <button 
-                type="submit" 
-                disabled={!formData.title.trim() || !formData.content.trim() || !formData.serviceId || isPublishing}
-                className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2"
-              >
+              <button type="submit" disabled={!formData.title.trim() || !formData.content.trim() || !formData.serviceId || isPublishing} className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2">
                 {isPublishing ? 'Publishing...' : 'Publish Discussion'}
               </button>
             </div>

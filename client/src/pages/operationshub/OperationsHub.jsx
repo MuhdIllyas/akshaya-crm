@@ -740,14 +740,12 @@ const OperationsHub = () => { // <--- Removed the prop!
         </div>
       </div>
 
-      {/* GLOBAL DRAFTS MODAL - ADDED HERE */}
+      {/* GLOBAL DRAFTS MODAL */}
       {showCreateModal && (
         <CreateDiscussionModal
           isOpen={showCreateModal}
-          preselectedServiceId={serviceId}
-          // 🔥 THE FIX: Find the service name from your realServices array and pass it in!
-          preselectedServiceName={realServices.find(s => String(s.id) === String(serviceId))?.name}
-          
+          lockedServiceId={serviceId} // Will be null if on the Global Home page
+          lockedServiceName={realServices.find(s => String(s.id) === String(serviceId))?.name}
           existingDraft={editingDraft} 
           onClose={() => {
             setShowCreateModal(false);
@@ -757,8 +755,21 @@ const OperationsHub = () => { // <--- Removed the prop!
              try {
                  const { createDiscussion } = await import('@/services/knowledge');
                  
-                 // 🔥 THE FIX: Removed the 3rd argument so it matches your frontend API perfectly!
-                 await createDiscussion(formData.serviceId, formData);
+                 // 🔥 THE FIX: If there is no workspaceId, fetch it using the serviceId they selected!
+                 let finalWorkspaceId = formData.workspaceId;
+                 
+                 if (!finalWorkspaceId) {
+                   const token = localStorage.getItem("token");
+                   // Your existing backend route that gets/creates the workspace for a service
+                   const res = await fetch(`${import.meta.env.VITE_API_URL}/api/knowledge/workspaces/${formData.serviceId}`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                   });
+                   const data = await res.json();
+                   finalWorkspaceId = data.workspace.id; // Grab the Workspace ID!
+                 }
+                 
+                 // Finally submit the discussion to the correct workspace!
+                 await createDiscussion(finalWorkspaceId, formData);
                  
                  toast.success("Discussion published!");
                  setShowCreateModal(false);

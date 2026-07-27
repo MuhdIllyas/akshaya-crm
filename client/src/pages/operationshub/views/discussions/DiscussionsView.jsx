@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiLoader } from 'react-icons/fi';
 import DiscussionsList from './DiscussionsList';
@@ -7,6 +8,8 @@ import CreateDiscussionModal from './CreateDiscussionModal';
 import { fetchDiscussions, createDiscussion } from '@/services/knowledge'; // Adjust path if needed
 
 const DiscussionsView = ({ workspaceId }) => {
+  const { serviceId } = useParams();
+
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
@@ -88,8 +91,10 @@ const DiscussionsView = ({ workspaceId }) => {
         existingDraft={null} 
         onClose={() => setIsModalOpen(false)} 
         onSubmit={handleCreateDiscussion} 
-        preselectedServiceId={workspaceId} 
-        preselectedServiceName="Current Workspace" 
+        
+        lockedServiceId={serviceId} 
+        lockedWorkspaceId={workspaceId} 
+        lockedServiceName="Current Workspace" 
       />
     </div>
   );
