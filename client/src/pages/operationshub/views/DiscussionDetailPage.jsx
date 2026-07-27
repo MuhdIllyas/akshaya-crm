@@ -1,3 +1,4 @@
+//handles the Global Discussions view
 import React, { useState, useEffect } from 'react';
 import { 
   FiLoader, 
