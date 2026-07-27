@@ -160,12 +160,19 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <select 
-                  value={formData.relatedTo} 
+                  value={formData.workspaceId} // or formData.serviceId
                   onChange={e => {
-                    setFormData(prev => ({ ...prev, relatedTo: e.target.value, relatedId: '' }));
-                    setCrmPreview(null);
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      workspaceId: e.target.value,
+                      // 🔥 THE UX FIX: Wipe the linked CRM data if they change the workspace!
+                      relatedTo: 'none',
+                      relatedId: ''
+                    }));
+                    // Wipe the blue preview card
+                    setCrmPreview(null); 
                   }} 
-                  className="px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm"
                 >
                   <option value="none">No Link</option>
                   <option value="serviceEntry">Service Application</option>

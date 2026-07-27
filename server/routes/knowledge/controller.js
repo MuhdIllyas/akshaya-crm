@@ -366,6 +366,7 @@ export const lookupCrm = async (req, res) => {
     try {
         // 🔥 Grab the serviceId from the frontend request
         const { type, id, serviceId } = req.query; 
+        console.log(req.query);
         
         const record = await knowledgeService.lookupCrmRecord(
             req.user.id, 

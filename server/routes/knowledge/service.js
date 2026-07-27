@@ -310,6 +310,54 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
     const customerStr = relatedTo === 'customer' ? relatedId : null;
     const appStr = relatedTo === 'serviceEntry' ? relatedId : null;
 
+    // ====================================================================
+    // 🔥 THE ULTIMATE GUARD: STRICT CRM SERVICE VALIDATION
+    // ====================================================================
+    if (appStr) {
+        const searchParam = appStr.trim();
+        const numericId = parseInt(searchParam, 10);
+
+        // 1. Get the Service ID that this Workspace belongs to
+        const workspaceRes = await pool.query(
+            `SELECT service_id FROM knowledge_workspaces WHERE id = $1`, 
+            [workspaceId]
+        );
+        if (workspaceRes.rows.length === 0) throw new Error("Invalid Workspace.");
+        const expectedServiceId = workspaceRes.rows[0].service_id;
+
+        // Only enforce the lock if this workspace is actually tied to a specific service
+        if (expectedServiceId) {
+            // 2. Find the Category ID of the linked CRM Application
+            let queryStr = `
+                SELECT se.category_id 
+                FROM service_tracking st
+                JOIN service_entries se ON st.service_entry_id = se.id
+                WHERE st.application_number ILIKE $1
+            `;
+            const params = [searchParam];
+
+            if (!isNaN(numericId)) {
+                queryStr += ` OR st.id = $2`;
+                params.push(numericId);
+            }
+
+            const appRes = await pool.query(queryStr, params);
+
+            if (appRes.rows.length === 0) {
+                throw new Error("The linked CRM application could not be found.");
+            }
+
+            const actualServiceId = appRes.rows[0].category_id;
+
+            // 3. THE LOCK: Do they match?
+            if (parseInt(expectedServiceId, 10) !== parseInt(actualServiceId, 10)) {
+                throw new Error("Integrity Check Failed: You cannot link this application to this workspace because they belong to different services.");
+            }
+        }
+    }
+    // ====================================================================
+
+    // If it passes the lock, proceed with the actual insertion
     const res = await pool.query(
         `INSERT INTO knowledge_discussions 
         (workspace_id, title, content, category, priority, tags, author_id, crm_customer, crm_application) 
