@@ -707,15 +707,15 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) =
     let queryStr = `
         SELECT 
             st.id as tracking_id, st.application_number, st.status, st.current_step, 
-            se.customer_name, se.phone, se.id as service_entry_id,
+            se.customer_name, NULLIF(se.phone, '') as phone, se.id as service_entry_id,
             s.name as service_name, sub.name as subcategory_name,
             st_staff.centre_id, assigned_staff.name as assigned_staff_name
         FROM service_tracking st
         JOIN service_entries se ON st.service_entry_id = se.id
-        LEFT JOIN services s ON se.category_id = s.id
-        LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
-        LEFT JOIN staff st_staff ON se.staff_id = st_staff.id
-        LEFT JOIN staff assigned_staff ON st.assigned_to = assigned_staff.id
+        LEFT JOIN services s ON se.category_id::integer = s.id
+        LEFT JOIN subcategories sub ON se.subcategory_id::integer = sub.id
+        LEFT JOIN staff st_staff ON se.staff_id::integer = st_staff.id
+        LEFT JOIN staff assigned_staff ON st.assigned_to::integer = assigned_staff.id
         WHERE st.application_number ILIKE $1
     `;
     const params = [searchParam];

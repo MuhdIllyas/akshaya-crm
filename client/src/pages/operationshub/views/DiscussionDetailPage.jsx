@@ -80,8 +80,22 @@ const LinkedCrmCard = ({ crmId, navigateTo }) => {
             </span>
           </div>
           <div className="text-sm text-gray-800 font-medium">{record.title}</div>
-          <div className="text-xs text-gray-500 flex items-center gap-1">
-            <FiLayers className="inline h-3 w-3" /> {record.subcategory}
+          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+            <FiLayers className="inline h-3 w-3" /> {record.subcategory || 'General'}
+          </div>
+        </div>
+
+        <div className="space-y-1.5 md:border-l md:border-gray-100 md:pl-6">
+          <div className="text-xs text-gray-600 flex items-center gap-2">
+            <FiUser className="text-gray-400" /> 
+            <span className="font-semibold text-gray-800">{record.customer || 'Walk-in'}</span>
+          </div>
+          <div className="text-xs text-gray-600 flex items-center gap-2">
+            <FiPhone className="text-gray-400" /> {record.phone || 'N/A'}
+          </div>
+          <div className="text-xs text-gray-600 flex items-center gap-2 pt-1">
+            <FiBriefcase className="text-indigo-400" /> 
+            Assigned to: <span className="font-medium">{record.assignedTo || 'Unassigned'}</span>
           </div>
         </div>
 

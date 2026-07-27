@@ -160,7 +160,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         {(discussion.crm_customer || discussion.crm_application) && (
           <div className="mb-6 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-wrap gap-4 text-sm">
             {discussion.crm_customer && <div className="flex items-center gap-2 text-indigo-900"><FiUser className="text-indigo-500"/> Customer: <span className="font-semibold">{discussion.crm_customer}</span></div>}
-            {discussion.crm_application && <div className="flex items-center gap-2 text-indigo-900"><FiBriefcase className="text-indigo-500"/> Application: <span className="font-semibold">{discussion.crm_application}</span></div>}
           </div>
         )}
 
