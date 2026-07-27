@@ -14,7 +14,7 @@ import DiscussionThread from './discussions/DiscussionThread';
 // =====================================================================
 // 1. THE LINKED CRM CARD COMPONENT
 // =====================================================================
-const LinkedCrmCard = ({ crmId, navigateTo }) => {
+const LinkedCrmCard = ({ crmId }) => {
   const [record, setRecord] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,15 +59,20 @@ const LinkedCrmCard = ({ crmId, navigateTo }) => {
         <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-800 flex items-center gap-1.5">
           <FiLayers /> Attached CRM Application
         </h4>
+        
+        {/* THE FIX: Use standard browser routing to open the tracking file in a new tab! */}
         <button 
-          onClick={() => navigateTo('track_service', record.trackingId)}
+          onClick={() => window.open(`/dashboard/staff/track_service/${record.trackingId}`, '_blank')}
           className="text-[11px] font-semibold bg-white border border-indigo-200 text-indigo-600 px-2.5 py-1 rounded shadow-sm hover:bg-indigo-50 flex items-center gap-1 transition"
         >
           View Full File <FiExternalLink />
         </button>
       </div>
 
-      <div className="p-4 flex flex-col md:flex-row gap-4 justify-between">
+      {/* THE FIX: Strict 2-column grid to prevent duplicates */}
+      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        {/* Column 1: Service Info */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-gray-900">{record.id}</span>
@@ -80,11 +85,12 @@ const LinkedCrmCard = ({ crmId, navigateTo }) => {
             </span>
           </div>
           <div className="text-sm text-gray-800 font-medium">{record.title}</div>
-          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+          <div className="text-xs text-gray-500 flex items-center gap-1">
             <FiLayers className="inline h-3 w-3" /> {record.subcategory || 'General'}
           </div>
         </div>
 
+        {/* Column 2: Customer & Staff Info */}
         <div className="space-y-1.5 md:border-l md:border-gray-100 md:pl-6">
           <div className="text-xs text-gray-600 flex items-center gap-2">
             <FiUser className="text-gray-400" /> 
@@ -99,19 +105,6 @@ const LinkedCrmCard = ({ crmId, navigateTo }) => {
           </div>
         </div>
 
-        <div className="space-y-1.5 md:border-l md:border-gray-100 md:pl-6">
-          <div className="text-xs text-gray-600 flex items-center gap-2">
-            <FiUser className="text-gray-400" /> 
-            <span className="font-semibold text-gray-800">{record.customer}</span>
-          </div>
-          <div className="text-xs text-gray-600 flex items-center gap-2">
-            <FiPhone className="text-gray-400" /> {record.phone}
-          </div>
-          <div className="text-xs text-gray-600 flex items-center gap-2 pt-1">
-            <FiBriefcase className="text-indigo-400" /> 
-            Assigned to: <span className="font-medium">{record.assignedTo}</span>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -136,12 +129,22 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
         description: data.content,
         solved: data.status === 'solved',
         author: data.author_name || 'Staff',
+        
+        // THE FIX: Format the raw ISO date into a beautiful, readable string!
+        time: new Date(data.created_at).toLocaleString('en-IN', {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        }),
+        
         lastReply: new Date(data.updated_at).toLocaleDateString(),
         tags: data.tags || [],
         replies: (data.replies || []).map(r => ({
           id: r.id,
           author: r.author_name || 'Staff',
-          time: new Date(r.created_at).toLocaleDateString(),
+          time: new Date(r.created_at).toLocaleString('en-IN', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+          }),
           content: r.content,
           is_best: r.is_best_answer
         }))
@@ -174,10 +177,7 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
       
       {/* THE INTEGRATION: Render the linked CRM record if it exists! */}
       {discussion.crm_application && (
-        <LinkedCrmCard 
-          crmId={discussion.crm_application} 
-          navigateTo={navigateTo} 
-        />
+        <LinkedCrmCard crmId={discussion.crm_application} />
       )}
 
       <DiscussionThread 

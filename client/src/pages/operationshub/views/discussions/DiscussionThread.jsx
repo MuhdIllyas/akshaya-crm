@@ -156,13 +156,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
           <span className="flex items-center gap-1.5"><FiClock /> {discussion.created_at || discussion.lastReply}</span>
         </div>
 
-        {/* CRM Context Block */}
-        {(discussion.crm_customer || discussion.crm_application) && (
-          <div className="mb-6 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-wrap gap-4 text-sm">
-            {discussion.crm_customer && <div className="flex items-center gap-2 text-indigo-900"><FiUser className="text-indigo-500"/> Customer: <span className="font-semibold">{discussion.crm_customer}</span></div>}
-          </div>
-        )}
-
         <div className="text-gray-800 leading-relaxed whitespace-pre-wrap text-sm md:text-base">
           {renderContentWithMentions(discussion.description)}
         </div>
