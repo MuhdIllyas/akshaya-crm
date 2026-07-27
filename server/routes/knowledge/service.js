@@ -707,17 +707,19 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) =
     let queryStr = `
         SELECT 
             st.id as tracking_id, st.application_number, st.status, st.current_step, 
-            se.customer_name, se.id as service_entry_id,
-            s.name as service_name, st_staff.centre_id
+            se.customer_name, se.phone, se.id as service_entry_id,
+            s.name as service_name, sub.name as subcategory_name,
+            st_staff.centre_id, assigned_staff.name as assigned_staff_name
         FROM service_tracking st
         JOIN service_entries se ON st.service_entry_id = se.id
         LEFT JOIN services s ON se.category_id = s.id
+        LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
         LEFT JOIN staff st_staff ON se.staff_id = st_staff.id
+        LEFT JOIN staff assigned_staff ON st.assigned_to = assigned_staff.id
         WHERE st.application_number ILIKE $1
     `;
     const params = [searchParam];
 
-    // 🔥 THE FIX: Strictly search ONLY the service_tracking table's ID!
     if (!isNaN(numericId)) {
         queryStr += ` OR st.id = $2`;
         params.push(numericId);
@@ -725,26 +727,22 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) =
 
     const res = await pool.query(queryStr, params);
 
-    if (res.rows.length === 0) {
-        throw new Error(`Tracking record '${searchParam}' not found.`);
-    }
-
+    if (res.rows.length === 0) throw new Error(`Tracking record '${searchParam}' not found.`);
     const record = res.rows[0];
 
-    // Secure Centre Verification
     if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
         throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}.`);
     }
 
-    // Display it exactly as a Tracking Record
-    const displayId = record.application_number || `TRK-${record.tracking_id}`;
-
     return {
-        id: displayId,
+        id: record.application_number || `TRK-${record.tracking_id}`,
         trackingId: record.tracking_id, 
         internalId: record.service_entry_id,
         title: record.service_name || 'Service Application',
+        subcategory: record.subcategory_name || 'General',
         customer: record.customer_name || 'Customer',
+        phone: record.phone || 'N/A',
+        assignedTo: record.assigned_staff_name || 'Unassigned',
         status: record.status,
         step: record.current_step
     };
