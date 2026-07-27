@@ -12,34 +12,35 @@ const CATEGORIES = [
   { id: 'suggestion', label: 'Suggestion' }
 ];
 
-const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => {
+// 🔥 ADDED preselectedServiceId to the props!
+const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, preselectedServiceId }) => {
   const [formData, setFormData] = useState(existingDraft?.payload || {
-    title: '', content: '', category: 'question', priority: 'medium', tags: [], relatedTo: 'none', relatedId: ''
+    title: '', content: '', category: 'question', priority: 'medium', tags: [], 
+    relatedTo: 'none', relatedId: '', serviceId: preselectedServiceId || '' // Uses the prop!
   });
+  
   const [tagInput, setTagInput] = useState('');
   const [crmPreview, setCrmPreview] = useState(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  
+  // 🔥 ADDED the publishing state!
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const handleLookup = async () => {
     if (!formData.relatedId) return;
     try {
       setIsLookingUp(true);
-      // Passes the service ID to the backend validator
       const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId, formData.serviceId);
       
       setCrmPreview(data);
       toast.success("✅ Record found and linked!");
     } catch (err) {
       setCrmPreview(null);
-      
-      // 🔥 THE FIX: Extract the exact error message from the backend
       const backendError = err.response?.data?.error;
-
-      // If the backend threw our workspace mismatch error, show a specific toast!
       if (backendError && backendError.includes("not found in this workspace")) {
         toast.error("❌ Service Mismatch: This application belongs to a different service!");
       } else {
-        // Otherwise, show the standard not found error
         toast.error(backendError || "Record not found or access denied.");
       }
     } finally {
@@ -58,8 +59,6 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
     setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
   };
 
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
-
   const loadSuggestions = async (query, callback) => {
     try {
       const data = await fetchStaffSuggestions(query);
@@ -72,20 +71,33 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
   const handleSaveDraft = async () => {
     try {
       setIsSavingDraft(true);
-      
       await saveDraft({
         entityType: 'discussion',
         title: formData.title || 'Untitled Discussion',
         payload: formData,
-        draftId: existingDraft?.id || null // Updates the draft if it already exists!
+        draftId: existingDraft?.id || null 
       });
-      
       toast.success('Saved to Drafts!');
       onClose();
     } catch (err) {
       toast.error('Failed to save draft.');
     } finally {
       setIsSavingDraft(false);
+    }
+  };
+
+  // 🔥 ADDED the handleSubmit wrapper to catch database lock errors!
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsPublishing(true);
+      await onSubmit(formData);
+    } catch (err) {
+      console.error("Failed to publish:", err);
+      const backendError = err.response?.data?.error || err.message;
+      toast.error(backendError || "Failed to publish discussion.");
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -108,7 +120,8 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
             </button>
           </div>
           
-          <form onSubmit={(e) => { e.preventDefault(); onSubmit(formData); }} className="p-6 space-y-4">
+          {/* 🔥 CHANGED to use handleSubmit */}
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
               <input
@@ -167,19 +180,15 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
               </label>
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                
+                {/* 🔥 THE FIX: This dropdown is now safely restoring relatedTo */}
                 <select 
-                    value={formData.serviceId} // (or workspaceId, depending on what you named it)
+                    value={formData.relatedTo} 
                     onChange={e => {
-                      // 🔥 THE FIX: Warn them if we are wiping their linked data!
-                      if (formData.relatedId || crmPreview) {
-                        toast.warning("⚠️ Workspace changed: Linked application was removed to prevent a service mismatch.");
-                      }
-                      
                       setFormData(prev => ({ 
                         ...prev, 
-                        serviceId: e.target.value,
-                        relatedTo: 'none',
-                        relatedId: ''
+                        relatedTo: e.target.value,
+                        relatedId: '' // Clears the ID if they change link types
                       }));
                       setCrmPreview(null); 
                     }} 
@@ -264,12 +273,13 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
                 {isSavingDraft ? 'Saving...' : 'Save Draft'}
               </button>
 
+              {/* 🔥 ADDED: Disables the button while publishing */}
               <button 
                 type="submit" 
-                disabled={!formData.title.trim() || !formData.content.trim()}
-                className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50"
+                disabled={!formData.title.trim() || !formData.content.trim() || isPublishing}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2"
               >
-                Publish Discussion
+                {isPublishing ? 'Publishing...' : 'Publish Discussion'}
               </button>
             </div>
           </form>

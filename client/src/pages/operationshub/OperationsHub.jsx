@@ -744,6 +744,7 @@ const OperationsHub = () => { // <--- Removed the prop!
       {showCreateModal && (
         <CreateDiscussionModal
           isOpen={showCreateModal}
+          preselectedServiceId={serviceId}
           existingDraft={editingDraft} // <--- Passes the draft data into the form!
           onClose={() => {
             setShowCreateModal(false);
