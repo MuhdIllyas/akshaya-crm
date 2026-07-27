@@ -118,35 +118,53 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const loadDiscussion = async () => {
+const loadDiscussion = async () => {
     if (!discussionId) return;
     try {
       setLoading(true);
       const data = await fetchDiscussionById(discussionId);
       
       const formatted = {
-        ...data,
+        ...data, // Copies all original DB fields
+        
+        // 🔥 THE FIX: Explicitly overwrite the raw DB timestamps!
+        created_at: new Date(data.created_at).toLocaleString('en-IN', {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        }),
+        updated_at: new Date(data.updated_at).toLocaleString('en-IN', {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        }),
+
         description: data.content,
         solved: data.status === 'solved',
         author: data.author_name || 'Staff',
         
-        // THE FIX: Format the raw ISO date into a beautiful, readable string!
+        // Also keeping these in case your components expect them
         time: new Date(data.created_at).toLocaleString('en-IN', {
           year: 'numeric', month: 'short', day: 'numeric',
           hour: '2-digit', minute: '2-digit'
         }),
-        
         lastReply: new Date(data.updated_at).toLocaleDateString(),
+        
         tags: data.tags || [],
         replies: (data.replies || []).map(r => ({
+          ...r,
           id: r.id,
           author: r.author_name || 'Staff',
-          time: new Date(r.created_at).toLocaleString('en-IN', {
+          content: r.content,
+          is_best: r.is_best_answer,
+          
+          // 🔥 THE FIX: Do the same for the replies!
+          created_at: new Date(r.created_at).toLocaleString('en-IN', {
             year: 'numeric', month: 'short', day: 'numeric',
             hour: '2-digit', minute: '2-digit'
           }),
-          content: r.content,
-          is_best: r.is_best_answer
+          time: new Date(r.created_at).toLocaleString('en-IN', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+          })
         }))
       };
 
