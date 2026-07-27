@@ -698,7 +698,8 @@ export const getRecentActivity = async (workspaceId = null) => {
     return res.rows;
 };
 
-export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) => {
+// 🔥 expectedServiceId as the final argument
+export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, expectedServiceId) => {
     if (type !== 'serviceEntry') throw new Error("Currently only service applications are supported");
 
     const searchParam = recordId.trim();
@@ -708,6 +709,7 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) =
         SELECT 
             st.id as tracking_id, st.application_number, st.status, st.current_step, 
             se.customer_name, NULLIF(se.phone, '') as phone, se.id as service_entry_id,
+            se.category_id, -- 🔥 FETCH THE SERVICE CATEGORY ID
             s.name as service_name, sub.name as subcategory_name,
             st_staff.centre_id, assigned_staff.name as assigned_staff_name
         FROM service_tracking st
@@ -732,6 +734,13 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId) =
 
     if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
         throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}.`);
+    }
+
+    // ====================================================================
+    // 🔥 NEW: STRICT SERVICE VALIDATION
+    // ====================================================================
+    if (expectedServiceId && parseInt(record.category_id) !== parseInt(expectedServiceId)) {
+        throw new Error(`Service Mismatch: You are posting in a different workspace, but this application is for "${record.service_name}".`);
     }
 
     return {

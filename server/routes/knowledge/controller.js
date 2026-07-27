@@ -364,9 +364,16 @@ export const getRecentActivity = async (req, res) => {
 
 export const lookupCrm = async (req, res) => {
     try {
-        const { type, id } = req.query;
+        // 🔥 Grab the serviceId from the frontend request
+        const { type, id, serviceId } = req.query; 
+        
         const record = await knowledgeService.lookupCrmRecord(
-            req.user.id, req.user.centre_id, req.user.role, type, id
+            req.user.id, 
+            req.user.centre_id, 
+            req.user.role, 
+            type, 
+            id, 
+            serviceId // 🔥 Pass it to the validator!
         );
         res.json(record);
     } catch (err) {

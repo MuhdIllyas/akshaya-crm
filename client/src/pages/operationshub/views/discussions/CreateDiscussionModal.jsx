@@ -24,15 +24,15 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
     if (!formData.relatedId) return;
     try {
       setIsLookingUp(true);
-      const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId);
+      
+      // 🔥 THE FIX: Pass formData.serviceId to securely validate it!
+      const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId, formData.serviceId);
+      
       setCrmPreview(data);
       toast.success("Record found and linked!");
     } catch (err) {
       setCrmPreview(null);
-      
-      // 🔥 ADD THIS SO WE CAN SEE THE REAL ERROR IN THE BROWSER CONSOLE:
       console.error("LOOKUP FAILED:", err.response || err);
-      
       toast.error(err.response?.data?.error || "Record not found or access denied");
     } finally {
       setIsLookingUp(false);

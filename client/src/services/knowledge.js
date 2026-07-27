@@ -176,8 +176,10 @@ export const fetchRecentActivity = async () => {
   return data;
 };
 
-export const lookupCrmRecord = async (type, id) => {
-  const { data } = await api.get(`/hub/crm-lookup?type=${type}&id=${id}`);
+export const lookupCrmRecord = async (type, id, serviceId = null) => {
+  let url = `/hub/crm-lookup?type=${type}&id=${id}`;
+  if (serviceId) url += `&serviceId=${serviceId}`; 
+  const { data } = await api.get(url);
   return data;
 };
 
