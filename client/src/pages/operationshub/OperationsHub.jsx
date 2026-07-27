@@ -745,16 +745,26 @@ const OperationsHub = () => { // <--- Removed the prop!
         <CreateDiscussionModal
           isOpen={showCreateModal}
           preselectedServiceId={serviceId}
-          existingDraft={editingDraft} // <--- Passes the draft data into the form!
+          existingDraft={editingDraft} 
           onClose={() => {
             setShowCreateModal(false);
-            setEditingDraft(null); // Clears it when closed
+            setEditingDraft(null); 
           }}
-          onSubmit={(formData) => {
-             // For now, if they click publish from the drafts page, just close it
-             // (We can add global publishing logic here later if needed)
-             setShowCreateModal(false);
-             setEditingDraft(null);
+          onSubmit={async (formData) => {
+             try {
+                 // We must import and call the API here for the global modal!
+                 const { createDiscussion } = await import('@/services/knowledge');
+                 
+                 // Uses formData.serviceId from the new dropdown we just added!
+                 await createDiscussion(formData.serviceId, formData, currentUser.id);
+                 
+                 toast.success("Discussion published!");
+                 setShowCreateModal(false);
+                 setEditingDraft(null);
+                 
+             } catch (err) {
+                 throw err; 
+             }
           }}
         />
       )}

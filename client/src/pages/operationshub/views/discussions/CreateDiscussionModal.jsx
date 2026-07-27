@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { FiX, FiPaperclip, FiLink, FiLayers } from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import { FiX, FiLink, FiLayers } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
-import { createDiscussion, saveDraft, fetchStaffSuggestions, lookupCrmRecord } from '@/services/knowledge';
+import { saveDraft, fetchStaffSuggestions, lookupCrmRecord } from '@/services/knowledge';
+
+// 🔥 IMPORT YOUR SERVICES API
+import { getWorkflowServices } from '@/services/serviceService';
 
 const CATEGORIES = [
   { id: 'question', label: 'Question' },
@@ -12,27 +15,40 @@ const CATEGORIES = [
   { id: 'suggestion', label: 'Suggestion' }
 ];
 
-// 🔥 ADDED preselectedServiceId to the props!
 const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, preselectedServiceId }) => {
   const [formData, setFormData] = useState(existingDraft?.payload || {
     title: '', content: '', category: 'question', priority: 'medium', tags: [], 
-    relatedTo: 'none', relatedId: '', serviceId: preselectedServiceId || '' // Uses the prop!
+    relatedTo: 'none', relatedId: '', serviceId: preselectedServiceId || ''
   });
   
   const [tagInput, setTagInput] = useState('');
   const [crmPreview, setCrmPreview] = useState(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
-  
-  // 🔥 ADDED the publishing state!
   const [isPublishing, setIsPublishing] = useState(false);
+
+  // 🔥 FETCH ALL SERVICES SO THEY CAN SELECT THE WORKSPACE
+  const [services, setServices] = useState([]);
+  useEffect(() => {
+    if (isOpen) {
+      getWorkflowServices()
+        .then(res => setServices(res.data))
+        .catch(console.error);
+    }
+  }, [isOpen]);
 
   const handleLookup = async () => {
     if (!formData.relatedId) return;
+    
+    // 🚨 Prevent lookup if they haven't selected a Workspace yet!
+    if (!formData.serviceId) {
+      toast.error("Please select a Service Workspace first!");
+      return;
+    }
+
     try {
       setIsLookingUp(true);
       const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId, formData.serviceId);
-      
       setCrmPreview(data);
       toast.success("✅ Record found and linked!");
     } catch (err) {
@@ -86,7 +102,6 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
     }
   };
 
-  // 🔥 ADDED the handleSubmit wrapper to catch database lock errors!
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -120,44 +135,72 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
             </button>
           </div>
           
-          {/* 🔥 CHANGED to use handleSubmit */}
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-              <input
-                type="text" required
-                value={formData.title}
-                onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="What's the issue or question?"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+            
+            {/* 🔥 NEW: THE WORKSPACE & TITLE ROW */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Service Workspace *</label>
+                <select 
+                  value={formData.serviceId} 
+                  onChange={e => {
+                    if (formData.relatedId || crmPreview) {
+                      toast.warning("⚠️ Workspace changed: Linked application was removed to prevent a service mismatch.");
+                    }
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      serviceId: e.target.value,
+                      relatedTo: 'none',
+                      relatedId: ''
+                    }));
+                    setCrmPreview(null);
+                  }} 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  required
+                  disabled={!!preselectedServiceId} // Locks it if opened from a specific service page!
+                >
+                  <option value="">Select a Workspace...</option>
+                  {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Discussion Title *</label>
+                <input
+                  type="text" required
+                  value={formData.title}
+                  onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Brief summary..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
             </div>
 
-              <div className="border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 overflow-hidden bg-white">
-                <MentionsInput
-                  value={formData.content}
-                  onChange={(e, val) => setFormData(prev => ({ ...prev, content: val }))}
-                  placeholder="Provide details... Use @ to tag a team member"
-                  className="w-full"
-                  style={{
-                    control: { fontFamily: 'inherit', fontSize: '14px', lineHeight: '1.5', minHeight: '100px' },
-                    input: { padding: '12px', border: 'none', outline: 'none', margin: 0, boxSizing: 'border-box', overflow: 'auto' },
-                    highlighter: { padding: '12px', margin: 0, boxSizing: 'border-box' },
-                    suggestions: { 
-                      list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }, 
-                      item: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' } 
-                    }
-                  }}
-                >
-                  <Mention 
-                    trigger="@" 
-                    data={loadSuggestions} 
-                    markup="@[__display__](__id__)" 
-                    displayTransform={(id, display) => `@${display}`} 
-                    style={{ backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '4px', zIndex: 1 }}
-                  />
-                </MentionsInput>
-              </div>
+            <div className="border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 overflow-hidden bg-white">
+              <MentionsInput
+                value={formData.content}
+                onChange={(e, val) => setFormData(prev => ({ ...prev, content: val }))}
+                placeholder="Provide details... Use @ to tag a team member"
+                className="w-full"
+                style={{
+                  control: { fontFamily: 'inherit', fontSize: '14px', lineHeight: '1.5', minHeight: '100px' },
+                  input: { padding: '12px', border: 'none', outline: 'none', margin: 0, boxSizing: 'border-box', overflow: 'auto' },
+                  highlighter: { padding: '12px', margin: 0, boxSizing: 'border-box' },
+                  suggestions: { 
+                    list: { backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', zIndex: 100, overflow: 'hidden', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }, 
+                    item: { padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '14px' } 
+                  }
+                }}
+              >
+                <Mention 
+                  trigger="@" 
+                  data={loadSuggestions} 
+                  markup="@[__display__](__id__)" 
+                  displayTransform={(id, display) => `@${display}`} 
+                  style={{ backgroundColor: '#e0e7ff', color: '#4338ca', borderRadius: '4px', zIndex: 1 }}
+                />
+              </MentionsInput>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -180,15 +223,13 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
               </label>
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                
-                {/* 🔥 THE FIX: This dropdown is now safely restoring relatedTo */}
                 <select 
                     value={formData.relatedTo} 
                     onChange={e => {
                       setFormData(prev => ({ 
                         ...prev, 
                         relatedTo: e.target.value,
-                        relatedId: '' // Clears the ID if they change link types
+                        relatedId: ''
                       }));
                       setCrmPreview(null); 
                     }} 
@@ -222,7 +263,6 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                 )}
               </div>
 
-              {/* THE PREVIEW CARD */}
               {crmPreview && (
                 <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
                   <div className="p-2 bg-white rounded-lg shadow-sm text-indigo-600">
@@ -273,10 +313,9 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft, prese
                 {isSavingDraft ? 'Saving...' : 'Save Draft'}
               </button>
 
-              {/* 🔥 ADDED: Disables the button while publishing */}
               <button 
                 type="submit" 
-                disabled={!formData.title.trim() || !formData.content.trim() || isPublishing}
+                disabled={!formData.title.trim() || !formData.content.trim() || !formData.serviceId || isPublishing}
                 className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2"
               >
                 {isPublishing ? 'Publishing...' : 'Publish Discussion'}
