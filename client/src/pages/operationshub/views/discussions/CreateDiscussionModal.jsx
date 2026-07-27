@@ -24,16 +24,24 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
     if (!formData.relatedId) return;
     try {
       setIsLookingUp(true);
-      
-      // 🔥 THE FIX: Pass formData.serviceId to securely validate it!
+      // Passes the service ID to the backend validator
       const data = await lookupCrmRecord(formData.relatedTo, formData.relatedId, formData.serviceId);
       
       setCrmPreview(data);
-      toast.success("Record found and linked!");
+      toast.success("✅ Record found and linked!");
     } catch (err) {
       setCrmPreview(null);
-      console.error("LOOKUP FAILED:", err.response || err);
-      toast.error(err.response?.data?.error || "Record not found or access denied");
+      
+      // 🔥 THE FIX: Extract the exact error message from the backend
+      const backendError = err.response?.data?.error;
+
+      // If the backend threw our workspace mismatch error, show a specific toast!
+      if (backendError && backendError.includes("not found in this workspace")) {
+        toast.error("❌ Service Mismatch: This application belongs to a different service!");
+      } else {
+        // Otherwise, show the standard not found error
+        toast.error(backendError || "Record not found or access denied.");
+      }
     } finally {
       setIsLookingUp(false);
     }
@@ -160,20 +168,23 @@ const CreateDiscussionModal = ({ isOpen, onClose, onSubmit, existingDraft }) => 
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <select 
-                  value={formData.workspaceId} // or formData.serviceId
-                  onChange={e => {
-                    setFormData(prev => ({ 
-                      ...prev, 
-                      workspaceId: e.target.value,
-                      // 🔥 THE UX FIX: Wipe the linked CRM data if they change the workspace!
-                      relatedTo: 'none',
-                      relatedId: ''
-                    }));
-                    // Wipe the blue preview card
-                    setCrmPreview(null); 
-                  }} 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm"
-                >
+                    value={formData.serviceId} // (or workspaceId, depending on what you named it)
+                    onChange={e => {
+                      // 🔥 THE FIX: Warn them if we are wiping their linked data!
+                      if (formData.relatedId || crmPreview) {
+                        toast.warning("⚠️ Workspace changed: Linked application was removed to prevent a service mismatch.");
+                      }
+                      
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        serviceId: e.target.value,
+                        relatedTo: 'none',
+                        relatedId: ''
+                      }));
+                      setCrmPreview(null); 
+                    }} 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm"
+                  >
                   <option value="none">No Link</option>
                   <option value="serviceEntry">Service Application</option>
                 </select>
