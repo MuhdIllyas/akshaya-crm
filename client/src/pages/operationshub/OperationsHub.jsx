@@ -564,40 +564,11 @@ const OperationsHub = () => { // <--- Removed the prop!
 
   // === 2. ADD THIS FETCH EFFECT ===
   useEffect(() => {
-    const fetchRealServices = async () => {
-      try {
-        setIsLoadingServices(true);
-        // CHANGE THIS LINE to use the new function:
-        const response = await getWorkflowServices(); 
-        
-        const formatted = response.data.map(s => ({
-          id: s.id, 
-          name: s.name,
-          icon: FiLayers,
-          description: s.description || 'Manage operations for this service.',
-          todayApplications: 0, 
-          pending: 0,
-        }));
-        
-        setRealServices(formatted);
-      } catch (error) {
-        console.error("Failed to load real services:", error);
-        toast.error("Failed to load services");
-      } finally {
-        setIsLoadingServices(false);
-      }
-    };
-    
-    fetchRealServices();
-  }, []);
-
-  // === UPDATE THE FETCH EFFECT ===
-  useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setIsLoadingServices(true);
         
-        // THE FIX: Fetch everything concurrently for the Home Page
+        // Fetch everything concurrently
         const [
           servicesResponse, 
           statsResponse, 
@@ -614,20 +585,29 @@ const OperationsHub = () => { // <--- Removed the prop!
            fetchRecentActivity()        
         ]);
 
-        const formatted = servicesResponse.data.map(s => ({
-          id: s.id, 
-          name: s.name,
-          icon: FiLayers, 
-          description: s.description || 'Manage operations for this service.',
-          openDiscussions: parseInt(s.open_discussions, 10) || 0,
-          closedDiscussions: parseInt(s.closed_discussions, 10) || 0,
-        }));
+        // Map over the services and attach the counts
+        const formatted = servicesResponse.data.map(s => {
+          
+          // 🔥 SMART FALLBACK: If the backend doesn't provide the counts natively, 
+          // we count them dynamically from the discussions array!
+          const relatedDiscussions = discussionsRes.filter(d => d.service_name === s.name || d.service_id === s.id);
+          const openCount = relatedDiscussions.filter(d => d.status !== 'solved').length;
+          const closedCount = relatedDiscussions.filter(d => d.status === 'solved').length;
+
+          return {
+            id: s.id, 
+            name: s.name,
+            icon: FiLayers, 
+            description: s.description || 'Manage operations for this service.',
+            openDiscussions: parseInt(s.open_discussions, 10) || openCount,
+            closedDiscussions: parseInt(s.closed_discussions, 10) || closedCount,
+          };
+        });
         
         setRealServices(formatted);
         setHubStats(statsResponse);
         setLiveAnnouncements(announcementsResponse);
 
-        // THE FIX: Save the new data to state!
         setHomeDiscussions(discussionsRes.slice(0, 5)); 
         setHomeMentions(mentionsRes.slice(0, 5));
         setHomeActivity(activityRes);
