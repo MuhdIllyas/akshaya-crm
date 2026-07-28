@@ -5,10 +5,12 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
-import { addReply, votePost, toggleReaction, uploadKnowledgeFiles, fetchStaffSuggestions } from '@/services/knowledge'; 
+// 🔥 THE FIX: Imported markDiscussionSolved
+import { addReply, votePost, toggleReaction, uploadKnowledgeFiles, fetchStaffSuggestions, markDiscussionSolved } from '@/services/knowledge'; 
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
+// --- UI HELPERS ---
 const Avatar = ({ name, size = "md" }) => {
   const initials = name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'U';
   const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500', 'bg-indigo-500'];
@@ -61,18 +63,19 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
-  const composerRef = useRef(null); // Used to scroll down when clicking "Reply"
+  const composerRef = useRef(null); 
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(null); 
   const AVAILABLE_EMOJIS = ['👍', '👀', '🎉', '🚀', '❤️', '💡'];
 
-  const [localVotes, setLocalVotes] = useState({ 
-    discussion: { total: 0, userVote: 0 }, 
-    replies: {} 
-  });
+  const [localVotes, setLocalVotes] = useState({ discussion: { total: 0, userVote: 0 }, replies: {} });
   const [localReactions, setLocalReactions] = useState({});
 
-  // 🔥 THE FIX: Sync local state with the Database payloads on Refresh
+  // 🔥 THE FIX: Get Current User to verify permissions for the "Solve" button
+  const currentUserId = parseInt(localStorage.getItem('id'), 10);
+  const currentUserRole = localStorage.getItem('role');
+  const canSolve = discussion?.author_id === currentUserId || ['admin', 'superadmin'].includes(currentUserRole);
+
   useEffect(() => {
     if (discussion) {
       const replyVotes = {};
@@ -84,22 +87,16 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         replies: replyVotes
       });
 
-      // 2. Sync Reactions from the new Database Query
       const initReactions = {};
       const mapReactions = (reactionsArray) => {
         if (!reactionsArray) return {};
         const map = {};
-        reactionsArray.forEach(r => {
-          map[r.emoji] = { count: Number(r.count), active: r.active };
-        });
+        reactionsArray.forEach(r => { map[r.emoji] = { count: Number(r.count), active: r.active }; });
         return map;
       };
 
       initReactions[`discussion-${discussion.id}`] = mapReactions(discussion.reactions);
-      discussion.replies?.forEach(r => {
-        initReactions[`reply-${r.id}`] = mapReactions(r.reactions);
-      });
-
+      discussion.replies?.forEach(r => { initReactions[`reply-${r.id}`] = mapReactions(r.reactions); });
       setLocalReactions(initReactions);
     }
   }, [discussion]);
@@ -107,9 +104,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     try {
-      return new Date(dateStr).toLocaleString('en-IN', {
-        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-      });
+      return new Date(dateStr).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch { return dateStr; }
   };
 
@@ -124,9 +119,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
-    const newAttachments = files.map(file => ({
-      file, previewUrl: URL.createObjectURL(file)
-    }));
+    const newAttachments = files.map(file => ({ file, previewUrl: URL.createObjectURL(file) }));
     setAttachments([...attachments, ...newAttachments]);
   };
 
@@ -142,13 +135,12 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       let newTotal = currentObj.total;
       let newUserVote;
 
-      // Smart Math for Toggle Logic
       if (currentObj.userVote === incomingVote) {
-        newTotal -= incomingVote; // Removing vote
+        newTotal -= incomingVote; 
         newUserVote = 0;
       } else {
         const delta = incomingVote - (currentObj.userVote || 0);
-        newTotal += delta; // Swapping or Adding vote
+        newTotal += delta; 
         newUserVote = incomingVote;
       }
 
@@ -163,7 +155,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       await votePost(targetType, targetId, incomingVote);
     } catch (err) {
       toast.error("Failed to register vote.");
-      if (onUpdate) onUpdate(); // Reset UI if it fails
+      if (onUpdate) onUpdate(); 
     }
   };
 
@@ -177,13 +169,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       const isActive = current[emoji]?.active || false;
       return {
         ...prev,
-        [key]: {
-          ...current,
-          [emoji]: {
-            count: isActive ? count - 1 : count + 1,
-            active: !isActive
-          }
-        }
+        [key]: { ...current, [emoji]: { count: isActive ? count - 1 : count + 1, active: !isActive } }
       };
     });
 
@@ -194,27 +180,37 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     }
   };
 
-  // 🔥 THE FIX: Wires up the "Reply" button inside nested comments
   const handleReplyToUser = (authorName, authorId) => {
-    // 1. Format the mention string so the parser picks it up as a blue pill
     const mentionString = authorId ? `@[${authorName}](${authorId}) ` : `@${authorName} `;
-    
-    // 2. Add the text to the state
     setReplyText(prev => prev ? `${prev}\n${mentionString}` : mentionString);
-    
-    // 3. Scroll the screen down to the composer box
     composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     
-    // 4. 🔥 THE FIX: Find the hidden MentionsInput textarea and force it to focus!
     setTimeout(() => {
       const textarea = composerRef.current?.querySelector('textarea');
       if (textarea) {
         textarea.focus();
-        // Move the blinking typing cursor to the very end of the text
         const len = textarea.value.length;
         textarea.setSelectionRange(len, len);
       }
     }, 100);
+  };
+
+  // 🔥 THE FIX: New Handler to Mark the Discussion as Solved
+  const handleMarkSolved = async (replyId = null) => {
+    const confirmMsg = replyId 
+      ? "Mark this reply as the Best Answer and close the discussion?" 
+      : "Mark this discussion as Solved and close it?";
+      
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await markDiscussionSolved(discussion.id, replyId);
+      toast.success("Discussion successfully marked as solved!");
+      if (onUpdate) onUpdate(); // Refresh the thread!
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || "Failed to mark as solved.";
+      toast.error(errorMsg);
+    }
   };
 
   const handlePostReply = async (e) => {
@@ -231,7 +227,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       }
 
       await addReply(discussion.id, replyText, finalAttachmentUrls); 
-      
       setReplyText('');
       setAttachments([]); 
       toast.success("Reply posted!");
@@ -255,11 +250,24 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
           <FiArrowLeft /> Back
         </button>
         <div className="flex items-center gap-2">
-          {discussion.solved && (
+          
+          {/* 🔥 THE FIX: Header "Mark Solved" Button */}
+          {discussion.solved ? (
             <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
               <FiCheckCircle /> Solved
             </span>
+          ) : (
+            canSolve && (
+              <button 
+                onClick={() => handleMarkSolved(null)}
+                className="bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition flex items-center gap-1 shadow-sm mr-2"
+                title="Mark this discussion as solved"
+              >
+                <FiCheckCircle className="h-3.5 w-3.5" /> Mark Solved
+              </button>
+            )
           )}
+
           <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition"><FiShare2 /></button>
           <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition"><FiMoreHorizontal /></button>
         </div>
@@ -311,11 +319,9 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
               <button onClick={() => handleVote('discussion', discussion.id, 1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === 1 ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 hover:bg-gray-200'}`}>
                 <FiArrowUp className="h-4 w-4" />
               </button>
-              
               <span className={`text-xs font-bold px-2 ${localVotes.discussion.userVote === 1 ? 'text-emerald-600' : localVotes.discussion.userVote === -1 ? 'text-red-600' : 'text-gray-700'}`}>
                 {localVotes.discussion.total}
               </span>
-              
               <button onClick={() => handleVote('discussion', discussion.id, -1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === -1 ? 'text-red-600 bg-red-50' : 'text-gray-400 hover:bg-gray-200'}`}>
                 <FiArrowDown className="h-4 w-4" />
               </button>
@@ -352,7 +358,8 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         <div className="px-6 pb-6 space-y-0">
           {discussion.replies && discussion.replies.map((reply, idx) => {
             const isLast = idx === discussion.replies.length - 1;
-            const replyVotes = localVotes.replies[reply.id] || 0;
+            const replyVotes = localVotes.replies[reply.id]?.total || 0;
+            const userReplyVote = localVotes.replies[reply.id]?.userVote || 0;
             const replyReactions = localReactions[`reply-${reply.id}`] || {};
             
             return (
@@ -383,22 +390,28 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                   )}
 
                   <div className="flex items-center gap-4 mt-2 text-xs font-semibold text-gray-500">
-                    {/* The Reply Upvote Button */}
                     <button 
                       onClick={() => handleVote('reply', reply.id, 1)} 
-                      className={`flex items-center gap-1 transition ${localVotes.replies[reply.id]?.userVote === 1 ? 'text-emerald-600' : 'hover:text-indigo-600'}`}
+                      className={`flex items-center gap-1 transition ${userReplyVote === 1 ? 'text-emerald-600' : 'hover:text-indigo-600'}`}
                     >
-                      <FiArrowUp /> {localVotes.replies[reply.id]?.total || 0}
+                      <FiArrowUp /> {replyVotes}
                     </button>
                     
-                    {/* 🔥 THE FIX: Clicking Reply now tags the user and scrolls down */}
-                    <button 
-                      onClick={() => handleReplyToUser(reply.author, reply.author_id)} 
-                      className="hover:text-gray-900"
-                    >
+                    <button onClick={() => handleReplyToUser(reply.author, reply.author_id)} className="hover:text-gray-900">
                       Reply
                     </button>
                     
+                    {/* 🔥 THE FIX: Mark Best Answer Button */}
+                    {!discussion.solved && canSolve && (
+                      <button 
+                        onClick={() => handleMarkSolved(reply.id)} 
+                        className="hover:text-emerald-600 flex items-center gap-1 transition"
+                        title="Mark as Best Answer"
+                      >
+                        <FiCheckCircle className="h-3.5 w-3.5" /> Mark Best
+                      </button>
+                    )}
+
                     <div className="relative flex items-center gap-2">
                       {Object.entries(replyReactions).map(([em, data]) => (
                          <ReactionPill key={em} emoji={em} count={data.count} active={data.active} onClick={() => handleReact('reply', reply.id, em)} />
