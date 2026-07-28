@@ -75,6 +75,11 @@ const mapDBNotificationToUI = (dbNotif) => {
       : `/dashboard/staff/expense_entry`;
   }
 
+  // 🔥 Route for Knowledge/Operations Hub Discussions
+  if (dbNotif.related_entity_type === 'discussion' || dbNotif.type?.startsWith('knowledge_')) {
+    actionUrl = `/dashboard/${role}/operations-hub/${dbNotif.related_entity_id}`; 
+  }
+
   // Safely get type to prevent .includes() crashing
   const typeStr = dbNotif.type || 'system';
 
@@ -86,10 +91,13 @@ const mapDBNotificationToUI = (dbNotif) => {
       conversationId: dbNotif.conversation_id,
       
       type: typeStr,
-      icon: typeStr.includes('message') ? FiMessageSquareIcon : 
+      icon: typeStr.startsWith('knowledge_') ? FiMessageCircle :
+            typeStr.includes('message') ? FiMessageSquareIcon : 
             typeStr.includes('task') ? FiCheckSquare : 
             typeStr.includes('service') ? FiBriefcase : FiBell,
-      color: typeStr.includes('message') ? 'blue' : 
+      color: typeStr === 'knowledge_solved' ? 'emerald' : 
+            typeStr.startsWith('knowledge_') ? 'indigo' :
+            typeStr.includes('message') ? 'blue' : 
             typeStr.includes('task') ? 'emerald' : 
             typeStr.includes('service') ? 'indigo' : 'gray',
       module: dbNotif.category ? dbNotif.category.toUpperCase() : 'CRM',
@@ -157,6 +165,12 @@ const TYPE_ACTIONS = {
   review: ['view', 'mark_read'],
   team: ['view', 'mark_read'],
   system: ['view', 'mark_read'],
+
+  // 🔥 knowledge hub
+  knowledge_mention: ['reply', 'mark_read'],
+  knowledge_reply: ['reply', 'mark_read'],
+  knowledge_solved: ['view', 'mark_read'],
+
   default: ['view', 'mark_read']
 };
 
@@ -607,6 +621,17 @@ const NotificationsPage = () => {
       navigate(`/dashboard/${role}/messenger`, { 
         state: { openConversationId: notification.conversationId || notification.related_entity_id } 
       });
+      return;
+    }
+
+    // 🔥 Handle Operations Hub Discussions
+    if (
+      (action === 'reply' || action === 'view') && 
+      (notification.type.startsWith('knowledge_') || notification.related_entity_type === 'discussion')
+    ) {
+      handleMarkRead(id);
+      // Notice we pass 'discussion-detail' as the page, and pass the ID!
+      navigate(`/dashboard/${role}/operations-hub/${notification.related_entity_id}`);
       return;
     }
 
