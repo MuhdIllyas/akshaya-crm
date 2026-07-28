@@ -1,6 +1,9 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import * as knowledgeController from './knowledge/controller.js';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
 
@@ -40,6 +43,26 @@ const authorizeRoles = (allowedRoles) => {
 const ALL_STAFF = ['staff', 'admin', 'superadmin'];
 const ADMIN_ONLY = ['admin', 'superadmin'];
 const SUPERADMIN_ONLY = ['superadmin'];
+
+// 1. Ensure the upload directory exists
+const uploadDir = path.join(process.cwd(), 'uploads', 'knowledge');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// 2. Configure Multer Storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate a unique filename: knowledge-163234234-8234.png
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'knowledge-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // ==========================================
 // WORKSPACE
@@ -138,5 +161,28 @@ router.get('/hub/crm-lookup', authorizeRoles(ALL_STAFF), knowledgeController.loo
 
 router.post('/hub/vote', authorizeRoles(ALL_STAFF), knowledgeController.votePost);
 router.post('/hub/react', authorizeRoles(ALL_STAFF), knowledgeController.toggleReaction);
+
+// ==========================================
+// UPLOADS (MULTER)
+// ==========================================
+// Accepts up to 10 files at once under the field name 'files'
+router.post('/upload', authorizeRoles(ALL_STAFF), upload.array('files', 10), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    // Return the relative URLs so the database can store them safely
+    const fileUrls = req.files.map(file => ({
+      url: `/uploads/knowledge/${file.filename}`,
+      name: file.originalname
+    }));
+
+    res.json({ urls: fileUrls });
+  } catch (err) {
+    console.error("💥 MULTER UPLOAD ERROR:", err);
+    res.status(500).json({ error: 'Failed to upload files' });
+  }
+});
 
 export default router;

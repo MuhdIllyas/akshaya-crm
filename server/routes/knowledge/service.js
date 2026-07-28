@@ -857,3 +857,22 @@ export const toggleReaction = async (staffId, targetType, targetId, emoji) => {
         return { action: 'added', emoji };
     }
 };
+
+// ==========================================
+// FILE UPLOADS
+// ==========================================
+export const uploadKnowledgeFiles = async (files) => {
+  const formData = new FormData();
+  
+  // Append all files to the 'files' array in formData
+  files.forEach(file => {
+    formData.append('files', file);
+  });
+  
+  // Multer requires the multipart/form-data header!
+  const { data } = await api.post('/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  
+  return data.urls; 
+};
