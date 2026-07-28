@@ -5,17 +5,14 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
-// 🔥 IMPORT YOUR API FUNCTIONS
 import { addReply, votePost, toggleReaction, uploadKnowledgeFiles, fetchStaffSuggestions } from '@/services/knowledge'; 
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-// --- UI HELPER: Generates a color-coded avatar based on a name ---
 const Avatar = ({ name, size = "md" }) => {
   const initials = name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'U';
   const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500', 'bg-indigo-500'];
   const colorIndex = name ? name.length % colors.length : 0;
-  
   const sizeClasses = { sm: "w-8 h-8 text-xs", md: "w-10 h-10 text-sm", lg: "w-12 h-12 text-base" };
 
   return (
@@ -25,7 +22,6 @@ const Avatar = ({ name, size = "md" }) => {
   );
 };
 
-// --- UI HELPER: Discord-style Reaction Pill ---
 const ReactionPill = ({ emoji, count, active, onClick }) => {
   if (count <= 0) return null;
   return (
@@ -40,15 +36,12 @@ const ReactionPill = ({ emoji, count, active, onClick }) => {
   );
 };
 
-// --- UI HELPER: Parses @[Name](ID) into beautiful blue pills ---
 const formatContent = (text) => {
   if (!text) return '';
-  // Split by the mention pattern
   const parts = text.split(/(@\[.*?\]\(\d+\))/g);
   return parts.map((part, idx) => {
     const match = part.match(/@\[(.*?)\]\((\d+)\)/);
     if (match) {
-      // match[1] is the Name, match[2] is the ID
       return <span key={idx} className="font-bold text-indigo-600 bg-indigo-50 px-1 rounded cursor-pointer hover:underline">@{match[1]}</span>;
     }
     return <span key={idx}>{part}</span>;
@@ -68,23 +61,42 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
+  const composerRef = useRef(null); // Used to scroll down when clicking "Reply"
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(null); 
   const AVAILABLE_EMOJIS = ['👍', '👀', '🎉', '🚀', '❤️', '💡'];
 
-  // 🔥 OPTIMISTIC UI STATE: Prevents the page from flickering when voting/reacting
   const [localVotes, setLocalVotes] = useState({ discussion: 0, replies: {} });
   const [localReactions, setLocalReactions] = useState({});
 
-  // Sync local state when discussion prop changes
+  // 🔥 THE FIX: Sync local state with the Database payloads on Refresh
   useEffect(() => {
     if (discussion) {
+      // 1. Sync Votes
       const replyVotes = {};
       discussion.replies?.forEach(r => { replyVotes[r.id] = r.upvotes || 0; });
       setLocalVotes({
         discussion: discussion.upvotes || 0,
         replies: replyVotes
       });
+
+      // 2. Sync Reactions from the new Database Query
+      const initReactions = {};
+      const mapReactions = (reactionsArray) => {
+        if (!reactionsArray) return {};
+        const map = {};
+        reactionsArray.forEach(r => {
+          map[r.emoji] = { count: Number(r.count), active: r.active };
+        });
+        return map;
+      };
+
+      initReactions[`discussion-${discussion.id}`] = mapReactions(discussion.reactions);
+      discussion.replies?.forEach(r => {
+        initReactions[`reply-${r.id}`] = mapReactions(r.reactions);
+      });
+
+      setLocalReactions(initReactions);
     }
   }, [discussion]);
 
@@ -109,8 +121,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     const newAttachments = files.map(file => ({
-      file,
-      previewUrl: URL.createObjectURL(file)
+      file, previewUrl: URL.createObjectURL(file)
     }));
     setAttachments([...attachments, ...newAttachments]);
   };
@@ -119,19 +130,14 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
-  // 🔥 FLICKER-FREE VOTING
   const handleVote = async (targetType, targetId, voteValue) => {
-    // 1. Update the UI instantly
     setLocalVotes(prev => {
       if (targetType === 'discussion') return { ...prev, discussion: prev.discussion + voteValue };
       return { ...prev, replies: { ...prev.replies, [targetId]: (prev.replies[targetId] || 0) + voteValue }};
     });
-
     try {
-      // 2. Send to backend silently (Notice we DO NOT call onUpdate() here!)
       await votePost(targetType, targetId, voteValue);
     } catch (err) {
-      // 3. Rollback if it fails
       toast.error("Failed to register vote.");
       setLocalVotes(prev => {
         if (targetType === 'discussion') return { ...prev, discussion: prev.discussion - voteValue };
@@ -140,12 +146,10 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     }
   };
 
-  // 🔥 FLICKER-FREE REACTIONS
   const handleReact = async (targetType, targetId, emoji) => {
     setShowEmojiPicker(null);
     const key = `${targetType}-${targetId}`;
     
-    // Optimistic UI update for reactions
     setLocalReactions(prev => {
       const current = prev[key] || {};
       const count = current[emoji]?.count || 0;
@@ -169,6 +173,17 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     }
   };
 
+  // 🔥 THE FIX: Wires up the "Reply" button inside nested comments
+  const handleReplyToUser = (authorName, authorId) => {
+    const mentionString = `@[${authorName}](${authorId}) `;
+    
+    // Add the mention to the text box
+    setReplyText(prev => prev ? `${prev}\n${mentionString}` : mentionString);
+    
+    // Smooth scroll down to the composer
+    composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const handlePostReply = async (e) => {
     e.preventDefault();
     if (!replyText.trim() && attachments.length === 0) return;
@@ -187,8 +202,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       setReplyText('');
       setAttachments([]); 
       toast.success("Reply posted!");
-      
-      // We DO call onUpdate() here because we need the parent to fetch the newly created reply!
       if (onUpdate) onUpdate(); 
       
     } catch (err) {
@@ -241,7 +254,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
             </div>
           )}
 
-          {/* 🔥 THE FIX: Renders parsed mentions beautifully! */}
           <div className="text-gray-800 text-sm whitespace-pre-wrap leading-relaxed">
             {formatContent(discussion.description || discussion.content)}
           </div>
@@ -250,7 +262,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               {discussion.attachments.map((img, idx) => (
                 <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 group bg-gray-100 aspect-video">
-                  {/* 🔥 THE FIX: Appends VITE_API_URL so images actually load! */}
                   <img src={getImageUrl(img.url)} alt="attachment" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <button className="bg-white/90 text-gray-900 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm" onClick={() => window.open(getImageUrl(img.url), '_blank')}>
@@ -265,12 +276,10 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
           <div className="flex items-center flex-wrap gap-3 mt-5 relative">
             <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
               <button onClick={() => handleVote('discussion', discussion.id, 1)} className="px-2 py-1.5 text-gray-400 hover:bg-gray-200 hover:text-emerald-600 transition"><FiArrowUp className="h-4 w-4" /></button>
-              {/* Uses local state so it updates instantly without flickering */}
               <span className="text-xs font-bold text-gray-700 px-2">{localVotes.discussion}</span>
               <button onClick={() => handleVote('discussion', discussion.id, -1)} className="px-2 py-1.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 transition"><FiArrowDown className="h-4 w-4" /></button>
             </div>
             
-            {/* Dynamic Local Reactions rendering */}
             {localReactions[`discussion-${discussion.id}`] && Object.entries(localReactions[`discussion-${discussion.id}`]).map(([em, data]) => (
                <ReactionPill key={em} emoji={em} count={data.count} active={data.active} onClick={() => handleReact('discussion', discussion.id, em)} />
             ))}
@@ -320,7 +329,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                     <span className="text-xs text-gray-500 text-right flex-1">{formatDate(reply.created_at || reply.time)}</span>
                   </div>
                   
-                  {/* 🔥 THE FIX: Parses mentions in replies too! */}
                   <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                     {formatContent(reply.content)}
                   </div>
@@ -337,7 +345,14 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                     <button onClick={() => handleVote('reply', reply.id, 1)} className="hover:text-indigo-600 flex items-center gap-1">
                       <FiArrowUp /> {replyVotes}
                     </button>
-                    <button className="hover:text-gray-900">Reply</button>
+                    
+                    {/* 🔥 THE FIX: Clicking Reply now tags the user and scrolls down */}
+                    <button 
+                      onClick={() => handleReplyToUser(reply.author, reply.author_id)} 
+                      className="hover:text-gray-900"
+                    >
+                      Reply
+                    </button>
                     
                     <div className="relative flex items-center gap-2">
                       {Object.entries(replyReactions).map(([em, data]) => (
@@ -363,13 +378,12 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
       {/* 4. REPLY COMPOSER BOX */}
       {!discussion.solved ? (
-        <div className="p-6 bg-white border-t border-gray-200">
+        <div ref={composerRef} className="p-6 bg-white border-t border-gray-200">
           <form onSubmit={handlePostReply} className="flex flex-col gap-3">
             <div className="flex items-start gap-3">
               <Avatar name="Current User" size="md" /> 
               <div className="flex-1 border border-gray-300 rounded-xl focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 bg-gray-50 focus-within:bg-white transition-all overflow-hidden flex flex-col">
                 
-                {/* 🔥 THE FIX: MentionsInput replacing standard textarea so you can tag staff in replies! */}
                 <MentionsInput
                   value={replyText}
                   onChange={(e, val) => setReplyText(val)}
