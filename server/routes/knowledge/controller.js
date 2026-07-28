@@ -126,9 +126,11 @@ export const deleteResource = async (req, res) => {
 
 export const getDiscussions = async (req, res) => {
     try {
-        const discussions = await knowledgeService.getDiscussions(req.params.workspaceId);
+        // 🔥 Passed req.user.id as the second argument!
+        const discussions = await knowledgeService.getDiscussions(req.params.workspaceId, req.user.id);
         res.json(discussions);
     } catch (err) {
+        console.error("Fetch Discussions Error:", err);
         res.status(500).json({ error: 'Failed to fetch discussions' });
     }
 };

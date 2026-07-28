@@ -275,33 +275,61 @@ const logHistory = async (workspaceId, entityType, entityId, action, oldContent,
 // ==========================================
 // DISCUSSIONS
 // ==========================================
-export const getDiscussions = async (workspaceId) => {
-    // Fetch discussions with author name and reply count
+export const getDiscussions = async (workspaceId, userId) => {
+    // 1. Fetch main discussions with user_vote
     const res = await pool.query(
         `SELECT d.*, s.name as author_name, 
-        (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count
+        (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count,
+        (SELECT vote_type FROM knowledge_votes WHERE discussion_id = d.id AND staff_id = $2) as user_vote
         FROM knowledge_discussions d
         JOIN staff s ON d.author_id = s.id
         WHERE d.workspace_id = $1
         ORDER BY d.created_at DESC`,
-        [workspaceId]
+        [workspaceId, userId]
     );
 
-    // Fetch replies for all these discussions
+    // 2. Fetch all replies with user_vote
     const repliesRes = await pool.query(
-        `SELECT r.*, s.name as author_name 
+        `SELECT r.*, s.name as author_name,
+        (SELECT vote_type FROM knowledge_votes WHERE reply_id = r.id AND staff_id = $2) as user_vote 
          FROM knowledge_discussion_replies r
          JOIN staff s ON r.author_id = s.id
          WHERE r.discussion_id IN (SELECT id FROM knowledge_discussions WHERE workspace_id = $1)
          ORDER BY r.created_at ASC`,
-        [workspaceId]
+        [workspaceId, userId]
     );
 
-    // Attach replies to their respective discussions
-    return res.rows.map(discussion => ({
-        ...discussion,
-        replies: repliesRes.rows.filter(r => r.discussion_id === discussion.id)
-    }));
+    // 3. Fetch Reactions for the Discussions
+    const discReactRes = await pool.query(`
+        SELECT discussion_id, emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
+        FROM knowledge_reactions
+        WHERE discussion_id IN (SELECT id FROM knowledge_discussions WHERE workspace_id = $1)
+        GROUP BY discussion_id, emoji
+    `, [workspaceId, userId]);
+
+    // 4. Fetch Reactions for the Replies
+    const replyReactRes = await pool.query(`
+        SELECT reply_id, emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
+        FROM knowledge_reactions
+        WHERE reply_id IN (SELECT id FROM knowledge_discussion_replies WHERE discussion_id IN (SELECT id FROM knowledge_discussions WHERE workspace_id = $1))
+        GROUP BY reply_id, emoji
+    `, [workspaceId, userId]);
+
+    // 5. Attach everything together!
+    return res.rows.map(discussion => {
+        const discussionReactions = discReactRes.rows.filter(react => react.discussion_id === discussion.id);
+        
+        const replies = repliesRes.rows.filter(r => r.discussion_id === discussion.id).map(r => ({
+            ...r,
+            reactions: replyReactRes.rows.filter(react => react.reply_id === r.id)
+        }));
+
+        return {
+            ...discussion,
+            reactions: discussionReactions,
+            replies
+        };
+    });
 };
 
 export const createDiscussion = async (workspaceId, payload, staffId) => {
