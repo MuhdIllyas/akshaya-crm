@@ -196,13 +196,25 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
   // 🔥 THE FIX: Wires up the "Reply" button inside nested comments
   const handleReplyToUser = (authorName, authorId) => {
-    const mentionString = `@[${authorName}](${authorId}) `;
+    // 1. Format the mention string so the parser picks it up as a blue pill
+    const mentionString = authorId ? `@[${authorName}](${authorId}) ` : `@${authorName} `;
     
-    // Add the mention to the text box
+    // 2. Add the text to the state
     setReplyText(prev => prev ? `${prev}\n${mentionString}` : mentionString);
     
-    // Smooth scroll down to the composer
+    // 3. Scroll the screen down to the composer box
     composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // 4. 🔥 THE FIX: Find the hidden MentionsInput textarea and force it to focus!
+    setTimeout(() => {
+      const textarea = composerRef.current?.querySelector('textarea');
+      if (textarea) {
+        textarea.focus();
+        // Move the blinking typing cursor to the very end of the text
+        const len = textarea.value.length;
+        textarea.setSelectionRange(len, len);
+      }
+    }, 100);
   };
 
   const handlePostReply = async (e) => {
