@@ -381,3 +381,35 @@ export const lookupCrm = async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 };
+
+export const addReply = async (req, res) => {
+    try {
+        // 🔥 Now extracts attachments from req.body
+        const { content, attachments } = req.body;
+        const reply = await knowledgeService.addReply(req.params.discussionId, content, attachments, req.user.id);
+        res.status(201).json(reply);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to post reply' });
+    }
+};
+
+export const votePost = async (req, res) => {
+    try {
+        const { targetType, targetId, voteValue } = req.body;
+        const result = await knowledgeService.votePost(targetType, targetId, voteValue);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to record vote' });
+    }
+};
+
+export const toggleReaction = async (req, res) => {
+    try {
+        const { targetType, targetId, emoji } = req.body;
+        const result = await knowledgeService.toggleReaction(req.user.id, targetType, targetId, emoji);
+        res.json(result);
+    } catch (err) {
+        console.error("💥 REACTION CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to toggle reaction' });
+    }
+};

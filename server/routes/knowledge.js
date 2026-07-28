@@ -136,4 +136,7 @@ router.get('/hub/activity', authorizeRoles(ALL_STAFF), knowledgeController.getRe
 // ==========================================
 router.get('/hub/crm-lookup', authorizeRoles(ALL_STAFF), knowledgeController.lookupCrm);
 
+router.post('/hub/vote', authorizeRoles(ALL_STAFF), knowledgeController.votePost);
+router.post('/hub/react', authorizeRoles(ALL_STAFF), knowledgeController.toggleReaction);
+
 export default router;

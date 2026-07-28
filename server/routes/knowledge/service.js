@@ -305,7 +305,7 @@ export const getDiscussions = async (workspaceId) => {
 };
 
 export const createDiscussion = async (workspaceId, payload, staffId) => {
-    const { title, content, category, priority, tags, relatedTo, relatedId } = payload;
+    const { title, content, category, priority, tags, relatedTo, relatedId, attachments } = payload;
     
     const customerStr = relatedTo === 'customer' ? relatedId : null;
     const appStr = relatedTo === 'serviceEntry' ? relatedId : null;
@@ -360,28 +360,27 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
     // If it passes the lock, proceed with the actual insertion
     const res = await pool.query(
         `INSERT INTO knowledge_discussions 
-        (workspace_id, title, content, category, priority, tags, author_id, crm_customer, crm_application) 
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [workspaceId, title, content, category, priority, tags || [], staffId, customerStr, appStr]
+        (workspace_id, title, content, category, priority, tags, author_id, crm_customer, crm_application, attachments) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [
+          workspaceId, title, content, category, priority, tags || [], 
+          staffId, customerStr, appStr, JSON.stringify(attachments || []) // Safely stringifies the JSON array
+        ]
     );
     
-    // Increment workspace updated_at
     await pool.query(`UPDATE knowledge_workspaces SET updated_at = NOW() WHERE id = $1`, [workspaceId]);
     return res.rows[0];
 };
 
-export const addReply = async (discussionId, content, authorId) => {
-    // 1. Save the actual reply
+export const addReply = async (discussionId, content, attachments, authorId) => {
+    // 1. Save the actual reply with attachments
     const replyRes = await pool.query(
-        'INSERT INTO knowledge_discussion_replies (discussion_id, content, author_id) VALUES ($1, $2, $3) RETURNING *',
-        [discussionId, content, authorId]
+        'INSERT INTO knowledge_discussion_replies (discussion_id, content, attachments, author_id) VALUES ($1, $2, $3, $4) RETURNING *',
+        [discussionId, content, JSON.stringify(attachments || []), authorId]
     );
 
-    // 2. THE ENGINE: Scan the text for mentions and notify them!
     const mentionedIds = extractMentions(content);
-    
     for (const targetId of mentionedIds) {
-        // NOTE: If you WANT to notify yourself for testing, delete this "if" statement!
         if (targetId !== authorId) { 
             await pool.query(
                 'INSERT INTO knowledge_mentions (staff_id, author_id, discussion_id, reply_id) VALUES ($1, $2, $3, $4)',
@@ -389,7 +388,6 @@ export const addReply = async (discussionId, content, authorId) => {
             );
         }
     }
-
     return replyRes.rows[0];
 };
 
@@ -820,4 +818,42 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
         status: record.status,
         step: record.current_step
     };
+};
+
+// ==========================================
+// REACTIONS & VOTING
+// ==========================================
+export const votePost = async (targetType, targetId, voteValue) => {
+    // targetType: 'discussion' or 'reply'
+    // voteValue: 1 (upvote) or -1 (downvote)
+    const table = targetType === 'discussion' ? 'knowledge_discussions' : 'knowledge_discussion_replies';
+    
+    const res = await pool.query(
+        `UPDATE ${table} SET upvotes = upvotes + $1 WHERE id = $2 RETURNING upvotes`,
+        [voteValue, targetId]
+    );
+    return res.rows[0];
+};
+
+export const toggleReaction = async (staffId, targetType, targetId, emoji) => {
+    const column = targetType === 'discussion' ? 'discussion_id' : 'reply_id';
+    
+    // 1. Check if the user already reacted with this specific emoji
+    const check = await pool.query(
+        `SELECT id FROM knowledge_reactions WHERE staff_id = $1 AND ${column} = $2 AND emoji = $3`,
+        [staffId, targetId, emoji]
+    );
+
+    if (check.rows.length > 0) {
+        // If it exists, toggle it OFF (Delete)
+        await pool.query('DELETE FROM knowledge_reactions WHERE id = $1', [check.rows[0].id]);
+        return { action: 'removed', emoji };
+    } else {
+        // If it doesn't exist, toggle it ON (Insert)
+        await pool.query(
+            `INSERT INTO knowledge_reactions (staff_id, ${column}, emoji) VALUES ($1, $2, $3)`,
+            [staffId, targetId, emoji]
+        );
+        return { action: 'added', emoji };
+    }
 };
