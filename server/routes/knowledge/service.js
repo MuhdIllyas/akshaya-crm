@@ -571,20 +571,15 @@ export const getAllDiscussions = async () => {
 };
 
 export const getDiscussionById = async (id, userId) => { 
-    // 1. Get the main post
+    // 1. Get the main post (Add user_vote)
     const discussionRes = await pool.query(`
         SELECT 
             d.*, 
             s.name as author_name, 
             srv.name as service_name,
-            EXISTS(
-                SELECT 1 FROM knowledge_bookmarks 
-                WHERE target_type = 'discussion' AND target_id = d.id AND staff_id = $2
-            ) as is_bookmarked,
-            EXISTS(
-                SELECT 1 FROM knowledge_followers 
-                WHERE discussion_id = d.id AND staff_id = $2
-            ) as is_following 
+            (SELECT vote_type FROM knowledge_votes WHERE discussion_id = d.id AND staff_id = $2) as user_vote,
+            EXISTS(SELECT 1 FROM knowledge_bookmarks WHERE target_type = 'discussion' AND target_id = d.id AND staff_id = $2) as is_bookmarked,
+            EXISTS(SELECT 1 FROM knowledge_followers WHERE discussion_id = d.id AND staff_id = $2) as is_following 
         FROM knowledge_discussions d
         JOIN staff s ON d.author_id = s.id
         JOIN knowledge_workspaces kw ON d.workspace_id = kw.id
@@ -595,14 +590,15 @@ export const getDiscussionById = async (id, userId) => {
     if (discussionRes.rows.length === 0) throw new Error("Discussion not found");
     const discussion = discussionRes.rows[0];
 
-    // 2. Get the replies 
+    // 2. Get the replies (Add user_vote)
     const repliesRes = await pool.query(`
-        SELECT r.*, s.name as author_name 
+        SELECT r.*, s.name as author_name,
+        (SELECT vote_type FROM knowledge_votes WHERE reply_id = r.id AND staff_id = $2) as user_vote
         FROM knowledge_discussion_replies r
         JOIN staff s ON r.author_id = s.id
         WHERE r.discussion_id = $1
         ORDER BY r.created_at ASC
-    `, [id]);
+    `, [id, userId]);
 
     // 🔥 3. GET REACTIONS FOR THE DISCUSSION
     const discReactRes = await pool.query(`
@@ -845,16 +841,54 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
 // ==========================================
 // REACTIONS & VOTING
 // ==========================================
-export const votePost = async (targetType, targetId, voteValue) => {
-    // targetType: 'discussion' or 'reply'
-    // voteValue: 1 (upvote) or -1 (downvote)
+export const votePost = async (staffId, targetType, targetId, voteValue) => {
+    const column = targetType === 'discussion' ? 'discussion_id' : 'reply_id';
     const table = targetType === 'discussion' ? 'knowledge_discussions' : 'knowledge_discussion_replies';
     
-    const res = await pool.query(
-        `UPDATE ${table} SET upvotes = upvotes + $1 WHERE id = $2 RETURNING upvotes`,
-        [voteValue, targetId]
-    );
-    return res.rows[0];
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // 1. Check if the user already voted on this specific post
+        const check = await client.query(
+            `SELECT id, vote_type FROM knowledge_votes WHERE staff_id = $1 AND ${column} = $2`,
+            [staffId, targetId]
+        );
+
+        let newTotal;
+
+        if (check.rows.length > 0) {
+            const existingVote = check.rows[0].vote_type;
+            
+            if (existingVote === voteValue) {
+                // SCENARIO A: They clicked the same button again. Remove their vote!
+                await client.query(`DELETE FROM knowledge_votes WHERE id = $1`, [check.rows[0].id]);
+                const res = await client.query(`UPDATE ${table} SET upvotes = upvotes - $1 WHERE id = $2 RETURNING upvotes`, [voteValue, targetId]);
+                newTotal = res.rows[0].upvotes;
+            } else {
+                // SCENARIO B: They switched their vote (Downvote to Upvote). 
+                await client.query(`UPDATE knowledge_votes SET vote_type = $1 WHERE id = $2`, [voteValue, check.rows[0].id]);
+                const res = await client.query(`UPDATE ${table} SET upvotes = upvotes + $1 WHERE id = $2 RETURNING upvotes`, [voteValue * 2, targetId]);
+                newTotal = res.rows[0].upvotes;
+            }
+        } else {
+            // SCENARIO C: Brand new vote!
+            await client.query(
+                `INSERT INTO knowledge_votes (staff_id, ${column}, vote_type) VALUES ($1, $2, $3)`,
+                [staffId, targetId, voteValue]
+            );
+            const res = await client.query(`UPDATE ${table} SET upvotes = upvotes + $1 WHERE id = $2 RETURNING upvotes`, [voteValue, targetId]);
+            newTotal = res.rows[0].upvotes;
+        }
+
+        await client.query('COMMIT');
+        return { upvotes: newTotal };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
 };
 
 export const toggleReaction = async (staffId, targetType, targetId, emoji) => {

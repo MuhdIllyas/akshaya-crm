@@ -387,9 +387,10 @@ export const addReply = async (req, res) => {
 export const votePost = async (req, res) => {
     try {
         const { targetType, targetId, voteValue } = req.body;
-        const result = await knowledgeService.votePost(targetType, targetId, voteValue);
+        const result = await knowledgeService.votePost(req.user.id, targetType, targetId, voteValue);
         res.json(result);
     } catch (err) {
+        console.error("💥 VOTE CRASH INFO:", err);
         res.status(500).json({ error: 'Failed to record vote' });
     }
 };

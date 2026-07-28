@@ -66,17 +66,21 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(null); 
   const AVAILABLE_EMOJIS = ['👍', '👀', '🎉', '🚀', '❤️', '💡'];
 
-  const [localVotes, setLocalVotes] = useState({ discussion: 0, replies: {} });
+  const [localVotes, setLocalVotes] = useState({ 
+    discussion: { total: 0, userVote: 0 }, 
+    replies: {} 
+  });
   const [localReactions, setLocalReactions] = useState({});
 
   // 🔥 THE FIX: Sync local state with the Database payloads on Refresh
   useEffect(() => {
     if (discussion) {
-      // 1. Sync Votes
       const replyVotes = {};
-      discussion.replies?.forEach(r => { replyVotes[r.id] = r.upvotes || 0; });
+      discussion.replies?.forEach(r => { 
+        replyVotes[r.id] = { total: r.upvotes || 0, userVote: r.user_vote || 0 }; 
+      });
       setLocalVotes({
-        discussion: discussion.upvotes || 0,
+        discussion: { total: discussion.upvotes || 0, userVote: discussion.user_vote || 0 },
         replies: replyVotes
       });
 
@@ -130,19 +134,36 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
-  const handleVote = async (targetType, targetId, voteValue) => {
+  const handleVote = async (targetType, targetId, incomingVote) => {
     setLocalVotes(prev => {
-      if (targetType === 'discussion') return { ...prev, discussion: prev.discussion + voteValue };
-      return { ...prev, replies: { ...prev.replies, [targetId]: (prev.replies[targetId] || 0) + voteValue }};
+      const isDiscussion = targetType === 'discussion';
+      const currentObj = isDiscussion ? prev.discussion : prev.replies[targetId];
+      
+      let newTotal = currentObj.total;
+      let newUserVote;
+
+      // Smart Math for Toggle Logic
+      if (currentObj.userVote === incomingVote) {
+        newTotal -= incomingVote; // Removing vote
+        newUserVote = 0;
+      } else {
+        const delta = incomingVote - (currentObj.userVote || 0);
+        newTotal += delta; // Swapping or Adding vote
+        newUserVote = incomingVote;
+      }
+
+      if (isDiscussion) {
+        return { ...prev, discussion: { total: newTotal, userVote: newUserVote } };
+      } else {
+        return { ...prev, replies: { ...prev.replies, [targetId]: { total: newTotal, userVote: newUserVote } } };
+      }
     });
+
     try {
-      await votePost(targetType, targetId, voteValue);
+      await votePost(targetType, targetId, incomingVote);
     } catch (err) {
       toast.error("Failed to register vote.");
-      setLocalVotes(prev => {
-        if (targetType === 'discussion') return { ...prev, discussion: prev.discussion - voteValue };
-        return { ...prev, replies: { ...prev.replies, [targetId]: (prev.replies[targetId] || 0) - voteValue }};
-      });
+      if (onUpdate) onUpdate(); // Reset UI if it fails
     }
   };
 
@@ -275,9 +296,17 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
           <div className="flex items-center flex-wrap gap-3 mt-5 relative">
             <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
-              <button onClick={() => handleVote('discussion', discussion.id, 1)} className="px-2 py-1.5 text-gray-400 hover:bg-gray-200 hover:text-emerald-600 transition"><FiArrowUp className="h-4 w-4" /></button>
-              <span className="text-xs font-bold text-gray-700 px-2">{localVotes.discussion}</span>
-              <button onClick={() => handleVote('discussion', discussion.id, -1)} className="px-2 py-1.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 transition"><FiArrowDown className="h-4 w-4" /></button>
+              <button onClick={() => handleVote('discussion', discussion.id, 1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === 1 ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 hover:bg-gray-200'}`}>
+                <FiArrowUp className="h-4 w-4" />
+              </button>
+              
+              <span className={`text-xs font-bold px-2 ${localVotes.discussion.userVote === 1 ? 'text-emerald-600' : localVotes.discussion.userVote === -1 ? 'text-red-600' : 'text-gray-700'}`}>
+                {localVotes.discussion.total}
+              </span>
+              
+              <button onClick={() => handleVote('discussion', discussion.id, -1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === -1 ? 'text-red-600 bg-red-50' : 'text-gray-400 hover:bg-gray-200'}`}>
+                <FiArrowDown className="h-4 w-4" />
+              </button>
             </div>
             
             {localReactions[`discussion-${discussion.id}`] && Object.entries(localReactions[`discussion-${discussion.id}`]).map(([em, data]) => (
@@ -342,8 +371,12 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                   )}
 
                   <div className="flex items-center gap-4 mt-2 text-xs font-semibold text-gray-500">
-                    <button onClick={() => handleVote('reply', reply.id, 1)} className="hover:text-indigo-600 flex items-center gap-1">
-                      <FiArrowUp /> {replyVotes}
+                    {/* The Reply Upvote Button */}
+                    <button 
+                      onClick={() => handleVote('reply', reply.id, 1)} 
+                      className={`flex items-center gap-1 transition ${localVotes.replies[reply.id]?.userVote === 1 ? 'text-emerald-600' : 'hover:text-indigo-600'}`}
+                    >
+                      <FiArrowUp /> {localVotes.replies[reply.id]?.total || 0}
                     </button>
                     
                     {/* 🔥 THE FIX: Clicking Reply now tags the user and scrolls down */}
