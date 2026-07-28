@@ -144,15 +144,6 @@ export const createDiscussion = async (req, res) => {
     }
 };
 
-export const addReply = async (req, res) => {
-    try {
-        const reply = await knowledgeService.addReply(req.params.discussionId, req.body.content, req.user.id);
-        res.status(201).json(reply);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to post reply' });
-    }
-};
-
 export const getCases = async (req, res) => {
     try {
         // We can just write the query right here for simplicity, or put it in service.js
