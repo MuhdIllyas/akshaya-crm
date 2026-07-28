@@ -570,7 +570,6 @@ export const getAllDiscussions = async () => {
     return res.rows;
 };
 
-// THE FIX: Added userId parameter
 export const getDiscussionById = async (id, userId) => { 
     // 1. Get the main post
     const discussionRes = await pool.query(`
@@ -578,7 +577,6 @@ export const getDiscussionById = async (id, userId) => {
             d.*, 
             s.name as author_name, 
             srv.name as service_name,
-            -- THE FIX: Check if this specific user has bookmarked this specific thread
             EXISTS(
                 SELECT 1 FROM knowledge_bookmarks 
                 WHERE target_type = 'discussion' AND target_id = d.id AND staff_id = $2
@@ -592,7 +590,7 @@ export const getDiscussionById = async (id, userId) => {
         JOIN knowledge_workspaces kw ON d.workspace_id = kw.id
         LEFT JOIN services srv ON kw.service_id = srv.id
         WHERE d.id = $1
-    `, [id, userId]); // <-- Passed userId to the SQL array
+    `, [id, userId]);
 
     if (discussionRes.rows.length === 0) throw new Error("Discussion not found");
     const discussion = discussionRes.rows[0];
@@ -606,7 +604,31 @@ export const getDiscussionById = async (id, userId) => {
         ORDER BY r.created_at ASC
     `, [id]);
 
-    return { ...discussion, replies: repliesRes.rows };
+    // 🔥 3. GET REACTIONS FOR THE DISCUSSION
+    const discReactRes = await pool.query(`
+        SELECT emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
+        FROM knowledge_reactions
+        WHERE discussion_id = $1
+        GROUP BY emoji
+    `, [id, userId]);
+
+    // 🔥 4. GET REACTIONS FOR ALL REPLIES
+    const replyReactRes = await pool.query(`
+        SELECT reply_id, emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
+        FROM knowledge_reactions
+        WHERE reply_id IN (SELECT id FROM knowledge_discussion_replies WHERE discussion_id = $1)
+        GROUP BY reply_id, emoji
+    `, [id, userId]);
+
+    // 5. ATTACH REACTIONS TO THE PAYLOAD
+    discussion.reactions = discReactRes.rows;
+    
+    const replies = repliesRes.rows.map(r => ({
+        ...r,
+        reactions: replyReactRes.rows.filter(react => react.reply_id === r.id)
+    }));
+
+    return { ...discussion, replies };
 };
 
 export const getMyMentions = async (staffId) => {
