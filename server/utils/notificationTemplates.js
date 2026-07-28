@@ -2,7 +2,8 @@ export const NOTIFICATION_CATEGORIES = {
   COMMUNICATION: 'communication',
   WORK: 'work',
   FINANCE: 'finance',
-  SYSTEM: 'system'
+  SYSTEM: 'system',
+  KNOWLEDGE: 'knowledge'
 };
 
 export const NOTIFICATION_TYPES = {
@@ -19,7 +20,12 @@ export const NOTIFICATION_TYPES = {
   PAYMENT: 'payment',
   REVIEW: 'review',
   TEAM: 'team',
-  SYSTEM: 'system'
+  SYSTEM: 'system',
+
+  //Operation Hub
+  KNOWLEDGE_MENTION: 'knowledge_mention',
+  KNOWLEDGE_REPLY: 'knowledge_reply',
+  KNOWLEDGE_SOLVED: 'knowledge_solved'
 };
 
 export const notificationTemplates = {
@@ -88,6 +94,43 @@ export const notificationTemplates = {
     message: data.message,
     priority: 'normal',
     metadata: data.metadata || {}
+  }),
+
+  // ==========================================
+  // 🔥 KNOWLEDGE HUB TEMPLATES
+  // ==========================================
+  knowledgeMention: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_MENTION,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '📣 Mentioned in Discussion',
+    message: `${data.senderName} mentioned you in a discussion.`,
+    priority: 'high',
+    metadata: {
+      'Discussion': data.discussionTitle
+    }
+  }),
+
+  knowledgeReply: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_REPLY,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '💬 New Reply',
+    message: `${data.senderName} replied to your discussion.`,
+    priority: 'normal',
+    metadata: {
+      'Discussion': data.discussionTitle
+    }
+  }),
+
+  knowledgeSolved: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_SOLVED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '🏆 Best Answer!',
+    message: `Your reply was marked as the Best Answer.`,
+    priority: 'high',
+    metadata: {
+      'Discussion': data.discussionTitle,
+      'Marked By': data.solvedByName
+    }
   })
   
   // Add other templates here as the CRM grows...

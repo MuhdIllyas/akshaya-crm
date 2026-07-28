@@ -1,5 +1,7 @@
-//knowledge - service.js
 import pool from '../../db.js';
+// 🔥 IMPORTED NOTIFICATION ENGINE
+import notificationService from '../notifications/notificationService.js'; 
+import { notificationTemplates } from '../notifications/notificationTemplates.js';
 
 // ==========================================
 // WORKSPACE & STATS (Inheritance Logic)
@@ -62,7 +64,6 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
         workspace = workspaceRes.rows[0];
     }
 
-    // 1. Added the COUNT queries to the Promise.all array (and added discussionsRes, casesRes to the destructured array)
     const [docsRes, blocksRes, resourcesRes, contributorsRes, discussionsRes, casesRes] = await Promise.all([
         pool.query('SELECT * FROM knowledge_documents WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY sort_order ASC', [workspace.id]),
         pool.query(
@@ -83,7 +84,6 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
         blocks: blocksRes.rows.filter(b => b.document_id === doc.id)
     }));
 
-    // 2. Updated the stats object to use the real database counts!
     const stats = {
         discussionCount: parseInt(discussionsRes.rows[0].count, 10) || 0, 
         caseCount: parseInt(casesRes.rows[0].count, 10) || 0,
@@ -276,7 +276,6 @@ const logHistory = async (workspaceId, entityType, entityId, action, oldContent,
 // DISCUSSIONS
 // ==========================================
 export const getDiscussions = async (workspaceId, userId) => {
-    // 1. Fetch main discussions with user_vote
     const res = await pool.query(
         `SELECT d.*, s.name as author_name, 
         (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count,
@@ -288,7 +287,6 @@ export const getDiscussions = async (workspaceId, userId) => {
         [workspaceId, userId]
     );
 
-    // 2. Fetch all replies with user_vote
     const repliesRes = await pool.query(
         `SELECT r.*, s.name as author_name,
         (SELECT vote_type FROM knowledge_votes WHERE reply_id = r.id AND staff_id = $2) as user_vote 
@@ -299,7 +297,6 @@ export const getDiscussions = async (workspaceId, userId) => {
         [workspaceId, userId]
     );
 
-    // 3. Fetch Reactions for the Discussions
     const discReactRes = await pool.query(`
         SELECT discussion_id, emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
         FROM knowledge_reactions
@@ -307,7 +304,6 @@ export const getDiscussions = async (workspaceId, userId) => {
         GROUP BY discussion_id, emoji
     `, [workspaceId, userId]);
 
-    // 4. Fetch Reactions for the Replies
     const replyReactRes = await pool.query(`
         SELECT reply_id, emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
         FROM knowledge_reactions
@@ -315,10 +311,8 @@ export const getDiscussions = async (workspaceId, userId) => {
         GROUP BY reply_id, emoji
     `, [workspaceId, userId]);
 
-    // 5. Attach everything together!
     return res.rows.map(discussion => {
         const discussionReactions = discReactRes.rows.filter(react => react.discussion_id === discussion.id);
-        
         const replies = repliesRes.rows.filter(r => r.discussion_id === discussion.id).map(r => ({
             ...r,
             reactions: replyReactRes.rows.filter(react => react.reply_id === r.id)
@@ -338,14 +332,10 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
     const customerStr = relatedTo === 'customer' ? relatedId : null;
     const appStr = relatedTo === 'serviceEntry' ? relatedId : null;
 
-    // ====================================================================
-    // 🔥 THE ULTIMATE GUARD: STRICT CRM SERVICE VALIDATION
-    // ====================================================================
     if (appStr) {
         const searchParam = appStr.trim();
         const numericId = parseInt(searchParam, 10);
 
-        // 1. Get the Service ID that this Workspace belongs to
         const workspaceRes = await pool.query(
             `SELECT service_id FROM knowledge_workspaces WHERE id = $1`, 
             [workspaceId]
@@ -353,9 +343,7 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
         if (workspaceRes.rows.length === 0) throw new Error("Invalid Workspace.");
         const expectedServiceId = workspaceRes.rows[0].service_id;
 
-        // Only enforce the lock if this workspace is actually tied to a specific service
         if (expectedServiceId) {
-            // 2. Find the Category ID of the linked CRM Application
             let queryStr = `
                 SELECT se.category_id 
                 FROM service_tracking st
@@ -377,45 +365,96 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
 
             const actualServiceId = appRes.rows[0].category_id;
 
-            // 3. THE LOCK: Do they match?
             if (parseInt(expectedServiceId, 10) !== parseInt(actualServiceId, 10)) {
                 throw new Error("Integrity Check Failed: You cannot link this application to this workspace because they belong to different services.");
             }
         }
     }
-    // ====================================================================
 
-    // If it passes the lock, proceed with the actual insertion
     const res = await pool.query(
         `INSERT INTO knowledge_discussions 
         (workspace_id, title, content, category, priority, tags, author_id, crm_customer, crm_application, attachments) 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
         [
           workspaceId, title, content, category, priority, tags || [], 
-          staffId, customerStr, appStr, JSON.stringify(attachments || []) // Safely stringifies the JSON array
+          staffId, customerStr, appStr, JSON.stringify(attachments || []) 
         ]
     );
+    const newDiscussion = res.rows[0];
+
+    // 🔥 Trigger Notifications for Mentions in the Main Post
+    const mentionedIds = extractMentions(content);
+    if (mentionedIds.length > 0) {
+        const staffRes = await pool.query('SELECT name FROM staff WHERE id = $1', [staffId]);
+        const authorName = staffRes.rows[0].name;
+
+        for (const targetId of mentionedIds) {
+            if (targetId !== staffId) { 
+                await pool.query(
+                    'INSERT INTO knowledge_mentions (staff_id, author_id, discussion_id) VALUES ($1, $2, $3)',
+                    [targetId, staffId, newDiscussion.id]
+                );
+                await notificationService.createNotification({
+                    recipientStaffId: targetId,
+                    senderStaffId: staffId,
+                    relatedEntityType: 'discussion',
+                    relatedEntityId: newDiscussion.id,
+                    ...notificationTemplates.knowledgeMention({ senderName: authorName, discussionTitle: title })
+                });
+            }
+        }
+    }
     
     await pool.query(`UPDATE knowledge_workspaces SET updated_at = NOW() WHERE id = $1`, [workspaceId]);
-    return res.rows[0];
+    return newDiscussion;
 };
 
 export const addReply = async (discussionId, content, attachments, authorId) => {
-    // 1. Save the actual reply with attachments
+    const contextRes = await pool.query(`
+        SELECT d.title, d.author_id as discussion_author_id, s.name as replier_name 
+        FROM knowledge_discussions d
+        CROSS JOIN staff s 
+        WHERE d.id = $1 AND s.id = $2
+    `, [discussionId, authorId]);
+    
+    const { title, discussion_author_id, replier_name } = contextRes.rows[0];
+
     const replyRes = await pool.query(
         'INSERT INTO knowledge_discussion_replies (discussion_id, content, attachments, author_id) VALUES ($1, $2, $3, $4) RETURNING *',
         [discussionId, content, JSON.stringify(attachments || []), authorId]
     );
+    const replyId = replyRes.rows[0].id;
 
+    // 🔥 Notify Mentions
     const mentionedIds = extractMentions(content);
     for (const targetId of mentionedIds) {
         if (targetId !== authorId) { 
             await pool.query(
                 'INSERT INTO knowledge_mentions (staff_id, author_id, discussion_id, reply_id) VALUES ($1, $2, $3, $4)',
-                [targetId, authorId, discussionId, replyRes.rows[0].id]
+                [targetId, authorId, discussionId, replyId]
             );
+            
+            await notificationService.createNotification({
+                recipientStaffId: targetId,
+                senderStaffId: authorId,
+                relatedEntityType: 'discussion',
+                relatedEntityId: discussionId,
+                ...notificationTemplates.knowledgeMention({ senderName: replier_name, discussionTitle: title })
+            });
         }
     }
+
+    // 🔥 Notify Discussion Author
+    if (discussion_author_id !== authorId && !mentionedIds.includes(discussion_author_id)) {
+         await notificationService.createNotification({
+             recipientStaffId: discussion_author_id,
+             senderStaffId: authorId,
+             relatedEntityType: 'discussion',
+             relatedEntityId: discussionId,
+             ...notificationTemplates.knowledgeReply({ senderName: replier_name, discussionTitle: title })
+         });
+    }
+
     return replyRes.rows[0];
 };
 
@@ -436,42 +475,46 @@ export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
     try {
         await client.query('BEGIN');
         
-        // 1. Mark discussion as solved
         await client.query(`UPDATE knowledge_discussions SET status = 'solved', updated_at = NOW() WHERE id = $1`, [discussionId]);
         
         let solutionText = "This issue was manually marked as resolved by staff.";
+        let replyAuthorId = null;
 
-        // 2. Mark specific reply as best answer AND grab the text for the Case
         if (replyId) {
             await client.query(`UPDATE knowledge_discussion_replies SET is_best_answer = true WHERE id = $1`, [replyId]);
             
-            const replyRes = await client.query(`SELECT content FROM knowledge_discussion_replies WHERE id = $1`, [replyId]);
+            const replyRes = await client.query(`SELECT content, author_id FROM knowledge_discussion_replies WHERE id = $1`, [replyId]);
             if (replyRes.rows.length > 0) {
                 solutionText = replyRes.rows[0].content;
+                replyAuthorId = replyRes.rows[0].author_id;
             }
         }
 
-        // 3. Fetch the original discussion details
-        const discussionRes = await client.query(
-            `SELECT workspace_id, title, content, tags FROM knowledge_discussions WHERE id = $1`, 
-            [discussionId]
-        );
+        const discussionRes = await client.query(`SELECT workspace_id, title, content, tags FROM knowledge_discussions WHERE id = $1`, [discussionId]);
         const discussion = discussionRes.rows[0];
 
-        // 4. 🔥 THE FIX: Insert everything into the Solved Cases table!
+        const solverRes = await client.query('SELECT name FROM staff WHERE id = $1', [staffId]);
+        const solverName = solverRes.rows[0]?.name;
+
+        // 🔥 Notify the Best Answer Winner
+        if (replyAuthorId && replyAuthorId !== staffId) {
+            await notificationService.createNotification({
+                recipientStaffId: replyAuthorId,
+                senderStaffId: staffId,
+                relatedEntityType: 'discussion',
+                relatedEntityId: discussionId,
+                ...notificationTemplates.knowledgeSolved({
+                    discussionTitle: discussion.title,
+                    solvedByName: solverName
+                })
+            });
+        }
+
         await client.query(
             `INSERT INTO knowledge_cases 
             (workspace_id, title, description, solution, original_discussion_id, tags, solved_by) 
             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [
-                discussion.workspace_id, 
-                discussion.title, 
-                discussion.content, 
-                solutionText, 
-                discussionId, 
-                discussion.tags, 
-                staffId
-            ]
+            [discussion.workspace_id, discussion.title, discussion.content, solutionText, discussionId, discussion.tags, staffId]
         );
 
         await client.query('COMMIT');
@@ -484,18 +527,15 @@ export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
 };
 
 export const toggleBookmark = async (staffId, targetType, targetId) => {
-    // 1. Check if it's already bookmarked
     const check = await pool.query(
         'SELECT id FROM knowledge_bookmarks WHERE staff_id = $1 AND target_type = $2 AND target_id = $3',
         [staffId, targetType, targetId]
     );
 
     if (check.rows.length > 0) {
-        // Un-bookmark it
         await pool.query('DELETE FROM knowledge_bookmarks WHERE id = $1', [check.rows[0].id]);
         return { bookmarked: false };
     } else {
-        // Bookmark it
         await pool.query(
             'INSERT INTO knowledge_bookmarks (staff_id, target_type, target_id) VALUES ($1, $2, $3)',
             [staffId, targetType, targetId]
@@ -505,8 +545,6 @@ export const toggleBookmark = async (staffId, targetType, targetId) => {
 };
 
 export const getMyBookmarks = async (staffId) => {
-    // join the discussions table to grab the titles of bookmarked discussions
-    // (easily expand this query later to JOIN your documents/trainings tables too)
     const res = await pool.query(`
         SELECT b.*, d.title, d.status
         FROM knowledge_bookmarks b
@@ -526,7 +564,6 @@ export const createAnnouncement = async (title, content, category, priority, isP
     return res.rows[0];
 };
 
-// Update your getAnnouncements function to pull the staff name!
 export const getAnnouncements = async () => {
     const res = await pool.query(`
         SELECT a.*, s.name as author_name 
@@ -539,7 +576,6 @@ export const getAnnouncements = async () => {
 };
 
 export const getGlobalStats = async (staffId) => { 
-    // ADDED: drafts to the destructured array and the Promise.all
     const [discussions, cases, resources, announcements, trainings, mentions, drafts] = await Promise.all([
         pool.query("SELECT COUNT(*) FROM knowledge_discussions WHERE deleted_at IS NULL"),
         pool.query("SELECT COUNT(*) FROM knowledge_cases"),
@@ -581,7 +617,6 @@ export const createTraining = async (title, description, type, url, duration, st
 };
 
 export const getAllDiscussions = async () => {
-    // Fetches discussions across all workspaces, includes author name and service name
     const res = await pool.query(`
         SELECT 
             d.*, 
@@ -599,7 +634,6 @@ export const getAllDiscussions = async () => {
 };
 
 export const getDiscussionById = async (id, userId) => { 
-    // 1. Get the main post (Add user_vote)
     const discussionRes = await pool.query(`
         SELECT 
             d.*, 
@@ -618,7 +652,6 @@ export const getDiscussionById = async (id, userId) => {
     if (discussionRes.rows.length === 0) throw new Error("Discussion not found");
     const discussion = discussionRes.rows[0];
 
-    // 2. Get the replies (Add user_vote)
     const repliesRes = await pool.query(`
         SELECT r.*, s.name as author_name,
         (SELECT vote_type FROM knowledge_votes WHERE reply_id = r.id AND staff_id = $2) as user_vote
@@ -628,7 +661,6 @@ export const getDiscussionById = async (id, userId) => {
         ORDER BY r.created_at ASC
     `, [id, userId]);
 
-    // 🔥 3. GET REACTIONS FOR THE DISCUSSION
     const discReactRes = await pool.query(`
         SELECT emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
         FROM knowledge_reactions
@@ -636,7 +668,6 @@ export const getDiscussionById = async (id, userId) => {
         GROUP BY emoji
     `, [id, userId]);
 
-    // 🔥 4. GET REACTIONS FOR ALL REPLIES
     const replyReactRes = await pool.query(`
         SELECT reply_id, emoji, COUNT(*)::int as count, bool_or(staff_id = $2) as active
         FROM knowledge_reactions
@@ -644,7 +675,6 @@ export const getDiscussionById = async (id, userId) => {
         GROUP BY reply_id, emoji
     `, [id, userId]);
 
-    // 5. ATTACH REACTIONS TO THE PAYLOAD
     discussion.reactions = discReactRes.rows;
     
     const replies = repliesRes.rows.map(r => ({
@@ -704,7 +734,6 @@ export const toggleFollow = async (staffId, discussionId) => {
 };
 
 export const getMyFollowing = async (staffId) => {
-    // Fetches all followed discussions and counts their replies
     const res = await pool.query(`
         SELECT d.*, s.name as author_name, srv.name as service_name,
         (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count
@@ -719,7 +748,6 @@ export const getMyFollowing = async (staffId) => {
     return res.rows;
 };
 
-//History View
 export const logRecentView = async (staffId, targetType, targetId) => {
     await pool.query(
         `INSERT INTO knowledge_recent_views (staff_id, target_type, target_id, last_viewed_at) 
@@ -731,7 +759,6 @@ export const logRecentView = async (staffId, targetType, targetId) => {
 };
 
 export const getMyHistory = async (staffId) => {
-    // Fetches the last 50 viewed items, pulling the title from the discussions table
     const res = await pool.query(`
         SELECT v.*, d.title, d.status
         FROM knowledge_recent_views v
@@ -744,7 +771,6 @@ export const getMyHistory = async (staffId) => {
 };
 
 export const saveDraft = async (staffId, entityType, title, payload, draftId = null) => {
-    // If we pass an existing draftId, we update it. Otherwise, create a new one!
     if (draftId) {
         const res = await pool.query(
             `UPDATE knowledge_drafts 
@@ -775,9 +801,7 @@ export const deleteDraft = async (staffId, draftId) => {
     await pool.query('DELETE FROM knowledge_drafts WHERE id = $1 AND staff_id = $2', [draftId, staffId]);
 };
 
-//Recent Activity
 export const getRecentActivity = async (workspaceId = null) => {
-    // Merges new discussions and solved cases into one chronological feed
     const res = await pool.query(`
         (SELECT 'discussion' as type, d.title as target, s.name as user_name, d.created_at as time
          FROM knowledge_discussions d JOIN staff s ON d.author_id = s.id)
@@ -790,7 +814,6 @@ export const getRecentActivity = async (workspaceId = null) => {
     return res.rows;
 };
 
-// 🔥 expectedServiceId as the final argument
 export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, expectedServiceId) => {
     if (type !== 'serviceEntry') throw new Error("Currently only service applications are supported");
 
@@ -815,7 +838,6 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
     const params = [];
     let paramIndex = 1;
 
-    // 1. The ID Filter (Checks both TRK-123 and 123)
     if (!isNaN(numericId)) {
         queryStr += ` AND (st.application_number ILIKE $${paramIndex} OR st.id = $${paramIndex + 1})`;
         params.push(searchParam, numericId);
@@ -826,9 +848,6 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
         paramIndex += 1;
     }
 
-    // ====================================================================
-    // 🔥 THE FIX: STRICT SERVICE FILTER AT THE DATABASE LEVEL
-    // ====================================================================
     if (expectedServiceId) {
         queryStr += ` AND se.category_id::integer = $${paramIndex}`;
         params.push(parseInt(expectedServiceId, 10));
@@ -837,7 +856,6 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
 
     const res = await pool.query(queryStr, params);
 
-    // Provide a smart error message so they know exactly why it failed
     if (res.rows.length === 0) {
         if (expectedServiceId) {
             throw new Error(`Record not found in this workspace. Please ensure the tracking ID is correct and belongs to this specific service.`);
@@ -847,7 +865,6 @@ export const lookupCrmRecord = async (staffId, centreId, role, type, recordId, e
 
     const record = res.rows[0];
 
-    // Final security check: Ensure it belongs to their centre (if they aren't superadmin)
     if (role !== 'superadmin' && parseInt(record.centre_id) !== parseInt(centreId)) {
         throw new Error(`Access Denied: This record belongs to Centre ${record.centre_id}.`);
     }
@@ -877,7 +894,6 @@ export const votePost = async (staffId, targetType, targetId, voteValue) => {
     try {
         await client.query('BEGIN');
         
-        // 1. Check if the user already voted on this specific post
         const check = await client.query(
             `SELECT id, vote_type FROM knowledge_votes WHERE staff_id = $1 AND ${column} = $2`,
             [staffId, targetId]
@@ -889,18 +905,15 @@ export const votePost = async (staffId, targetType, targetId, voteValue) => {
             const existingVote = check.rows[0].vote_type;
             
             if (existingVote === voteValue) {
-                // SCENARIO A: They clicked the same button again. Remove their vote!
                 await client.query(`DELETE FROM knowledge_votes WHERE id = $1`, [check.rows[0].id]);
                 const res = await client.query(`UPDATE ${table} SET upvotes = upvotes - $1 WHERE id = $2 RETURNING upvotes`, [voteValue, targetId]);
                 newTotal = res.rows[0].upvotes;
             } else {
-                // SCENARIO B: They switched their vote (Downvote to Upvote). 
                 await client.query(`UPDATE knowledge_votes SET vote_type = $1 WHERE id = $2`, [voteValue, check.rows[0].id]);
                 const res = await client.query(`UPDATE ${table} SET upvotes = upvotes + $1 WHERE id = $2 RETURNING upvotes`, [voteValue * 2, targetId]);
                 newTotal = res.rows[0].upvotes;
             }
         } else {
-            // SCENARIO C: Brand new vote!
             await client.query(
                 `INSERT INTO knowledge_votes (staff_id, ${column}, vote_type) VALUES ($1, $2, $3)`,
                 [staffId, targetId, voteValue]
@@ -922,41 +935,19 @@ export const votePost = async (staffId, targetType, targetId, voteValue) => {
 export const toggleReaction = async (staffId, targetType, targetId, emoji) => {
     const column = targetType === 'discussion' ? 'discussion_id' : 'reply_id';
     
-    // 1. Check if the user already reacted with this specific emoji
     const check = await pool.query(
         `SELECT id FROM knowledge_reactions WHERE staff_id = $1 AND ${column} = $2 AND emoji = $3`,
         [staffId, targetId, emoji]
     );
 
     if (check.rows.length > 0) {
-        // If it exists, toggle it OFF (Delete)
         await pool.query('DELETE FROM knowledge_reactions WHERE id = $1', [check.rows[0].id]);
         return { action: 'removed', emoji };
     } else {
-        // If it doesn't exist, toggle it ON (Insert)
         await pool.query(
             `INSERT INTO knowledge_reactions (staff_id, ${column}, emoji) VALUES ($1, $2, $3)`,
             [staffId, targetId, emoji]
         );
         return { action: 'added', emoji };
     }
-};
-
-// ==========================================
-// FILE UPLOADS
-// ==========================================
-export const uploadKnowledgeFiles = async (files) => {
-  const formData = new FormData();
-  
-  // Append all files to the 'files' array in formData
-  files.forEach(file => {
-    formData.append('files', file);
-  });
-  
-  // Multer requires the multipart/form-data header!
-  const { data } = await api.post('/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
-  
-  return data.urls; 
 };
