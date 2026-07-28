@@ -52,7 +52,10 @@ export const NotificationProvider = ({ children }) => {
       setUnreadCount((prev) => prev + 1);
 
       // 🔥 EXPLICIT WHITELIST: Always show toasts for these specific types, plus anything 'high' priority
-      const allowedToastTypes = ['whatsapp_message', 'mention', 'review', 'conversation_assigned'];
+      const allowedToastTypes = [
+        'whatsapp_message', 'mention', 'review', 'conversation_assigned',
+        'knowledge_mention', 'knowledge_reply', 'knowledge_solved' 
+      ];
 
       if (
         notification.priority === 'high' || 

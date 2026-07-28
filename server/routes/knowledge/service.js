@@ -1,7 +1,7 @@
+//knowledge - service.js
 import pool from '../../db.js';
-// 🔥 IMPORTED NOTIFICATION ENGINE
-import notificationService from '../notifications/notificationService.js'; 
-import { notificationTemplates } from '../notifications/notificationTemplates.js';
+import notificationService from '../../utils/notificationService.js'; 
+import { notificationTemplates } from '../../utils/notificationTemplates.js';
 
 // ==========================================
 // WORKSPACE & STATS (Inheritance Logic)
