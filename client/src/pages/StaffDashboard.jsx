@@ -32,20 +32,20 @@ const formatDate = (date) => {
 const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 p-4 sm:p-5"
+    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 p-5"
   >
     <div className="flex items-center justify-between">
       <div>
-        <p className="font-medium text-gray-600 mb-1 text-xs sm:text-sm">{title}</p>
+        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
         {loading ? (
           <div className="h-8 w-20 bg-gray-200 animate-pulse rounded"></div>
         ) : (
-          <p className="font-bold text-gray-900 text-xl sm:text-2xl">{value}</p>
+          <p className="font-bold text-gray-900 text-2xl">{value}</p>
         )}
-        {subtitle && <p className="text-gray-500 text-xs sm:text-sm mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-gray-500 text-sm mt-1">{subtitle}</p>}
       </div>
-      <div className={`rounded-xl ${color} p-2.5 sm:p-3`}>
-        <Icon className="text-white h-5 w-5 sm:h-6 sm:w-6" />
+      <div className={`rounded-xl ${color} p-3`}>
+        <Icon className="text-white h-6 w-6" />
       </div>
     </div>
   </motion.div>
@@ -693,12 +693,12 @@ const StaffDashboard = () => {
     <div className="min-h-screen bg-gray-50">
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
-      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-4 sm:px-6 py-4 sm:py-6">
+      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
-              <div className="flex items-start gap-3 sm:gap-4 mb-2">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/20 flex items-center justify-center text-xl sm:text-2xl font-bold flex-shrink-0 overflow-hidden shadow-sm">
+              <div className="flex items-start gap-4 mb-3">
+                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0 overflow-hidden shadow-sm">
                   {staffPhotoUrl && !imageError ? (
                     <img 
                       src={staffPhotoUrl} 
@@ -711,15 +711,15 @@ const StaffDashboard = () => {
                   )}
                 </div>
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-bold">
+                  <h2 className="text-2xl font-bold">
                     {getGreeting()}, {staffName}!
                   </h2>
-                  <p className="text-white/80 text-base sm:text-lg mt-0.5">
+                  <p className="text-white/80 text-lg mt-0.5">
                     Welcome back to your workspace.
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-sm text-white/90 mt-2 mb-4">
+              <div className="flex items-center gap-4 text-sm text-white/90 mt-2 mb-6">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 bg-green-400 rounded-full"></span>
                   <span>Online</span>
@@ -736,31 +736,31 @@ const StaffDashboard = () => {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => navigate('/dashboard/staff/token')}
-                    className="px-3 sm:px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     New Token
                   </button>
                   <button
                     onClick={() => setShowQuickService(true)}
-                    className="px-3 sm:px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     Quick Service
                   </button>
                   <button
                     onClick={() => navigate('/dashboard/staff/performance')}
-                    className="px-3 sm:px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     View Reports
                   </button>
                 </div>
               </div>
             </div>
-            <div className="md:text-right mt-2 md:mt-0">
-              <p className="text-2xl sm:text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
+            <div className="md:text-right">
+              <p className="text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
               <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-white/20 text-sm text-white/70 italic">
+          <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
             💅 You can now track all your assigned Applications seamlessly 🎯, and instantly update Notes on the fly! 📝🚀
           </div>
         </div>
@@ -781,7 +781,7 @@ const StaffDashboard = () => {
                     : 'bg-amber-50 border-amber-500')
             }`}
           >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 {!todayAttendance || !todayAttendance.punch_in ? (
                   <>
@@ -822,7 +822,7 @@ const StaffDashboard = () => {
               <button
                 onClick={handleQuickPunch}
                 disabled={attendanceLoading}
-                className={`px-4 sm:px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[120px] ${
+                className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
                   !todayAttendance || !todayAttendance.punch_in 
                     ? 'bg-rose-600 hover:bg-rose-700' 
                     : (!todayAttendance.punch_out 
@@ -836,43 +836,36 @@ const StaffDashboard = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* ========================================= */}
       
       {/* Original Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="px-4 sm:px-6 py-4 sm:py-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="px-6 py-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                <FiTrendingUp className="text-white h-5 w-5 sm:h-6 sm:w-6" />
+              <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                <FiTrendingUp className="text-white h-6 w-6" />
               </div>
               <div>
-                <h1 className="font-bold text-gray-900 text-xl sm:text-2xl">Service Dashboard</h1>
-                <p className="text-gray-600 text-sm hidden sm:block">Manage tokens, track services, and view performance</p>
+                <h1 className="font-bold text-gray-900 text-2xl">Service Dashboard</h1>
+                <p className="text-gray-600 text-sm">Manage tokens, track services, and view performance</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            <div className="flex items-center space-x-3">
               {/* Period Selector */}
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <FiCalendar className="h-4 w-4 text-gray-500" />
-                  <span className="hidden sm:inline">
+                  <span className="text-sm">
                     {period === 'today' && 'Today'}
                     {period === 'week' && 'This Week'}
                     {period === 'month' && 'This Month'}
                     {period === 'quarter' && 'This Quarter'}
                     {period === 'year' && 'This Year'}
                     {period === 'custom' && 'Custom Range'}
-                  </span>
-                  <span className="sm:hidden">
-                    {period === 'today' && 'Today'}
-                    {period === 'week' && 'Week'}
-                    {period === 'month' && 'Month'}
-                    {period === 'quarter' && 'Qtr'}
-                    {period === 'year' && 'Year'}
-                    {period === 'custom' && 'Custom'}
                   </span>
                   <FiChevronRight className="h-4 w-4 text-gray-500 transform rotate-90" />
                 </button>
@@ -885,7 +878,7 @@ const StaffDashboard = () => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-56 sm:w-64"
+                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64"
                       >
                         <div className="p-3">
                           <button
@@ -948,7 +941,7 @@ const StaffDashboard = () => {
                 </AnimatePresence>
               </div>
               
-              <span className="text-xs text-gray-500 hidden sm:inline">Last updated: {lastUpdated.toLocaleTimeString()}</span>
+              <span className="text-xs text-gray-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
               <button
                 onClick={refreshTokens}
                 className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
@@ -961,46 +954,46 @@ const StaffDashboard = () => {
         </div>
       </div>
 
-      <div className="p-3 sm:p-6">
+      <div className="p-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="max-w-7xl mx-auto">
           
           {/* Floating Action Button */}
           <button
             onClick={() => setShowQuickService(true)}
-            className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 bg-blue-700 text-white p-3 sm:p-4 rounded-full shadow-lg hover:bg-blue-800 transition-all z-20"
+            className="fixed bottom-8 right-8 bg-blue-700 text-white p-4 rounded-full shadow-lg hover:bg-blue-800 transition-all z-20"
           >
-            <FiPlus className="h-5 w-5 sm:h-6 sm:w-6" />
+            <FiPlus className="h-6 w-6" />
           </button>
 
           {/* Search & Filter Bar + Wallet Pill */}
-          <div className="flex flex-wrap gap-3 mb-6 items-center">
-            <div className="relative flex-1 min-w-[180px]">
+          <div className="flex flex-wrap gap-4 mb-6 items-center">
+            <div className="relative flex-1 max-w-md">
               <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Search by token, customer name, or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <select value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm flex-1 sm:flex-none">
+            <select value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2.5">
               <option value="today">Today</option>
               <option value="yesterday">Yesterday</option>
               <option value="week">This Week</option>
               <option value="all">All Time</option>
             </select>
 
-            {/* Ultra‑Compact Wallet Pill */}
+            {/* ----- Ultra‑Compact Wallet Pill ----- */}
             {myWallet && (
               <motion.div
                 whileHover={{ y: -1 }}
-                className="inline-flex items-center gap-2 bg-white border border-indigo-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer flex-shrink-0"
+                className="inline-flex items-center gap-2 bg-white border border-indigo-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
               >
                 <div className="p-1 bg-indigo-100 rounded-full">
                   <FiBriefcase className="h-3.5 w-3.5 text-indigo-600" />
                 </div>
-                <span className="text-sm font-medium text-gray-700 hidden sm:inline">
+                <span className="text-sm font-medium text-gray-700">
                   {myWallet.name}
                 </span>
                 <span className="text-sm font-bold text-gray-900">
@@ -1011,16 +1004,16 @@ const StaffDashboard = () => {
           </div>
 
           {/* Stats Toggle Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 mt-2 gap-2">
+          <div className="flex items-center justify-between mb-4 mt-2">
             <h3 className="text-lg font-bold text-gray-900">Overview Metrics</h3>
             <div className="bg-gray-100 p-1 rounded-lg inline-flex">
-              <button onClick={() => setStatView('applications')} className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Applications</button>
-              <button onClick={() => setStatView('tokens')} className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
+              <button onClick={() => setStatView('applications')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Applications</button>
+              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
             </div>
           </div>
 
           {/* Stats Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-5 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
             {statView === 'applications' ? (
               <>
                 <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-gray-600" />
@@ -1046,49 +1039,45 @@ const StaffDashboard = () => {
             {/* Left Column – Unified Workspace */}
             <div className="xl:col-span-2 flex flex-col gap-6">
               
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[700px] sm:h-[800px] lg:h-[850px]">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[850px]">
                 
                 {/* Master Workspace Tabs */}
-                <div className="flex p-2 sm:p-3 border-b border-gray-200 bg-gray-50/80 gap-1 sm:gap-2 overflow-x-auto hide-scrollbar">
-                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-indigo-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                <div className="flex p-3 border-b border-gray-200 bg-gray-50/80 gap-2 overflow-x-auto hide-scrollbar">
+                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-indigo-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiUsers className="h-4 w-4" />
-                    <span className="hidden xs:inline">Walk-in</span>
-                    <span className="xs:hidden">Tokens</span>
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${workspaceTab === 'tokens' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'}`}>{statusCounts.total}</span>
+                    Walk-in Tokens
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'}`}>{statusCounts.total}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-blue-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-blue-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiGlobe className="h-4 w-4" />
-                    <span className="hidden xs:inline">Online Queue</span>
-                    <span className="xs:hidden">Queue</span>
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${workspaceTab === 'queue' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>{onlineBookings.length}</span>
+                    Online Queue
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'queue' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>{onlineBookings.length}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiPlayCircle className="h-4 w-4" />
-                    <span className="hidden xs:inline">My Online</span>
-                    <span className="xs:hidden">Online</span>
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
+                    My Online Work
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-purple-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-purple-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiTarget className="h-4 w-4" />
-                    <span className="hidden xs:inline">Applications</span>
-                    <span className="xs:hidden">Apps</span>
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${workspaceTab === 'applications' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{trackingStats.total || 0}</span>
+                    Applications
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{trackingStats.total || 0}</span>
                   </button>
                 </div>
 
                 {/* Workspace Content */}
-                <div className="flex-1 overflow-y-auto bg-gray-50/30 p-3 sm:p-4 lg:p-6">
+                <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 sm:p-6">
                   
                   {/* TAB 1: TOKENS */}
                   {workspaceTab === 'tokens' && (
                     <div className="space-y-4">
                       {/* Sub-Tabs for Tokens */}
-                      <div className="flex gap-2 border-b border-gray-200 pb-3 overflow-x-auto">
+                      <div className="flex gap-2 border-b border-gray-200 pb-3">
                         {['active', 'completed', 'campaign'].map(tab => (
                           <button
                             key={tab}
                             onClick={() => setActiveView(tab)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-colors whitespace-nowrap ${
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors ${
                               activeView === tab ? 'bg-gray-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
                             }`}
                           >
@@ -1117,8 +1106,8 @@ const StaffDashboard = () => {
                                   const isUnassigned = !token.staffId || token.staffId === 'null';
                                   
                                   return (
-                                    <div key={token.tokenId} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all group gap-2">
-                                      <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
+                                    <div key={token.tokenId} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all group">
+                                      <div className="flex items-center gap-3 min-w-0 flex-1">
                                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
                                           activeView === 'completed' ? 'bg-green-50 text-green-700 border border-green-100' :
                                           activeView === 'campaign' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
@@ -1127,30 +1116,30 @@ const StaffDashboard = () => {
                                           {shortenTokenId(token.tokenId)}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                          <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-0.5">
+                                          <div className="flex items-center gap-2 mb-0.5">
                                             <h4 className="font-bold text-gray-900 text-sm truncate">{token.customerName || 'Customer'}</h4>
-                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
                                               {token.status?.replace('-', ' ')}
                                             </span>
                                             {isAssignedToMe && activeView === 'active' && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Mine</span>}
                                           </div>
-                                          <p className="text-xs text-gray-500 truncate flex flex-wrap items-center gap-1 sm:gap-2">
+                                          <p className="text-xs text-gray-500 truncate flex items-center gap-2">
                                             <span className="font-medium text-gray-700">{getCategoryName(token.categoryId)}</span>
-                                            <span className="w-1 h-1 bg-gray-300 rounded-full hidden sm:inline"></span>
+                                            <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                                             <span>{formatTime(token.createdAt)}</span>
-                                            {token.phone && <><span className="w-1 h-1 bg-gray-300 rounded-full hidden sm:inline"></span><span className="truncate">{token.phone}</span></>}
+                                            {token.phone && <><span className="w-1 h-1 bg-gray-300 rounded-full"></span><span>{token.phone}</span></>}
                                           </p>
                                         </div>
                                       </div>
                                       
-                                      <div className="flex items-center gap-2 pl-0 sm:pl-3 w-full sm:w-auto justify-end">
+                                      <div className="flex items-center gap-2 pl-3 shrink-0">
                                         {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
                                           <>
                                             <button 
                                               onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
-                                              className="px-2 sm:px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1 text-xs font-semibold shadow-sm transition-colors"
+                                              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors"
                                             >
-                                              <FiPlayCircle className="h-3.5 w-3.5" /> <span className="hidden xs:inline">{token.status === 'pending' ? 'Start' : 'Resume'}</span>
+                                              <FiPlayCircle className="h-3.5 w-3.5" /> {token.status === 'pending' ? 'Start' : 'Resume'}
                                             </button>
                                             <button 
                                               onClick={() => openCancelModal(token)} 
@@ -1162,8 +1151,8 @@ const StaffDashboard = () => {
                                           </>
                                         )}
                                         {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
-                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-2 sm:px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-1 text-xs font-semibold shadow-sm transition-colors">
-                                            <FiBarChart2 className="h-3.5 w-3.5" /> <span className="hidden xs:inline">Details</span>
+                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors">
+                                            <FiBarChart2 className="h-3.5 w-3.5" /> Details
                                           </button>
                                         )}
                                       </div>
@@ -1188,8 +1177,8 @@ const StaffDashboard = () => {
                         </div>
                       ) : (
                         onlineBookings.map(booking => (
-                          <div key={booking.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white border border-blue-100 rounded-xl hover:shadow-md transition-all group gap-3">
-                            <div className="flex items-center gap-4 min-w-0 w-full sm:w-auto">
+                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-blue-100 rounded-xl hover:shadow-md transition-all group">
+                            <div className="flex items-center gap-4 min-w-0">
                               <div className="w-10 h-10 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
                               <div className="min-w-0">
                                 <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
@@ -1197,7 +1186,7 @@ const StaffDashboard = () => {
                                 <p className="text-[10px] text-gray-400 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
                               </div>
                             </div>
-                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm shrink-0 transition-colors w-full sm:w-auto">
+                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm shrink-0 transition-colors">
                               Take Work
                             </button>
                           </div>
@@ -1216,19 +1205,19 @@ const StaffDashboard = () => {
                         </div>
                       ) : (
                         processingBookings.map(booking => (
-                          <div key={booking.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white border border-emerald-100 rounded-xl hover:shadow-md transition-all group gap-3">
-                            <div className="flex items-center gap-4 min-w-0 w-full sm:w-auto">
+                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-emerald-100 rounded-xl hover:shadow-md transition-all group">
+                            <div className="flex items-center gap-4 min-w-0">
                               <div className="w-10 h-10 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
                               <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                                <div className="flex items-center gap-2 mb-0.5">
                                   <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
-                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Assigned</span>
+                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Assigned to you</span>
                                 </div>
                                 <p className="text-xs text-gray-500 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
                                 <p className="text-[10px] text-gray-400 mt-1 font-mono">Taken at: {new Date(booking.taken_at || booking.applied_at).toLocaleString()}</p>
                               </div>
                             </div>
-                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors w-full sm:w-auto">
+                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
                               <FiPlayCircle className="h-4 w-4" /> Start
                             </button>
                           </div>
@@ -1240,9 +1229,11 @@ const StaffDashboard = () => {
                   {/* TAB 4: APPLICATIONS TRACKING */}
                   {workspaceTab === 'applications' && (
                     <div className="space-y-4">
+                      
                       {/* Sub-Tabs for Applications */}
-                      <div className="flex gap-2 border-b border-gray-200 pb-3 overflow-x-auto">
+                      <div className="flex gap-2 border-b border-gray-200 pb-3">
                         {['active', 'completed', 'delayed'].map(tab => {
+                          // Calculate counts based on global stats for the badges
                           let count = 0;
                           if (tab === 'active') count = (trackingStats.pending || 0) + (trackingStats.in_progress || 0);
                           if (tab === 'completed') count = (trackingStats.completed || 0);
@@ -1252,7 +1243,7 @@ const StaffDashboard = () => {
                             <button
                               key={tab}
                               onClick={() => setActiveAppView(tab)}
-                              className={`px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
                                 activeAppView === tab ? 'bg-purple-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
                               }`}
                             >
@@ -1274,8 +1265,8 @@ const StaffDashboard = () => {
                           </div>
                         ) : (
                           filteredApplications.map(app => (
-                            <div key={app.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group gap-3">
-                              <div className="flex items-center gap-4 min-w-0 w-full sm:w-auto">
+                            <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group">
+                              <div className="flex items-center gap-4 min-w-0">
                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
                                   activeAppView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
                                   activeAppView === 'delayed' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
@@ -1284,7 +1275,7 @@ const StaffDashboard = () => {
                                   {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
                                 </div>
                                 <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-0.5">
+                                  <div className="flex items-center gap-2 mb-0.5">
                                     <h4 className="font-bold text-gray-900 text-sm truncate">{app.customer_name}</h4>
                                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                       app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
@@ -1300,9 +1291,9 @@ const StaffDashboard = () => {
                                       {app.progress}%
                                     </span>
                                   </div>
-                                  <p className="text-xs text-gray-500 truncate flex flex-wrap items-center gap-1 sm:gap-2">
+                                  <p className="text-xs text-gray-500 truncate flex items-center gap-2">
                                     <span className="font-medium">{app.service_name}</span>
-                                    <span className="w-1 h-1 bg-gray-300 rounded-full hidden sm:inline"></span>
+                                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                                     <span>{app.current_step || 'Submitted'}</span>
                                   </p>
                                   <p className="text-[10px] text-gray-400 mt-1 font-mono">
@@ -1312,7 +1303,7 @@ const StaffDashboard = () => {
                               </div>
                               <button 
                                 onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
-                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors w-full sm:w-auto justify-center"
+                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
                               >
                                 <FiBarChart2 className="h-4 w-4" /> Track
                               </button>
@@ -1330,7 +1321,7 @@ const StaffDashboard = () => {
             <div className="space-y-6">
               
               {/* ===== NEW: MY TASKS ===== */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900 text-sm flex items-center">
                     <FiCheckSquare className="h-4 w-4 mr-2 text-indigo-600" />
@@ -1372,7 +1363,7 @@ const StaffDashboard = () => {
 
               {/* ===== NEW: UPCOMING EVENTS (AUTO-CYCLING) ===== */}
               <div 
-                className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 shadow-sm"
+                className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
                 onMouseEnter={() => setIsEventsHovered(true)}
                 onMouseLeave={() => setIsEventsHovered(false)}
               >
@@ -1402,7 +1393,7 @@ const StaffDashboard = () => {
                       <button
                         key={tab}
                         onClick={() => setActiveEventTab(tab)}
-                        className={`text-xs px-2 sm:px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                        className={`text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                           activeEventTab === tab 
                             ? 'bg-indigo-600 text-white shadow-md' 
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1473,7 +1464,7 @@ const StaffDashboard = () => {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold text-gray-900 truncate" title={event.title}>{event.title}</p>
                             {event.description && <p className="text-xs text-gray-600 truncate mt-0.5">{event.description}</p>}
-                            <div className="flex items-center justify-between mt-1.5 flex-wrap gap-1">
+                            <div className="flex items-center justify-between mt-1.5">
                               <p className="text-xs font-medium flex items-center gap-1">
                                 <FiClock className="h-3 w-3" />
                                 <span className={`${isToday ? 'text-rose-600 font-bold' : isTomorrow ? 'text-amber-600 font-bold' : 'text-gray-600'}`}>
@@ -1504,7 +1495,7 @@ const StaffDashboard = () => {
               </div>
               
               {/* Performance Score Card */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900 text-sm flex items-center">
                     <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
@@ -1512,14 +1503,14 @@ const StaffDashboard = () => {
                   </h3>
                   <div className="relative group">
                     <FiInfo className="h-4 w-4 text-gray-400 cursor-pointer" />
-                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 sm:w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
+                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
                       Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
                     </div>
                   </div>
                 </div>
                 <div className="text-center">
                   <div className="relative inline-block">
-                    <svg className="w-28 h-28 sm:w-32 sm:h-32">
+                    <svg className="w-32 h-32">
                       <circle className="text-gray-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
                       <circle
                         className="transition-all duration-1000"
@@ -1542,7 +1533,7 @@ const StaffDashboard = () => {
                     </svg>
                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
                       <p className="text-2xl font-bold text-gray-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
-                      <p className="text-[10px] sm:text-xs text-gray-500">
+                      <p className="text-xs text-gray-500">
                         {!performanceLoading && (performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement')}
                       </p>
                     </div>
@@ -1551,7 +1542,7 @@ const StaffDashboard = () => {
               </div>
 
               {/* Performance Metrics */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
                   <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
                   Performance Metrics
@@ -1620,13 +1611,13 @@ const StaffDashboard = () => {
 
               {/* Recent Activity (Compact Version) */}
               <div className="bg-white rounded-xl border border-gray-200">
-                <div className="px-4 sm:px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
                   <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-sm">
                     {recentServiceEntries.length} items
                   </span>
                 </div>
-                <div className="p-3 sm:p-4 overflow-y-auto max-h-[500px]">
+                <div className="p-4 overflow-y-auto max-h-[500px]">
                   {Object.keys(groupedRecentActivities).length > 0 ? (
                     <div className="space-y-6">
                       {Object.entries(groupedRecentActivities).map(([date, entries]) => (
@@ -1661,8 +1652,8 @@ const StaffDashboard = () => {
                                 <div className="flex-1 bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200 flex flex-col justify-center">
                                   
                                   {/* Top Row: Name, Status, Time */}
-                                  <div className="flex flex-wrap justify-between items-center mb-1.5 gap-1">
-                                    <div className="flex flex-wrap items-center gap-1 min-w-0">
+                                  <div className="flex justify-between items-center mb-1.5 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
                                       <p className="text-sm font-bold text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
                                       {/* Status Pill moved next to name */}
@@ -1682,9 +1673,9 @@ const StaffDashboard = () => {
                                   </div>
                                   
                                   {/* Bottom Row: Service, Info, Actions */}
-                                  <div className="flex flex-wrap justify-between items-end gap-1">
-                                    <div className="flex flex-wrap items-center gap-1">
-                                      <p className="text-[11px] font-medium text-gray-600 truncate max-w-[140px] sm:max-w-[200px]">
+                                  <div className="flex justify-between items-end gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="text-[11px] font-medium text-gray-600 truncate max-w-[160px]">
                                         {getCategoryName(entry.category)}
                                       </p>
                                       
@@ -1736,43 +1727,42 @@ const StaffDashboard = () => {
           </div>
         </motion.div>
       </div>
-      
       {/* Cancel Modal */}
-      {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4 sm:p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
-            <p className="text-gray-600 mb-4 text-sm">
-              Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenId}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
-            </p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
-              <textarea 
-                value={cancelReason} 
-                onChange={(e) => setCancelReason(e.target.value)} 
-                rows="3" 
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 text-sm" 
-                placeholder="e.g., customer requested, duplicate entry..." 
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 justify-end">
-              <button 
-                onClick={() => setShowCancelModal(false)} 
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition w-full sm:w-auto"
-              >
-                No, Keep Token
-              </button>
-              <button 
-                onClick={handleCancelConfirm} 
-                disabled={cancelling} 
-                className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50 w-full sm:w-auto"
-              >
-                {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
-              </button>
+        {showCancelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenId}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
+                <textarea 
+                  value={cancelReason} 
+                  onChange={(e) => setCancelReason(e.target.value)} 
+                  rows="3" 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500" 
+                  placeholder="e.g., customer requested, duplicate entry..." 
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button 
+                  onClick={() => setShowCancelModal(false)} 
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition"
+                >
+                  No, Keep Token
+                </button>
+                <button 
+                  onClick={handleCancelConfirm} 
+                  disabled={cancelling} 
+                  className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       <QuickServiceModal open={showQuickService} onClose={() => setShowQuickService(false)} wallets={wallets} />
     </div>
