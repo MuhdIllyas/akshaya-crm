@@ -77,7 +77,7 @@ const mapDBNotificationToUI = (dbNotif) => {
 
   // 🔥 Route for Knowledge/Operations Hub Discussions
   if (dbNotif.related_entity_type === 'discussion' || dbNotif.type?.startsWith('knowledge_')) {
-    actionUrl = `/dashboard/${role}/operations-hub/${dbNotif.related_entity_id}`; 
+    actionUrl = `/dashboard/${role}/operationshub/${dbNotif.related_entity_id}`; 
   }
 
   // Safely get type to prevent .includes() crashing
