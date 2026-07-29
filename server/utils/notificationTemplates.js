@@ -25,7 +25,9 @@ export const NOTIFICATION_TYPES = {
   //Operation Hub
   KNOWLEDGE_MENTION: 'knowledge_mention',
   KNOWLEDGE_REPLY: 'knowledge_reply',
-  KNOWLEDGE_SOLVED: 'knowledge_solved'
+  KNOWLEDGE_SOLVED: 'knowledge_solved',
+  KNOWLEDGE_UPVOTE: 'knowledge_upvote',
+  KNOWLEDGE_REACTION: 'knowledge_reaction'
 };
 
 export const notificationTemplates = {
@@ -130,6 +132,28 @@ export const notificationTemplates = {
     metadata: {
       'Discussion': data.discussionTitle,
       'Marked By': data.solvedByName
+    }
+  }),
+
+  knowledgeUpvote: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_UPVOTE,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '👍 Upvote Received',
+    message: `${data.senderName} upvoted your post.`,
+    priority: 'low', 
+    metadata: {
+      'Discussion': data.discussionTitle
+    }
+  }),
+
+  knowledgeReaction: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_REACTION,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `${data.emoji} New Reaction`,
+    message: `${data.senderName} reacted to your post.`,
+    priority: 'low', 
+    metadata: {
+      'Discussion': data.discussionTitle
     }
   })
   

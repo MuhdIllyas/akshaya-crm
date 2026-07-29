@@ -922,6 +922,36 @@ export const votePost = async (staffId, targetType, targetId, voteValue) => {
             newTotal = res.rows[0].upvotes;
         }
 
+        // 🔥 FIRE SILENT NOTIFICATION ONLY ON BRAND NEW UPVOTES (+1)
+        if (check.rows.length === 0 && voteValue === 1) {
+            try {
+                const targetRes = await client.query(`
+                    SELECT t.author_id, d.title, d.id as discussion_id
+                    FROM ${table} t
+                    JOIN knowledge_discussions d ON d.id = ${targetType === 'discussion' ? 't.id' : 't.discussion_id'}
+                    WHERE t.id = $1
+                `, [targetId]);
+                
+                const targetAuthor = targetRes.rows[0]?.author_id;
+                const senderRes = await client.query('SELECT name FROM staff WHERE id = $1', [staffId]);
+                
+                if (targetAuthor && targetAuthor !== staffId) {
+                    await notificationService.createNotification({
+                        recipientStaffId: targetAuthor,
+                        senderStaffId: staffId,
+                        relatedEntityType: 'discussion',
+                        relatedEntityId: targetRes.rows[0].discussion_id,
+                        ...notificationTemplates.knowledgeUpvote({ 
+                            senderName: senderRes.rows[0]?.name, 
+                            discussionTitle: targetRes.rows[0].title 
+                        })
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to send upvote notification", err);
+            }
+        }
+
         await client.query('COMMIT');
         return { upvotes: newTotal };
     } catch (err) {
@@ -934,7 +964,9 @@ export const votePost = async (staffId, targetType, targetId, voteValue) => {
 
 export const toggleReaction = async (staffId, targetType, targetId, emoji) => {
     const column = targetType === 'discussion' ? 'discussion_id' : 'reply_id';
+    const targetTable = targetType === 'discussion' ? 'knowledge_discussions' : 'knowledge_discussion_replies';
     
+    // 1. Check if the user already reacted
     const check = await pool.query(
         `SELECT id FROM knowledge_reactions WHERE staff_id = $1 AND ${column} = $2 AND emoji = $3`,
         [staffId, targetId, emoji]
@@ -948,6 +980,41 @@ export const toggleReaction = async (staffId, targetType, targetId, emoji) => {
             `INSERT INTO knowledge_reactions (staff_id, ${column}, emoji) VALUES ($1, $2, $3)`,
             [staffId, targetId, emoji]
         );
+
+        // 🔥 FIRE SILENT NOTIFICATION
+        try {
+            // Find who wrote the post and the title of the discussion
+            const targetRes = await pool.query(`
+                SELECT t.author_id, d.title, d.id as discussion_id
+                FROM ${targetTable} t
+                JOIN knowledge_discussions d ON d.id = ${targetType === 'discussion' ? 't.id' : 't.discussion_id'}
+                WHERE t.id = $1
+            `, [targetId]);
+
+            const targetAuthor = targetRes.rows[0]?.author_id;
+            
+            // Get sender's name
+            const senderRes = await pool.query('SELECT name FROM staff WHERE id = $1', [staffId]);
+            const senderName = senderRes.rows[0]?.name;
+
+            // Don't notify them if they react to their own post!
+            if (targetAuthor && targetAuthor !== staffId) {
+                await notificationService.createNotification({
+                    recipientStaffId: targetAuthor,
+                    senderStaffId: staffId,
+                    relatedEntityType: 'discussion',
+                    relatedEntityId: targetRes.rows[0].discussion_id,
+                    ...notificationTemplates.knowledgeReaction({ 
+                        senderName, 
+                        discussionTitle: targetRes.rows[0].title,
+                        emoji 
+                    })
+                });
+            }
+        } catch (err) {
+            console.error("Failed to send reaction notification", err);
+        }
+
         return { action: 'added', emoji };
     }
 };
