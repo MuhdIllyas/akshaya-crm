@@ -210,16 +210,19 @@ router.post("/add", async (req, res) => {
     ================================ */
     let conversationInput = {
       channel: "internal",
-      centre_id: centreId,
       created_by: req.user.id
     };
 
     if (related_service_entry_id) {
       conversationInput.context_type = "service_entry";
       conversationInput.context_id = related_service_entry_id;
+      conversationInput.centre_id = centreId;
+      conversationInput.is_group = true;
     } else if (related_customer_id) {
       conversationInput.context_type = "customer";
       conversationInput.customer_id = related_customer_id;
+      conversationInput.centre_id = centreId;
+      conversationInput.is_group = true;
     } else {
       // SAFE PARTICIPANT ARRAY: Only add assigned_to if it exists
       const participants = [req.user.id];
@@ -227,6 +230,9 @@ router.post("/add", async (req, res) => {
         participants.push(assigned_to);
       }
       conversationInput.participant_ids = participants;
+
+      conversationInput.is_group = false;
+      conversationInput.centre_id = null;
     }
 
     const conversation = await resolveConversation(conversationInput);
