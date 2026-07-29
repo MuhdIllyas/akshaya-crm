@@ -2,16 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
+import { FiMenu, FiX } from 'react-icons/fi'; // Hamburger icons
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
   const staffName = localStorage.getItem("name");
   const customerName = localStorage.getItem("customer_name");
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [activePath, setActivePath] = useState(window.location.pathname);
   const location = useLocation();
   const token = localStorage.getItem("token");
   
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [location.pathname]);
+
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadNotesCount, setUnreadNotesCount] = useState(0);
@@ -266,17 +273,35 @@ const DashboardLayout = () => {
     setIsCollapsed(!isCollapsed);
   };
 
+  const toggleMobileSidebar = () => {
+    setIsMobileOpen(!isMobileOpen);
+  };
+
   const handleNavigation = (path) => {
     setActivePath(path);
   };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar with original navy blue colors */}
+      {/* ===== MOBILE HAMBURGER (visible on small screens) ===== */}
+      <div className="fixed top-4 left-4 z-50 lg:hidden">
+        <button
+          onClick={toggleMobileSidebar}
+          className="p-2 rounded-lg bg-navy-800 text-white shadow-lg hover:bg-navy-700 transition"
+        >
+          {isMobileOpen ? <FiX className="w-6 h-6" /> : <FiMenu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* ===== SIDEBAR ===== */}
       <aside 
-        className={`bg-navy-800 text-white min-h-screen fixed top-0 left-0 bottom-0 flex flex-col transition-all duration-300 z-50 ${
-          isCollapsed ? "w-20" : "w-64"
-        }`}
+        className={`
+          bg-navy-800 text-white min-h-screen fixed top-0 left-0 bottom-0 flex flex-col transition-all duration-300 z-50
+          ${isCollapsed ? "w-20" : "w-64"}
+          // Mobile: overlay, slides in/out
+          lg:relative lg:translate-x-0
+          ${isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+        `}
       >
         {/* Header Section */}
         <div className={`p-6 border-b border-navy-700 ${isCollapsed ? "px-4" : ""}`}>
@@ -302,7 +327,7 @@ const DashboardLayout = () => {
             {!isCollapsed && (
               <button
                 onClick={toggleSidebar}
-                className="p-2 rounded-lg hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
+                className="p-2 rounded-lg hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white hidden lg:block"
                 title="Collapse Sidebar"
               >
                 <CollapseIcon />
@@ -459,7 +484,7 @@ const DashboardLayout = () => {
           {isCollapsed && (
             <button
               onClick={toggleSidebar}
-              className="w-full flex items-center justify-center p-4 hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
+              className="w-full flex items-center justify-center p-4 hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white hidden lg:block"
               title="Expand Sidebar"
             >
               <ExpandIcon />
@@ -475,14 +500,24 @@ const DashboardLayout = () => {
         </div>
       </aside>
 
-      {/* Main Content Area - Hidden scrollbar */}
+      {/* ===== BACKDROP for mobile sidebar ===== */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={toggleMobileSidebar}
+        />
+      )}
+
+      {/* ===== MAIN CONTENT ===== */}
       <main 
-        className={`flex-1 transition-all duration-300 min-h-screen overflow-auto main-content-scrollbar ${
-          isCollapsed ? "ml-20" : "ml-64"
-        }`}
+        className={`
+          flex-1 transition-all duration-300 min-h-screen overflow-auto main-content-scrollbar
+          ${isCollapsed ? "lg:ml-20" : "lg:ml-64"}
+          ml-0 // always full width on mobile
+        `}
       >
-        <div className="p-6">
-          <div className="bg-white rounded-2xl shadow-sm p-6 min-h-full border border-gray-200">
+        <div className="p-4 sm:p-6">
+          <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 min-h-full border border-gray-200">
             <Outlet />
           </div>
         </div>
@@ -660,4 +695,5 @@ const TrackServiceIcon = createIcon("M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1
 const CustomersIcon = createIcon("M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z");
 const ServiceLogsIcon = createIcon("M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01");
 const KnowledgeHubIcon = createIcon("M12 2a7 7 0 00-4 12.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26A7 7 0 0012 2zm-2 18h4m-3 2h2");
+
 export default DashboardLayout;
