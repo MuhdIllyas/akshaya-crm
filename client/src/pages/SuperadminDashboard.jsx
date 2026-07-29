@@ -359,8 +359,8 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Global KPI Cards - Responsive grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8 gap-3">
+      {/* Global KPI Cards - responsive grid updated for better laptop display */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-8 gap-3">
         
         {/* 1. Total Centres */}
         <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col justify-between shadow-sm">
