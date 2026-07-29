@@ -77,7 +77,7 @@ const mapDBNotificationToUI = (dbNotif) => {
 
   // 🔥 Route for Knowledge/Operations Hub Discussions
   if (dbNotif.related_entity_type === 'discussion' || dbNotif.type?.startsWith('knowledge_')) {
-    actionUrl = `/dashboard/${role}/operationshub/${dbNotif.related_entity_id}`; 
+    actionUrl = `/dashboard/${role}/operationshub`; 
   }
 
   // Safely get type to prevent .includes() crashing
@@ -114,7 +114,10 @@ const mapDBNotificationToUI = (dbNotif) => {
       actions: ['mark_read', 'view'],
 
       // 🔥 The state to pass when clicking the whole card
-      actionState: { openConversationId: dbNotif.conversation_id },
+      actionState: { 
+        openConversationId: dbNotif.conversation_id,
+        openDiscussionId: (dbNotif.related_entity_type === 'discussion' || typeStr.startsWith('knowledge_')) ? dbNotif.related_entity_id : undefined
+      },
 
       metadata: dbNotif.metadata || {},
       preview: dbNotif.metadata || {}
@@ -630,8 +633,10 @@ const NotificationsPage = () => {
       (notification.type.startsWith('knowledge_') || notification.related_entity_type === 'discussion')
     ) {
       handleMarkRead(id);
-      // Notice we pass 'discussion-detail' as the page, and pass the ID!
-      navigate(`/dashboard/${role}/operationshub/${notification.related_entity_id}`);
+      // 🔥 Send them to the base URL and pass the Discussion ID securely in the background!
+      navigate(`/dashboard/${role}/operationshub`, { 
+        state: { openDiscussionId: notification.related_entity_id } 
+      });
       return;
     }
 

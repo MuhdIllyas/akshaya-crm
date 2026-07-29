@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import {
   FiHome, FiMessageCircle, FiBook, FiBell, FiAward,
   FiTag, FiBookmark, FiAtSign, FiClock, FiPlus, FiSearch,
@@ -542,6 +542,7 @@ const OperationsHub = () => { // <--- Removed the prop!
   }), []);
 
   const { serviceId } = useParams(); 
+  const location = useLocation();
 
   const isDbId = serviceId && !isNaN(serviceId);
 
@@ -637,6 +638,15 @@ const OperationsHub = () => { // <--- Removed the prop!
         }
       }
   }, [serviceId]);
+
+  useEffect(() => {
+    if (location.state?.openDiscussionId) {
+      setPage('discussion-detail');
+      setSelectedServiceId(location.state.openDiscussionId);
+      
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const navigateTo = (target, id = null) => {
     setPage(target);
