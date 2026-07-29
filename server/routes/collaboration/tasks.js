@@ -272,16 +272,44 @@ router.post("/add", async (req, res) => {
     /* ================================
       🔥 3. INSERT CHAT MESSAGE (TASK)
     ================================ */
-    await client.query(
+    const msgRes = await client.query(
       `INSERT INTO chat_messages
       (conversation_id, sender_type, sender_id, message, message_type, created_at)
-      VALUES ($1,'staff',$2,$3,'task',NOW())`,
+      VALUES ($1,'staff',$2,$3,'task',NOW())
+      RETURNING *`,
       [
         conversation.id,
         req.user.id,
         task.id.toString() 
       ]
     );
+    const savedMsg = msgRes.rows[0];
+
+    // 🔥 NEW: Calculate unread counts inside the transaction before committing
+    const participantsRes = await client.query(
+      `SELECT staff_id FROM chat_participants WHERE conversation_id = $1`,
+      [conversation.id]
+    );
+
+    const participantUpdates = [];
+    for (const p of participantsRes.rows) {
+      if (p.staff_id !== req.user.id) {
+        const unreadCountRes = await client.query(
+          `SELECT COUNT(*) as count
+           FROM chat_messages m
+           LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
+           WHERE m.conversation_id = $2 
+             AND m.sender_id != $1
+             AND r.id IS NULL
+             AND m.is_deleted = false`,
+          [p.staff_id, conversation.id]
+        );
+        participantUpdates.push({
+          staff_id: p.staff_id,
+          unread: parseInt(unreadCountRes.rows[0].count)
+        });
+      }
+    }
 
     if (due_date) {
       await client.query(
@@ -339,11 +367,24 @@ router.post("/add", async (req, res) => {
       }
     }
 
-    io.to(`conversation_${conversation.id}`).emit("new_message", {
-      conversation_id: conversation.id,
-      message_type: "task",
-      data: task
-    });
+    // 🔥 NEW: Format message payload perfectly for the frontend
+    const messagePayload = {
+      ...savedMsg,
+      data: task,
+      live_task_data: task
+    };
+
+    // 1. Emit to active chat windows (if they currently have the chat open)
+    io.to(`conversation_${conversation.id}`).emit("new_message", messagePayload);
+
+    // 2. 🔥 NEW: Emit to global user rooms so sidebar badges update instantly
+    for (const update of participantUpdates) {
+      io.to(`user:${update.staff_id}`).emit("new_message", messagePayload);
+      io.to(`user:${update.staff_id}`).emit("unread_update", {
+        conversationId: conversation.id,
+        unread: update.unread
+      });
+    }
 
     res.status(201).json(task);
 
