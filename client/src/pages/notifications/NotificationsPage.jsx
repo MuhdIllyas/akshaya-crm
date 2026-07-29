@@ -631,7 +631,7 @@ const NotificationsPage = () => {
     ) {
       handleMarkRead(id);
       // Notice we pass 'discussion-detail' as the page, and pass the ID!
-      navigate(`/dashboard/${role}/operations-hub/${notification.related_entity_id}`);
+      navigate(`/dashboard/${role}/operationshub/${notification.related_entity_id}`);
       return;
     }
 
