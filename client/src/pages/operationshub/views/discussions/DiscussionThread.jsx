@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   FiArrowLeft, FiMoreHorizontal, FiShare2, FiMessageSquare, 
-  FiCheckCircle, FiImage, FiPaperclip, FiSmile, FiArrowUp, FiArrowDown, FiX 
+  FiCheckCircle, FiImage, FiPaperclip, FiSmile, FiArrowUp, FiArrowDown, FiX,
+  FiLink, FiMessageCircle, FiMail // 🔥 Added new icons for the Share Menu
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
-// 🔥 THE FIX: Imported markDiscussionSolved
+import { useNavigate } from 'react-router-dom'; // 🔥 Required for redirecting to Messenger
 import { addReply, votePost, toggleReaction, uploadKnowledgeFiles, fetchStaffSuggestions, markDiscussionSolved } from '@/services/knowledge'; 
 
 const API_URL = import.meta.env.VITE_API_URL || '';
@@ -58,6 +59,8 @@ const getImageUrl = (url) => {
 
 // --- MAIN COMPONENT ---
 const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
+  const navigate = useNavigate(); // 🔥 Added Router Navigation
+
   const [replyText, setReplyText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -71,10 +74,24 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [localVotes, setLocalVotes] = useState({ discussion: { total: 0, userVote: 0 }, replies: {} });
   const [localReactions, setLocalReactions] = useState({});
 
-  // 🔥 THE FIX: Get Current User to verify permissions for the "Solve" button
+  // 🔥 SHARE MENU STATE
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const shareMenuRef = useRef(null);
+
   const currentUserId = parseInt(localStorage.getItem('id'), 10);
-  const currentUserRole = localStorage.getItem('role');
+  const currentUserRole = localStorage.getItem('role') || 'staff';
   const canSolve = discussion?.author_id === currentUserId || ['admin', 'superadmin'].includes(currentUserRole);
+
+  // Close share menu if clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(event.target)) {
+        setShowShareMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (discussion) {
@@ -100,6 +117,36 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
       setLocalReactions(initReactions);
     }
   }, [discussion]);
+
+  // ==========================================
+  // 🔥 NEW SHARE HANDLERS
+  // ==========================================
+  const getShareUrl = () => {
+    return `${window.location.origin}/dashboard/${currentUserRole}/operationshub/${discussion.id}`;
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(getShareUrl());
+    toast.success("Link copied to clipboard!");
+    setShowShareMenu(false);
+  };
+
+  const handleShareToMessenger = () => {
+    const shareText = `Check out this discussion on the Operations Hub: *${discussion.title}*\n${getShareUrl()}`;
+    navigator.clipboard.writeText(shareText);
+    toast.success("Link copied! Opening Messenger...");
+    setShowShareMenu(false);
+    // Instantly teleport them to messenger so they can paste it to anyone
+    navigate(`/dashboard/${currentUserRole}/messenger`);
+  };
+
+  const handleShareViaEmail = () => {
+    const subject = encodeURIComponent(`Discussion: ${discussion.title}`);
+    const body = encodeURIComponent(`I wanted to share this discussion with you:\n\n${discussion.title}\n\nRead it here: ${getShareUrl()}`);
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+    setShowShareMenu(false);
+  };
+  // ==========================================
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -195,7 +242,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     }, 100);
   };
 
-  // 🔥 THE FIX: New Handler to Mark the Discussion as Solved
   const handleMarkSolved = async (replyId = null) => {
     const confirmMsg = replyId 
       ? "Mark this reply as the Best Answer and close the discussion?" 
@@ -206,7 +252,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
     try {
       await markDiscussionSolved(discussion.id, replyId);
       toast.success("Discussion successfully marked as solved!");
-      if (onUpdate) onUpdate(); // Refresh the thread!
+      if (onUpdate) onUpdate(); 
     } catch (err) {
       const errorMsg = err.response?.data?.error || "Failed to mark as solved.";
       toast.error(errorMsg);
@@ -251,7 +297,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         </button>
         <div className="flex items-center gap-2">
           
-          {/* 🔥 THE FIX: Header "Mark Solved" Button */}
           {discussion.solved ? (
             <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
               <FiCheckCircle /> Solved
@@ -268,8 +313,33 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
             )
           )}
 
-          <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition"><FiShare2 /></button>
-          <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition"><FiMoreHorizontal /></button>
+          {/* 🔥 THE FIX: Integrated Share Dropdown */}
+          <div className="relative" ref={shareMenuRef}>
+            <button 
+              onClick={() => setShowShareMenu(!showShareMenu)}
+              className={`p-2 rounded-full transition ${showShareMenu ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-100'}`}
+              title="Share Discussion"
+            >
+              <FiShare2 className="h-5 w-5" />
+            </button>
+            
+            {showShareMenu && (
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1.5 animate-in fade-in slide-in-from-top-2">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">Share options</div>
+                <button onClick={handleShareToMessenger} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition">
+                  <FiMessageCircle className="h-4 w-4" /> Send in Messenger
+                </button>
+                <button onClick={handleCopyLink} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-2.5 transition">
+                  <FiLink className="h-4 w-4 text-gray-400" /> Copy Link
+                </button>
+                <button onClick={handleShareViaEmail} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-2.5 transition">
+                  <FiMail className="h-4 w-4 text-gray-400" /> Send via Email
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition"><FiMoreHorizontal className="h-5 w-5" /></button>
         </div>
       </div>
 
@@ -401,7 +471,6 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                       Reply
                     </button>
                     
-                    {/* 🔥 THE FIX: Mark Best Answer Button */}
                     {!discussion.solved && canSolve && (
                       <button 
                         onClick={() => handleMarkSolved(reply.id)} 
