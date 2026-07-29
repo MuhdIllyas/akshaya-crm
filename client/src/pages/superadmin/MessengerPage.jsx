@@ -787,20 +787,23 @@ const MessengerPage = ({ user }) => {
 
   // 🔥 Catch incoming navigation from Notifications
   useEffect(() => {
-    if (location.state?.openConversationId && conversations.length > 0) {
+    if (!location.state) return;
+
+    // Check if we need to open the Tasks tab
+    if (location.state.openTasksView) {
+      setActiveView("tasks");
+      window.history.replaceState({}, document.title);
+      return;
+    }
+
+    // Check if we need to open a specific Chat
+    if (location.state.openConversationId && conversations.length > 0) {
       const targetConvId = location.state.openConversationId;
-      
-      // Find the conversation in your loaded list
       const chatToOpen = conversations.find(c => c.id === targetConvId);
       
       if (chatToOpen) {
-        // Switch to the chats tab if they were somewhere else
         setActiveView("chats"); 
-        
-        // Open the specific chat!
         setActiveConversation(chatToOpen); 
-
-        // Clear the router state so it doesn't re-trigger on page refresh
         window.history.replaceState({}, document.title);
       }
     }

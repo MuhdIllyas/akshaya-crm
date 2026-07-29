@@ -44,7 +44,12 @@ const mapDBNotificationToUI = (dbNotif) => {
   const role = localStorage.getItem('role') || 'staff';
   // Construct a frontend route based on the entity
   let actionUrl = '#';
-  if (dbNotif.related_entity_type === 'task') actionUrl = `/dashboard/${role}/tasks`; 
+  if (dbNotif.related_entity_type === 'task') {
+    actionUrl = ["admin", "superadmin"].includes(role) 
+      ? `/dashboard/${role}/messenger` 
+      : `/dashboard/staff/tasks`;
+  }
+
   if (dbNotif.related_entity_type === 'service') {
     actionUrl = ["admin", "superadmin"].includes(role)
       ? `/dashboard/${role}/servicelogs`
@@ -116,7 +121,10 @@ const mapDBNotificationToUI = (dbNotif) => {
       // 🔥 The state to pass when clicking the whole card
       actionState: { 
         openConversationId: dbNotif.conversation_id,
-        openDiscussionId: (dbNotif.related_entity_type === 'discussion' || typeStr.startsWith('knowledge_')) ? dbNotif.related_entity_id : undefined
+        openDiscussionId: (dbNotif.related_entity_type === 'discussion' || typeStr.startsWith('knowledge_')) ? dbNotif.related_entity_id : undefined,
+
+        // 🔥 Tell Messenger to open the Tasks tab for admins
+        openTasksView: dbNotif.related_entity_type === 'task' && ["admin", "superadmin"].includes(role) ? true : undefined
       },
 
       metadata: dbNotif.metadata || {},
@@ -589,7 +597,14 @@ const NotificationsPage = () => {
     // Handle "Open" for tasks
     if (action === 'open' && notification.type.includes('task')) {
       handleMarkRead(id);
-      navigate(`/dashboard/${role}/tasks`);
+      
+      const targetRoute = ["admin", "superadmin"].includes(role) 
+        ? `/dashboard/${role}/messenger` 
+        : `/dashboard/staff/tasks`;
+        
+      navigate(targetRoute, {
+        state: ["admin", "superadmin"].includes(role) ? { openTasksView: true } : {}
+      });
       return;
     }
 
