@@ -387,7 +387,7 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["superadmin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
-              path="superadmin/operationshub/:serviceId"
+              path="superadmin/operationshub"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
             /> 
             <Route
