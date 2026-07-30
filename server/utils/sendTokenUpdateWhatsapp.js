@@ -10,7 +10,7 @@ const LIBROMI_BASE_URL =
 // Approved WhatsApp template name
 const TEMPLATE_NAME = 'campaigns';
 
-const sendTokenUpdateWhatsApp = async ({
+const sendTokenUpdateWhatsapp = async ({
   customerName,
   phone,
   tokenNumber,
@@ -120,4 +120,4 @@ const sendTokenUpdateWhatsApp = async ({
   }
 };
 
-export default sendTokenUpdateWhatsApp;
+export default sendTokenUpdateWhatsapp;
