@@ -761,7 +761,7 @@ const StaffDashboard = () => {
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            💅 You can now track all your assigned Applications seamlessly 🎯, and instantly update Notes on the fly! 📝🚀
+            🎉 Introducing Knowledge Hub!! 🧠 A live notification engine 🔔, staff mentions across the system 🗣️, service cards in messenger 💼, and notes in messenger 📝🚀
           </div>
         </div>
       </div>
