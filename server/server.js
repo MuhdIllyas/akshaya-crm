@@ -1,8 +1,5 @@
 import express from "express";
 import dotenv from "dotenv";
-
-dotenv.config();
-
 import path from "path";
 import cors from "cors";
 import jwt from "jsonwebtoken";
@@ -57,20 +54,12 @@ import eventsRoutes from "./routes/events.js";
 
 import notesRoutes from "./routes/notes.js";
 
-import printingRoutes from "./routes/printing.js"
-
 //communication routes
 import communicationRoutes from "./routes/communication.js";
 
-//notification routes
-import notificationRoutes from "./routes/notifications.js";
-
-//Operation Hub
-import knowledgeRoutes from "./routes/knowledge.js";
+dotenv.config();
 
 import "./routes/scheduler.js";
-
-dotenv.config();
 
 const { Pool } = pkg;
 
@@ -312,17 +301,9 @@ app.use("/api/events", eventsRoutes);
 /* Notes */
 app.use("/api/notes", notesRoutes);
 
-/* Printing */
-app.use("/api/printing", printingRoutes);
-
 /* Communication */
 app.use("/api/communication", communicationRoutes);
 
-/* Notification */
-app.use("/api/notifications", notificationRoutes);
-
-/* Knowledge Hub */
-app.use("/api/knowledge", knowledgeRoutes);
 /* ================================
    STATIC FILES
 ================================ */
