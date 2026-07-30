@@ -886,8 +886,3 @@ async function fetchSystemAlerts(client) {
     });
 
     return alerts;
-<<<<<<< HEAD
-}
-=======
-}
->>>>>>> staging
