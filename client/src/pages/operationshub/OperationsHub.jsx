@@ -1,0 +1,778 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useLocation } from 'react-router-dom';
+import {
+  FiHome, FiMessageCircle, FiBook, FiBell, FiAward,
+  FiTag, FiBookmark, FiAtSign, FiClock, FiPlus, FiSearch,
+  FiUser, FiChevronRight, FiChevronLeft, FiX,
+  FiStar, FiTrendingUp, FiCalendar, FiEye, FiMessageSquare,
+  FiPaperclip, FiLink, FiCheckCircle, FiAlertCircle, FiFilter,
+  FiChevronDown, FiCornerDownLeft, FiEdit2, FiTrash2, FiSave,
+  FiExternalLink, FiLock, FiMapPin, FiGlobe, FiHeart, FiZap,
+  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo,
+  FiMenu, FiSettings, FiFile, FiLayers, FiFolder,
+  FiMoreHorizontal, FiShare2, FiUserPlus, FiRefreshCw,
+  FiArchive, FiClipboard, FiVideo, FiFileText, FiLifeBuoy,
+  FiUsers, FiBriefcase, FiTarget, FiCheckSquare, FiMessageCircle as FiMessageCircleOutline,
+  FiGrid, FiList, FiFilePlus, FiDatabase, FiServer, FiCloud,
+  FiMessageCircle as FiChat, FiFileMinus, FiFilePlus as FiFileAdd,
+} from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MentionsInput, Mention } from 'react-mentions';
+import { toast } from 'react-toastify';
+import GlobalDiscussions from './views/GlobalDiscussions';
+import DiscussionDetailPage from './views/DiscussionDetailPage';
+import LearningView from './views/LearningView';
+import BookmarksPage from './views/BookmarksPage';
+import MentionsPage from './views/MentionsPage';
+import FollowingPage from './views/FollowingPage';
+import HistoryPage from './views/HistoryPage';
+import DraftsPage from './views/DraftsPage';
+import AnnouncementsView from './views/AnnouncementsView';
+import CreateDiscussionModal from './views/discussions/CreateDiscussionModal';
+import ServiceWorkspace from './ServiceWorkspace'; 
+import { getWorkflowServices } from '@/services/serviceService';
+import { 
+  fetchGlobalHubStats, 
+  fetchAnnouncements,
+  fetchAllDiscussions,
+  fetchMyMentions,
+  fetchRecentActivity
+} from '@/services/knowledge';
+
+// =====================================================================
+// HELPER COMPONENTS
+// =====================================================================
+
+const Sidebar = ({ active, onNavigate, hubStats = {} }) => { 
+  const mainNav = [
+    { id: 'home', label: 'Home', icon: FiHome },
+    { id: 'services', label: 'Services', icon: FiGrid },
+    { id: 'discussions', label: 'Discussions', icon: FiMessageCircle, count: hubStats.discussions },
+    { id: 'learning', label: 'Learning Center', icon: FiAward, count: hubStats.trainings },
+    { id: 'announcements', label: 'Announcements', icon: FiBell, count: hubStats.announcements },
+    { id: 'ai-assistant', label: 'AI Assistant', icon: FiZap },
+  ];
+  const workspaceItems = [
+    { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: hubStats.mentions },
+    { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
+    { id: 'drafts', label: 'Drafts', icon: FiFile, count: hubStats.drafts || 0 }, 
+    { id: 'following', label: 'Following', icon: FiUserPlus },
+    { id: 'history', label: 'History', icon: FiClock },
+  ];
+
+  return (
+    <div className="w-60 h-full bg-white border-r border-gray-200 flex flex-col overflow-y-auto flex-shrink-0">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200">
+        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm">
+          <FiZap className="h-5 w-5" />
+        </div>
+        <h1 className="text-lg font-bold text-gray-900">Operations Hub</h1>
+        <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full ml-auto">v1.0</span>
+      </div>
+
+      <div className="flex-1 px-2.5 py-3">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5">⚡ Operations</div>
+        {mainNav.map(item => (
+          <a
+            key={item.id}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+              active === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+            onClick={() => onNavigate(item.id)}
+          >
+            <item.icon className="h-4 w-4" />
+            <span>{item.label}</span>
+            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+          </a>
+        ))}
+
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5 mt-4">⭐ My Workspace</div>
+        {workspaceItems.map(item => (
+          <a
+            key={item.id}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+              active === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+            onClick={() => onNavigate(item.id)}
+          >
+            <item.icon className="h-4 w-4" />
+            <span>{item.label}</span>
+            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant, hubStats = {} }) => {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  return (
+    <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <button className="lg:hidden text-gray-500 hover:text-gray-700" onClick={toggleMobileSidebar}>
+        <FiMenu className="h-5 w-5" />
+      </button>
+      <div className="flex-1 min-w-[180px] max-w-xl relative">
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Ask Operations Hub (e.g., 'How to correct Aadhaar DOB?')"
+          value={query}
+          onChange={(e) => onSearch(e.target.value)}
+          className="w-full pl-9 pr-14 py-2 bg-gray-100 border border-transparent rounded-full text-sm focus:outline-none focus:bg-white focus:border-gray-300 transition-all shadow-inner"
+        />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded border border-gray-300 font-mono">⌘K</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button onClick={onAIAssistant} className="relative p-2 rounded-full hover:bg-indigo-50 text-indigo-500 hover:text-indigo-700 transition" title="Ask Akshaya Assistant">
+          <FiZap className="h-5 w-5" />
+        </button>
+        <button onClick={() => onNavigate('notifications')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+          <FiBell className="h-5 w-5" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+        </button>
+        <button onClick={() => onNavigate('bookmarks')} className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+          <FiBookmark className="h-5 w-5" />
+        </button>
+        <button onClick={() => onNavigate('mentions')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+          <FiAtSign className="h-5 w-5" />
+          {hubStats.mentions > 0 && (    
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const StatCard = ({ label, value, icon: Icon, color }) => {
+  const colorMap = {
+    blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600',
+    amber: 'bg-amber-50 text-amber-600', purple: 'bg-purple-50 text-purple-600',
+    rose: 'bg-rose-50 text-rose-600', indigo: 'bg-indigo-50 text-indigo-600',
+  };
+  return (
+    <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
+      <div className={`p-2.5 rounded-xl ${colorMap[color] || 'bg-gray-50 text-gray-600'}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div>
+        <div className="text-xl font-bold text-gray-900">{value}</div>
+        <div className="text-xs text-gray-500">{label}</div>
+      </div>
+    </div>
+  );
+};
+
+const AnnouncementItem = ({ announcement, onClick }) => {
+  const categoryColors = {
+    government: 'bg-red-100 text-red-700', centre: 'bg-blue-100 text-blue-700',
+    software: 'bg-green-100 text-green-700', training: 'bg-purple-100 text-purple-700',
+  };
+  const color = categoryColors[announcement.category] || 'bg-gray-100 text-gray-700';
+  return (
+    <div className="flex items-center gap-3 py-3 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg transition" onClick={onClick}>
+      {announcement.pinned ? <FiHeart className="text-amber-500 h-4 w-4 flex-shrink-0" /> : <span className="w-4 flex-shrink-0"></span>}
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-gray-900">{announcement.title}</div>
+        <div className="text-xs text-gray-400">{announcement.time}</div>
+      </div>
+      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${color}`}>{announcement.category}</span>
+    </div>
+  );
+};
+
+const DiscussionCard = ({ discussion, onClick }) => {
+  const typeMap = {
+    question: { icon: FiMessageSquare, color: 'bg-blue-50 text-blue-600' },
+    'customer issue': { icon: FiUser, color: 'bg-amber-50 text-amber-600' },
+    bug: { icon: FiAlertCircle, color: 'bg-yellow-50 text-yellow-600' },
+  };
+  const { icon: Icon, color: typeClass } = typeMap[discussion.type] || { icon: FiMessageSquare, color: 'bg-gray-50 text-gray-600' };
+  const serviceObj = null;
+  const serviceName = serviceObj ? serviceObj.name : null;
+
+  return (
+    <div className="p-3 bg-white border border-gray-200 rounded-xl mb-2.5 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={() => onClick(discussion.id)}>
+      <div className="flex gap-3">
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${typeClass}`}><Icon className="h-4 w-4" /></div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center flex-wrap gap-1.5">
+            <span className="text-sm font-semibold text-gray-900">{discussion.title}</span>
+            {discussion.solved !== undefined && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${discussion.solved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                {discussion.solved ? 'Solved' : 'Open'}
+              </span>
+            )}
+            {serviceName && <span className="text-[10px] font-medium bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{serviceName}</span>}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{discussion.preview}</div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-400">
+            <span><FiUser className="inline h-3 w-3 mr-0.5" /> {discussion.author}</span>
+            <span><FiClock className="inline h-3 w-3 mr-0.5" /> {discussion.lastReply}</span>
+            <span><FiMessageSquare className="inline h-3 w-3 mr-0.5" /> {discussion.replies}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ArticleCard = ({ article, onClick }) => {
+  const serviceObj = null; // <--- Safe fallback!
+  const serviceName = serviceObj ? serviceObj.name : null;
+  return (
+    <div className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
+      <div className="font-semibold text-sm text-gray-900">{article.title}</div>
+      <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{article.desc}</div>
+      <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-gray-400">
+        <span><FiFolder className="inline h-3 w-3 mr-0.5" /> {article.category}</span>
+        <span><FiUser className="inline h-3 w-3 mr-0.5" /> {article.author}</span>
+        <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.updated}</span>
+        {serviceName && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">{serviceName}</span>}
+      </div>
+    </div>
+  );
+};
+
+const ActivityFeed = ({ activities }) => (
+  <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
+      <FiRefreshCw className="h-4 w-4 text-indigo-500" /> Recent Activity
+    </h3>
+    <div className="space-y-2">
+      {activities.map(act => (
+        <div key={act.id} className="flex items-start gap-2 text-sm">
+          <span className="mt-0.5">
+            {act.type === 'solved' && <FiCheckCircle className="h-4 w-4 text-emerald-500" />}
+            {act.type === 'article' && <FiFileText className="h-4 w-4 text-blue-500" />}
+          </span>
+          <div className="flex-1 min-w-0">
+            <span className="text-gray-700">
+              <strong>{act.user}</strong> {act.type === 'solved' ? 'solved' : 'updated'}{' '}
+              <span className="text-indigo-600 font-medium">{act.target}</span>
+            </span>
+            <span className="block text-xs text-gray-400">{act.time}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const ConvertDropdown = ({ onConvert }) => {
+  const [open, setOpen] = useState(false);
+  const options = [{ label: 'Solved Case', icon: FiCheckCircle, action: 'case' }];
+  return (
+    <div className="relative inline-block">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition">
+        <FiMoreHorizontal className="h-4 w-4" /> Convert
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+          {options.map(opt => (
+            <div key={opt.action} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer" onClick={() => { onConvert(opt.action); setOpen(false); }}>
+              <opt.icon className="h-4 w-4" /> {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =====================================================================
+// PAGE COMPONENTS
+// =====================================================================
+
+const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], recentDiscussions = [], recentMentions = [], recentActivity = [], navigateTo, openDiscussion }) => {
+  // THE FIX: Sort services by most pending, then slice to only show the Top 6!
+  const topServices = [...services]
+    .sort((a, b) => (b.openDiscussions || 0) - (a.openDiscussions || 0))
+    .slice(0, 6);
+
+  // SMART GREETING LOGIC
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Staff';
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">{greeting}, {firstName} 👋</h2>
+        <p className="text-gray-500">Welcome to the Operations Hub. Here is everything at a glance.</p>
+      </div>
+
+      {/* THE FIX: Real Live Data for the Stat Cards! */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatCard label="Discussions" value={hubStats.discussions} icon={FiMessageCircle} color="blue" />
+        <StatCard label="Services" value={services.length} icon={FiGrid} color="green" />
+        <StatCard label="Announcements" value={hubStats.announcements} icon={FiBell} color="amber" />
+        <StatCard label="Trainings" value={hubStats.trainings} icon={FiAward} color="purple" />
+        <StatCard label="Solved Cases" value={hubStats.cases} icon={FiCheckCircle} color="rose" />
+        <StatCard label="Mentions" value={hubStats.mentions} icon={FiAtSign} color="indigo" />
+      </div>
+
+      <div className="flex items-center justify-between mt-8 mb-2">
+        <h3 className="text-lg font-bold text-gray-900">High Priority Services</h3>
+        <button onClick={() => navigateTo('services')} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+          View All {services.length} Services &rarr;
+        </button>
+      </div>
+
+      {/* THE FIX: Only map over the topServices (Max 6) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {topServices.map(service => (
+          <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition cursor-pointer" onClick={() => navigateTo('service-detail', service.id)}>
+            <div className="flex items-start gap-3 mb-3">
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                <FiLayers className="h-6 w-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-gray-900 truncate">{service.name}</h4>
+                <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{service.description}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium border-t border-gray-100 pt-3">
+              <span className={`${(service.openDiscussions > 0) ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'} px-2 py-1 rounded-lg flex items-center gap-1`}>
+                <FiMessageCircle className="h-3 w-3" /> {service.openDiscussions || 0} Open
+              </span>
+              <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg flex items-center gap-1">
+                <FiCheckCircle className="h-3 w-3" /> {service.closedDiscussions || 0} Solved
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Real Live Government Updates / Announcements */}
+      <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <FiFileText className="h-4 w-4 text-red-500" /> Government Updates & Announcements
+          </h3>
+        </div>
+        <div className="space-y-2">
+          {liveAnnouncements.length === 0 ? (
+             <p className="text-sm text-gray-500">No active announcements.</p>
+          ) : (
+            liveAnnouncements.map(update => (
+              <div key={update.id} className="flex items-center gap-3 text-sm p-2 hover:bg-gray-50 rounded-lg transition">
+                {update.is_pinned && <FiHeart className="text-amber-500 h-3 w-3 flex-shrink-0" />}
+                <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                  update.priority === 'high' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {update.priority}
+                </span>
+                <span className="text-gray-700 font-medium flex-1">{update.title}</span>
+                <span className="text-xs text-gray-400">
+                  {new Date(update.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* --- THE 3 BOTTOM WIDGETS --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div className="space-y-6">
+          
+          {/* LATEST DISCUSSIONS */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <FiMessageCircle className="h-4 w-4 text-indigo-500" /> Latest Discussions
+              </h3>
+              <button onClick={() => navigateTo('discussions')} className="text-xs font-medium text-indigo-600 hover:underline">View All</button>
+            </div>
+            
+            {recentDiscussions.length === 0 ? (
+               <p className="text-sm text-gray-500 py-2">No active discussions.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentDiscussions.map(d => (
+                  <div key={d.id} onClick={() => openDiscussion(d.id)} className="group cursor-pointer border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                    <h4 className="text-sm font-semibold text-gray-800 group-hover:text-indigo-600 truncate">{d.title}</h4>
+                    <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-1">
+                      <span><FiUser className="inline h-3 w-3 mr-1"/>{d.author_name}</span>
+                      <span><FiMessageSquare className="inline h-3 w-3 mr-1"/>{d.replies_count} replies</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* MY MENTIONS */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+             <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <FiAtSign className="h-4 w-4 text-purple-500" /> Recent Mentions
+              </h3>
+              <button onClick={() => navigateTo('mentions')} className="text-xs font-medium text-purple-600 hover:underline">Inbox</button>
+            </div>
+            
+            {recentMentions.length === 0 ? (
+               <p className="text-sm text-gray-500 py-2">No new mentions.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentMentions.map(m => (
+                  <div key={m.id} onClick={() => openDiscussion(m.discussion_id)} className="cursor-pointer bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100 transition border border-purple-100">
+                    <div className="text-xs font-medium text-purple-800 mb-1">
+                      <strong className="font-bold">{m.author_name}</strong> tagged you:
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 truncate">{m.discussion_title}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* RECENT ACTIVITY */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
+              <FiRefreshCw className="h-4 w-4 text-indigo-500" /> Global Activity
+            </h3>
+            
+            <div className="space-y-3">
+              {recentActivity.map((act, i) => (
+                <div key={i} className="flex items-start gap-3 text-sm">
+                  <div className={`mt-0.5 p-1.5 rounded-md ${act.type === 'solved' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                    {act.type === 'solved' ? <FiCheckCircle className="h-3 w-3" /> : <FiMessageSquare className="h-3 w-3" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-gray-700">
+                      <strong className="font-semibold text-gray-900">{act.user_name}</strong> {act.type === 'solved' ? 'solved the case:' : 'started a discussion:'}
+                    </span>
+                    <span className="block text-indigo-600 font-medium truncate mt-0.5">{act.target}</span>
+                    <span className="block text-[10px] text-gray-400 mt-1 uppercase tracking-wider">
+                      {new Date(act.time).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+  </div>
+  );
+};
+
+const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
+  <div>
+    <h2 className="text-xl font-bold text-gray-900 mb-4">All Services</h2>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* 2. Map over the "services" prop instead of DATA.services */}
+      {services.map(service => (
+        <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer" onClick={() => openServiceDetail(service.id)}>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><service.icon className="h-6 w-6" /></div>
+            <div>
+              <h3 className="font-semibold text-gray-900">{service.name}</h3>
+              <p className="text-xs text-gray-500">{service.description}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const TagsPage = () => <div className="p-4">Tags - Coming Soon</div>;
+const NotificationsPage = () => <div className="p-4">Notifications - Coming Soon</div>;
+
+const AIAssistantPage = () => {
+  const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello! I am your Akshaya Assistant.' }]);
+  const [input, setInput] = useState('');
+  return (
+    <div className="flex flex-col h-full">
+      <h2 className="text-xl font-bold text-gray-900 mb-4">Akshaya Assistant</h2>
+      <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 mb-4">
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`mb-3 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
+            <span className={`inline-block p-3 rounded-xl max-w-xl text-sm ${msg.role === 'user' ? 'bg-indigo-100 text-gray-800' : 'bg-gray-100 text-gray-800'}`}>
+              {msg.content}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask a question..." className="flex-1 px-3 py-2 border border-gray-300 rounded-lg outline-none" />
+        <button onClick={() => { setMessages([...messages, { role: 'user', content: input }]); setInput(''); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Send</button>
+      </div>
+    </div>
+  );
+};
+
+const SearchPage = ({ query }) => (
+  <div className="p-4"><h2 className="text-xl font-bold text-gray-900">Search: "{query}"</h2></div>
+);
+
+
+// =====================================================================
+// MAIN SHELL COMPONENT
+// =====================================================================
+const OperationsHub = () => { // <--- Removed the prop!
+  
+  // GRAB USER DIRECTLY FROM LOCAL STORAGE
+  const currentUser = useMemo(() => ({
+    id: localStorage.getItem("id"),
+    name: localStorage.getItem("name"),
+    username: localStorage.getItem("username"),
+    role: localStorage.getItem("role"),
+    centre_id: localStorage.getItem("centre_id"),
+    photo: localStorage.getItem("photo"),
+  }), []);
+
+  const { serviceId } = useParams(); 
+  const location = useLocation();
+
+  const isDbId = serviceId && !isNaN(serviceId);
+
+  const [page, setPage] = useState(isDbId ? 'service-detail' : (serviceId || 'home'));
+  const [selectedServiceId, setSelectedServiceId] = useState(isDbId ? serviceId : null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingDraft, setEditingDraft] = useState(null);
+
+  // === 1. ADD THIS REAL DATABASE STATE ===
+  const [realServices, setRealServices] = useState([]);
+  const [hubStats, setHubStats] = useState({ discussions: 0, cases: 0, resources: 0, announcements: 0, trainings: 0, mentions: 0 });
+  const [liveAnnouncements, setLiveAnnouncements] = useState([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+
+  const [homeDiscussions, setHomeDiscussions] = useState([]);
+  const [homeMentions, setHomeMentions] = useState([]);
+  const [homeActivity, setHomeActivity] = useState([]);
+
+  // === 2. ADD THIS FETCH EFFECT ===
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoadingServices(true);
+        
+        // Fetch everything concurrently
+        const [
+          servicesResponse, 
+          statsResponse, 
+          announcementsResponse, 
+          discussionsRes, 
+          mentionsRes, 
+          activityRes
+        ] = await Promise.all([
+           getWorkflowServices(),
+           fetchGlobalHubStats(),
+           fetchAnnouncements(),
+           fetchAllDiscussions(),       
+           fetchMyMentions(),           
+           fetchRecentActivity()        
+        ]);
+
+        // Map over the services and attach the counts
+        const formatted = servicesResponse.data.map(s => {
+          
+          // 🔥 SMART FALLBACK: If the backend doesn't provide the counts natively, 
+          // we count them dynamically from the discussions array!
+          const relatedDiscussions = discussionsRes.filter(d => d.service_name === s.name || d.service_id === s.id);
+          const openCount = relatedDiscussions.filter(d => d.status !== 'solved').length;
+          const closedCount = relatedDiscussions.filter(d => d.status === 'solved').length;
+
+          return {
+            id: s.id, 
+            name: s.name,
+            icon: FiLayers, 
+            description: s.description || 'Manage operations for this service.',
+            openDiscussions: parseInt(s.open_discussions, 10) || openCount,
+            closedDiscussions: parseInt(s.closed_discussions, 10) || closedCount,
+          };
+        });
+        
+        setRealServices(formatted);
+        setHubStats(statsResponse);
+        setLiveAnnouncements(announcementsResponse);
+
+        setHomeDiscussions(discussionsRes.slice(0, 5)); 
+        setHomeMentions(mentionsRes.slice(0, 5));
+        setHomeActivity(activityRes);
+
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+        toast.error("Failed to load operations dashboard");
+      } finally {
+        setIsLoadingServices(false);
+      }
+    };
+    
+    fetchDashboardData();
+  }, []);
+
+  // Sync with URL changes
+  useEffect(() => {
+      if (serviceId) {
+        if (!isNaN(serviceId)) {
+          // It's a real database ID, open the workspace!
+          setPage('service-detail');
+          setSelectedServiceId(serviceId);
+        } else {
+          // It's just a text page like 'services' or 'home'
+          setPage(serviceId); 
+          setSelectedServiceId(null);
+        }
+      }
+  }, [serviceId]);
+
+  useEffect(() => {
+    if (location.state?.openDiscussionId) {
+      setPage('discussion-detail');
+      setSelectedServiceId(location.state.openDiscussionId);
+      
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  const navigateTo = (target, id = null) => {
+    setPage(target);
+    setSelectedServiceId(id); // <--- This now safely accepts the ID for ANY page!
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setMobileSidebarOpen(false);
+  };
+
+  const renderPage = () => {
+    // Show a loader while fetching services from PostgreSQL
+    if (isLoadingServices) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;
+
+    switch (page) {
+      case 'home': 
+        return (
+          <HomePage
+            currentUser={currentUser} 
+            services={realServices} 
+            hubStats={hubStats} 
+            liveAnnouncements={liveAnnouncements} 
+            recentDiscussions={homeDiscussions} 
+            recentMentions={homeMentions}       
+            recentActivity={homeActivity}       
+            navigateTo={navigateTo} 
+            openDiscussion={(id) => navigateTo('discussion-detail', id)} 
+          />
+        );
+      case 'services': 
+        return <ServicesPage services={realServices} navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
+      case 'service-detail': 
+        return (
+          <ServiceWorkspace 
+            serviceId={selectedServiceId} 
+            navigateTo={navigateTo} 
+            // We use String() here just in case selectedServiceId from URL is a string but DB id is a number
+            mockService={realServices.find(s => String(s.id) === String(selectedServiceId))} 
+          />
+        );
+      case 'discussions': 
+        return <GlobalDiscussions navigateTo={navigateTo} />;
+      case 'discussion-detail': 
+        return <DiscussionDetailPage discussionId={selectedServiceId} navigateTo={navigateTo} />;
+      case 'learning': return <LearningView />;
+      case 'announcements': return <AnnouncementsView />;
+      case 'tags': return <TagsPage navigateTo={navigateTo} />;
+      case 'bookmarks': return <BookmarksPage navigateTo={navigateTo} />;
+      case 'mentions': return <MentionsPage navigateTo={navigateTo} />;
+      case 'drafts': 
+        return <DraftsPage navigateTo={navigateTo} onResumeDraft={(draft) => { 
+          setEditingDraft(draft); 
+          setShowCreateModal(true); 
+        }} />;
+      case 'following': return <FollowingPage navigateTo={navigateTo} />;
+      case 'history': return <HistoryPage navigateTo={navigateTo} />;
+      case 'notifications': return <NotificationsPage />;
+      case 'ai-assistant': return <AIAssistantPage navigateTo={navigateTo} />;
+      case 'search': return <SearchPage query={searchQuery} navigateTo={navigateTo} />;
+      default: 
+        return <HomePage navigateTo={navigateTo} />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-gray-50">
+      <div className="hidden lg:block flex-shrink-0">
+        {/* PASSED hubStats */}
+        <Sidebar active={page} onNavigate={navigateTo} hubStats={hubStats} /> 
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TopBar
+          onSearch={(q) => setSearchQuery(q)}
+          query={searchQuery}
+          onNavigate={navigateTo}
+          toggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+          onAIAssistant={() => navigateTo('ai-assistant')}
+          hubStats={hubStats} // <--- PASSED hubStats
+        />
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {renderPage()}
+        </div>
+      </div>
+
+      {/* GLOBAL DRAFTS MODAL */}
+      {showCreateModal && (
+        <CreateDiscussionModal
+          isOpen={showCreateModal}
+          lockedServiceId={serviceId} // Will be null if on the Global Home page
+          lockedServiceName={realServices.find(s => String(s.id) === String(serviceId))?.name}
+          existingDraft={editingDraft} 
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditingDraft(null); 
+          }}
+          onSubmit={async (formData) => {
+             try {
+                 const { createDiscussion } = await import('@/services/knowledge');
+                 
+                 // 🔥 THE FIX: If there is no workspaceId, fetch it using the serviceId they selected!
+                 let finalWorkspaceId = formData.workspaceId;
+                 
+                 if (!finalWorkspaceId) {
+                   const token = localStorage.getItem("token");
+                   // Your existing backend route that gets/creates the workspace for a service
+                   const res = await fetch(`${import.meta.env.VITE_API_URL}/api/knowledge/workspaces/${formData.serviceId}`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                   });
+                   const data = await res.json();
+                   finalWorkspaceId = data.workspace.id; // Grab the Workspace ID!
+                 }
+                 
+                 // Finally submit the discussion to the correct workspace!
+                 await createDiscussion(finalWorkspaceId, formData);
+                 
+                 toast.success("Discussion published!");
+                 setShowCreateModal(false);
+                 setEditingDraft(null);
+                 
+             } catch (err) {
+                 throw err; 
+             }
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+export default OperationsHub;

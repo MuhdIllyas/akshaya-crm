@@ -1,5 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
+
+dotenv.config();
+
 import path from "path";
 import cors from "cors";
 import jwt from "jsonwebtoken";
@@ -54,10 +57,16 @@ import eventsRoutes from "./routes/events.js";
 
 import notesRoutes from "./routes/notes.js";
 
+import printingRoutes from "./routes/printing.js"
+
 //communication routes
 import communicationRoutes from "./routes/communication.js";
 
-dotenv.config();
+//notification routes
+import notificationRoutes from "./routes/notifications.js";
+
+//Operation Hub
+import knowledgeRoutes from "./routes/knowledge.js";
 
 import "./routes/scheduler.js";
 
@@ -72,8 +81,7 @@ const httpServer = createServer(app);
 
 app.use(cors({
   origin: [
-    "https://akshayasahayi.com",
-    "https://www.akshayasahayi.com"
+    process.env.FRONTEND_URL || "http://localhost:5173"
   ],
   credentials: true
 }));
@@ -226,7 +234,8 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.PG_URI,
-  ssl: process.env.DATABASE_URL
+  // Only force SSL if we are in production mode
+  ssl: process.env.NODE_ENV === "production"
     ? { rejectUnauthorized: false }
     : false,
 });
@@ -301,8 +310,17 @@ app.use("/api/events", eventsRoutes);
 /* Notes */
 app.use("/api/notes", notesRoutes);
 
+/* Printing */
+app.use("/api/printing", printingRoutes);
+
 /* Communication */
 app.use("/api/communication", communicationRoutes);
+
+/* Notification */
+app.use("/api/notifications", notificationRoutes);
+
+/* Knowledge Hub */
+app.use("/api/knowledge", knowledgeRoutes);
 
 /* ================================
    STATIC FILES

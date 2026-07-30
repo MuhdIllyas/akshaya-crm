@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { socket } from '@/services/socket';
+import { useNotifications } from '../context/NotificationContext';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -16,6 +17,9 @@ const DashboardLayout = () => {
   const [unreadNotesCount, setUnreadNotesCount] = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // global notification count
+  const { unreadCount: notificationsCount } = useNotifications();
 
   // Get current user info for socket
   let currentUserId = null;
@@ -175,6 +179,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin", label: "Overview", icon: DashboardIcon },
       { path: "/dashboard/superadmin/centremanagement", label: "Centre Management", icon: CentreIcon },
       { path: "/dashboard/superadmin/calendar", label: "Calendar", icon: EventsIcon },
+      { path: "/dashboard/superadmin/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/superadmin/staffmanagement", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/superadmin/walletmanagement", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/superadmin/servicemanagement", label: "Service Management", icon: ServicesIcon },
@@ -182,7 +187,9 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin/attendance", label: "Salary Calculations", icon: SalaryIcon },
       { path: "/dashboard/superadmin/expensemanagement", label: "Expense Management", icon: ExpenseManagementIcon },
       { path: "/dashboard/superadmin/teams", label: "Teams", icon: TeamIcon },
+      { path: "/dashboard/superadmin/notifications", label: "Notifications", icon: NotificationsIconWithBadge },
       { path: "/dashboard/superadmin/messenger", label: "Messenger", icon: MessengerIconWithBadge },
+      { path: "/dashboard/superadmin/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/superadmin/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/superadmin/settings", label: "Settings", icon: SettingsIcon },
       { path: "/dashboard/superadmin/reports", label: "Reports", icon: ReportsIcon },
@@ -192,6 +199,7 @@ const DashboardLayout = () => {
     admin: [
       { path: "/dashboard/admin", label: "Overview", icon: DashboardIcon },
       { path: "/dashboard/admin/calendar", label: "Calendar", icon: EventsIcon },
+      { path: "/dashboard/admin/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/admin/staff", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/admin/wallets", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/admin/services", label: "Service Management", icon: ServicesIcon },
@@ -199,7 +207,9 @@ const DashboardLayout = () => {
       { path: "/dashboard/admin/token", label: "Token Generator", icon: TokenGeneratorIcon },
       { path: "/dashboard/admin/attendancemanagement", label: "Salary Calculations", icon: SalaryIcon },
       { path: "/dashboard/admin/expensemanagement", label: "Expense Management", icon: ExpenseManagementIcon },
+      { path: "/dashboard/admin/notifications", label: "Notifications", icon: NotificationsIconWithBadge },
       { path: "/dashboard/admin/messenger", label: "Messenger", icon: MessengerIconWithBadge },
+      { path: "/dashboard/admin/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/admin/teams", label: "Teams", icon: TeamIcon },
       { path: "/dashboard/admin/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/admin/settings", label: "Settings", icon: SettingsIcon },
@@ -216,9 +226,10 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/service_entry", label: "Service Entry", icon: ServiceEntryIcon },
       { path: "/dashboard/staff/expense_entry", label: "Expense Entry", icon: ExpenseEntryIcon },
       { path: "/dashboard/staff/pending_payments", label: "Pending Payments", icon: PendingPaymentIcon },
-      { path: "/dashboard/staff/messages", label: "Notifications", icon: NotificationsIcon },
+      { path: "/dashboard/staff/notifications", label: "Notifications", icon: NotificationsIconWithBadge }, 
       { path: "/dashboard/staff/team", label: "My Team", icon: TeamIcon },
       { path: "/dashboard/staff/messenger", label: "Messenger", icon: MessengerIconWithBadge },
+      { path: "/dashboard/staff/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/staff/token", label: "Token Generator", icon: TokenGeneratorIcon },
       { path: "/dashboard/staff/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/staff/track_service", label: "Track Service", icon: TrackServiceIcon },
@@ -313,6 +324,7 @@ const DashboardLayout = () => {
               const IconComponent = item.icon;
               const isMessenger = item.label === "Messenger";
               const isNotes = item.label === "Notes";
+              const isNotifications = item.label === "Notifications";
               
               return (
                 <Link 
@@ -334,7 +346,11 @@ const DashboardLayout = () => {
                     <IconComponent 
                       isActive={isActive} 
                       isCollapsed={isCollapsed} 
-                      unreadCount={isMessenger ? unreadCount : (isNotes ? unreadNotesCount : 0)}
+                      unreadCount={
+                        isMessenger ? unreadCount : 
+                        isNotes ? unreadNotesCount : 
+                        isNotifications ? notificationsCount : 0 
+                      }
                     />
                   </div>
                   {!isCollapsed && (
@@ -361,6 +377,13 @@ const DashboardLayout = () => {
                       {isNotes && unreadNotesCount > 0 && (
                         <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
                           {unreadNotesCount > 99 ? '99+' : unreadNotesCount}
+                        </span>
+                      )}
+
+                      {/* 🔥 ADDED: Notifications Badge */}
+                      {isNotifications && notificationsCount > 0 && (
+                        <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
+                          {notificationsCount > 99 ? '99+' : notificationsCount}
                         </span>
                       )}
 
@@ -584,6 +607,28 @@ const NotesIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount
   </div>
 );
 
+// Notifications Icon with Badge
+const NotificationsIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount = 0 }) => (
+  <div className="relative inline-block">
+    <svg 
+      className={isCollapsed ? "w-6 h-6" : "w-5 h-5"} 
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+    </svg>
+    {unreadCount > 0 && (
+      <span className={`absolute ${
+        isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
+      } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
+      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+        {unreadCount > 99 ? '99+' : unreadCount}
+      </span>
+    )}
+  </div>
+);
+
 // Icon Definitions
 const DashboardIcon = createIcon("M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6");
 const EventsIcon = createIcon(`M8 7V3m8 4V3m-9 8h10 M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z M12 16h.01 M12 12h.01 M12 20h.01`);
@@ -614,5 +659,5 @@ const TokenGeneratorIcon = createIcon("M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.74
 const TrackServiceIcon = createIcon("M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7");
 const CustomersIcon = createIcon("M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z");
 const ServiceLogsIcon = createIcon("M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01");
-
+const KnowledgeHubIcon = createIcon("M12 2a7 7 0 00-4 12.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26A7 7 0 0012 2zm-2 18h4m-3 2h2");
 export default DashboardLayout;

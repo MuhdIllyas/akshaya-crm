@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { triggerNotification } from "../utils/communication/notificationEngine.js";
 import pool from "../db.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import notificationService from "../utils/notificationService.js";
+import { notificationTemplates } from "../utils/notificationTemplates.js";
 
 const router = express.Router();
 
@@ -172,6 +174,58 @@ router.post("/public/:token", async (req, res) => {
       [service_rating, staff_rating || null, review_text, token]
     );
 
+    // 🔥 Trigger Real-Time Notification using the Template
+    const reviewData = review.rows[0];
+    if (reviewData.staff_id) {
+      try {
+        await notificationService.createNotification({
+          recipientStaffId: reviewData.staff_id,
+          centreId: reviewData.centre_id,
+          relatedEntityType: 'review',
+          relatedEntityId: reviewData.id,
+          ...notificationTemplates.reviewReceived({
+            rating: service_rating,
+            customerName: reviewData.customer_name || 'a customer'
+          })
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send review notification", notifErr);
+      }
+    }
+
+    // 🔥 ESCALATION ALERT for 1 or 2-star reviews
+    if (service_rating <= 2) {
+      try {
+        // Fetch all active Superadmins, AND Admins for this specific centre
+        const adminRes = await pool.query(
+          `SELECT id FROM staff 
+           WHERE (role = 'superadmin' OR (role = 'admin' AND centre_id = $1)) 
+           AND status = 'Active'`,
+          [reviewData.centre_id]
+        );
+        
+        // Extract IDs, but remove the staff_id if they happen to be an admin (so they don't get double-notified)
+        const escalationIds = adminRes.rows
+          .map(row => row.id)
+          .filter(id => id !== reviewData.staff_id);
+
+        if (escalationIds.length > 0) {
+          await notificationService.createBulkNotifications({
+            recipientStaffIds: escalationIds,
+            centreId: reviewData.centre_id,
+            relatedEntityType: 'review',
+            relatedEntityId: reviewData.id,
+            ...notificationTemplates.reviewReceived({
+              rating: service_rating,
+              customerName: reviewData.customer_name || 'a customer'
+            })
+          });
+        }
+      } catch (escErr) {
+        console.error("Non-fatal: Failed to send escalation notification", escErr);
+      }
+    }
+
     res.json({ success: true, message: "Review submitted successfully" });
 
   } catch (error) {
@@ -255,13 +309,15 @@ router.post("/booking/:bookingId", customerAuthMiddleware, async (req, res) => {
     }
 
     // Insert review with centre_id from staff table
-    await pool.query(
+    // 🔥 Added RETURNING id so we can link it to the notification!
+    const insertRes = await pool.query(
       `INSERT INTO service_reviews
        (centre_id, customer_id, booking_id,
         service_id, staff_id,
         service_rating, staff_rating,
         review_text, is_submitted, submitted_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,NOW())`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,NOW())
+       RETURNING id`,
       [
         centreId,
         customerId,
@@ -273,6 +329,62 @@ router.post("/booking/:bookingId", customerAuthMiddleware, async (req, res) => {
         review_text
       ]
     );
+
+    const newReviewId = insertRes.rows[0].id;
+
+    // 🔥 Trigger Real-Time Notification using the Template
+    if (bookingData.staff_id) {
+      try {
+        // Fetch customer name for the alert
+        const custRes = await pool.query(`SELECT name FROM customers WHERE id = $1`, [customerId]);
+        const custName = custRes.rows[0]?.name || 'A customer';
+
+        await notificationService.createNotification({
+          recipientStaffId: bookingData.staff_id,
+          centreId: centreId,
+          relatedEntityType: 'review',
+          relatedEntityId: newReviewId,
+          ...notificationTemplates.reviewReceived({
+            rating: service_rating,
+            customerName: custName
+          })
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send review notification", notifErr);
+      }
+    }
+
+    if (service_rating <= 2) {
+      try {
+        // Fetch all active Superadmins, AND Admins for this specific centre
+        const adminRes = await pool.query(
+          `SELECT id FROM staff 
+           WHERE (role = 'superadmin' OR (role = 'admin' AND centre_id = $1)) 
+           AND status = 'Active'`,
+          [reviewData.centre_id]
+        );
+        
+        // Extract IDs, but remove the staff_id if they happen to be an admin (so they don't get double-notified)
+        const escalationIds = adminRes.rows
+          .map(row => row.id)
+          .filter(id => id !== reviewData.staff_id);
+
+        if (escalationIds.length > 0) {
+          await notificationService.createBulkNotifications({
+            recipientStaffIds: escalationIds,
+            centreId: reviewData.centre_id,
+            relatedEntityType: 'review',
+            relatedEntityId: reviewData.id,
+            ...notificationTemplates.reviewReceived({
+              rating: service_rating,
+              customerName: reviewData.customer_name || 'a customer'
+            })
+          });
+        }
+      } catch (escErr) {
+        console.error("Non-fatal: Failed to send escalation notification", escErr);
+      }
+    }
 
     res.json({ success: true, message: "Review submitted successfully" });
 
@@ -623,6 +735,62 @@ router.get("/all", async (req, res) => {
 
   } catch (error) {
     console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* -------------------------------------------------------
+   🔟 GET SINGLE REVIEW BY ID (For Drawer)
+------------------------------------------------------- */
+router.get("/single/:id", async (req, res) => {
+  try {
+    const review = await pool.query(
+      `SELECT sr.*, 
+              -- 🔥 Smart Service Name Fallbacks
+              COALESCE(s1.name, s2.name, s3.name) as service_name,
+              
+              -- 🔥 Smart Staff & Role Fallbacks
+              COALESCE(st1.name, st2.name) as staff_name,
+              COALESCE(st1.role, st2.role) as staff_role,
+              
+              -- Smart Customer Name Fallbacks
+              c.name as portal_customer_name,
+              cen.name as centre_name,
+              se.customer_name as tracking_customer_name,
+              cs_cust.name as cs_customer_name
+       FROM service_reviews sr
+       
+       -- Direct Joins
+       LEFT JOIN services s1 ON sr.service_id = s1.id
+       LEFT JOIN staff st1 ON sr.staff_id = st1.id
+       LEFT JOIN customers c ON sr.customer_id = c.id
+       LEFT JOIN centres cen ON sr.centre_id = cen.id
+       
+       -- Walk-in Tracking Rescue Joins (sr.tracking_id -> service_tracking)
+       LEFT JOIN service_tracking track ON sr.tracking_id = track.id
+       LEFT JOIN service_entries se ON track.service_entry_id = se.id
+       LEFT JOIN services s2 ON se.category_id = s2.id
+       LEFT JOIN staff st2 ON track.assigned_to = st2.id
+       
+       -- Portal Booking Rescue Joins (sr.booking_id -> customer_services)
+       LEFT JOIN customer_services cs ON sr.booking_id = cs.id
+       LEFT JOIN services s3 ON cs.service_id = s3.id
+       LEFT JOIN customers cs_cust ON cs.customer_id = cs_cust.id
+
+       WHERE sr.id = $1`,
+      [req.params.id]
+    );
+
+    if (review.rows.length === 0) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    const data = review.rows[0];
+    data.display_customer_name = data.customer_name || data.portal_customer_name || data.tracking_customer_name || data.cs_customer_name || "A Customer";
+
+    res.json(data);
+  } catch (error) {
+    console.error("Fetch single review error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

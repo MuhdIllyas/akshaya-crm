@@ -5,8 +5,12 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from 'url';
-import { resolveConversation, addParticipantsToConversation } from '../../utils/conversationService.js';
+import { resolveConversation } from '../../utils/conversationService.js';
 import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
+import notificationService from "../../utils/notificationService.js";
+import { notificationTemplates } from "../../utils/notificationTemplates.js";
+
+import Communication from '../../services/communication/communicationEngine.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -157,6 +161,7 @@ router.get("/conversations", authenticateToken, async (req, res) => {
         c.phone_number AS context_identifier,
         c.name AS context_name,
         c.status,
+        c.assigned_staff_id,
         c.last_message_at,
         (
           SELECT m.message
@@ -183,20 +188,23 @@ router.get("/conversations", authenticateToken, async (req, res) => {
               json_build_object(
                 'staff_id', p.staff_id,
                 'name', s.name,
-                'role', s.role
+                'role', s.role,
+                'photo', s.photo,
+                'centre_name', c_staff.name
               )
             ),
             '[]'::json
           )
           FROM chat_participants p
           LEFT JOIN staff s ON p.staff_id = s.id
+          LEFT JOIN centres c_staff ON s.centre_id = c_staff.id
           WHERE p.conversation_id = c.id AND p.participant_type = 'staff'
         ) as participants
       FROM chat_conversations c
       INNER JOIN chat_participants p ON c.id = p.conversation_id
       WHERE p.staff_id = $1 
         AND c.status = $2
-        ${role !== "superadmin" ? "AND c.centre_id = $3" : ""}
+        ${role !== "superadmin" ? "AND (c.centre_id = $3 OR c.centre_id IS NULL)" : ""}
       ORDER BY c.last_message_at DESC NULLS LAST
       `,
       role !== "superadmin" ? [userId, status, centreId] : [userId, status]
@@ -289,26 +297,14 @@ router.post("/conversation", authenticateToken, async (req, res) => {
       context_id: finalCustomerId,
       customer_id: finalCustomerId,
       phone_number: finalPhoneNumber,
-      centre_id: centreId,
+      // 🔥 NEW: Only assign a centre_id to WhatsApp or Service chats. Internal chats get NULL.
+      centre_id: (isWhatsApp || finalContextType === 'service_entry') ? centreId : null,
       created_by: userId,
       name: finalName,
       is_group: finalIsGroup,
       participant_ids: participantIds,
-      communication_account_id: commAccountId // 🔥 PASSING THE TENANT ID HERE
+      communication_account_id: commAccountId 
     });
-
-    // Add participants if needed (resolveConversation might have added them, but ensure)
-    if (participantIds) {
-      for (const staffId of participantIds) {
-        await pool.query(
-          `INSERT INTO chat_participants
-          (conversation_id, staff_id, participant_type, role, joined_at)
-          VALUES ($1, $2, 'staff', $3, NOW())
-          ON CONFLICT (conversation_id, staff_id) DO NOTHING`,
-          [conversation.id, staffId, staffId === userId ? 'owner' : 'member']
-        );
-      }
-    }
 
     // Fetch the complete conversation with participants
     const fullConversation = await pool.query(
@@ -323,6 +319,7 @@ router.post("/conversation", authenticateToken, async (req, res) => {
         c.phone_number AS context_identifier,
         c.name AS context_name,
         c.status,
+        c.assigned_staff_id,
         c.last_message_at,
         (
           SELECT COALESCE(
@@ -331,13 +328,16 @@ router.post("/conversation", authenticateToken, async (req, res) => {
                 'staff_id', p.staff_id,
                 'name', s.name,
                 'role', s.role,
-                'joined_at', p.joined_at
+                'photo', s.photo,
+                'joined_at', p.joined_at,
+                'centre_name', c_staff.name
               )
             ),
             '[]'::json
           )
           FROM chat_participants p
           JOIN staff s ON p.staff_id = s.id
+          LEFT JOIN centres c_staff ON s.centre_id = c_staff.id
           WHERE p.conversation_id = c.id
         ) as participants
       FROM chat_conversations c
@@ -405,6 +405,22 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
             ELSE NULL 
           END as live_task_data,
           (
+            SELECT COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', mn.id,
+                  'mention_type', mn.mention_type,
+                  'entity_id', mn.entity_id,
+                  'display_text', mn.display_text,
+                  'start_index', mn.start_index,
+                  'end_index', mn.end_index
+                )
+              ), '[]'::json
+            ) 
+            FROM chat_mentions mn 
+            WHERE mn.message_id = m.id
+          ) as mentions,
+          (
             SELECT COUNT(*)
             FROM chat_message_reads r
             WHERE r.message_id = m.id
@@ -439,6 +455,22 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
             )
             ELSE NULL 
           END as live_task_data,
+          (
+            SELECT COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', mn.id,
+                  'mention_type', mn.mention_type,
+                  'entity_id', mn.entity_id,
+                  'display_text', mn.display_text,
+                  'start_index', mn.start_index,
+                  'end_index', mn.end_index
+                )
+              ), '[]'::json
+            ) 
+            FROM chat_mentions mn 
+            WHERE mn.message_id = m.id
+          ) as mentions,
           (
             SELECT COUNT(*)
             FROM chat_message_reads r
@@ -530,6 +562,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
       isCurrentUser: m.sender_id === userId,
       messageType: m.type,
       isFile: m.type !== "text"
+      // Note: 'mentions' is automatically carried over via the spread operator (...m)
     }));
     
     res.json(formatted);
@@ -541,19 +574,20 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
 });
 
 /* ================================
-   SEND MESSAGE (Smart Auto-Join)
+   SEND MESSAGE (Smart Auto-Join & Dual-Ownership)
 ================================ */
 
 router.post("/message", authenticateToken, upload.single("file"), async (req, res) => {
+  const client = await pool.connect(); // Use a dedicated client for transactions
   try {
-    const { conversation_id, message, message_type } = req.body;
+    const { conversation_id, message, message_type, mentions } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
     const userCentreId = req.user.centre_id;
 
-    // 1. Get the conversation details to verify Centre ownership
-    const convRes = await pool.query(
-      `SELECT centre_id, channel FROM chat_conversations WHERE id = $1`,
+    // 1. Get the conversation details
+    const convRes = await client.query(
+      `SELECT centre_id, channel, name FROM chat_conversations WHERE id = $1`,
       [conversation_id]
     );
 
@@ -563,21 +597,37 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
 
     const conversation = convRes.rows[0];
 
-    // 2. Security Check: Prevent staff from messaging other centres' customers
-    if (userRole !== 'superadmin' && conversation.centre_id !== userCentreId) {
-       return res.status(403).json({ error: "This conversation belongs to another centre." });
+    // 2. 🔥 NEW: DUAL-OWNERSHIP SECURITY CHECK
+    let isAuthorized = false;
+    
+    if (userRole === 'superadmin') {
+      isAuthorized = true;
+    } else if (conversation.centre_id === null) {
+      // Participant-Owned (Internal Chat)
+      const participantCheck = await client.query(
+        `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+        [conversation_id, userId]
+      );
+      isAuthorized = participantCheck.rows.length > 0;
+    } else {
+      // Tenant-Owned (WhatsApp/External Chat)
+      isAuthorized = (String(conversation.centre_id) === String(userCentreId));
     }
 
-    // 3. Participant Check & Auto-Join (The Magic Fix)
-    if (userRole === 'staff') {
-      const participantCheck = await pool.query(
+    if (!isAuthorized) {
+       return res.status(403).json({ error: "Not authorized to message in this conversation." });
+    }
+
+    // 3. Participant Check & Auto-Join 
+    if (userRole === 'staff' || userRole === 'admin' || userRole === 'superadmin') {
+      const participantCheck = await client.query(
         `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
         [conversation_id, userId]
       );
 
       // If the staff member isn't in the DB yet, auto-enroll them so they can reply!
       if (participantCheck.rows.length === 0) {
-        await pool.query(
+        await client.query(
           `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
            VALUES ($1, $2, 'staff', 'member', NOW())
            ON CONFLICT DO NOTHING`,
@@ -586,21 +636,107 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       }
     }
 
-    // 4. Send the message to the central router (which handles Libromi internally)
-    const savedMessage = await sendMessage({
-      conversation_id,
-      sender_id: userId,
-      sender_type: "staff",
-      message,
-      message_type,
-      file: req.file,
+    await client.query('BEGIN'); // Start transaction 
+
+    // 4. 🔥 SEND THROUGH THE COMMUNICATION ENGINE (Replaces sendMessage)
+    const result = await Communication.send({
+      channel: conversation.channel || 'internal', 
+      conversation_id: conversation_id,
+      sender: { type: "staff", id: userId },
+      message: {
+        text: message,
+        type: message_type,
+        file: req.file,
+        mentions: mentions ? (typeof mentions === 'string' ? JSON.parse(mentions) : mentions) : []
+      },
       io: req.io
     });
 
+    const savedMessage = result.message;
+
+    // 🔥 Fetch the sender's real name from the database for notifications
+    const senderRes = await client.query(`SELECT name FROM staff WHERE id = $1`, [userId]);
+    const senderName = senderRes.rows[0]?.name || 'Admin';
+
+    // 5. Insert Mentions safely
+    if (mentions) {
+      const parsedMentions = typeof mentions === 'string' ? JSON.parse(mentions) : mentions;
+      
+      for (const m of parsedMentions) {
+        await client.query(
+          `INSERT INTO chat_mentions (message_id, mention_type, entity_id, display_text, start_index, end_index)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [savedMessage.id, m.mention_type, m.entity_id, m.display_text, m.start_index, m.end_index]
+        );
+
+        // AUTO-ADD NON-PARTICIPANTS (The "Slack" Way)
+        if (m.mention_type === 'staff') {
+          const participantCheck = await client.query(
+            `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+            [conversation_id, m.entity_id]
+          );
+
+          if (participantCheck.rows.length === 0) {
+            await client.query(
+              `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+               VALUES ($1, $2, 'staff', 'member', NOW())`,
+              [conversation_id, m.entity_id]
+            );
+
+            const newConvRes = await client.query(
+              `SELECT id, name, is_group, channel, context_type, context_id, phone_number AS context_identifier, name AS context_name, status 
+               FROM chat_conversations WHERE id = $1`,
+              [conversation_id]
+            );
+
+            if (req.io) {
+              req.io.to(`user:${m.entity_id}`).emit("added_to_conversation", {
+                ...newConvRes.rows[0],
+                last_message: message,
+                last_message_at: new Date().toISOString()
+              });
+            }
+          }
+        }
+        
+        // 6. Centralized Notification Engine
+        if (m.mention_type === 'staff') {
+          try {
+            // 1. Use your centralized template factory
+            const template = notificationTemplates.mention({
+              senderName: senderName,
+              metadata: {
+                'Chat Room': conversation.name || 'Internal Chat'
+              }
+            });
+
+            // 2. Create the notification in the database
+            // (This service will automatically emit the 'notification' and 'notification_count' sockets!)
+            await notificationService.createBulkNotifications({
+              recipientStaffIds: [m.entity_id], 
+              senderStaffId: userId,            
+              centreId: userCentreId,           
+              relatedEntityType: 'message',
+              relatedEntityId: savedMessage.id,
+              conversationId: conversation_id,  
+              ...template 
+            });
+
+          } catch (notifErr) {
+            console.error("Non-fatal: Failed to trigger mention notification", notifErr);
+          }
+        }
+      }
+    }
+
+    await client.query('COMMIT'); 
     res.json(savedMessage);
   } catch (err) {
+    await client.query('ROLLBACK'); 
     console.error("Message send error:", err);
     res.status(500).json({ error: "Failed to send message" });
+  } finally {
+    client.release(); 
   }
 });
 
@@ -789,52 +925,32 @@ router.delete("/message/:messageId", authenticateToken, async (req, res) => {
 });
 
 /* ================================
-   GET STAFF FOR NEW CHAT
+   GET STAFF FOR NEW CHAT (Cross-Centre)
 ================================ */
 
 router.get("/staff", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
-    const centreId = req.user.centre_id;
 
-    let query;
-    let params;
+    // 🔥 Fetch all active staff across ALL centres, including their centre name
+    const query = `
+      SELECT 
+        s.id,
+        s.name,
+        s.role,
+        s.email,
+        s.phone,
+        s.photo,
+        s.centre_id,
+        c.name as centre_name,
+        COALESCE(s.status, 'active') as status
+      FROM staff s
+      LEFT JOIN centres c ON s.centre_id = c.id
+      WHERE s.id != $1 AND s.status = 'Active'
+      ORDER BY c.name ASC, s.name ASC
+    `;
 
-    if (userRole === "superadmin") {
-      query = `
-        SELECT 
-          id,
-          name,
-          role,
-          email,
-          phone,
-          centre_id,
-          COALESCE(status, 'active') as status
-        FROM staff
-        WHERE id != $1
-        ORDER BY name
-      `;
-      params = [userId];
-    } else {
-      query = `
-        SELECT 
-          id,
-          name,
-          role,
-          email,
-          phone,
-          centre_id,
-          COALESCE(status, 'active') as status
-        FROM staff
-        WHERE id != $1 
-          AND centre_id = $2
-        ORDER BY name
-      `;
-      params = [userId, centreId];
-    }
-
-    const result = await pool.query(query, params);
+    const result = await pool.query(query, [userId]);
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch staff error:", err);
@@ -963,6 +1079,209 @@ router.delete("/conversation/:conversationId", authenticateToken, async (req, re
   } catch (err) {
     console.error("Delete conversation error:", err);
     res.status(500).json({ error: "Failed to delete conversation", details: err.message });
+  }
+});
+
+/* ================================
+   MENTIONS API (Search & Tracking)
+================================ */
+
+// Search staff for autocomplete
+router.get("/mentions/search-staff", authenticateToken, async (req, res) => {
+  console.log("Mention search called");
+  console.log(req.query);
+
+  try {
+    const { q } = req.query;
+    const { centre_id, role } = req.user; // Extract centre_id and role
+    
+    if (!q) return res.json([]);
+
+    let queryStr = `SELECT id, name, role FROM staff WHERE name ILIKE $1 AND status = 'Active'`;
+    const params = [`%${q}%`];
+
+    // FIX: Restrict to the same centre unless the user is a superadmin
+    if (role !== 'superadmin') {
+      queryStr += ` AND centre_id = $2`;
+      params.push(centre_id);
+    }
+    
+    queryStr += ` LIMIT 5`;
+
+    const result = await pool.query(queryStr, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fast lookup for Tracking ID OR Application Number
+router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Removed isNaN check in case your app numbers have letters later (e.g. APP-10936)
+    if (!id) return res.status(400).json({ error: 'Invalid ID' });
+
+    const result = await pool.query(
+      `SELECT
+          st.id AS tracking_id,
+          st.application_number,
+          st.status,
+          st.current_step,
+          st.priority,
+          st.average_time AS estimated_delivery,
+          
+          se.customer_name,
+          srv.name AS service_name,
+          sub.name AS subcategory_name,
+          
+          COALESCE(staff.name, st.assigned_to::text) AS assigned_to
+
+      FROM service_tracking st
+      
+      -- Join directly to service_entries
+      LEFT JOIN service_entries se 
+          ON st.service_entry_id = se.id
+          
+      -- Grab the service and subcategory names directly from service_entries
+      LEFT JOIN services srv 
+          ON se.category_id = srv.id
+      LEFT JOIN subcategories sub 
+          ON se.subcategory_id = sub.id
+
+      -- Grab the staff name
+      LEFT JOIN staff 
+          ON staff.id = st.assigned_to
+
+      -- 🔥 CRITICAL FIX: Search both the primary key AND the application number
+      WHERE st.id::text = $1 OR st.application_number = $1`, 
+      [id]
+    );
+    
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Tracking not found' });
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Tracking lookup error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ================================
+   ASSIGN CONVERSATION (The "Baton Pass")
+================================ */
+router.patch("/conversation/:conversationId/assign", authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { conversationId } = req.params;
+    const { staff_id } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Verify permission
+    const hasAccess = await checkConversationAccess(conversationId, userId);
+    if (!hasAccess && userRole !== 'superadmin' && userRole !== 'admin') {
+      return res.status(403).json({ error: "Not authorized to assign this conversation" });
+    }
+
+    await client.query('BEGIN');
+
+    // 1. Get the CURRENT owner before we change it
+    const currentConv = await client.query('SELECT assigned_staff_id FROM chat_conversations WHERE id = $1', [conversationId]);
+    const previousOwnerId = currentConv.rows[0]?.assigned_staff_id;
+
+    // 2. Update the conversation record
+    const updateRes = await client.query(
+      `UPDATE chat_conversations SET assigned_staff_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [staff_id || null, conversationId]
+    );
+
+    if (updateRes.rows.length === 0) throw new Error("Conversation not found");
+
+    // 3. REMOVE the previous owner from participants (if they exist and are different from the new owner)
+    if (previousOwnerId && String(previousOwnerId) !== String(staff_id)) {
+      await client.query(
+        `DELETE FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2 AND role = 'owner'`, 
+        [conversationId, previousOwnerId]
+      );
+      
+      // Tell the old owner's frontend to remove this chat from their sidebar immediately
+      if (req.io) {
+        req.io.to(`user:${previousOwnerId}`).emit('conversation_deleted', { conversationId: parseInt(conversationId) });
+      }
+    }
+
+    // 4. ADD the new owner
+    if (staff_id) {
+        await client.query(
+          `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+           VALUES ($1, $2, 'staff', 'owner', NOW())
+           ON CONFLICT (conversation_id, staff_id) DO UPDATE SET role = 'owner'`,
+          [conversationId, staff_id]
+        );
+        
+        const convRes = await client.query(
+          `SELECT c.id, c.name, c.is_group, c.channel, c.context_type, c.context_id, c.phone_number AS context_identifier, c.name AS context_name, c.status, c.assigned_staff_id, c.centre_id,
+             (
+               SELECT COALESCE(
+                 json_agg(
+                   json_build_object('staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'centre_name', c_staff.name)
+                 ), '[]'::json
+               )
+               FROM chat_participants p
+               JOIN staff s ON p.staff_id = s.id
+               LEFT JOIN centres c_staff ON s.centre_id = c_staff.id
+               WHERE p.conversation_id = c.id
+             ) as participants
+           FROM chat_conversations c WHERE c.id = $1`, [conversationId]
+        );
+
+        const fullConversation = convRes.rows[0];
+
+        if (req.io) {
+           req.io.to(`user:${staff_id}`).emit("added_to_conversation", fullConversation);
+        }
+
+        // Trigger Notification using the universal template (Ensures category matches perfectly)
+        try {
+          const chatName = fullConversation.context_name || fullConversation.context_identifier || fullConversation.name || 'a customer';
+          
+          await notificationService.createBulkNotifications({
+            recipientStaffIds: [staff_id], 
+            senderStaffId: userId,            
+            centreId: fullConversation.centre_id || req.user.centre_id,           
+            relatedEntityType: 'conversation',
+            relatedEntityId: conversationId,
+            conversationId: conversationId,  
+            // 🔥 Hardcoded exactly to your system's required format
+            type: 'system',
+            category: 'communication',
+            title: '👤 Chat Assigned to You',
+            message: `You have been assigned to handle the chat with ${chatName}.`,
+            priority: 'high'
+          });
+        } catch (notifErr) {
+          console.error("Non-fatal: Failed to trigger assignment notification", notifErr);
+        }
+    }
+
+    // 5. Broadcast general update to the room
+    if (req.io) {
+       req.io.to(`conversation:${conversationId}`).emit("conversation_updated", {
+          conversationId: parseInt(conversationId),
+          assigned_staff_id: staff_id || null
+       });
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, assigned_staff_id: staff_id || null });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Assign error:", err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

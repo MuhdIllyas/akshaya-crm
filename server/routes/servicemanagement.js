@@ -7,6 +7,7 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 import sendTokenUpdateWhatsApp from '../utils/sendTokenUpdateWhatsapp.js';
 import crypto from 'crypto';
 import axios from "axios";
+import notificationService from '../utils/notificationService.js';
 
 const router = express.Router();
 
@@ -160,6 +161,110 @@ router.get('/services', authenticateToken, async (req, res) => {
     res.json(services);
   } catch (err) {
     console.error('Error fetching services:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/servicemanagement/workflow_services
+// Dedicated route for Operations Hub / Service Tracking (Only returns true workflow services)
+router.get('/workflow_services', authenticateToken, async (req, res) => {
+  const { search } = req.query;
+  const client = await pool.connect();
+  try {
+    let query = `
+      SELECT s.*, 
+      
+      -- 🔥 NEW: COUNTS OPEN DISCUSSIONS FOR THIS SERVICE
+      (
+        SELECT COUNT(*) 
+        FROM knowledge_discussions kd
+        JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+        WHERE kw.service_id = s.id 
+          AND (kd.status != 'solved' OR kd.status IS NULL) 
+          AND kd.deleted_at IS NULL
+      ) AS open_discussions,
+
+      -- 🔥 NEW: COUNTS SOLVED DISCUSSIONS FOR THIS SERVICE
+      (
+        SELECT COUNT(*) 
+        FROM knowledge_discussions kd
+        JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+        WHERE kw.service_id = s.id 
+          AND kd.status = 'solved' 
+          AND kd.deleted_at IS NULL
+      ) AS closed_discussions,
+
+      (
+        SELECT COALESCE(json_agg(sc), '[]'::json)
+        FROM (
+          SELECT sc.*, (
+            SELECT COALESCE(json_agg(rd), '[]'::json)
+            FROM required_documents rd
+            WHERE rd.sub_category_id = sc.id
+          ) AS required_documents
+          FROM subcategories sc
+          WHERE sc.service_id = s.id
+        ) sc
+      ) AS subcategories,
+      (
+        SELECT COALESCE(json_agg(rd), '[]'::json)
+        FROM required_documents rd
+        WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
+      ) AS required_documents
+      FROM services s
+      WHERE s.requires_workflow = true
+    `;
+    
+    let values = [];
+    if (search && (typeof search !== 'string' || search.length > 100)) {
+      return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
+    }
+    
+    if (search) {
+      query += ` AND (s.name ILIKE $1 OR s.description ILIKE $1
+                OR EXISTS (
+                  SELECT 1 FROM subcategories sc
+                  WHERE sc.service_id = s.id AND sc.name ILIKE $1
+                ))`;
+      values = [`%${search}%`];
+    }
+    
+    const result = await client.query(query, values);
+    
+    const services = result.rows.map(service => ({
+      ...service,
+      // 🔥 NEW: Map the Discussion counts as integers!
+      open_discussions: parseInt(service.open_discussions, 10) || 0,
+      closed_discussions: parseInt(service.closed_discussions, 10) || 0,
+      wallet_name: null,
+      balance: null,
+      wallet_type: null,
+      is_shared: null,
+      wallet_status: null,
+      assigned_staff_id: null
+    }));
+
+    for (let service of services) {
+      if (service.wallet_id) {
+        const walletQuery = `SELECT * FROM wallets WHERE id = $1`;
+        const walletResult = await client.query(walletQuery, [service.wallet_id]);
+        if (walletResult.rows.length > 0) {
+          const wallet = walletResult.rows[0];
+          service.wallet_name = wallet.name;
+          service.balance = wallet.balance;
+          service.wallet_type = wallet.wallet_type;
+          service.is_shared = wallet.is_shared;
+          service.wallet_status = wallet.status;
+          service.assigned_staff_id = wallet.assigned_staff_id;
+        }
+      }
+    }
+
+    res.json(services);
+  } catch (err) {
+    console.error('Error fetching workflow services:', err);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
@@ -3381,6 +3486,33 @@ router.put('/tokens/:tokenId/cancel', authenticateToken, async (req, res) => {
       io.to(`centre_${centreId}`).emit('tokenCancelled', { tokenId, reason });
     }
 
+    // 🔥 CRM NOTIFICATION ENGINE (Notify the assigned staff member)
+    try {
+      // If the token was assigned to a staff member, and that staff member isn't the one cancelling it
+      if (token.staff_id && parseInt(token.staff_id) !== req.user.id) {
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: [token.staff_id],
+          senderStaffId: req.user.id,
+          centreId: centreId,
+          relatedEntityType: 'token',
+          relatedEntityId: token.id,
+          type: 'system',
+          category: 'operations',
+          title: '❌ Token Cancelled',
+          message: `Token ${tokenId} assigned to you has been cancelled.`,
+          priority: 'normal',
+          metadata: {
+            'Token': tokenId,
+            'Customer': token.customer_name,
+            'Reason': reason || 'No reason provided'
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error("Non-fatal: Failed to send token cancellation notification:", notifErr);
+    }
+    // =================================================================
+
     res.json({ success: true, message: 'Token cancelled successfully' });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -3474,6 +3606,33 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
       staff_name: staffName,
       message: `Token ${tokenId} reassigned to ${staffName}`,
     });
+
+    // 🔥 CRM NOTIFICATION ENGINE (Notify the assigned staff member)
+    try {
+      // Don't notify the staff if they are assigning it to themselves
+      if (parseInt(staffId) !== req.user.id) {
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: [staffId], // Ping the specific staff member
+          senderStaffId: req.user.id,
+          centreId: token.centre_id,
+          relatedEntityType: 'token',
+          relatedEntityId: token.id, // The numeric DB id
+          type: 'service_assigned',
+          category: 'operations',
+          title: '🎟️ Token Assigned',
+          message: `You have been assigned Token ${tokenId} for ${token.customer_name}.`,
+          priority: 'high',
+          metadata: {
+            'Token': tokenId,
+            'Customer': token.customer_name,
+            'Phone': token.phone || 'N/A'
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error("Non-fatal: Failed to send token assignment notification:", notifErr);
+    }
+    // =================================================================
 
     // Send WhatsApp Notification for Assignment (Non-blocking)
     sendTokenUpdateWhatsApp({
@@ -3698,7 +3857,7 @@ router.delete('/tokens/:tokenId', authenticateToken, async (req, res) => {
   }
 });
 
-// ========== PENDING PAYMENTS (FIXED QUERIES) ==========
+// ========== PENDING PAYMENTS ==========
 
 // GET /api/servicemanagement/pending-payments
 router.get("/pending-payments", authenticateToken, async (req, res) => {
@@ -3970,8 +4129,46 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
       }
     }
     // ====================================================================
-
     await client.query("COMMIT");
+
+    // 🔥 NOTIFICATION ENGINE TRIGGER (Notify Admins of collected payment)
+    try {
+      // Find all admins for this centre to notify them of the collected revenue
+      const adminsRes = await client.query(
+        `SELECT id FROM staff WHERE centre_id = $1 AND role IN ('admin', 'superadmin')`,
+        [serviceEntry.centre_id] // Uses the centre_id we grabbed earlier
+      );
+      const adminIds = adminsRes.rows.map(r => r.id);
+
+      // Only notify if someone other than the admin is collecting it, or if you just want general alerts
+      if (adminIds.length > 0) {
+        // Fetch the service name to make the notification look nice
+        const sNameRes = await client.query(`SELECT s.name FROM services s JOIN service_entries se ON se.category_id = s.id WHERE se.id = $1`, [serviceEntryId]);
+        const serviceName = sNameRes.rows[0]?.name || 'a service';
+
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: adminIds,
+          senderStaffId: req.user.id, // The staff member who collected the money
+
+          relatedEntityType: 'payment',
+          relatedEntityId: paymentId,
+
+          type: 'payment',
+          category: 'finance',
+          title: '💰 Payment Collected',
+          message: `A pending payment was successfully collected.`,
+          priority: 'normal',
+          metadata: {
+            'Amount': `₹${amount}`,
+            'Service': serviceName,
+            'Status': (totalPaid >= totalCharges && totalCharges > 0) ? 'Fully Paid' : 'Partially Paid'
+          }
+        });
+      }
+    } catch (notifErr) {
+      console.error("Non-fatal: Failed to send payment collection notification:", notifErr);
+    }
+    // ====================================================================
 
     res.json({
       success: true,
@@ -3984,6 +4181,84 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
     res.status(500).json({
       error: err.message || "Failed to receive payment"
     });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/servicemanagement/payment-receipt/:paymentId - for admin or superadmin to view in the notification panel
+router.get("/payment-receipt/:paymentId", authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { paymentId } = req.params;
+    
+    const query = `
+      SELECT 
+        p.id AS payment_id,
+        p.amount AS amount_collected,
+        p.status AS payment_status,
+        p.created_at AS payment_date,
+        se.id AS service_entry_id,
+        se.customer_name,
+        se.phone AS customer_phone,
+        se.total_charges AS total_bill,
+        s.name AS service_name,
+        w.name AS wallet_name,
+        st.name AS collected_by_name,
+        st.role AS collected_by_role,
+        COALESCE(
+          (
+            SELECT SUM(amount) 
+            FROM payments p2 
+            WHERE p2.service_entry_id = se.id 
+              AND p2.created_at < p.created_at 
+              AND p2.status = 'received' 
+              AND COALESCE(p2.is_reversal, FALSE) = FALSE
+          ), 0
+        ) AS previously_paid
+      FROM payments p
+      JOIN service_entries se ON p.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id  -- ✅ Removed ::integer cast for safety
+      LEFT JOIN wallets w ON p.wallet_id = w.id
+      LEFT JOIN wallet_transactions wt ON wt.reference_payment_id = p.id AND wt.type = 'credit'
+      LEFT JOIN staff st ON wt.staff_id = st.id
+      WHERE p.id = $1
+      LIMIT 1
+    `;
+    
+    const { rows } = await client.query(query, [paymentId]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Receipt not found in database" });
+    }
+    
+    const data = rows[0];
+    const previouslyPaid = parseFloat(data.previously_paid || 0);
+    const amountCollected = parseFloat(data.amount_collected || 0);
+    const totalBill = parseFloat(data.total_bill || 0);
+    const remainingBalance = Math.max(0, totalBill - previouslyPaid - amountCollected);
+    
+    res.json({
+      id: data.payment_id,
+      status: remainingBalance <= 0 ? 'fully_paid' : 'partially_paid',
+      amountCollected,
+      totalBill,
+      previouslyPaid,
+      remainingBalance,
+      date: data.payment_date,
+      customer: { name: data.customer_name || 'Walk-in', phone: data.customer_phone || 'N/A' },
+      service: { name: data.service_name || 'Service', trackingId: `SRV-${data.service_entry_id}` },
+      audit: { 
+        collectedBy: data.collected_by_name || 'Unknown', 
+        role: data.collected_by_role || 'Staff', 
+        wallet: data.wallet_name || 'Unknown Wallet' 
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ Fetch receipt error:", err);
+    res.status(500).json({ error: "Failed to fetch payment receipt" });
   } finally {
     client.release();
   }

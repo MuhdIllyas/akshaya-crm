@@ -19,9 +19,9 @@ import {
   FiX,
   FiClock,
   FiList,
-  FiMessageSquare,
-  FiUser,
-  FiSmartphone,
+  FiMessageSquare, FiCheckSquare,
+  FiUser, FiBriefcase, FiUsers,
+  FiSmartphone, FiMapPin, FiChevronRight
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdCheckmarkCircleOutline } from "react-icons/io";
@@ -29,13 +29,21 @@ import { BsCircleFill } from "react-icons/bs";
 import { toast } from "react-toastify";
 import EmojiPicker from 'emoji-picker-react';
 import { socket } from "@/services/socket";
-import axios from "axios"; // <-- added for template API
+import axios from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 if (!API_BASE_URL) {
   throw new Error("VITE_API_URL is not defined");
 }
+
+const getAvatarUrl = (photoPath) => {
+  if (!photoPath) return null;
+  if (photoPath.startsWith('http')) return photoPath;
+  const safeBase = API_BASE_URL.replace(/\/$/, '');
+  const safePath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+  return `${safeBase}${safePath}`;
+};
 
 // Helper: check if last customer message is within 24 hours
 const isWithin24Hours = (lastMessageTime) => {
@@ -113,6 +121,162 @@ const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
   );
 };
 
+// Normal task message
+const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
+  const [completing, setCompleting] = useState(false);
+  const completed = taskData?.status === 'completed';
+
+  const handleComplete = async () => {
+    if (completing || completed) return;
+    setCompleting(true);
+    try {
+      if (onStatusUpdate) {
+        await onStatusUpdate(taskId, taskData.status);
+      }
+    } catch {
+      // parent handles the error toast
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h4 className={`font-medium ${
+            completed ? 'line-through text-gray-500' : 'text-gray-900'
+          }`}>
+            {taskData.title}
+          </h4>
+          <p className="text-xs text-gray-500 mt-1">
+            Priority: {taskData.priority} | Status: {taskData.status}
+          </p>
+          {taskData.due_date && (
+            <p className="text-xs text-gray-500">
+              📅 {formatDate(taskData.due_date)}
+            </p>
+          )}
+        </div>
+        {!completed && (
+          <button
+            onClick={handleComplete}
+            disabled={completing}
+            className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+          >
+            {completing ? '...' : '✓ Complete'}
+          </button>
+        )}
+        {completed && (
+          <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
+            ✓ Completed
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------- NEW: Flat Tracking Mention Card ----------
+const TrackingMentionCard = ({ entityId, displayText }) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    axios.get(`${API_BASE_URL}/api/chat/mentions/tracking/${entityId}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    })
+    .then(res => { if (isMounted) setData(res.data); })
+    .catch(err => console.error(err))
+    .finally(() => { if (isMounted) setLoading(false); });
+    return () => { isMounted = false; };
+  }, [entityId]);
+
+  if (loading) return <span className="text-blue-200 font-medium animate-pulse">{displayText}</span>;
+  if (!data) return <span className="text-red-300 font-medium line-through" title="Tracking not found">{displayText}</span>;
+
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        window.open(`/dashboard/staff/track_service/${data.tracking_id || entityId}`, '_blank');
+      }}
+      className="my-3 block w-72 bg-white border-2 border-gray-200 rounded-lg shadow-sm hover:border-navy-700 transition-colors cursor-pointer text-left overflow-hidden select-none"
+    >
+      {/* Header section */}
+      <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex justify-between items-center">
+        <div className="flex items-center gap-1.5 text-navy-700 font-bold text-xs">
+          <FiFile size={12} />
+          <span>App #{data.application_number || data.tracking_id || entityId}</span>
+        </div>
+        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+          data.priority === 'High' ? 'bg-red-50 text-red-600 border-red-200' :
+          data.priority === 'Medium' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
+          'bg-green-50 text-green-600 border-green-200'
+        }`}>
+          {data.priority || 'Normal'}
+        </span>
+      </div>
+
+      {/* Body section */}
+      <div className="p-3 space-y-2.5">
+        {/* Service Name */}
+        <div className="flex items-start gap-2">
+          <FiBriefcase className="text-gray-400 mt-0.5 shrink-0" size={14} />
+          <p className="font-bold text-gray-900 text-sm leading-tight">
+            {data.service_name || 'Unknown Service'}
+          </p>
+        </div>
+
+        {/* Customer Name */}
+        <div className="flex items-center gap-2">
+          <FiUser className="text-gray-400 shrink-0" size={14} />
+          <p className="font-medium text-gray-700 text-sm truncate">
+            {data.customer_name || 'No Customer Attached'}
+          </p>
+        </div>
+
+        {/* Status Box */}
+        <div className="bg-gray-50 border border-gray-100 rounded-md p-2 space-y-1.5 mt-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-500 font-medium">Status</span>
+            <span className="font-bold text-gray-800 capitalize">{data.status || 'Pending'}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-500 font-medium">Step</span>
+            <span className="font-bold text-navy-700 truncate max-w-[120px]" title={data.current_step}>
+              {data.current_step || 'Initial Phase'}
+            </span>
+          </div>
+          {data.estimated_delivery && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500 font-medium">Delivery</span>
+              <span className="font-bold text-gray-800 flex items-center gap-1">
+                <FiClock size={10} /> {data.estimated_delivery}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer section */}
+      <div className="bg-gray-50 border-t border-gray-200 px-3 py-2 flex items-center justify-between">
+        <div className="flex flex-col">
+          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Assigned To</span>
+          <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">
+            {data.assigned_to || 'Unassigned'}
+          </span>
+        </div>
+        <div className="text-xs font-bold text-navy-700 flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
+          Open <FiChevronRight size={12} />
+        </div>
+      </div>
+    </div>
+  );
+};
+// -------------------------------------------------
+
 const Chat = ({
   activeConversation,
   messages,
@@ -148,12 +312,20 @@ const Chat = ({
   const [templateParams, setTemplateParams] = useState("");
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
+  // ---------- NEW: Mention states ----------
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [mentionResults, setMentionResults] = useState([]);
+  const [pendingStaffMentions, setPendingStaffMentions] = useState([]);
+  // -----------------------------------------
+
   const messagesEndRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
+
+  const chatInputRef = useRef(null);
 
   const currentMessages = messages[activeConversation?.id] || [];
 
@@ -215,61 +387,6 @@ const Chat = ({
   const shouldShowOnlineIndicator = useCallback(() => {
     return activeConversation?.channel !== 'whatsapp' && !activeConversation?.is_group;
   }, [activeConversation]);
-
-  const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
-    const [completing, setCompleting] = useState(false);
-    const completed = taskData?.status === 'completed';
-
-    const handleComplete = async () => {
-      if (completing || completed) return;
-      setCompleting(true);
-      try {
-        if (onStatusUpdate) {
-          await onStatusUpdate(taskId, taskData.status);
-        }
-      } catch {
-        // parent handles the error toast
-      } finally {
-        setCompleting(false);
-      }
-    };
-
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
-        <div className="flex justify-between items-start gap-4">
-          <div>
-            <h4 className={`font-medium ${
-              completed ? 'line-through text-gray-500' : 'text-gray-900'
-            }`}>
-              {taskData.title}
-            </h4>
-            <p className="text-xs text-gray-500 mt-1">
-              Priority: {taskData.priority} | Status: {taskData.status}
-            </p>
-            {taskData.due_date && (
-              <p className="text-xs text-gray-500">
-                📅 {formatDate(taskData.due_date)}
-              </p>
-            )}
-          </div>
-          {!completed && (
-            <button
-              onClick={handleComplete}
-              disabled={completing}
-              className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-            >
-              {completing ? '...' : '✓ Complete'}
-            </button>
-          )}
-          {completed && (
-            <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
-              ✓ Completed
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // Join conversation room when active
   useEffect(() => {
@@ -359,11 +476,31 @@ const Chat = ({
     }
   }, [activeConversation?.id, currentUser.id, currentUser.name, API_BASE_URL]);
 
-  const handleInputChange = (e) => {
-    const value = e.target.value;
-    setNewMessage(value);
+  // ---------- UPDATED: handleInputChange ----------
+  const handleInputChange = async (e) => {
+    const val = e.target.value;
+    setNewMessage(val);
+    
+    // Detect Staff Mentions (@ followed by letters)
+    const cursor = e.target.selectionStart;
+    const textBeforeCursor = val.slice(0, cursor);
+    const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z]+)$/);
+    
+    if (match) {
+      setMentionQuery(match[1]);
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/chat/mentions/search-staff?q=${match[1]}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        setMentionResults(res.data);
+      } catch (err) { console.error("Staff fetch error", err); }
+    } else {
+      setMentionQuery(null);
+    }
+
+    // Existing typing indicator logic
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (value.length > 0) {
+    if (val.length > 0) {
       if (!isTyping) {
         setIsTyping(true);
         emitTyping(true);
@@ -381,6 +518,7 @@ const Chat = ({
       }
     }
   };
+  // ------------------------------------------------
 
   useEffect(() => {
     return () => {
@@ -389,13 +527,121 @@ const Chat = ({
     };
   }, [activeConversation?.id, isTyping, emitTyping]);
 
+  // ---------- NEW: handleSelectMention ----------
+  const handleSelectMention = (staff) => {
+      
+      const inputEl = chatInputRef.current; 
+      
+      // Safety check just in case it hasn't mounted
+      if (!inputEl) return; 
+
+      const cursor = inputEl.selectionStart;
+      
+      // Replace the typed query with the full staff name
+      const textBefore = newMessage.slice(0, cursor).replace(/(?:^|\s)@([a-zA-Z]+)$/, ` @${staff.name} `);
+      const textAfter = newMessage.slice(cursor);
+      
+      setNewMessage(textBefore + textAfter);
+      setMentionQuery(null);
+      setPendingStaffMentions(prev => [...prev, { entityId: staff.id, name: staff.name }]);
+      
+      inputEl.focus();
+    };
+
+  // 🔥 UPDATED: Convert Message to Note (React-Mentions Compatible)
+  const handleConvertToNote = async (msg) => {
+    try {
+      const staffMentions = [];
+      let finalContent = msg.text;
+
+      // 1. Format the text for Notes.jsx (react-mentions syntax: @[Name](id))
+      if (msg.mentions && msg.mentions.length > 0) {
+        
+        // Sort mentions backwards by index so we can replace text without messing up string positions
+        const sortedMentions = [...msg.mentions].sort((a, b) => b.start_index - a.start_index);
+
+        sortedMentions.forEach(m => {
+          if (m.mention_type === 'staff') {
+            staffMentions.push(m.entity_id);
+            
+            // Remove the '@' from the display text (e.g. "@Shijin" -> "Shijin")
+            const cleanName = m.display_text.replace('@', '').trim();
+            
+            // Format it exactly how Notes.jsx expects it: @[Shijin](123)
+            const formattedMention = `@[${cleanName}](${m.entity_id})`;
+            
+            // Safely swap the raw text with the formatted string
+            finalContent = finalContent.substring(0, m.start_index) + formattedMention + finalContent.substring(m.end_index);
+          }
+        });
+      }
+
+      // 2. Deduplicate IDs and calculate privacy
+      const uniqueMentions = [...new Set(staffMentions)];
+      const calculatedVisibility = uniqueMentions.length > 0 ? "mention" : "private";
+
+      const payload = {
+        title: `Note from chat: ${msg.sender || 'Unknown'}`,
+        content: finalContent, // 🔥 Now formatted perfectly for Notes.jsx!
+        visibility: calculatedVisibility,
+        mentions: uniqueMentions,
+        related_conversation_id: activeConversation.id,
+        origin_message_id: msg.id,
+        related_service_entry_id: activeConversation.context_type === 'service_entry' ? activeConversation.context_id : null
+      };
+
+      await axios.post(`${API_BASE_URL}/api/notes`, payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      toast.success(uniqueMentions.length > 0 
+        ? "Note saved and staff notified ⭐" 
+        : "Private note saved ⭐"
+      );
+      
+    } catch (error) {
+      console.error("Convert to note error:", error);
+      toast.error("Failed to convert message to note");
+    }
+  };
+
   const handleSendMessage = () => {
     if ((!newMessage.trim() && !fileToUpload) || !activeConversation) return;
-    if (isTyping) {
-      setIsTyping(false);
-      emitTyping(false);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    const mentions = [];
+    const trackingRegex = /(?:^|\s)@(\d+)/g;
+    let match;
+
+    // 1. Auto-Parse Tracking IDs on send (@284)
+    while ((match = trackingRegex.exec(newMessage)) !== null) {
+      const matchText = match[0].trim();
+      const startIndex = match.index + (match[0].startsWith(' ') ? 1 : 0);
+      mentions.push({
+        mention_type: 'tracking',
+        entity_id: parseInt(match[1], 10),
+        display_text: matchText,
+        start_index: startIndex,
+        end_index: startIndex + matchText.length
+      });
     }
+
+    // 2. Parse Staff Mentions from the ones they clicked in the dropdown
+    pendingStaffMentions.forEach(m => {
+      const regex = new RegExp(`(?:^|\\s)@${m.name}(?=\\s|$)`, 'g');
+      while ((match = regex.exec(newMessage)) !== null) {
+        const matchText = match[0].trim();
+        const startIndex = match.index + (match[0].startsWith(' ') ? 1 : 0);
+        mentions.push({
+          mention_type: 'staff',
+          entity_id: m.entityId,
+          display_text: matchText,
+          start_index: startIndex,
+          end_index: startIndex + matchText.length
+        });
+      }
+    });
+    // ---------------------------------------------
+
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const optimisticMessage = {
       id: tempId,
@@ -411,12 +657,15 @@ const Chat = ({
       messageType: fileToUpload ? (fileToUpload.type?.startsWith('image/') ? 'image' : 'file') : 'text',
       isCurrentUser: true,
       is_read_by_me: true,
-      isOptimistic: true
+      isOptimistic: true,
+      mentions: mentions // <-- Attach mentions
     };
     onSendMessage(newMessage, fileToUpload, optimisticMessage);
     setNewMessage("");
     setFileToUpload(null);
+    setPendingStaffMentions([]); // Reset pending mentions
   };
+  // ------------------------------------------------
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -482,6 +731,49 @@ const Chat = ({
       return <IoMdCheckmarkCircleOutline className="text-blue-200 ml-1" size={14} title="Sent" />;
     }
   };
+
+  // ---------- NEW: renderMessageTextWithMentions ----------
+  const renderMessageTextWithMentions = (text, mentions = []) => {
+    if (!mentions || mentions.length === 0) {
+      return <p className="text-sm whitespace-pre-wrap break-words">{text}</p>;
+    }
+    
+    // Sort by index so we can slice the string correctly
+    const sorted = [...mentions].sort((a, b) => a.start_index - b.start_index);
+    const parts = [];
+    let lastIndex = 0;
+    
+    sorted.forEach((m, idx) => {
+      if (m.start_index > lastIndex) {
+        parts.push(text.slice(lastIndex, m.start_index));
+      }
+      
+      // Render Tracking Card
+      if (m.mention_type === 'tracking') {
+        parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+      } 
+      // 🔥 UPDATED: Render Staff Chip (Bold and Colored)
+      else if (m.mention_type === 'staff') {
+        parts.push(
+          <span 
+            key={`mnt-${idx}`} 
+            className="font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-md border border-blue-200 shadow-sm mx-0.5 cursor-pointer hover:bg-blue-200 transition-colors"
+          >
+            {m.display_text}
+          </span>
+        );
+      }
+      
+      lastIndex = m.end_index;
+    });
+    
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    
+    return <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">{parts}</div>;
+  };
+  // -------------------------------------------------------
 
   // Manual template send handler
   const handleSendTemplate = async () => {
@@ -575,6 +867,17 @@ const Chat = ({
   const singleOtherParticipant = !activeConversation.is_group && !isWhatsApp && activeConversation.participants?.find(p => p.staff_id !== currentUser.id);
   const isParticipantOnline = singleOtherParticipant ? isUserOnline(singleOtherParticipant.staff_id) : false;
 
+  // 🔥 DYNAMIC PHOTO & GROUP DETECTOR
+  const otherParticipants = activeConversation.participants ? activeConversation.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
+  const isFunctionallyGroup = activeConversation.is_group || otherParticipants.length > 1;
+
+  let avatarPhoto = null;
+  if (!isFunctionallyGroup && otherParticipants.length === 1) {
+      if (otherParticipants[0]?.photo) {
+          avatarPhoto = getAvatarUrl(otherParticipants[0].photo);
+      }
+  }
+
   return (
     <div className="flex flex-col w-full bg-white h-full min-h-0">
       {/* Fixed Header */}
@@ -582,14 +885,23 @@ const Chat = ({
         <button className="md:hidden mr-3 text-gray-500 hover:text-gray-700" onClick={onBack}>
           <FiChevronLeft size={24} />
         </button>
-        <div className="relative">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${activeConversation.avatarColor || 'bg-navy-700'} mr-3 flex-shrink-0`}
-          >
-            {avatarChar}
+        <div className="relative mr-3 flex-shrink-0">
+          {avatarPhoto ? (
+            <img 
+              src={avatarPhoto} 
+              alt={displayName} 
+              className="w-10 h-10 rounded-full object-cover border border-gray-200"
+              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+            />
+          ) : null}
+          
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${activeConversation.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
+            {isFunctionallyGroup ? <FiUsers size={20} /> : avatarChar}
           </div>
-          {showOnlineStatus && singleOtherParticipant && (
-            <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+
+          {/* Online Dot */}
+          {showOnlineStatus && singleOtherParticipant && !isFunctionallyGroup && (
+            <span className={`absolute -bottom-0 -right-0 w-3 h-3 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -628,6 +940,15 @@ const Chat = ({
                 <span className="text-xs text-gray-500">
                   {isParticipantOnline ? 'Online' : 'Offline'}
                 </span>
+                {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
+                {!isFunctionallyGroup && otherParticipants[0]?.centre_name && (
+                  <>
+                    <span className="text-gray-300 mx-2">•</span>
+                    <span className="text-xs text-gray-500 truncate flex items-center gap-1">
+                      <FiMapPin size={10}/> {otherParticipants[0].centre_name}
+                    </span>
+                  </>
+                )}
               </div>
             )}
             {serviceInfo && serviceInfo.applicationNumber && (
@@ -729,6 +1050,7 @@ const Chat = ({
                 return (
                   <motion.div
                     key={messageKey}
+                    id={`msg-${msg.id}`}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
@@ -813,7 +1135,8 @@ const Chat = ({
                               <FiDownload size={14} className="ml-2" />
                             </div>
                           ) : (
-                            <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                            // ---------- REPLACED with mention renderer ----------
+                            renderMessageTextWithMentions(msg.text, msg.mentions)
                           )}
                           <div className={`flex justify-between items-center mt-1 text-xs ${msg.isCurrentUser ? "text-blue-200" : "text-gray-500"}`}>
                             <span>{msg.time}</span>
@@ -822,13 +1145,33 @@ const Chat = ({
                             </div>
                           </div>
                         </div>
-                        {msg.isCurrentUser && !msg.isDeleted && !msg.isOptimistic && (
-                          <button
-                            onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
-                            className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition self-end mb-1"
-                          >
-                            <FiTrash2 size={14} />
-                          </button>
+                        {/* 🔥 Unified Hover Actions (Note, Task, Delete) */}
+                        {!msg.isOptimistic && !msg.isDeleted && msg.messageType === 'text' && (
+                          <div className={`flex items-end mb-1 opacity-0 group-hover:opacity-100 transition-opacity gap-1 ${msg.isCurrentUser ? 'mr-2' : 'ml-2'}`}>
+                            <button 
+                              onClick={() => handleConvertToNote(msg)}
+                              className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-yellow-500 rounded-full shadow-sm hover:shadow transition" 
+                              title="Convert to Note"
+                            >
+                              <FiStar size={12} />
+                            </button>
+                            <button 
+                              onClick={() => onOpenTaskModal(msg.text)} // Pass the text to optionally prepopulate the task modal later
+                              className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-green-600 rounded-full shadow-sm hover:shadow transition" 
+                              title="Create Task from Message"
+                            >
+                              <FiCheckSquare size={12} />
+                            </button>
+                            {msg.isCurrentUser && (
+                              <button
+                                onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
+                                className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-red-500 rounded-full shadow-sm hover:shadow transition"
+                                title="Delete Message"
+                              >
+                                <FiTrash2 size={12} />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
@@ -842,7 +1185,7 @@ const Chat = ({
       </div>
 
       {/* Fixed Input Area */}
-      <div className="w-full bg-white p-3 border-t border-gray-200 sticky bottom-0">
+      <div className="w-full bg-white p-3 border-t border-gray-200 sticky bottom-0 relative">
         {fileToUpload && (
           <div className="mb-2 px-3 py-2 bg-gray-100 rounded-lg flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -910,6 +1253,8 @@ const Chat = ({
           </div>
           <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center">
             <input
+              id="chat-message-input"   // <-- added id
+              ref={chatInputRef}
               type="text"
               value={newMessage}
               onChange={handleInputChange}
@@ -961,6 +1306,32 @@ const Chat = ({
             </motion.button>
           )}
         </div>
+
+        {/* ---------- NEW: Autocomplete dropdown ---------- */}
+        {mentionQuery && mentionResults.length > 0 && (
+          <div className="absolute bottom-[80px] left-14 bg-white border border-gray-200 rounded-xl shadow-xl w-64 overflow-hidden z-50">
+            <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 font-semibold uppercase">
+              Staff Suggestions
+            </div>
+            {mentionResults.map(staff => (
+              <button
+                key={staff.id}
+                onClick={() => handleSelectMention(staff)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition text-left"
+              >
+                <div className="w-8 h-8 rounded-full bg-navy-700 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  {staff.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 text-sm truncate">{staff.name}</p>
+                  <p className="text-xs text-gray-500 truncate">{staff.role}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {/* ---------------------------------------------- */}
+
       </div>
 
       {/* Tasks Modal */}

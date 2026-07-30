@@ -5,6 +5,9 @@ import { io } from "../../server.js";
 import { logActivity } from "../../utils/activityLogger.js";
 import { resolveConversation } from "../../utils/conversationService.js";
 
+import notificationService from "../../utils/notificationService.js";
+import { notificationTemplates } from "../../utils/notificationTemplates.js";
+
 const router = express.Router();
 
 /* ================================
@@ -207,16 +210,19 @@ router.post("/add", async (req, res) => {
     ================================ */
     let conversationInput = {
       channel: "internal",
-      centre_id: centreId,
       created_by: req.user.id
     };
 
     if (related_service_entry_id) {
       conversationInput.context_type = "service_entry";
       conversationInput.context_id = related_service_entry_id;
+      conversationInput.centre_id = centreId;
+      conversationInput.is_group = true;
     } else if (related_customer_id) {
       conversationInput.context_type = "customer";
       conversationInput.customer_id = related_customer_id;
+      conversationInput.centre_id = centreId;
+      conversationInput.is_group = true;
     } else {
       // SAFE PARTICIPANT ARRAY: Only add assigned_to if it exists
       const participants = [req.user.id];
@@ -224,6 +230,9 @@ router.post("/add", async (req, res) => {
         participants.push(assigned_to);
       }
       conversationInput.participant_ids = participants;
+
+      conversationInput.is_group = false;
+      conversationInput.centre_id = null;
     }
 
     const conversation = await resolveConversation(conversationInput);
@@ -263,16 +272,44 @@ router.post("/add", async (req, res) => {
     /* ================================
       🔥 3. INSERT CHAT MESSAGE (TASK)
     ================================ */
-    await client.query(
+    const msgRes = await client.query(
       `INSERT INTO chat_messages
       (conversation_id, sender_type, sender_id, message, message_type, created_at)
-      VALUES ($1,'staff',$2,$3,'task',NOW())`,
+      VALUES ($1,'staff',$2,$3,'task',NOW())
+      RETURNING *`,
       [
         conversation.id,
         req.user.id,
         task.id.toString() 
       ]
     );
+    const savedMsg = msgRes.rows[0];
+
+    // 🔥 NEW: Calculate unread counts inside the transaction before committing
+    const participantsRes = await client.query(
+      `SELECT staff_id FROM chat_participants WHERE conversation_id = $1`,
+      [conversation.id]
+    );
+
+    const participantUpdates = [];
+    for (const p of participantsRes.rows) {
+      if (p.staff_id !== req.user.id) {
+        const unreadCountRes = await client.query(
+          `SELECT COUNT(*) as count
+           FROM chat_messages m
+           LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
+           WHERE m.conversation_id = $2 
+             AND m.sender_id != $1
+             AND r.id IS NULL
+             AND m.is_deleted = false`,
+          [p.staff_id, conversation.id]
+        );
+        participantUpdates.push({
+          staff_id: p.staff_id,
+          unread: parseInt(unreadCountRes.rows[0].count)
+        });
+      }
+    }
 
     if (due_date) {
       await client.query(
@@ -307,11 +344,47 @@ router.post("/add", async (req, res) => {
     });
     // ======================================
 
-    io.to(`conversation_${conversation.id}`).emit("new_message", {
-      conversation_id: conversation.id,
-      message_type: "task",
-      data: task
-    });
+    // 🔥 NOTIFICATION ENGINE TRIGGER
+    // We only notify if the task is assigned to someone (and optionally, not themselves)
+    if (assigned_to && assigned_to !== req.user.id) {
+      try {
+        await notificationService.createNotification({
+          recipientStaffId: assigned_to,       
+          senderStaffId: req.user.id,          
+          centreId: centreId,
+          relatedEntityType: 'task',
+          relatedEntityId: task.id,
+          ...notificationTemplates.taskAssigned({
+            taskTitle: title,
+            metadata: { 
+              dueDate: due_date || 'No due date',
+              assignedBy: req.user.role 
+            }
+          })
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send task notification:", notifErr);
+      }
+    }
+
+    // 🔥 NEW: Format message payload perfectly for the frontend
+    const messagePayload = {
+      ...savedMsg,
+      data: task,
+      live_task_data: task
+    };
+
+    // 1. Emit to active chat windows (if they currently have the chat open)
+    io.to(`conversation_${conversation.id}`).emit("new_message", messagePayload);
+
+    // 2. 🔥 NEW: Emit to global user rooms so sidebar badges update instantly
+    for (const update of participantUpdates) {
+      io.to(`user:${update.staff_id}`).emit("new_message", messagePayload);
+      io.to(`user:${update.staff_id}`).emit("unread_update", {
+        conversationId: conversation.id,
+        unread: update.unread
+      });
+    }
 
     res.status(201).json(task);
 
@@ -480,6 +553,29 @@ router.patch("/:id/status", async (req, res) => {
       performed_by_role: req.user.role
     });
     // ======================================
+
+    // 🔥 NOTIFICATION ENGINE TRIGGER
+    // If completed, notify the person who originally assigned the task
+    if (status === "completed" && task.assigned_by && task.assigned_by !== req.user.id) {
+      try {
+        await notificationService.createNotification({
+          recipientStaffId: task.assigned_by,  // Person who created the task
+          senderStaffId: req.user.id,          // Person who completed it
+          centreId: task.centre_id,
+          relatedEntityType: 'task',
+          relatedEntityId: task.id,
+          // Since we might not have added taskCompleted to templates yet, we can do it manually or use generic
+          type: 'task_completed',
+          category: 'work',
+          title: 'Task Completed',
+          message: `${assignedStaffName} completed the task: ${task.title}`,
+          priority: 'normal',
+          metadata: { taskId: task.id }
+        });
+      } catch (notifErr) {
+        console.error("Non-fatal: Failed to send completion notification:", notifErr);
+      }
+    }
 
     io.to(`centre_${task.centre_id}`).emit("taskUpdated", {
       id,

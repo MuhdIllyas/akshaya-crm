@@ -444,6 +444,48 @@ router.get("/", async (req, res) => {
     ];
 
     /* ======================================================
+      4. KNOWLEDGE HUB ANNOUNCEMENTS (NEW!)
+    ====================================================== */
+    
+    const announcementQuery = `
+      SELECT
+        a.id,
+        a.title,
+        a.content,
+        a.priority,
+        a.category,
+        a.created_at,
+        s.name AS author_name
+      FROM knowledge_announcements a
+      LEFT JOIN staff s ON a.created_by = s.id
+      ORDER BY a.created_at DESC
+      LIMIT 100
+    `;
+    
+    const announcementRes = await client.query(announcementQuery);
+    
+    const announcementEvents = announcementRes.rows.map(row => ({
+      id: `announcement-${row.id}`,
+      title: `📢 ${row.title}`,
+      description: row.content,
+      date: row.created_at,
+      start_datetime: null,
+      end_datetime: null,
+      type: "system",
+      event_type: "announcement",
+      priority: row.priority || "high",
+      status: "active",
+      visibility: "global",
+      created_at: row.created_at,
+      centre_id: null,
+      related_service_id: null,
+      service_name: row.category || "Announcement",
+      assigned_to: null,
+      assigned_staff_name: row.author_name || "System",
+      source: "announcement",
+    }));
+
+    /* ======================================================
       COMBINE ALL EVENTS
     ====================================================== */
 
@@ -451,6 +493,7 @@ router.get("/", async (req, res) => {
       ...manualEventsRes.rows,
       ...taskRes.rows,
       ...serviceTrackingEvents,
+      ...announcementEvents
     ];
 
     /* ======================================================

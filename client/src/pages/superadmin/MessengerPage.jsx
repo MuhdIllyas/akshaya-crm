@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiSend,
@@ -58,33 +59,44 @@ import ActivityPanel from "@/components/ActivityPanel";
 import EmojiPicker from 'emoji-picker-react';
 import Chat from '@/components/Chat';
 import { socket } from "@/services/socket";
+import { useLocation } from "react-router-dom";
 
-// ============== NEW CHAT MODAL (Enhanced for WhatsApp) ==============
-const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
+// ============== NEW CHAT MODAL (Grouped by Centre) ==============
+const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [groupName, setGroupName] = useState('');
   const [isGroup, setIsGroup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [chatType, setChatType] = useState('internal'); // 'internal' or 'whatsapp'
+  const [chatType, setChatType] = useState('internal'); 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
 
   if (!isOpen) return null;
 
+  // 1. Filter by search
   const filteredStaff = staffList.filter(staff =>
     staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // 2. Group the filtered staff by Centre Name
+  const groupedStaff = filteredStaff.reduce((acc, staff) => {
+    // Prefer backend name, fallback to map, fallback to ID
+    const cName = staff.centre_name || centresMap?.[staff.centre_id] || (staff.centre_id ? `Centre ${staff.centre_id}` : 'Other Staff');
+    if (!acc[cName]) acc[cName] = [];
+    acc[cName].push(staff);
+    return acc;
+  }, {});
+
+  const sortedCentres = Object.keys(groupedStaff).sort();
+
   const handleCreate = async () => {
     if (isCreating) return;
-
     setIsCreating(true);
     if (chatType === 'internal') {
       await onCreate(selectedUsers, isGroup ? groupName : null, 'internal');
     } else {
-      // WhatsApp: phone number required
       if (!phoneNumber.trim()) {
         toast.error('Phone number is required for WhatsApp chat');
         setIsCreating(false);
@@ -92,14 +104,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
       }
       await onCreate(null, null, 'whatsapp', phoneNumber, customerName);
     }
-    setSelectedUsers([]);
-    setGroupName('');
-    setIsGroup(false);
-    setSearchTerm('');
-    setChatType('internal');
-    setPhoneNumber('');
-    setCustomerName('');
-    setIsCreating(false);
+    handleClose();
   };
 
   const handleClose = () => {
@@ -110,6 +115,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
     setChatType('internal');
     setPhoneNumber('');
     setCustomerName('');
+    setIsCreating(false);
     onClose();
   };
 
@@ -126,131 +132,40 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 20, opacity: 0 }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="bg-white rounded-xl w-full max-w-md shadow-xl"
+        className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6">
+        <div className="p-6 pb-0">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-gray-800">
-              New Conversation
-            </h3>
-            <button
-              onClick={handleClose}
-              className="p-2 rounded-full hover:bg-gray-100 transition"
-              disabled={isCreating}
-            >
+            <h3 className="text-xl font-bold text-gray-800">New Conversation</h3>
+            <button onClick={handleClose} disabled={isCreating} className="p-2 rounded-full hover:bg-gray-100 transition">
               <IoMdClose className="text-gray-500" />
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 mb-4">
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setChatType('internal')}
-                disabled={isCreating}
-                className={`flex-1 py-2 rounded-lg transition ${chatType === 'internal' ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                Internal
-              </button>
-              <button
-                type="button"
-                onClick={() => setChatType('whatsapp')}
-                disabled={isCreating}
-                className={`flex-1 py-2 rounded-lg transition ${chatType === 'whatsapp' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                WhatsApp
-              </button>
+              <button type="button" onClick={() => setChatType('internal')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${chatType === 'internal' ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Internal</button>
+              <button type="button" onClick={() => setChatType('whatsapp')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${chatType === 'whatsapp' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>WhatsApp</button>
             </div>
 
             {chatType === 'internal' && (
               <>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsGroup(false)}
-                    disabled={isCreating}
-                    className={`flex-1 py-2 rounded-lg transition ${!isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                  >
-                    Direct
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsGroup(true)}
-                    disabled={isCreating}
-                    className={`flex-1 py-2 rounded-lg transition ${isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                  >
-                    Group
-                  </button>
+                  <button type="button" onClick={() => setIsGroup(false)} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${!isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Direct</button>
+                  <button type="button" onClick={() => setIsGroup(true)} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Group</button>
                 </div>
 
                 {isGroup && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
-                    <input
-                      type="text"
-                      value={groupName}
-                      onChange={(e) => setGroupName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent"
-                      placeholder="Enter group name"
-                      disabled={isCreating}
-                    />
+                    <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Enter group name" disabled={isCreating} />
                   </div>
                 )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Search Staff</label>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent"
-                    placeholder="Search by name or role..."
-                    disabled={isCreating}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Select Participants ({selectedUsers.length} selected)
-                  </label>
-                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
-                    {filteredStaff.length > 0 ? (
-                      filteredStaff.map(staff => (
-                        <label
-                          key={staff.id}
-                          className={`flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${isCreating ? 'opacity-50 pointer-events-none' : ''
-                            }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedUsers.includes(staff.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedUsers([...selectedUsers, staff.id]);
-                              } else {
-                                setSelectedUsers(selectedUsers.filter(id => id !== staff.id));
-                              }
-                            }}
-                            disabled={isCreating}
-                            className="w-4 h-4 text-navy-700 rounded border-gray-300 focus:ring-navy-700 mr-3"
-                          />
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-800">{staff.name}</p>
-                            <p className="text-xs text-gray-500">{staff.role || 'Staff'}</p>
-                          </div>
-                        </label>
-                      ))
-                    ) : (
-                      <div className="p-4 text-center text-gray-500">
-                        No staff members found
-                      </div>
-                    )}
-                  </div>
+                  <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Search by name or role..." disabled={isCreating} />
                 </div>
               </>
             )}
@@ -259,58 +174,108 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
-                    placeholder="+1234567890"
-                    disabled={isCreating}
-                  />
+                  <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent" placeholder="+1234567890" disabled={isCreating} />
                   <p className="text-xs text-gray-500 mt-1">Include country code (e.g., +1 for US)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name (Optional)</label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
-                    placeholder="John Doe"
-                    disabled={isCreating}
-                  />
+                  <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent" placeholder="John Doe" disabled={isCreating} />
                 </div>
               </>
             )}
           </div>
+        </div>
 
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={handleClose}
-              disabled={isCreating}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreate}
-              disabled={
-                (chatType === 'internal' && (selectedUsers.length === 0 || (isGroup && !groupName))) ||
-                (chatType === 'whatsapp' && !phoneNumber.trim()) ||
-                isCreating
-              }
-              className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2"
-            >
-              {isCreating ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Creating...
-                </>
+        {/* Scrollable Staff List Area */}
+        {chatType === 'internal' && (
+          <div className="px-6 pb-2 flex-1 overflow-hidden flex flex-col">
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex-shrink-0">
+              Select Participants ({selectedUsers.length} selected)
+            </label>
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg custom-scrollbar bg-white min-h-[150px]">
+              {sortedCentres.length > 0 ? (
+                sortedCentres.map(centreName => {
+                  const members = groupedStaff[centreName];
+                  const centreStaffIds = members.map(m => m.id);
+                  const allSelected = centreStaffIds.every(id => selectedUsers.includes(id));
+
+                  return (
+                    <div key={centreName} className="mb-0 border-b border-gray-200 last:border-0">
+                      <div className="bg-gray-50 px-3 py-2 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200 shadow-sm">
+                        <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{centreName}</span>
+                        <div className="flex items-center gap-2">
+                          {/* 🔥 NEW: Select All button for easy Group creation! */}
+                          {isGroup && (
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (allSelected) {
+                                  setSelectedUsers(selectedUsers.filter(id => !centreStaffIds.includes(id)));
+                                } else {
+                                  const newSelection = new Set([...selectedUsers, ...centreStaffIds]);
+                                  setSelectedUsers(Array.from(newSelection));
+                                }
+                              }}
+                              className="text-[10px] bg-white border border-gray-300 px-2 py-0.5 rounded text-navy-700 hover:bg-gray-100 font-medium transition"
+                            >
+                              {allSelected ? 'Deselect All' : 'Select All'}
+                            </button>
+                          )}
+                          <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full font-medium">{members.length}</span>
+                        </div>
+                      </div>
+                      <div>
+                        {members.map(staff => (
+                          <label key={staff.id} className={`flex items-center p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition ${isCreating ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <input
+                              type={isGroup ? "checkbox" : "radio"}
+                              name="participantSelection"
+                              checked={selectedUsers.includes(staff.id)}
+                              onChange={(e) => {
+                                if (isGroup) {
+                                  if (e.target.checked) setSelectedUsers([...selectedUsers, staff.id]);
+                                  else setSelectedUsers(selectedUsers.filter(id => id !== staff.id));
+                                } else {
+                                  setSelectedUsers([staff.id]);
+                                }
+                              }}
+                              disabled={isCreating}
+                              className={`w-4 h-4 text-navy-700 border-gray-300 focus:ring-navy-700 mr-3 ${isGroup ? 'rounded' : ''}`}
+                            />
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-800 text-sm">{staff.name}</p>
+                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{staff.role || 'Staff'}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                'Create'
+                <div className="p-8 text-center text-gray-500 flex flex-col items-center">
+                  <FiUsers size={24} className="mb-2 text-gray-300" />
+                  <p>No staff members found</p>
+                </div>
               )}
-            </button>
+            </div>
           </div>
+        )}
+
+        <div className="p-6 pt-4 flex justify-end gap-3 border-t border-gray-100 flex-shrink-0 mt-auto">
+          <button onClick={handleClose} disabled={isCreating} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50">Cancel</button>
+          <button
+            onClick={handleCreate}
+            disabled={
+              (chatType === 'internal' && (selectedUsers.length === 0 || (isGroup && !groupName))) ||
+              (chatType === 'whatsapp' && !phoneNumber.trim()) ||
+              isCreating
+            }
+            className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            {isCreating ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : 'Create Chat'}
+          </button>
         </div>
       </motion.div>
     </motion.div>
@@ -319,6 +284,8 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList }) => {
 
 // ============== MAIN MESSENGER PAGE ==============
 const MessengerPage = ({ user }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const token = localStorage.getItem("token");
 
   let decodedPayload = null;
@@ -349,6 +316,11 @@ const MessengerPage = ({ user }) => {
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+
+  const [conversationNotes, setConversationNotes] = useState([]);
+  const [isQuickNoteModalOpen, setIsQuickNoteModalOpen] = useState(false);
+  const [quickNoteForm, setQuickNoteForm] = useState({ title: "", content: "" });
+
   const [taskFilter, setTaskFilter] = useState("all");
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
@@ -362,6 +334,9 @@ const MessengerPage = ({ user }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [socketConnected, setSocketConnected] = useState(false);
+
+  const [serviceDetails, setServiceDetails] = useState(null);
+  const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
 
   const lastMessageIdsRef = useRef(new Set());
   const typingTimeoutRef = useRef(null);
@@ -392,6 +367,14 @@ const MessengerPage = ({ user }) => {
     if (!API_BASE_URL) {
       throw new Error("VITE_API_URL is not defined");
   }
+
+  const getAvatarUrl = (photoPath) => {
+    if (!photoPath) return null;
+    if (photoPath.startsWith('http')) return photoPath;
+    const safeBase = API_BASE_URL.replace(/\/$/, '');
+    const safePath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+    return `${safeBase}${safePath}`;
+  };
 
   const [taskForm, setTaskForm] = useState({
     title: "",
@@ -459,6 +442,38 @@ const MessengerPage = ({ user }) => {
       return 0;
     }
   };
+
+  useEffect(() => {
+    // 🔥 NEW: Fetch Notes for this Conversation
+    if (activeConversation?.id) {
+      fetch(`${API_BASE_URL}/api/notes/conversation/${activeConversation.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setConversationNotes(data))
+      .catch(err => console.error("Failed to fetch notes", err));
+    } else {
+      setConversationNotes([]);
+    }
+
+    if (activeConversation?.context_type === 'service_entry' && activeConversation.context_id) {
+      setLoadingServiceDetails(true);
+      fetch(`${API_BASE_URL}/api/servicecollaboration/${activeConversation.context_id}/summary`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        setServiceDetails(data);
+        setLoadingServiceDetails(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch service details", err);
+        setLoadingServiceDetails(false);
+      });
+    } else {
+      setServiceDetails(null);
+    }
+  }, [activeConversation?.id, token, API_BASE_URL]);
 
   // ============== SOCKET.IO INTEGRATION ==============
   useEffect(() => {
@@ -539,7 +554,8 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
-          live_task_data: msg.live_task_data || null
+          live_task_data: msg.live_task_data || null,
+          mentions: msg.mentions || []
         };
 
         return {
@@ -769,6 +785,30 @@ const MessengerPage = ({ user }) => {
     };
   }, [token, currentUser.id, currentUser.centreId, activeConversation]);
 
+  // 🔥 Catch incoming navigation from Notifications
+  useEffect(() => {
+    if (!location.state) return;
+
+    // Check if we need to open the Tasks tab
+    if (location.state.openTasksView) {
+      setActiveView("tasks");
+      window.history.replaceState({}, document.title);
+      return;
+    }
+
+    // Check if we need to open a specific Chat
+    if (location.state.openConversationId && conversations.length > 0) {
+      const targetConvId = location.state.openConversationId;
+      const chatToOpen = conversations.find(c => c.id === targetConvId);
+      
+      if (chatToOpen) {
+        setActiveView("chats"); 
+        setActiveConversation(chatToOpen); 
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, conversations]);
+
   // ============== CHAT API INTEGRATION ==============
 
   const fetchConversations = async () => {
@@ -854,7 +894,8 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
-          live_task_data: msg.live_task_data || null
+          live_task_data: msg.live_task_data || null,
+          mentions: msg.mentions || []
         };
       });
 
@@ -951,6 +992,11 @@ const MessengerPage = ({ user }) => {
     formData.append('conversation_id', activeConversation.id);
     formData.append('message', message || '');
     formData.append('message_type', file ? (file.type?.startsWith('image/') ? 'image' : 'file') : 'text');
+
+    // 🔥 Attach Mentions to the Form Payload
+    if (optimisticMessage?.mentions?.length > 0) {
+      formData.append('mentions', JSON.stringify(optimisticMessage.mentions));
+    }
     
     if (file) {
       formData.append('file', file);
@@ -979,12 +1025,45 @@ const MessengerPage = ({ user }) => {
 
       const newMsg = await res.json();
       
-      // 🔥 FIX 2: Delete the optimistic (blurred) message on SUCCESS!
-      // The real message is arriving via Socket.io simultaneously.
-      setMessages(prev => ({
-        ...prev,
-        [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
-      }));
+      // 🔥 NEW FIX: Swap the optimistic message with the real API response
+      // This guarantees the sender sees their message instantly, even if WebSockets lag.
+      setMessages(prev => {
+        const currentMessages = prev[activeConversation.id] || [];
+        const filtered = currentMessages.filter(m => m.tempId !== actualTempId);
+        
+        // Prevent duplication if the socket was somehow faster than the HTTP response
+        if (filtered.some(m => m.id === newMsg.id)) {
+            return { ...prev, [activeConversation.id]: filtered };
+        }
+        
+        // Format the saved message for the UI
+        const formattedMsg = {
+          id: newMsg.id,
+          sender: 'You',
+          senderId: currentUser.id,
+          text: newMsg.message,
+          time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: newMsg.created_at,
+          isFile: newMsg.message_type === 'file' || newMsg.message_type === 'image',
+          fileName: newMsg.file_name,
+          fileUrl: newMsg.file_url,
+          fileSize: newMsg.file_size,
+          messageType: newMsg.message_type,
+          isDeleted: newMsg.is_deleted,
+          isCurrentUser: true,
+          is_read_by_me: true,
+          isOptimistic: false,
+          isSystem: newMsg.sender_type === 'system',
+          sender_type: newMsg.sender_type,
+          live_task_data: newMsg.live_task_data || null,
+          mentions: newMsg.mentions || (optimisticMessage ? optimisticMessage.mentions : [])
+        };
+        
+        return {
+          ...prev,
+          [activeConversation.id]: [...filtered, formattedMsg]
+        };
+      });
       
     } catch (err) {
       console.error("Upload error:", err);
@@ -1143,6 +1222,35 @@ const MessengerPage = ({ user }) => {
     } catch (err) {
       console.error('Error deleting conversation:', err);
       toast.error('Failed to delete conversation');
+    }
+  };
+
+  // ============== ASSIGN CONVERSATION ==============
+  const handleAssignChat = async (staffId) => {
+    if (!activeConversation) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${activeConversation.id}/assign`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ staff_id: staffId || null })
+      });
+
+      if (!res.ok) throw new Error('Failed to assign conversation');
+      
+      // Update local state instantly so the dropdown reflects the change
+      const newStaffId = staffId ? parseInt(staffId) : null;
+      setActiveConversation(prev => ({ ...prev, assigned_staff_id: newStaffId }));
+      setConversations(prev => prev.map(c => c.id === activeConversation.id ? { ...c, assigned_staff_id: newStaffId } : c));
+      
+      toast.success(staffId ? 'Chat assigned successfully' : 'Chat unassigned');
+      fetchConversations(); // Refresh to pull down new participants array
+      
+    } catch (err) {
+      console.error('Error assigning conversation:', err);
+      toast.error('Failed to assign chat');
     }
   };
 
@@ -1783,8 +1891,8 @@ const MessengerPage = ({ user }) => {
         } else if (conv.participants) {
           const otherParticipants = conv.participants.filter(p => p.staff_id !== currentUser.id);
           if (otherParticipants.length > 0) {
-            displayName = otherParticipants.map(p => p.name).join(', ');
-          }
+          displayName = otherParticipants.map(p => p.name).join(', ');
+        }
         }
       }
       if (!displayName) displayName = 'Unknown Chat';
@@ -1857,6 +1965,17 @@ const MessengerPage = ({ user }) => {
 
             const isAnyOnline = c.channel !== 'whatsapp' && c.participants?.some(p => p.staff_id !== currentUser.id && onlineUsers.has(String(p.staff_id)));
 
+            // 🔥 DYNAMIC PHOTO & GROUP DETECTOR
+            const otherParticipants = c.participants ? c.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
+            const isFunctionallyGroup = c.is_group || otherParticipants.length > 1;
+
+            let avatarPhoto = null;
+            if (!isFunctionallyGroup && otherParticipants.length === 1) {
+                if (otherParticipants[0]?.photo) {
+                    avatarPhoto = getAvatarUrl(otherParticipants[0].photo);
+                }
+            }
+
             let lastMessageText = c.last_message || c.lastMessage || '';
             const lastMessageSenderName = c.last_message_sender;
             const lastMessageSenderId = c.last_message_sender_id;
@@ -1883,28 +2002,46 @@ const MessengerPage = ({ user }) => {
                     : "hover:bg-gray-50 border-l-4 border-transparent"
                   }`}
               >
-                <div className="relative">
-                  <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${c.avatarColor || 'bg-navy-700'} mr-3 flex-shrink-0`}
-                  >
-                    {displayName.charAt(0).toUpperCase()}
+                <div className="relative mr-3 flex-shrink-0">
+                  {avatarPhoto ? (
+                    <img 
+                      src={avatarPhoto} 
+                      alt={displayName} 
+                      className="w-12 h-12 rounded-xl object-cover border border-gray-200"
+                      onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                    />
+                  ) : null}
+                  
+                  {/* Fallback & Group Icon */}
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${c.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
+                    {isFunctionallyGroup ? <FiUsers size={20} /> : displayName.charAt(0).toUpperCase()}
                   </div>
-                  {!c.is_group && isAnyOnline && (
-                    <span className="absolute bottom-0 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
+                  
+                  {/* Online Dot */}
+                  {!isFunctionallyGroup && isAnyOnline && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-1 min-w-0 flex-1">
-                      <span className="font-semibold text-gray-800 truncate">{displayName}</span>
-                      {c.channel === 'whatsapp' && (
-                        <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap flex items-center gap-1">
-                          <FiSmartphone size={10} /> WhatsApp
-                        </span>
-                      )}
+                  <div className="flex justify-between items-start">
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold text-gray-800 truncate">{displayName}</span>
+                        {c.channel === 'whatsapp' && (
+                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap flex items-center gap-1">
+                            <FiSmartphone size={10} /> WhatsApp
+                          </span>
+                        )}
                       {c.context_type === 'service_entry' && (
                         <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 whitespace-nowrap">
                           Service
+                        </span>
+                      )}
+                    </div>
+                      {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
+                      {!isFunctionallyGroup && otherParticipants[0]?.centre_name && (
+                        <span className="text-[10px] text-gray-400 truncate mt-0.5 flex items-center gap-1">
+                          <FiMapPin size={10} /> {otherParticipants[0].centre_name}
                         </span>
                       )}
                     </div>
@@ -1967,6 +2104,16 @@ const MessengerPage = ({ user }) => {
     }
     if (!displayName) displayName = 'Unknown Chat';
 
+    const otherPanelParticipants = activeConversation.participants ? activeConversation.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
+    const isFunctionallyGroup = activeConversation.is_group || otherPanelParticipants.length > 1;
+
+    let avatarPhoto = null;
+    if (!isFunctionallyGroup && otherPanelParticipants.length === 1) {
+        if (otherPanelParticipants[0]?.photo) {
+            avatarPhoto = getAvatarUrl(otherPanelParticipants[0].photo);
+        }
+    }
+
     return (
       <div className="flex flex-col h-full bg-white border-l border-gray-200 overflow-hidden">
         <div className="flex-none p-6 flex flex-col items-center border-b border-gray-200">
@@ -1979,6 +2126,14 @@ const MessengerPage = ({ user }) => {
             )}
           </div>
           <h3 className="text-xl font-bold text-gray-800">{displayName}</h3>
+
+          {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
+          {!isFunctionallyGroup && otherPanelParticipants[0]?.centre_name && (
+            <p className="text-gray-500 text-sm flex items-center mt-1 text-center">
+              <FiMapPin className="mr-1" size={14} /> {otherPanelParticipants[0].centre_name}
+            </p>
+          )}
+
           {activeConversation.channel === 'whatsapp' && (
             <p className="text-green-600 text-sm flex items-center mt-1">
               <FiSmartphone className="mr-1" size={14} /> WhatsApp
@@ -2006,6 +2161,25 @@ const MessengerPage = ({ user }) => {
               Reconnecting...
             </p>
           )}
+
+          {/* 🔥 ASSIGNMENT DROPDOWN (For WhatsApp & External Chats) */}
+          {(activeConversation.channel === 'whatsapp' || activeConversation.context_type === 'customer') && (
+            <div className="mt-4 w-full px-2">
+              <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">Assign To</p>
+              <select
+                value={activeConversation.assigned_staff_id || ""}
+                onChange={(e) => handleAssignChat(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-navy-700"
+              >
+                <option value="">Unassigned</option>
+                {staffList.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.role ? `(${s.role})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 p-4">
@@ -2016,22 +2190,28 @@ const MessengerPage = ({ user }) => {
             {activeConversation.participants?.map((p, index) => {
               const isOnline = onlineUsers.has(String(p.staff_id));
               const isCurrentUserParticipant = p.staff_id === currentUser.id;
+              const pPhoto = getAvatarUrl(p.photo);
 
               return (
                 <div key={index} className="flex items-center">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs mr-3">
+                  <div className="relative mr-3 flex-shrink-0">
+                    {pPhoto ? (
+                       <img src={pPhoto} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-gray-200" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                    ) : null}
+                    
+                    <div className={`w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600 ${pPhoto ? 'hidden' : ''}`}>
                       {p.name?.[0] || '?'}
                     </div>
+                    
                     {isOnline && (
-                      <span className="absolute bottom-0 right-3 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>
                     )}
                   </div>
                   <div className="flex-1">
                     <p className="text-gray-700 font-medium">
                       {p.name} {isCurrentUserParticipant && '(You)'}
                     </p>
-                    <p className="text-xs text-gray-500">{p.role || 'Member'}</p>
+                    <p className="text-xs text-gray-500">{p.role || 'Member'} {p.centre_name && `• ${p.centre_name}`}</p>
                   </div>
                   {isOnline && (
                     <span className="text-xs text-green-600">● Online</span>
@@ -2040,6 +2220,128 @@ const MessengerPage = ({ user }) => {
               );
             })}
           </div>
+
+          {activeConversation.context_type === 'service_entry' && (
+            <>
+              <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
+                <FiBriefcase className="mr-2" /> Service Details
+              </h4>
+              
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
+                <div className="mb-3 border-b border-gray-200 pb-3">
+                  <p className="text-sm font-bold text-gray-900 truncate" title={activeConversation.context_name}>
+                    {activeConversation.context_name || 'Service Request'}
+                  </p>
+                  {activeConversation.context_identifier && (
+                    <p className="text-xs text-navy-700 mt-1 font-mono font-medium">
+                      App #: {activeConversation.context_identifier}
+                    </p>
+                  )}
+                </div>
+
+                {loadingServiceDetails ? (
+                  <div className="animate-pulse space-y-2 py-2">
+                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-5/6"></div>
+                  </div>
+                ) : serviceDetails ? (
+                  <div className="space-y-3 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Service Type</p>
+                        <p className="font-medium text-gray-800">{serviceDetails.category_name || serviceDetails.service_name || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Subcategory</p>
+                        <p className="font-medium text-gray-800">{serviceDetails.subcategory_name || 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Status</p>
+                        <span className={`inline-block px-2 py-0.5 rounded font-medium text-[10px] uppercase tracking-wider ${
+                          serviceDetails.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          serviceDetails.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {serviceDetails.status?.replace('-', ' ') || 'Pending'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Current Step</p>
+                        <p className="font-medium text-navy-700 truncate" title={serviceDetails.current_step}>
+                          {serviceDetails.current_step || 'Initial Phase'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Priority</p>
+                        <p className={`font-medium ${
+                          serviceDetails.priority === 'High' ? 'text-red-600' :
+                          serviceDetails.priority === 'Medium' ? 'text-yellow-600' :
+                          'text-gray-800'
+                        }`}>
+                          {serviceDetails.priority || 'Normal'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Avg Time</p>
+                        <p className="font-medium text-gray-800 flex items-center gap-1">
+                          <FiClock size={10}/> {serviceDetails.average_time || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Expiry Date</p>
+                        <p className="font-medium text-gray-800">
+                          {serviceDetails.expiry_date ? new Date(serviceDetails.expiry_date).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 mb-0.5">Last Updated</p>
+                        <p className="font-medium text-gray-800">
+                          {serviceDetails.updated_at ? new Date(serviceDetails.updated_at).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-200">
+                      <p className="text-gray-500 mb-0.5">Assigned To</p>
+                      <p className="font-medium text-gray-800 flex items-center gap-1">
+                        <FiUser size={12}/> {serviceDetails.assigned_staff_name || serviceDetails.staff_name || 'Unassigned'}
+                      </p>
+                    </div>
+
+                    {serviceDetails.notes && (
+                      <div className="pt-2 border-t border-gray-200">
+                        <p className="text-gray-500 mb-0.5">Notes</p>
+                        <p className="font-medium text-gray-700 italic">
+                          "{serviceDetails.notes}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-center text-gray-500 py-2">
+                    Unable to load service details.
+                  </div>
+                )}
+                
+                <button
+                  onClick={() => navigate(`/dashboard/staff/track_service/${activeConversation.context_id}`)}
+                  className="w-full mt-4 py-2 bg-navy-700 hover:bg-navy-800 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center justify-center gap-2"
+                >
+                  <FiMapPin size={16} /> Open Tracking
+                </button>
+              </div>
+            </>
+          )}
 
           <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
             <FiFile className="mr-2" /> Shared Files
@@ -2078,46 +2380,138 @@ const MessengerPage = ({ user }) => {
             )}
           </div>
 
-          {/* Tasks Section (only for service conversations) */}
-          {activeConversation.context_type === 'service_entry' && (
+          {/* 🔥 Notes Section */}
+          {activeConversation.channel !== 'whatsapp' && (
+            <>
+              <div className="flex justify-between items-center mb-3 mt-6">
+                <h4 className="font-semibold text-gray-700 flex items-center">
+                  <FiStar className="mr-2 text-yellow-500" /> Notes
+                </h4>
+                <button 
+                  onClick={() => setIsQuickNoteModalOpen(true)} 
+                  className="text-xs bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 px-2 py-1 rounded transition shadow-sm font-medium"
+                >
+                  + Add Note
+                </button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
+                 {conversationNotes.map(note => (
+                   <div key={note.id} className="bg-[#fffdf2] border border-yellow-100 p-3 rounded-xl hover:shadow-sm transition">
+                      <p className="font-semibold text-sm text-yellow-900 truncate">{note.title || 'Note'}</p>
+                      <p className="text-xs text-yellow-800 mt-1 whitespace-pre-wrap">{note.content}</p>
+                      {note.origin_message_id && (
+                        <span className="text-[10px] text-yellow-600 mt-2 flex items-center gap-1 font-medium bg-yellow-100/50 inline-block px-1.5 py-0.5 rounded">
+                           <FiMessageSquare size={10} /> Converted from message
+                        </span>
+                      )}
+                   </div>
+                 ))}
+                 {conversationNotes.length === 0 && (
+                   <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
+                     <FiStar className="mx-auto text-gray-300 text-2xl mb-2" />
+                     <p className="text-xs text-gray-500 font-medium">No notes attached yet</p>
+                   </div>
+                 )}
+              </div>
+            </>
+          )}
+
+          {/* Tasks Section (Works for BOTH Service & Normal Chats) */}
+          {activeConversation.channel !== 'whatsapp' && (
             <>
               <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
                 <FiCheckSquare className="mr-2" /> Tasks
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
                 {(() => {
-                  const serviceTasks = tasks.filter(t => t.related_service_entry_id === activeConversation.context_id);
-                  if (serviceTasks.length === 0) {
-                    return <p className="text-sm text-gray-500 text-center py-2">No tasks for this service</p>;
+                  // 1. Gather the relevant tasks
+                  let relevantTasks = [];
+                  
+                  if (activeConversation.context_type === 'service_entry') {
+                    // Service Chats: Get all tasks linked to this service entry
+                    relevantTasks = tasks.filter(t => String(t.related_service_entry_id) === String(activeConversation.context_id));
+                  } else {
+                    // Normal Chats: Extract tasks that were shared as messages in this specific chat!
+                    const uniqueTaskIds = new Set();
+                    const chatMessages = messages[activeConversation.id] || [];
+                    const taskMessages = chatMessages.filter(m => m.messageType === 'task' && !m.isDeleted);
+                    
+                    taskMessages.forEach(msg => {
+                      // Grab the live task data attached to the message, or fallback to the master task list
+                      const taskObj = msg.live_task_data || tasks.find(t => String(t.id) === String(msg.text));
+                      if (taskObj && !uniqueTaskIds.has(String(taskObj.id))) {
+                        uniqueTaskIds.add(String(taskObj.id));
+                        relevantTasks.push(taskObj);
+                      }
+                    });
                   }
-                  return serviceTasks.map(task => (
-                    <div key={task.id} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+
+                  // 2. Handle empty state
+                  if (relevantTasks.length === 0) {
+                    return (
+                      <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
+                        <FiCheckSquare className="mx-auto text-gray-300 text-2xl mb-2" />
+                        <p className="text-xs text-gray-500 font-medium">No tasks in this conversation</p>
+                      </div>
+                    );
+                  }
+
+                  // 3. Render the tasks elegantly
+                  return relevantTasks.map(task => (
+                    <div key={task.id} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <p className={`font-medium text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                        <div className="flex-1 min-w-0 pr-2">
+                          <p className={`font-semibold text-sm truncate ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-800'}`} title={task.title}>
                             {task.title}
                           </p>
                           {task.description && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2" title={task.description}>
+                              {task.description}
+                            </p>
                           )}
-                          <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
-                            {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
-                            {task.due_date && <span>📅 {new Date(task.due_date).toLocaleDateString()}</span>}
-                            <span className={`px-2 py-0.5 rounded-full ${task.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-green-100 text-green-800'
-                              }`}>
-                              {task.priority}
+                          
+                          {/* Badges Row */}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {task.assigned_to_name && (
+                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
+                                <FiUser size={10}/> {task.assigned_to_name}
+                              </span>
+                            )}
+                            {task.due_date && (
+                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
+                                <FiCalendar size={10}/> {new Date(task.due_date).toLocaleDateString('en-IN')}
+                              </span>
+                            )}
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              task.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-100' :
+                              task.priority === 'medium' ? 'bg-yellow-50 text-yellow-600 border border-yellow-100' :
+                              'bg-green-50 text-green-600 border border-green-100'
+                            }`}>
+                              {task.priority || 'Normal'}
                             </span>
                           </div>
                         </div>
-                        {task.status !== 'completed' && (
+
+                        {/* Completion Checkmark */}
+                        {task.status !== 'completed' ? (
                           <button
-                            onClick={() => handleServiceTaskStatusUpdate(task.id, 'completed')}
-                            className="ml-2 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                            onClick={() => {
+                              // Dynamically trigger the correct API handler depending on the task type
+                              if (task.related_service_entry_id) {
+                                handleServiceTaskStatusUpdate(task.id, 'completed');
+                              } else {
+                                handleNormalTaskStatusUpdate(task.id, task.status);
+                              }
+                            }}
+                            className="shrink-0 p-1.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors border border-green-200"
+                            title="Mark Complete"
                           >
-                            ✓ Complete
+                            <FiCheck size={14} />
                           </button>
+                        ) : (
+                          <div className="shrink-0 p-1.5 bg-gray-50 text-gray-400 rounded-lg border border-gray-100" title="Completed">
+                            <FiCheck size={14} />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2130,6 +2524,85 @@ const MessengerPage = ({ user }) => {
       </div>
     );
   };
+
+  // 🔥 Save Quick Note Logic
+  const handleCreateQuickNote = async () => {
+    if (!quickNoteForm.content.trim()) return toast.error("Note content is required");
+    setLoading(true);
+    try {
+      const payload = {
+        title: quickNoteForm.title || null,
+        content: quickNoteForm.content,
+        related_conversation_id: activeConversation?.id,
+        related_service_entry_id: activeConversation?.context_type === 'service_entry' ? activeConversation?.context_id : null
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/notes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Failed to create note");
+      const newNote = await res.json();
+      
+      setConversationNotes(prev => [newNote, ...prev]);
+      setIsQuickNoteModalOpen(false);
+      setQuickNoteForm({ title: "", content: "" });
+      toast.success("Note saved to conversation ⭐");
+    } catch (err) {
+      toast.error("Failed to save note");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔥 Quick Note Modal UI
+  const renderQuickNoteModal = () => (
+    <AnimatePresence>
+      {isQuickNoteModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setIsQuickNoteModalOpen(false)}
+        >
+          <motion.div
+            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
+            className="bg-white rounded-xl w-full max-w-md shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-gray-800">Add Quick Note</h3>
+                <button onClick={() => setIsQuickNoteModalOpen(false)} className="p-2 rounded-full hover:bg-gray-100">
+                  <IoMdClose className="text-gray-500" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title (Optional)</label>
+                  <input type="text" value={quickNoteForm.title} onChange={e => setQuickNoteForm({...quickNoteForm, title: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="e.g. Needs Follow-up" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                  <textarea value={quickNoteForm.content} onChange={e => setQuickNoteForm({...quickNoteForm, content: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Type your secure note here..." rows={4} />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={() => setIsQuickNoteModalOpen(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
+                <button onClick={handleCreateQuickNote} disabled={loading || !quickNoteForm.content.trim()} className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2">
+                  <FiStar size={16} /> Save Note
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   const renderRegularTaskModal = () => (
     <AnimatePresence>
@@ -2473,12 +2946,13 @@ const MessengerPage = ({ user }) => {
   return (
     <div className="flex h-screen bg-white overflow-hidden w-full">
       <AnimatePresence mode="wait">
-        {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} />)}
+        {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
       </AnimatePresence>
 
       {renderRegularTaskModal()}
       {renderTemplateModal()}
       {renderEventModal()}
+      {renderQuickNoteModal()}
 
       {apiError && (<div className="fixed top-0 left-0 right-0 bg-red-500 text-white p-2 text-center z-50">{apiError}<button onClick={() => setApiError(null)} className="ml-4 px-2 py-1 bg-white text-red-500 rounded hover:bg-red-100 transition">Dismiss</button></div>)}
 

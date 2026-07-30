@@ -764,4 +764,54 @@ router.get('/:serviceEntryId/conversation', authenticateToken, async (req, res) 
   }
 });
 
+// GET /api/servicecollaboration/:serviceEntryId/summary - to view service entry details in chat
+router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
+  const { serviceEntryId } = req.params;
+  try {
+    // 1. Verify the staff member is allowed to view this service
+    const allowed = await canAccessService(serviceEntryId, req.user.id, req.user.role);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Not authorized to view service details' });
+    }
+
+    // 2. Fetch all necessary details safely using exact schema mapping
+    const query = `
+      SELECT 
+        se.id,
+        se.customer_name,
+        se.phone,
+        st.application_number,    -- FIXED: Lives in service_tracking
+        s.name as service_name,
+        s.name as category_name,
+        sub.name as subcategory_name,
+        staff.name as assigned_staff_name,
+        staff.name as staff_name,
+        st.id as tracking_id,
+        COALESCE(st.status, se.status) as status,
+        st.current_step,
+        st.priority,
+        st.average_time,
+        se.expiry_date,           -- FIXED: Lives in service_entries
+        st.notes,
+        COALESCE(st.updated_at, se.updated_at) as updated_at
+      FROM service_entries se
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN staff ON se.staff_id = staff.id
+      LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+      WHERE se.id = $1
+    `;
+    const result = await pool.query(query, [serviceEntryId]);
+    
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Summary fetch error:", err);
+    res.status(500).json({ error: 'Failed to fetch service summary' });
+  }
+});
+
 export default router;

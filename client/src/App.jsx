@@ -33,7 +33,7 @@ import Messenger from './pages/superadmin/MessengerPage';
 import CommunicationSettings from './pages/superadmin/CommunicationSettings';
 import TeamManagement from "./pages/team/TeamManagement";
 import TokenGenerator from "./pages/staff/TokenGenerator";
-import NotesPage from './pages/staff/NotesPage';
+import NotesPage from "./pages/notes/NotesPage";
 import CampaignTokenManagementStaff from "./pages/staff/CampaignTokenManagementStaff";
 import ServiceWorkspace from './components/ServiceWorkspace';
 import StaffPerformance from './pages/staff/StaffPerformance';
@@ -49,6 +49,17 @@ import CampaignManagement from "./pages/campaign/CampaignManagement";
 import axios from "axios";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
+
+// Self Service Print Portal
+import SelfServicePrint from './pages/printing/SelfServicePrint';
+import AdminPrintSettings from './pages/printing/AdminPrintSettings';
+
+//Operations Hub
+import OperationsHub from './pages/operationshub/OperationsHub';
+
+//Notification Page
+import NotificationsPage from './pages/notifications/NotificationsPage';
+import { NotificationProvider } from './context/NotificationContext';
 
 //Analytics Page
 import ReportsSection from './pages/ReportsSection';
@@ -195,7 +206,7 @@ const CustomerProtectedRoute = ({ children }) => {
 // ---------------------------------------------------------------------
 const App = () => {
   return (
-    <>
+    <NotificationProvider>
       <ToastContainer
         position="top-right"
         autoClose={5000}
@@ -214,7 +225,8 @@ const App = () => {
         <Route path="/home" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
-        <Route path="/review/:token" element={<PublicReview />} /> 
+        <Route path="/review/:token" element={<PublicReview />} />
+        <Route path="/print" element={<SelfServicePrint />} /> 
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardLayout />}>
@@ -239,6 +251,11 @@ const App = () => {
             <Route
               path="admin/calendar"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><CalendarPage /></ProtectedRoute>}
+            />
+
+            <Route
+              path="admin/notes"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><NotesPage /></ProtectedRoute>}
             />
 
             <Route
@@ -274,6 +291,18 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
+              path="admin/operationshub"
+              element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
+            />
+            <Route
+              path="admin/operationshub/:serviceId"
+              element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
+            />
+            <Route
+              path="admin/notifications"
+              element={<ProtectedRoute allowedRoles={["admin"]}><NotificationsPage /></ProtectedRoute>}
+            />
+            <Route
               path="admin/token"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminTokenManagement /></ProtectedRoute>}
             />
@@ -294,6 +323,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><CampaignManagement /></ProtectedRoute>}
             />
             <Route
+              path="admin/settings"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminPrintSettings /></ProtectedRoute>}
+            />
+            <Route
               path="admin/reports"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminReports /></ProtectedRoute>}
             />
@@ -308,6 +341,10 @@ const App = () => {
             <Route
               path="superadmin/calendar"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><CalendarPage /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/notes"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><NotesPage /></ProtectedRoute>}
             />
             <Route
               path="superadmin/staffmanagement"
@@ -348,7 +385,15 @@ const App = () => {
             <Route
               path="superadmin/messenger"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><Messenger /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/operationshub"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
             /> 
+            <Route
+              path="superadmin/notifications"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><NotificationsPage /></ProtectedRoute>}
+            />
             <Route
               path="superadmin/campaigns"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><CampaignManagementSuperAdmin /></ProtectedRoute>}
@@ -410,8 +455,16 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><PendingPayments /></ProtectedRoute>}
             />
             <Route
+              path="staff/notifications"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><NotificationsPage /></ProtectedRoute>}
+            />
+            <Route
               path="staff/messenger"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><Messenger /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/operationshub"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
               path="staff/track_service"
@@ -473,7 +526,7 @@ const App = () => {
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </>
+    </NotificationProvider>
   );
 };
 
