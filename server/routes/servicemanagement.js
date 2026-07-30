@@ -1738,6 +1738,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
 
     let finalCategoryId = existingEntry.category_id;
     let serviceName = null;
+    let resolvedServiceWalletId = undefined; // 🔥 NEW: Track if wallet needs updating
     
     // 1. Validate Category against Master Table (for name/expiry)
     if (categoryId) {
@@ -1749,12 +1750,13 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       finalCategoryId = parseInt(categoryId);
       serviceName = categoryResult.rows[0].name;
       
-      // Ensure the centre actually has this service enabled
-      const confCheck = await client.query('SELECT id FROM service_configurations WHERE service_id = $1 AND centre_id = $2', [finalCategoryId, centreId]);
+      // Ensure the centre actually has this service enabled AND grab the wallet
+      const confCheck = await client.query('SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2', [finalCategoryId, centreId]);
       if (confCheck.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: `This service is not configured for your centre.` });
       }
+      resolvedServiceWalletId = confCheck.rows[0].wallet_id; // 🔥 NEW: Grab the wallet
     }
 
     let finalSubcategoryId = existingEntry.subcategory_id;
@@ -1770,12 +1772,13 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       finalSubcategoryId = parseInt(subcategoryId);
       subcategoryName = subcategoryResult.rows[0].name;
       
-      // Ensure the centre actually has this subcategory enabled
-      const subConfCheck = await client.query('SELECT id FROM subcategory_configurations WHERE subcategory_id = $1 AND centre_id = $2', [finalSubcategoryId, centreId]);
+      // Ensure the centre actually has this subcategory enabled AND grab the wallet
+      const subConfCheck = await client.query('SELECT wallet_id FROM subcategory_configurations WHERE subcategory_id = $1 AND centre_id = $2', [finalSubcategoryId, centreId]);
       if (subConfCheck.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: `This subcategory is not configured for your centre.` });
       }
+      resolvedServiceWalletId = subConfCheck.rows[0].wallet_id; // 🔥 NEW: Subcategory wallet overrides parent
     }
 
     let finalStaffId = existingEntry.staff_id;
@@ -1805,6 +1808,13 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     if (status) { updateFields.push(`status = $${paramIndex++}`); updateValues.push(status); }
     if (expiryDate !== undefined) { updateFields.push(`expiry_date = $${paramIndex++}`); updateValues.push(expiryDate || null); }
     if (staffId) { updateFields.push(`staff_id = $${paramIndex++}`); updateValues.push(parseInt(staffId)); }
+    
+    // 🔥 NEW: Update the wallet snapshot if the category or subcategory was changed
+    if (resolvedServiceWalletId !== undefined) { 
+      updateFields.push(`service_wallet_id = $${paramIndex++}`); 
+      updateValues.push(resolvedServiceWalletId); 
+    }
+
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
     if (req.user.role === 'staff') updateFields.push(`is_edited = true`);
     updateValues.push(parseInt(id));
@@ -1814,7 +1824,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-  const updateQuery = `UPDATE service_entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+    const updateQuery = `UPDATE service_entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
     const result = await client.query(updateQuery, updateValues);
     let updatedEntry = result.rows[0];
 
@@ -1909,7 +1919,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       serviceCharge: parseFloat(updatedEntry.service_charges),
       departmentCharge: parseFloat(updatedEntry.department_charges),
       totalCharge: parseFloat(updatedEntry.total_charges),
-      serviceWalletId: updatedEntry.service_wallet_id,
+      serviceWalletId: updatedEntry.service_wallet_id, // 🔥 Ensure this reflects the updated snapshot
       staffId: parseInt(updatedEntry.staff_id),
       created_at: updatedEntry.created_at ? updatedEntry.created_at.toISOString() : null,
       paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
