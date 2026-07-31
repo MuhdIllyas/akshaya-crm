@@ -449,15 +449,6 @@ router.post('/services', authenticateToken, async (req, res) => {
       ]);
     }
 
-    // 🔥 2. Insert into Configuration Table for this specific centre
-    const configQuery = `
-      INSERT INTO service_configurations (centre_id, service_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
-    `;
-    await client.query(configQuery, [
-      req.user.centre_id, newService.id, finalWalletId, service_charges, department_charges, requires_wallet || false
-    ]);
-
     // 3. Insert Documents
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
