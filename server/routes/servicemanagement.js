@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
 import { logActivity } from "../utils/activityLogger.js";
 import { triggerNotification } from '../utils/communication/notificationEngine.js';
-import sendTokenUpdateWhatsApp from '../utils/sendTokenUpdateWhatsapp.js';
 import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
@@ -76,6 +75,53 @@ const sendPendingPaymentWhatsApp = async ({
     };
   } catch (err) {
     console.error("Pending payment WhatsApp failed:", err.message);
+    return {
+      success: false,
+      error: err.message,
+    };
+  }
+};
+
+// ==========================================
+// TOKEN NOTIFICATION HELPER
+// ==========================================
+const sendTokenNotification = async ({
+  customerName,
+  phone,
+  tokenNumber,
+  status,
+  assignedStaff,
+  centreId
+}) => {
+  try {
+    // Map parameters exactly as your old 'campaigns' template expected them
+    const templateParams = [
+      customerName || 'Customer',
+      tokenNumber || 'N/A',
+      status || 'Pending',
+      assignedStaff || 'Waiting for Assignment'
+    ];
+
+    // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
+    const response = await triggerNotification({
+      eventKey: 'token_generated', // Ensure this key is mapped in communication_template_mappings
+      centreId: centreId,          
+      customerPhone: phone,
+      templateParams: templateParams
+    });
+
+    if (!response.success) {
+      throw new Error(response.error || response.reason);
+    }
+
+    console.log(`Token WhatsApp sent via Engine to ${phone}`);
+
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (err) {
+    console.error("Token WhatsApp failed:", err.message);
     return {
       success: false,
       error: err.message,
@@ -3496,7 +3542,7 @@ router.post('/tokens', authenticateToken, async (req, res) => {
     console.log('servicemanagement.js: Token created:', JSON.stringify(token, null, 2));
 
     // Send WhatsApp Notification (Non-blocking)
-    sendTokenUpdateWhatsApp({
+    sendTokenNotification({
       customerName: token.customer_name,
       phone: token.phone,
       tokenNumber: token.token_id,
@@ -3787,7 +3833,7 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
     // =================================================================
 
     // Send WhatsApp Notification for Assignment (Non-blocking)
-    sendTokenUpdateWhatsApp({
+    sendTokenNotification({
       customerName: token.customer_name,
       phone: token.phone,
       tokenNumber: tokenId,
@@ -3849,7 +3895,7 @@ router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
     await client.query('COMMIT');
 
     // Send WhatsApp Notification for Status Update (Non-blocking)
-    sendTokenUpdateWhatsApp({
+    sendTokenNotification({
       customerName: tokenData.customer_name,
       phone: tokenData.phone,
       tokenNumber: tokenId,
