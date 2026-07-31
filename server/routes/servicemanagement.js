@@ -96,10 +96,50 @@ router.get('/centres', async (req, res) => {
 
 // GET /api/servicemanagement/services
 router.get('/services', authenticateToken, async (req, res) => {
-  const { search } = req.query;
+  const { search, centre_id } = req.query;
   const client = await pool.connect();
   try {
-    const targetCentreId = req.query.centre_id ? parseInt(req.query.centre_id) : parseInt(req.user.centre_id);
+    // 🔥 SUPERADMIN MASTER VIEW (Returns raw services without centre configs)
+    if (req.user.role === 'superadmin' && !centre_id) {
+      let query = `
+        SELECT s.*, (
+          SELECT COALESCE(json_agg(sc), '[]'::json)
+          FROM (
+            SELECT sc.*, (
+              SELECT COALESCE(json_agg(rd), '[]'::json)
+              FROM required_documents rd
+              WHERE rd.sub_category_id = sc.id
+            ) AS required_documents
+            FROM subcategories sc
+            WHERE sc.service_id = s.id
+          ) sc
+        ) AS subcategories,
+        (
+          SELECT COALESCE(json_agg(rd), '[]'::json)
+          FROM required_documents rd
+          WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
+        ) AS required_documents
+        FROM services s
+      `;
+      let values = [];
+      if (search && (typeof search !== 'string' || search.length > 100)) {
+        return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
+      }
+      if (search) {
+        query += ` WHERE s.name ILIKE $1 OR s.description ILIKE $1
+                  OR EXISTS (
+                    SELECT 1 FROM subcategories sc
+                    WHERE sc.service_id = s.id AND sc.name ILIKE $1
+                  )`;
+        values = [`%${search}%`];
+      }
+      query += ' ORDER BY s.name ASC';
+      const result = await client.query(query, values);
+      return res.json(result.rows);
+    }
+
+    // 🔥 ADMIN/STAFF CONFIGURATION VIEW
+    const targetCentreId = centre_id ? parseInt(centre_id) : parseInt(req.user.centre_id);
 
     let query = `
       SELECT 
@@ -141,10 +181,6 @@ router.get('/services', authenticateToken, async (req, res) => {
 
     let values = [targetCentreId];
 
-    if (search && (typeof search !== 'string' || search.length > 100)) {
-      return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
-    }
-
     if (search) {
       query += ` AND (s.name ILIKE $2 OR s.description ILIKE $2
                 OR EXISTS (
@@ -156,7 +192,6 @@ router.get('/services', authenticateToken, async (req, res) => {
 
     const result = await client.query(query, values);
     
-    // We keep your original frontend mapping exactly as it was
     const services = result.rows.map(service => ({
       ...service,
       wallet_name: null, balance: null, wallet_type: null, is_shared: null, wallet_status: null, assigned_staff_id: null
@@ -342,8 +377,7 @@ router.post('/services', authenticateToken, async (req, res) => {
       throw new Error('Wallet ID should not be provided when requires_wallet is false');
     }
 
-    // 🔥 1. Insert into Master Table (No Financials)
-    // Note: We still insert into the legacy columns for backwards compatibility during migration
+    // 🔥 1. Insert into Master Table (No Financials for true architecture, but legacy columns kept for safety)
     const serviceQuery = `
       INSERT INTO services (name, description, website, status, requires_workflow, has_expiry, created_at, updated_at, department_charges, service_charges, requires_wallet, wallet_id)
       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), $7, $8, $9, $10)
@@ -356,6 +390,17 @@ router.post('/services', authenticateToken, async (req, res) => {
     ];
     const serviceResult = await client.query(serviceQuery, serviceValues);
     const newService = serviceResult.rows[0];
+
+    // 🔥 2. Insert into Configuration Table ONLY if not Superadmin
+    if (req.user.role !== 'superadmin') {
+      const configQuery = `
+        INSERT INTO service_configurations (centre_id, service_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+      `;
+      await client.query(configQuery, [
+        req.user.centre_id, newService.id, finalWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
+    }
 
     // 🔥 2. Insert into Configuration Table for this specific centre
     const configQuery = `
@@ -463,28 +508,30 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
     const serviceResult = await client.query(serviceQuery, serviceValues);
     const updatedService = serviceResult.rows[0];
 
-    // 🔥 2. Upsert Configuration Table for this specific centre
-    const configQuery = `
-      INSERT INTO service_configurations (centre_id, service_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
-      ON CONFLICT (centre_id, service_id) 
-      DO UPDATE SET 
-          wallet_id = EXCLUDED.wallet_id,
-          service_charge = EXCLUDED.service_charge,
-          department_charge = EXCLUDED.department_charge,
-          requires_wallet = EXCLUDED.requires_wallet,
-          updated_at = NOW()
-    `;
-    await client.query(configQuery, [
-      req.user.centre_id, id, finalWalletId, service_charges, department_charges, requires_wallet || false
-    ]);
+    // 🔥 2. Upsert Configuration Table ONLY if not Superadmin
+    if (req.user.role !== 'superadmin') {
+      const configQuery = `
+        INSERT INTO service_configurations (centre_id, service_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+        ON CONFLICT (centre_id, service_id) 
+        DO UPDATE SET 
+            wallet_id = EXCLUDED.wallet_id,
+            service_charge = EXCLUDED.service_charge,
+            department_charge = EXCLUDED.department_charge,
+            requires_wallet = EXCLUDED.requires_wallet,
+            updated_at = NOW()
+      `;
+      await client.query(configQuery, [
+        req.user.centre_id, id, finalWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
 
-    // 🔥 3. CASCADE PATCH: Update inherited wallet for all subcategories of this service
-    await client.query(`
-      UPDATE subcategory_configurations 
-      SET wallet_id = $1, updated_at = NOW() 
-      WHERE centre_id = $2 AND subcategory_id IN (SELECT id FROM subcategories WHERE service_id = $3)
-    `, [finalWalletId, req.user.centre_id, id]);
+      // 🔥 3. CASCADE PATCH: Only cascade if Admin
+      await client.query(`
+        UPDATE subcategory_configurations 
+        SET wallet_id = $1, updated_at = NOW() 
+        WHERE centre_id = $2 AND subcategory_id IN (SELECT id FROM subcategories WHERE service_id = $3)
+      `, [finalWalletId, req.user.centre_id, id]);
+    }
 
     // 4. Update Documents
     await client.query('DELETE FROM required_documents WHERE service_id = $1 AND sub_category_id IS NULL', [id]);
@@ -593,7 +640,7 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
       throw new Error('Subcategory requires_wallet must match the parent service');
     }
 
-    // 🔥 1. Insert into Master Table (Legacy columns kept for safe migration)
+    // 🔥 1. Insert into Master Table
     const subcategoryQuery = `
       INSERT INTO subcategories (service_id, name, department_charges, service_charges, requires_wallet, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
@@ -603,21 +650,22 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
     const subcategoryResult = await client.query(subcategoryQuery, subcategoryValues);
     const newSubcategory = subcategoryResult.rows[0];
 
-    // 🔥 2. Fetch Parent's Configuration to Inherit the Wallet
-    const parentConfigRes = await client.query(`
-      SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2
-    `, [id, req.user.centre_id]);
-    
-    const inheritedWalletId = parentConfigRes.rows.length > 0 ? parentConfigRes.rows[0].wallet_id : null;
+    // 🔥 2 & 3. Fetch Parent's Config and Insert Sub Config ONLY if not Superadmin
+    if (req.user.role !== 'superadmin') {
+      const parentConfigRes = await client.query(`
+        SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2
+      `, [id, req.user.centre_id]);
+      
+      const inheritedWalletId = parentConfigRes.rows.length > 0 ? parentConfigRes.rows[0].wallet_id : null;
 
-    // 🔥 3. Insert Configuration for this specific centre
-    const subConfigQuery = `
-      INSERT INTO subcategory_configurations (centre_id, subcategory_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
-    `;
-    await client.query(subConfigQuery, [
-      req.user.centre_id, newSubcategory.id, inheritedWalletId, service_charges, department_charges, requires_wallet || false
-    ]);
+      const subConfigQuery = `
+        INSERT INTO subcategory_configurations (centre_id, subcategory_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+      `;
+      await client.query(subConfigQuery, [
+        req.user.centre_id, newSubcategory.id, inheritedWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
+    }
 
     // 4. Insert Documents
     let documents = [];
@@ -707,26 +755,27 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
     ]);
     const updatedSubcategory = subResult.rows[0];
 
-    // 🔥 2. Fetch Parent's Wallet ID (In case this is an upsert and it needs the wallet)
-    const parentConfigRes = await client.query(`
-      SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2
-    `, [id, req.user.centre_id]);
-    const inheritedWalletId = parentConfigRes.rows.length > 0 ? parentConfigRes.rows[0].wallet_id : null;
+    // 🔥 2 & 3. Upsert Configuration Table ONLY if not Superadmin
+    if (req.user.role !== 'superadmin') {
+      const parentConfigRes = await client.query(`
+        SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2
+      `, [id, req.user.centre_id]);
+      const inheritedWalletId = parentConfigRes.rows.length > 0 ? parentConfigRes.rows[0].wallet_id : null;
 
-    // 🔥 3. Upsert Configuration Table
-    const subConfigQuery = `
-      INSERT INTO subcategory_configurations (centre_id, subcategory_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
-      ON CONFLICT (centre_id, subcategory_id)
-      DO UPDATE SET 
-          service_charge = EXCLUDED.service_charge,
-          department_charge = EXCLUDED.department_charge,
-          requires_wallet = EXCLUDED.requires_wallet,
-          updated_at = NOW()
-    `;
-    await client.query(subConfigQuery, [
-      req.user.centre_id, subId, inheritedWalletId, service_charges, department_charges, requires_wallet || false
-    ]);
+      const subConfigQuery = `
+        INSERT INTO subcategory_configurations (centre_id, subcategory_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+        ON CONFLICT (centre_id, subcategory_id)
+        DO UPDATE SET 
+            service_charge = EXCLUDED.service_charge,
+            department_charge = EXCLUDED.department_charge,
+            requires_wallet = EXCLUDED.requires_wallet,
+            updated_at = NOW()
+      `;
+      await client.query(subConfigQuery, [
+        req.user.centre_id, subId, inheritedWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
+    }
 
     // 4. Replace required documents
     await client.query('DELETE FROM required_documents WHERE sub_category_id = $1', [subId]);
