@@ -29,7 +29,10 @@ const storage = multer.diskStorage({
         cb(null, 'printjob-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
-const upload = multer({ storage });
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
 
 /* ================================
    CUSTOMER SELF-SERVICE ENDPOINTS

@@ -193,7 +193,7 @@ router.get('/services', authenticateToken, async (req, res) => {
         sc.wallet_id,
         COALESCE(sc.department_charge, 0) AS department_charges,
         COALESCE(sc.service_charge, 0) AS service_charges,
-        COALESCE(sc.requires_wallet, false) AS requires_wallet,
+        COALESCE(sc.requires_wallet, s.requires_wallet) AS requires_wallet,
         (
           SELECT COALESCE(json_agg(sub), '[]'::json)
           FROM (
@@ -209,10 +209,10 @@ router.get('/services', authenticateToken, async (req, res) => {
                 WHERE rd.sub_category_id = scat.id
               ) AS required_documents
             FROM subcategories scat
-            JOIN subcategory_configurations subconf ON scat.id = subconf.subcategory_id
+            -- 🔥 LEFT JOIN: Shows subcategories even if not configured yet
+            LEFT JOIN subcategory_configurations subconf ON scat.id = subconf.subcategory_id AND subconf.centre_id = $1
             WHERE scat.service_id = s.id 
-              AND subconf.centre_id = $1 
-              AND subconf.is_enabled = true
+              AND (subconf.is_enabled = true OR subconf.is_enabled IS NULL)
           ) sub
         ) AS subcategories,
         (
@@ -221,8 +221,9 @@ router.get('/services', authenticateToken, async (req, res) => {
           WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
         ) AS required_documents
       FROM services s
-      JOIN service_configurations sc ON s.id = sc.service_id
-      WHERE sc.centre_id = $1 AND sc.is_enabled = true
+      -- 🔥 LEFT JOIN: Shows master services to new centres so they can configure them!
+      LEFT JOIN service_configurations sc ON s.id = sc.service_id AND sc.centre_id = $1
+      WHERE s.status = 'active' AND (sc.is_enabled = true OR sc.is_enabled IS NULL)
     `;
 
     let values = [targetCentreId];
@@ -538,23 +539,32 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
       throw new Error('Wallet ID should not be provided when requires_wallet is false');
     }
 
-    // 🔥 1. Update Master Table
-    const serviceQuery = `
-      UPDATE services
-      SET name = $1, description = $2, website = $3, status = $4, requires_workflow = $5, has_expiry = $6,
-          department_charges = $7, service_charges = $8, requires_wallet = $9, wallet_id = $10,
-          updated_at = NOW()
-      WHERE id = $11
-      RETURNING *
-    `;
-    const serviceValues = [
-      name, description, website, status, requires_workflow !== false, has_expiry || false,
-      department_charges, service_charges, requires_wallet || false, finalWalletId, id
-    ];
-    const serviceResult = await client.query(serviceQuery, serviceValues);
-    const updatedService = serviceResult.rows[0];
+    let updatedService;
 
-    // 🔥 2. Upsert Configuration Table ONLY if not Superadmin
+    // 🔥 1. Update Master Table (ONLY IF SUPERADMIN)
+    if (req.user.role === 'superadmin') {
+      const serviceQuery = `
+        UPDATE services
+        SET name = $1, description = $2, website = $3, status = $4, requires_workflow = $5, has_expiry = $6,
+            department_charges = $7, service_charges = $8, requires_wallet = $9, wallet_id = $10,
+            updated_at = NOW()
+        WHERE id = $11
+        RETURNING *
+      `;
+      const serviceValues = [
+        name, description, website, status, requires_workflow !== false, has_expiry || false,
+        department_charges, service_charges, requires_wallet || false, finalWalletId, id
+      ];
+      const serviceResult = await client.query(serviceQuery, serviceValues);
+      updatedService = serviceResult.rows[0];
+    } else {
+      // Centre Admins cannot alter the Global Master Name/Description. 
+      // We just fetch the existing data to return to the frontend.
+      const serviceResult = await client.query('SELECT * FROM services WHERE id = $1', [id]);
+      updatedService = serviceResult.rows[0];
+    }
+
+    // 🔥 2. Upsert Configuration Table for this specific centre
     if (req.user.role !== 'superadmin') {
       const configQuery = `
         INSERT INTO service_configurations (centre_id, service_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, updated_at)
@@ -571,7 +581,7 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
         req.user.centre_id, id, finalWalletId, service_charges, department_charges, requires_wallet || false
       ]);
 
-      // 🔥 3. CASCADE PATCH: Only cascade if Admin
+      // 🔥 3. CASCADE PATCH: Update inherited wallet for all subcategories
       await client.query(`
         UPDATE subcategory_configurations 
         SET wallet_id = $1, updated_at = NOW() 
@@ -789,19 +799,26 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
     const subCheck = await client.query('SELECT * FROM subcategories WHERE id = $1 AND service_id = $2', [subId, id]);
     if (subCheck.rows.length === 0) throw new Error('Subcategory not found');
 
-    // 🔥 1. Update Master Table
-    const updateQuery = `
-      UPDATE subcategories 
-      SET name = $1, department_charges = $2, service_charges = $3, requires_wallet = $4, updated_at = NOW()
-      WHERE id = $5 AND service_id = $6
-      RETURNING *
-    `;
-    const subResult = await client.query(updateQuery, [
-      name, department_charges, service_charges, requires_wallet || false, subId, id
-    ]);
-    const updatedSubcategory = subResult.rows[0];
+    let updatedSubcategory;
 
-    // 🔥 2 & 3. Upsert Configuration Table ONLY if not Superadmin
+    // 🔥 1. Update Master Table (ONLY IF SUPERADMIN)
+    if (req.user.role === 'superadmin') {
+      const updateQuery = `
+        UPDATE subcategories 
+        SET name = $1, department_charges = $2, service_charges = $3, requires_wallet = $4, updated_at = NOW()
+        WHERE id = $5 AND service_id = $6
+        RETURNING *
+      `;
+      const subResult = await client.query(updateQuery, [
+        name, department_charges, service_charges, requires_wallet || false, subId, id
+      ]);
+      updatedSubcategory = subResult.rows[0];
+    } else {
+      const subResult = await client.query('SELECT * FROM subcategories WHERE id = $1 AND service_id = $2', [subId, id]);
+      updatedSubcategory = subResult.rows[0];
+    }
+
+    // 🔥 2 & 3. Upsert Configuration Table (ONLY IF NOT SUPERADMIN)
     if (req.user.role !== 'superadmin') {
       const parentConfigRes = await client.query(`
         SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2
@@ -885,7 +902,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
         sc.wallet_id, 
         COALESCE(sc.department_charge, 0) AS department_charges,
         COALESCE(sc.service_charge, 0) AS service_charges,
-        COALESCE(sc.requires_wallet, false) AS requires_wallet,
+        COALESCE(sc.requires_wallet, s.requires_wallet) AS requires_wallet,
         
         (SELECT COALESCE(json_agg(rd), '[]'::json)
          FROM required_documents rd
