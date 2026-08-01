@@ -369,8 +369,22 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
 
             // Map the report ID to the exact data array we formatted earlier
             switch (report.id) {
-                case 1: case 2: // Financials
-                    exportData = [financials]; sheetName = "Financial_Summary"; break;
+                case 1: case 2: // Financials & P&L
+                    // Grab the timeline array instead of the single aggregate row
+                    const trendData = previewData?.data?.financials?.periodTrend || [];
+                    exportData = trendData.map(row => ({
+                        Date: row.label,
+                        Revenue_Collected: row.revenueCollected,
+                        Gross_Profit: row.grossProfit,
+                        Operating_Expenses: row.operatingExpenses,
+                        Net_Profit: row.netProfit
+                    }));
+                    sheetName = report.id === 1 ? "Financial_Summary" : "Profit_And_Loss"; 
+                    break;
+                case 3: 
+                    exportData = previewData?.data?.serviceRevenue || []; 
+                    sheetName = "Revenue_Report"; 
+                    break;
                 case 4: // Expenses
                     exportData = expenseData; sheetName = "Expenses"; break;
                 case 5: // Wallets
