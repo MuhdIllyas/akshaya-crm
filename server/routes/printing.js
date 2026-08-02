@@ -2,7 +2,6 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
-import pdfParse from 'pdf-parse';
 
 // Robust ESM/CJS Import for pdf-parse
 import { createRequire } from 'module';
