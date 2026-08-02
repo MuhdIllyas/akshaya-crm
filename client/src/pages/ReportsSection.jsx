@@ -19,8 +19,7 @@ import { toPng } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
-import { toast } from 'react-toastify'; // ✅ Added toast import
-
+import { toast } from 'react-toastify'; 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
     <motion.div
@@ -369,8 +368,22 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
 
             // Map the report ID to the exact data array we formatted earlier
             switch (report.id) {
-                case 1: case 2: // Financials
-                    exportData = [financials]; sheetName = "Financial_Summary"; break;
+                case 1: case 2: // Financials & P&L
+                    // Grab the timeline array instead of the single aggregate row
+                    const trendData = previewData?.data?.financials?.periodTrend || [];
+                    exportData = trendData.map(row => ({
+                        Date: row.label,
+                        Revenue_Collected: row.revenueCollected,
+                        Gross_Profit: row.grossProfit,
+                        Operating_Expenses: row.operatingExpenses,
+                        Net_Profit: row.netProfit
+                    }));
+                    sheetName = report.id === 1 ? "Financial_Summary" : "Profit_And_Loss"; 
+                    break;
+                case 3: // 👈 REVENUE REPORT
+                    exportData = previewData?.data?.serviceRevenue || []; 
+                    sheetName = "Revenue_Report"; 
+                    break;
                 case 4: // Expenses
                     exportData = expenseData; sheetName = "Expenses"; break;
                 case 5: // Wallets
@@ -461,7 +474,19 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
         // 1. Grab the exact same data array we used for the Excel export!
         let exportData = [];
         switch (report.id) {
-            case 1: case 2: exportData = [financials]; break;
+            case 1: case 2: 
+                const pdfTrendData = previewData?.data?.financials?.periodTrend || [];
+                exportData = pdfTrendData.map(row => ({
+                    Date: row.label,
+                    Revenue_Collected: row.revenueCollected,
+                    Gross_Profit: row.grossProfit,
+                    Operating_Expenses: row.operatingExpenses,
+                    Net_Profit: row.netProfit
+                }));
+                break;
+            case 3: // REVENUE REPORT
+                exportData = previewData?.data?.serviceRevenue || []; 
+                break;
             case 4: exportData = expenseData; break;
             case 5: exportData = walletSummaryData; break;
             case 6: exportData = cashFlowData; break;
