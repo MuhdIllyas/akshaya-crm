@@ -7,7 +7,9 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
     throw new Error("VITE_API_URL is not defined");
 }
 
-const centreId = localStorage.getItem("centre_id") || 1;
+// Check the URL from the QR code first, then fallback to local storage, then default to 1
+const urlParams = new URLSearchParams(window.location.search);
+const centreId = urlParams.get("centre_id") || localStorage.getItem("centre_id");
 
 export default function SelfServicePrint() {
     const [file, setFile] = useState(null);
