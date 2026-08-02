@@ -484,7 +484,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                     Net_Profit: row.netProfit
                 }));
                 break;
-            case 3: // 👈 ADDED REVENUE REPORT
+            case 3: // REVENUE REPORT
                 exportData = previewData?.data?.serviceRevenue || []; 
                 break;
             case 4: exportData = expenseData; break;
