@@ -68,20 +68,21 @@ function calculateEffectivePages(rangeStr, totalPdfPages) {
         part = part.trim();
         if (part.includes('-')) {
             const [start, end] = part.split('-').map(Number);
-            if (start > 0 && end >= start && start <= totalPdfPages) {
-                const actualEnd = Math.min(end, totalPdfPages);
+            if (start > 0 && end >= start) {
+                // THE FIX: If totalPdfPages is 1, our PDF parser likely failed. 
+                // In that case, we trust the user's input (end) instead of capping it at 1.
+                const actualEnd = (totalPdfPages <= 1) ? end : Math.min(end, totalPdfPages);
+                
                 for (let i = start; i <= actualEnd; i++) pages.add(i);
             }
         } else {
             const page = Number(part);
-            if (page > 0 && page <= totalPdfPages) pages.add(page);
+            if (page > 0) pages.add(page);
         }
     }
     
-    // If they typed invalid things like "xyz", default to all pages
     if (pages.size === 0) return { count: totalPdfPages, formattedRange: 'ALL' };
     
-    // Return the actual number of pages they will consume
     return { count: pages.size, formattedRange: rangeStr.trim() };
 }
 
