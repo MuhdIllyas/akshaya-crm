@@ -143,21 +143,34 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   console.log("🔌 Client connected:", socket.id);
 
-  /* ==========================
+ /* ==========================
      COMPANION DEVICE LOGIC
   ========================== */
   if (socket.device) {
     console.log(`📱 Device Connected: ${socket.device.id}`);
     
-    // The device joins its centre's room and a dedicated device room
     socket.join(`centre:${socket.device.centre_id}`);
     socket.join(`device:${socket.device.id}`);
+
+    // ---> NEW: Listen for incoming SMS from the phone <---
+    socket.on("incoming_sms", (smsData) => {
+      console.log(`\n📩 SMS Forwarded from Device [${socket.device.id}]:`);
+      console.log(`Sender: ${smsData.sender}`);
+      console.log(`Message: ${smsData.message}`);
+      console.log(`Is OTP: ${smsData.isOtp}\n`);
+
+      // Broadcast this SMS to all human staff connected to this Centre's dashboard!
+      // Your React frontend can now listen for "new_centre_sms"
+      io.to(`centre:${socket.device.centre_id}`).emit("new_centre_sms", {
+        device_id: socket.device.id,
+        ...smsData
+      });
+    });
 
     socket.on("disconnect", () => {
       console.log(`🔴 Device Disconnected: ${socket.device.id}`);
     });
 
-    // We return here so devices don't execute the human staff logic below
     return; 
   }
 
