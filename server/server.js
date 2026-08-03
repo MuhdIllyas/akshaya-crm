@@ -68,6 +68,9 @@ import notificationRoutes from "./routes/notifications.js";
 //Operation Hub
 import knowledgeRoutes from "./routes/knowledge.js";
 
+//Companion Device Routes
+import companionRoutes from "./routes/companion.js";
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -321,6 +324,9 @@ app.use("/api/notifications", notificationRoutes);
 
 /* Knowledge Hub */
 app.use("/api/knowledge", knowledgeRoutes);
+
+/* Companion Devices */
+app.use("/api/companion", companionRoutes);
 
 /* ================================
    STATIC FILES
