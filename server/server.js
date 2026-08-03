@@ -115,11 +115,20 @@ io.use((socket, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    socket.user = {
-      id: decoded.id,
-      centre_id: decoded.centre_id,
-      role: decoded.role,
-    };
+    // Fork: Is this a Companion Device or a Web User?
+    if (decoded.type === "device") {
+      socket.device = {
+        id: decoded.device_id,
+        centre_id: decoded.centre_id,
+        type: "device"
+      };
+    } else {
+      socket.user = {
+        id: decoded.id,
+        centre_id: decoded.centre_id,
+        role: decoded.role,
+      };
+    }
 
     next();
   } catch (err) {
@@ -134,15 +143,39 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   console.log("🔌 Client connected:", socket.id);
 
+  /* ==========================
+     COMPANION DEVICE LOGIC
+  ========================== */
+  if (socket.device) {
+    console.log(`📱 Device Connected: ${socket.device.id}`);
+    
+    // The device joins its centre's room and a dedicated device room
+    socket.join(`centre:${socket.device.centre_id}`);
+    socket.join(`device:${socket.device.id}`);
+
+    socket.on("disconnect", () => {
+      console.log(`🔴 Device Disconnected: ${socket.device.id}`);
+    });
+
+    // We return here so devices don't execute the human staff logic below
+    return; 
+  }
+
+  /* ==========================
+     HUMAN STAFF LOGIC (Existing)
+  ========================== */
   const user = socket.user;
+  
+  // Failsafe if user is somehow undefined
+  if (!user) return; 
 
   /* ==========================
      SEND CURRENT ONLINE USERS
   ========================== */
-
-  const onlineUsers = Array.from(io.sockets.sockets.values()).map(
-    (s) => s.user?.id
-  );
+  // Filter out undefined (which would happen if a device is connected without a user object)
+  const onlineUsers = Array.from(io.sockets.sockets.values())
+    .map((s) => s.user?.id)
+    .filter(Boolean);
 
   socket.emit("online_users", onlineUsers);
 
