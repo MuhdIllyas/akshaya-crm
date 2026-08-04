@@ -51,7 +51,7 @@ const AdminSettings = () => {
     );
 };
 
-// --- Sub-Component for Companion App Setup ---
+// -- Sub-Component for Companion App Setup --
 const CompanionSetupTab = () => {
     const [pairingToken, setPairingToken] = useState(null);
     const [loading, setLoading] = useState(true);
