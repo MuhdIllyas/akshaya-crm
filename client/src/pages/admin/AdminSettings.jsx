@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { QRCodeCanvas } from 'qrcode.react';
-import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw } from 'react-icons/fi';
+import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import AdminPrintSettings from '../printing/AdminPrintSettings';
 
 const AdminSettings = () => {
@@ -51,11 +52,11 @@ const AdminSettings = () => {
     );
 };
 
-// -- Sub-Component for Companion App Setup --
+// --- Sub-Component for Companion App Setup ---
 const CompanionSetupTab = () => {
     const [pairingToken, setPairingToken] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [devices, setDevices] = useState([]); // State for connected devices
+    const [devices, setDevices] = useState([]); 
 
     const fetchData = async () => {
         setLoading(true);
@@ -68,7 +69,9 @@ const CompanionSetupTab = () => {
             const devicesRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/companion/devices`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
-            setDevices(devicesRes.data);
+            
+            // Only show active devices in the UI
+            setDevices(devicesRes.data.filter(d => d.is_active));
         } catch (error) {
             console.error("Failed to fetch companion data", error);
         } finally {
@@ -79,6 +82,27 @@ const CompanionSetupTab = () => {
     useEffect(() => {
         fetchData();
     }, []);
+
+    // ---> NEW: Function to handle device removal <---
+    const handleRemoveDevice = async (deviceId, deviceName) => {
+        if (!window.confirm(`Are you sure you want to unpair "${deviceName}"? It will stop receiving messages.`)) {
+            return;
+        }
+
+        try {
+            await axios.delete(`${import.meta.env.VITE_API_URL}/api/companion/devices/${deviceId}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+            });
+            
+            toast.success("Device removed successfully.");
+            
+            // Instantly remove it from the UI without reloading the page
+            setDevices(prev => prev.filter(device => device.id !== deviceId));
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to remove device.");
+        }
+    };
 
     const qrPayload = JSON.stringify({ pairingToken });
 
@@ -114,20 +138,27 @@ const CompanionSetupTab = () => {
                     <h3 className="font-semibold text-gray-900 text-lg mb-4">Active Gateways</h3>
                     {devices.length === 0 ? (
                         <div className="text-center text-gray-500 py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                            No devices paired yet.
+                            No active devices found.
                         </div>
                     ) : (
                         <div className="space-y-4">
                             {devices.map(device => (
-                                <div key={device.id} className="p-4 border border-gray-100 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                                    <div className="flex justify-between items-start mb-2">
+                                <div key={device.id} className="p-4 border border-gray-100 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors relative group">
+                                    
+                                    {/* ---> NEW: Delete Button <--- */}
+                                    <button 
+                                        onClick={() => handleRemoveDevice(device.id, device.device_name)}
+                                        className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                        title="Unpair Device"
+                                    >
+                                        <FiTrash2 className="text-lg" />
+                                    </button>
+
+                                    <div className="flex justify-between items-start mb-2 pr-10">
                                         <div className="font-semibold text-gray-900 flex items-center gap-2">
                                             <FiSmartphone className="text-blue-600" />
                                             {device.device_name}
                                         </div>
-                                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${device.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                            {device.is_active ? 'Online' : 'Offline'}
-                                        </span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mt-3">
                                         <div><strong>Battery:</strong> {device.battery_level ? `${device.battery_level}%` : 'Unknown'}</div>

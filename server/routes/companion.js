@@ -188,4 +188,29 @@ router.get("/devices", authMiddleware(["admin", "superadmin"]), async (req, res)
     }
 });
 
+// ---> NEW ROUTE: Admin unpairs/removes a device from the CRM
+router.delete("/devices/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Soft delete: Mark it inactive and offline. 
+        // We include centre_id in the WHERE clause for security so admins can't delete other centres' phones.
+        const result = await pool.query(
+            `UPDATE companion_devices 
+             SET is_active = FALSE, is_online = FALSE 
+             WHERE id = $1 AND centre_id = $2`,
+            [id, req.user.centre_id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Device not found or not authorized." });
+        }
+
+        res.json({ success: true, message: "Device unpaired successfully." });
+    } catch (error) {
+        console.error("Remove device error:", error);
+        res.status(500).json({ error: "Failed to remove device" });
+    }
+});
+
 export default router;
