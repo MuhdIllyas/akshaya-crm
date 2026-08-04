@@ -205,6 +205,40 @@ const CustomerProtectedRoute = ({ children }) => {
 // Main App Component
 // ---------------------------------------------------------------------
 const App = () => {
+
+  // ---> NEW: Global SMS Listener for Instant OTP Popups <---
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewSms = (smsData) => {
+      if (smsData.isOtp) {
+        // High-priority green toast for OTPs (stays open for 15 seconds)
+        toast.success(
+          <div>
+            <strong>🔐 OTP RECEIVED</strong><br />
+            <small>From: {smsData.sender}</small><br />
+            {smsData.message}
+          </div>,
+          { autoClose: 15000 }
+        );
+      } else {
+        // Standard info toast for normal texts
+        toast.info(
+          <div>
+            <strong>📩 Text from {smsData.sender}</strong><br />
+            {smsData.message}
+          </div>
+        );
+      }
+    };
+
+    socket.on("new_centre_sms", handleNewSms);
+
+    return () => {
+      socket.off("new_centre_sms", handleNewSms);
+    };
+  }, []);
+
   return (
     <NotificationProvider>
       <ToastContainer

@@ -152,19 +152,98 @@ io.on("connection", (socket) => {
     socket.join(`centre:${socket.device.centre_id}`);
     socket.join(`device:${socket.device.id}`);
 
-    // ---> NEW: Listen for incoming SMS from the phone <---
-    socket.on("incoming_sms", (smsData) => {
+    // ---> NEW: Listen for incoming SMS and route to Messenger <---
+    socket.on("incoming_sms", async (smsData) => {
       console.log(`\n📩 SMS Forwarded from Device [${socket.device.id}]:`);
       console.log(`Sender: ${smsData.sender}`);
       console.log(`Message: ${smsData.message}`);
-      console.log(`Is OTP: ${smsData.isOtp}\n`);
+      
+      const centreId = socket.device.centre_id;
 
-      // Broadcast this SMS to all human staff connected to this Centre's dashboard!
-      // Your React frontend can now listen for "new_centre_sms"
-      io.to(`centre:${socket.device.centre_id}`).emit("new_centre_sms", {
-        device_id: socket.device.id,
-        ...smsData
-      });
+      try {
+        // 1. Save to PostgreSQL permanently (Your existing log table)
+        await pool.query(
+          `INSERT INTO companion_sms_logs (centre_id, device_id, sender, message, is_otp) 
+           VALUES ($1, $2, $3, $4, $5)`,
+          [centreId, socket.device.id, smsData.sender, smsData.message, smsData.isOtp]
+        );
+
+        // ==========================================
+        // 2. MESSENGER INTEGRATION (The Group Chat)
+        // ==========================================
+        
+        // Check if the SMS Gateway conversation already exists for this centre
+        let convRes = await pool.query(
+          `SELECT id FROM chat_conversations WHERE context_type = 'sms_gateway' AND centre_id = $1 LIMIT 1`,
+          [centreId]
+        );
+
+        let conversationId;
+
+        if (convRes.rows.length > 0) {
+          conversationId = convRes.rows[0].id;
+        } else {
+          // Create the dedicated Gateway Room
+          const newConv = await pool.query(
+            `INSERT INTO chat_conversations (name, is_group, channel, context_type, centre_id, status)
+             VALUES ($1, true, 'internal', 'sms_gateway', $2, 'active') RETURNING id`,
+            [`📱 SMS Gateway (OTPs)`, centreId]
+          );
+          conversationId = newConv.rows[0].id;
+        }
+
+        // Auto-Enroll ALL active staff in this centre so everyone sees the OTPs.
+        // The 'ON CONFLICT DO NOTHING' ensures we don't duplicate existing members.
+        await pool.query(
+          `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+           SELECT $1, id, 'staff', 'member', NOW() FROM staff WHERE centre_id = $2 AND status = 'Active'
+           ON CONFLICT DO NOTHING`,
+          [conversationId, centreId]
+        );
+
+        // Format the message so it looks great in the UI
+        const formattedMessage = smsData.isOtp 
+            ? `🚨 **OTP RECEIVED** 🚨\n\n**From:** ${smsData.sender}\n**Message:** ${smsData.message}`
+            : `📩 **New Text Message**\n\n**From:** ${smsData.sender}\n**Message:** ${smsData.message}`;
+
+        // Insert the actual chat message. (sender_id is NULL because it's hardware, not a human)
+        const msgRes = await pool.query(
+          `INSERT INTO chat_messages (conversation_id, sender_id, sender_type, message_type, message, created_at)
+           VALUES ($1, NULL, 'system', 'text', $2, NOW()) RETURNING *`,
+          [conversationId, formattedMessage]
+        );
+
+        const savedMessage = msgRes.rows[0];
+
+        // 3. FIRE WEBSOCKETS TO UPDATE THE REACT UI INSTANTLY
+        
+        // Emit the message to anyone currently looking at the SMS Gateway chat
+        io.to(`conversation:${conversationId}`).emit("new_message", {
+          ...savedMessage,
+          sender_name: "SMS Gateway", 
+          isCurrentUser: false,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        });
+
+        // Bump the conversation to the top of the sidebar for everyone in the centre
+        io.to(`centre:${centreId}`).emit("conversation_updated", {
+          conversationId: conversationId,
+          last_message: formattedMessage,
+          last_message_at: savedMessage.created_at,
+          unread_increment: 1 // Tells the frontend to increment the red badge
+        });
+
+        // Keep your original global toast broadcast if you still want the popup alert
+        io.to(`centre:${centreId}`).emit("new_centre_sms", {
+          device_id: socket.device.id,
+          ...smsData
+        });
+
+        console.log(`✅ SMS successfully injected into Messenger (Conv ID: ${conversationId})`);
+
+      } catch (error) {
+        console.error("❌ Failed to process incoming SMS:", error);
+      }
     });
 
     socket.on("disconnect", () => {
