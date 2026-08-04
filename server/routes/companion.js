@@ -97,11 +97,16 @@ router.post('/pair', async (req, res) => {
             process.env.JWT_SECRET
         );
         
+        // Fetch the actual Centre Name to send to the Android phone
+        const centreRes = await pool.query('SELECT name FROM centres WHERE id = $1', [centreId]);
+        const centreName = centreRes.rows[0]?.name || `Centre ${centreId}`;
+
         res.status(200).json({ 
             message: "Paired successfully",
             token: token,
             device_id: deviceId,
-            centre_id: centreId
+            centre_id: centreId,
+            centre_name: centreName
         });
     } catch (error) {
         console.error("Pairing Error:", error);
@@ -163,6 +168,23 @@ router.post('/unpair', deviceAuth, async (req, res) => {
         res.status(200).json({ message: "Device unpaired successfully" });
     } catch (error) {
         res.status(500).json({ error: "Failed to unpair device" });
+    }
+});
+
+// ---> NEW ROUTE: Fetch all registered devices for an Admin's centre
+router.get("/devices", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, device_name, app_version, battery_level, network_status, last_seen, is_active 
+             FROM companion_devices 
+             WHERE centre_id = $1 
+             ORDER BY last_seen DESC`,
+            [req.user.centre_id]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error("Fetch devices error:", error);
+        res.status(500).json({ error: "Failed to fetch devices" });
     }
 });
 
