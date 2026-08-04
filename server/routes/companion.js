@@ -13,7 +13,7 @@ router.post('/pair', async (req, res) => {
         const { pairingToken, installationId, deviceName, appVersion } = req.body;
         
         // TODO: Verify pairingToken matches what the CRM generated and extract centreId
-        const centreId = 4; // Mocked for this example
+        const centreId = 8; // Mocked for this example
 
         // Insert or Update the device using the installationId
         const result = await pool.query(
