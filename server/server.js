@@ -203,8 +203,8 @@ io.on("connection", (socket) => {
 
         // Format the message so it looks great in the UI
         const formattedMessage = smsData.isOtp 
-            ? `🚨 **OTP RECEIVED** 🚨\n\n**From:** ${smsData.sender}\n**Message:** ${smsData.message}`
-            : `📩 **New Text Message**\n\n**From:** ${smsData.sender}\n**Message:** ${smsData.message}`;
+            ? `🚨 OTP RECEIVED 🚨\n\nFrom: ${smsData.sender}\nMessage: ${smsData.message}`
+            : `📩 New Text Message\n\nFrom: ${smsData.sender}\nMessage: ${smsData.message}`;
 
         // Insert the actual chat message. (sender_id is NULL because it's hardware, not a human)
         const msgRes = await pool.query(
