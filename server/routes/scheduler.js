@@ -182,14 +182,14 @@ cron.schedule("* * * * *", async () => {
     timezone: "Asia/Kolkata"
 });
 
-// Run every day at 00:20 AM IST - Cleanup old SMS/OTP logs (Keeps last 24 hours)
+// Run every day at 00:20 AM IST - Cleanup previous days' SMS/OTP logs
 cron.schedule("20 0 * * *", async () => {
   try {
     const result = await pool.query(`
       DELETE FROM companion_sms_logs
-      WHERE received_at < CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      WHERE (received_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
     `);
-    console.log(`[CRON] 🗑️ Deleted ${result.rowCount} old SMS/OTP logs (older than 24h)`);
+    console.log(`[CRON] 🗑️ Deleted ${result.rowCount} old SMS/OTP logs (cleared previous days' logs)`);
   } catch (err) {
     console.error("[CRON] SMS log cleanup failed", err);
   }
