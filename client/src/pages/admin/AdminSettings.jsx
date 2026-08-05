@@ -61,17 +61,14 @@ const CompanionSetupTab = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
+            // 1. Get the pairing token for the QR code
             const tokenRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/companion/generate-pairing-token`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             setPairingToken(tokenRes.data.pairingToken);
 
-            const devicesRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/companion/devices`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-            });
-            
-            // Only show active devices in the UI
-            setDevices(devicesRes.data.filter(d => d.is_active));
+            // 2. Fetch the initial list of devices
+            await fetchDevicesOnly();
         } catch (error) {
             console.error("Failed to fetch companion data", error);
         } finally {
@@ -79,8 +76,28 @@ const CompanionSetupTab = () => {
         }
     };
 
+    // A lightweight function just for updating the device list silently
+    const fetchDevicesOnly = async () => {
+        try {
+            const devicesRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/companion/devices`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+            });
+            setDevices(devicesRes.data.filter(d => d.is_active));
+        } catch (error) {
+            console.error("Background device fetch failed", error);
+        }
+    };
+
     useEffect(() => {
-        fetchData();
+        fetchData(); // Run once heavily on mount to get the QR code
+
+        // ---> NEW: Set up a silent polling interval every 5 seconds <---
+        const intervalId = setInterval(() => {
+            fetchDevicesOnly();
+        }, 5000);
+
+        // Cleanup the interval when the user leaves the tab
+        return () => clearInterval(intervalId);
     }, []);
 
     // ---> NEW: Function to handle device removal <---
