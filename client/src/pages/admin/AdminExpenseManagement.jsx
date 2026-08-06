@@ -102,15 +102,19 @@ const StatusDistributionChart = ({ expenses }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 h-72">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-900">Status Overview</h3>
         <FiPieChart className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64">
+      <div className="h-[200px]">
         <Doughnut data={data} options={{
-          plugins: { legend: { position: "right" }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ₹${ctx.raw.toLocaleString()}` } } },
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 12, padding: 10 } },
+            tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ₹${ctx.raw.toLocaleString()}` } }
+          },
           cutout: "50%",
+          maintainAspectRatio: false,
         }} />
       </div>
     </div>
@@ -130,12 +134,12 @@ const MonthlyExpenseTrendChart = ({ expenses }) => {
   }, [expenses]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 h-72">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-900">Monthly Trend</h3>
         <FiTrendingUp className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64">
+      <div className="h-[200px]">
         <Line data={{
           labels: monthly.labels,
           datasets: [{
@@ -146,7 +150,11 @@ const MonthlyExpenseTrendChart = ({ expenses }) => {
             tension: 0.4,
             fill: true,
           }],
-        }} options={{ responsive: true }} />
+        }} options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } }
+        }} />
       </div>
     </div>
   );
@@ -164,12 +172,12 @@ const CategoryDistributionChart = ({ expenses }) => {
   }, [expenses]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 h-72">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-900">By Category</h3>
         <FiBarChart2 className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64">
+      <div className="h-[200px]">
         <Bar data={{
           labels: catMap.labels,
           datasets: [{
@@ -179,7 +187,11 @@ const CategoryDistributionChart = ({ expenses }) => {
             borderColor: COLORS.slice(0,6),
             borderWidth: 2,
           }],
-        }} options={{ responsive: true }} />
+        }} options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } }
+        }} />
       </div>
     </div>
   );
@@ -196,12 +208,12 @@ const WalletDistributionChart = ({ expenses }) => {
   }, [expenses]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 h-72">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-900">By Wallet</h3>
         <FiPieChart className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64">
+      <div className="h-[200px]">
         <Doughnut data={{
           labels: walletData.map(d=>d.name),
           datasets: [{
@@ -209,7 +221,10 @@ const WalletDistributionChart = ({ expenses }) => {
             backgroundColor: COLORS,
             borderWidth: 1,
           }],
-        }} options={{ plugins: { legend: { position: "right" } } }} />
+        }} options={{
+          plugins: { legend: { position: "bottom", labels: { boxWidth: 12, padding: 10 } } },
+          maintainAspectRatio: false,
+        }} />
       </div>
     </div>
   );
@@ -227,12 +242,12 @@ const StaffWorkloadChart = ({ expenses }) => {
   }, [expenses]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 h-72">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-900">Staff Expense Volume</h3>
         <FiUsers className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64">
+      <div className="h-[200px]">
         <Bar data={{
           labels: staffMap.labels,
           datasets: [{
@@ -242,7 +257,11 @@ const StaffWorkloadChart = ({ expenses }) => {
             borderColor: "rgb(139,92,246)",
             borderWidth: 2,
           }],
-        }} options={{ responsive: true }} />
+        }} options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } }
+        }} />
       </div>
     </div>
   );
@@ -259,12 +278,12 @@ const ApprovalTypeChart = ({ expenses }) => {
   }, [expenses]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 h-72">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-gray-900">Approval Type</h3>
         <FiAlertCircle className="h-5 w-5 text-indigo-600" />
       </div>
-      <div className="h-64">
+      <div className="h-[200px]">
         <Pie data={{
           labels: ["Requires Approval", "Auto‑Approved"],
           datasets: [{
@@ -273,7 +292,10 @@ const ApprovalTypeChart = ({ expenses }) => {
             borderColor: ["rgb(245,158,11)", "rgb(16,185,129)"],
             borderWidth: 2,
           }],
-        }} options={{ plugins: { legend: { position: "right" } } }} />
+        }} options={{
+          plugins: { legend: { position: "bottom", labels: { boxWidth: 12, padding: 10 } } },
+          maintainAspectRatio: false,
+        }} />
       </div>
     </div>
   );
@@ -791,19 +813,15 @@ const AdminExpenseManagement = () => {
           </button>
         </div>
 
-        {/* Charts Section */}
+        {/* Charts Section - now 3 per row */}
         <AnimatePresence>
           {showCharts && (
             <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="mb-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatusDistributionChart expenses={filteredExpenses} />
                 <MonthlyExpenseTrendChart expenses={filteredExpenses} />
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <CategoryDistributionChart expenses={filteredExpenses} />
                 <WalletDistributionChart expenses={filteredExpenses} />
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <StaffWorkloadChart expenses={filteredExpenses} />
                 <ApprovalTypeChart expenses={filteredExpenses} />
               </div>
