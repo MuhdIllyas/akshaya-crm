@@ -6,7 +6,7 @@ import {
   FiRefreshCw, FiDownload, FiFilter, FiChevronRight, FiChevronLeft,
   FiUser, FiPhone, FiMail, FiMapPin, FiActivity, FiSmile,
   FiThumbsUp, FiThumbsDown, FiLoader, FiInfo, FiEye, FiZap, FiHeart, FiGift, FiX,
-  FiMessageCircle, FiBookOpen, FiFlag, FiBell, FiUsers as FiTeam, FiCrown, FiAward as FiTrophy,
+  FiMessageCircle, FiBookOpen, FiFlag, FiBell, FiUsers as FiTeam, FiAward as FiTrophy,
   FiCalendar as FiEvent, FiClock as FiTime, FiUserCheck, FiUserX, FiGift as FiBirthday,
   FiLogOut, FiMenu, FiGrid, FiList, FiPlus, FiEdit, FiTrash2
 } from 'react-icons/fi';
@@ -119,7 +119,7 @@ const MemberCard = ({ member, rank, isLeader }) => (
         <div>
           <div className="flex items-center gap-2">
             <h4 className="font-semibold text-gray-900">{member.name}</h4>
-            {isLeader && <FiCrown className="text-amber-500 h-4 w-4" title="Team Leader" />}
+            {isLeader && <span className="text-amber-500" title="Team Leader">👑</span>}
             {member.is_online && <span className="w-2 h-2 rounded-full bg-emerald-500" title="Online"></span>}
           </div>
           <p className="text-sm text-gray-500">{member.role || 'Member'}</p>
@@ -584,7 +584,7 @@ const StaffTeamDashboard = () => {
                   <h2 className="text-xl font-bold text-gray-900">{teamData.name}</h2>
                   <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 mt-1">
                     <span className="flex items-center gap-1">
-                      <FiCrown className="text-amber-500" /> Leader: {teamData.leader}
+                      <span className="text-amber-500">👑</span> Leader: {teamData.leader}
                     </span>
                     <span className="flex items-center gap-1">
                       <FiUsers /> {teamData.member_count} members
