@@ -1,3 +1,4 @@
+//Used by both admin and superadmin
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-toastify";

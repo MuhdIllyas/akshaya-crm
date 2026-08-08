@@ -40,6 +40,7 @@ import StaffPerformance from './pages/staff/StaffPerformance';
 import StaffAttendance from "./pages/staff/StaffAttendance";
 import ServiceEntry from "./pages/staff/ServiceEntry";
 import ExpenseEntry from "./pages/staff/ExpenseEntry";
+import StaffTeamDashboard from "./pages/staff/StaffTeamDashboard";
 import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
 import AllEntries from './pages/AllEntries';
@@ -487,6 +488,10 @@ const App = () => {
             <Route
               path="staff/pending_payments"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><PendingPayments /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/teams"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><StaffTeamDashboard /></ProtectedRoute>}
             />
             <Route
               path="staff/notifications"
