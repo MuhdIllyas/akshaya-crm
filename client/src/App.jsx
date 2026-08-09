@@ -40,6 +40,7 @@ import StaffPerformance from './pages/staff/StaffPerformance';
 import StaffAttendance from "./pages/staff/StaffAttendance";
 import ServiceEntry from "./pages/staff/ServiceEntry";
 import ExpenseEntry from "./pages/staff/ExpenseEntry";
+import StaffTeamDashboard from "./pages/staff/StaffTeamDashboard";
 import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
 import AllEntries from './pages/AllEntries';
@@ -52,7 +53,7 @@ import Home from "./pages/Home";
 
 // Self Service Print Portal
 import SelfServicePrint from './pages/printing/SelfServicePrint';
-import AdminPrintSettings from './pages/printing/AdminPrintSettings';
+import AdminSettings from './pages/admin/AdminSettings';
 
 //Operations Hub
 import OperationsHub from './pages/operationshub/OperationsHub';
@@ -205,6 +206,40 @@ const CustomerProtectedRoute = ({ children }) => {
 // Main App Component
 // ---------------------------------------------------------------------
 const App = () => {
+
+  // ---> NEW: Global SMS Listener for Instant OTP Popups <---
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewSms = (smsData) => {
+      if (smsData.isOtp) {
+        // High-priority green toast for OTPs (stays open for 15 seconds)
+        toast.success(
+          <div>
+            <strong>🔐 OTP RECEIVED</strong><br />
+            <small>From: {smsData.sender}</small><br />
+            {smsData.message}
+          </div>,
+          { autoClose: 15000 }
+        );
+      } else {
+        // Standard info toast for normal texts
+        toast.info(
+          <div>
+            <strong>📩 Text from {smsData.sender}</strong><br />
+            {smsData.message}
+          </div>
+        );
+      }
+    };
+
+    socket.on("new_centre_sms", handleNewSms);
+
+    return () => {
+      socket.off("new_centre_sms", handleNewSms);
+    };
+  }, []);
+
   return (
     <NotificationProvider>
       <ToastContainer
@@ -324,7 +359,7 @@ const App = () => {
             />
             <Route
               path="admin/settings"
-              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminPrintSettings /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><AdminSettings /></ProtectedRoute>}
             />
             <Route
               path="admin/reports"
@@ -453,6 +488,10 @@ const App = () => {
             <Route
               path="staff/pending_payments"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><PendingPayments /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/teams"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><StaffTeamDashboard /></ProtectedRoute>}
             />
             <Route
               path="staff/notifications"
