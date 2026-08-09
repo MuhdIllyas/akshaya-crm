@@ -795,4 +795,71 @@ router.get("/single/:id", async (req, res) => {
   }
 });
 
+/* -------------------------------------------------------
+   1️⃣1️⃣ GET TEAM REVIEWS (For Team Dashboard)
+------------------------------------------------------- */
+router.get("/team/:teamId", async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const { start_date, end_date, min_rating } = req.query;
+
+    let query = `
+      SELECT sr.*, 
+             s.name as service_name,
+             st.name as staff_name,
+             c.name as customer_name
+      FROM service_reviews sr
+      LEFT JOIN services s ON sr.service_id = s.id
+      LEFT JOIN staff st ON sr.staff_id = st.id
+      LEFT JOIN customers c ON sr.customer_id = c.id
+      -- JOIN team_members to filter reviews belonging to this team's staff
+      JOIN team_members tm ON sr.staff_id = tm.staff_id
+      WHERE tm.team_id = $1
+      AND tm.is_active = true
+      AND sr.is_submitted = true
+    `;
+    
+    const values = [teamId];
+    let paramCount = 2;
+
+    if (start_date) {
+      query += ` AND sr.submitted_at >= $${paramCount++}`;
+      values.push(start_date);
+    }
+    if (end_date) {
+      query += ` AND sr.submitted_at <= $${paramCount++}`;
+      values.push(end_date);
+    }
+    if (min_rating) {
+      query += ` AND sr.service_rating >= $${paramCount++}`;
+      values.push(parseInt(min_rating));
+    }
+
+    query += ` ORDER BY sr.submitted_at DESC`;
+
+    const reviews = await pool.query(query, values);
+
+    // Calculate Team Stats
+    const stats = {
+      total: reviews.rows.length,
+      average: reviews.rows.length > 0 
+        ? (reviews.rows.reduce((acc, r) => acc + r.service_rating, 0) / reviews.rows.length).toFixed(1)
+        : 0,
+      rating_distribution: {
+        1: reviews.rows.filter(r => r.service_rating === 1).length,
+        2: reviews.rows.filter(r => r.service_rating === 2).length,
+        3: reviews.rows.filter(r => r.service_rating === 3).length,
+        4: reviews.rows.filter(r => r.service_rating === 4).length,
+        5: reviews.rows.filter(r => r.service_rating === 5).length
+      }
+    };
+
+    res.json({ reviews: reviews.rows, stats });
+
+  } catch (error) {
+    console.error("Team Reviews Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 export default router;

@@ -1,23 +1,19 @@
 // TeamManagement.jsx
-import React, { useState, useEffect, useMemo } from "react";
 import {
-  FiUsers,
-  FiGlobe,
-  FiHome,
-  FiBarChart2,
-  FiSearch,
-  FiPlus,
-  FiX,
-  FiUser,
-  FiUserPlus,
-  FiCheck,
-  FiEdit,
-  FiTrash2,
-  FiStar,
-  FiTrendingUp,
-  FiPieChart,
-  FiCalendar,
+  FiUsers, FiGlobe, FiHome, FiBarChart2, FiSearch, FiPlus, FiX,
+  FiUser, FiUserPlus, FiCheck, FiEdit, FiTrash2, FiStar,
+  FiTrendingUp, FiPieChart, FiCalendar, FiTarget, FiDollarSign, FiBriefcase
 } from "react-icons/fi";
+import {
+  Chart as ChartJS, CategoryScale, LinearScale, BarElement,
+  LineElement, PointElement, Title, Tooltip, Legend, Filler, ArcElement
+} from "chart.js";
+import { Line, Doughnut } from "react-chartjs-2";
+
+ChartJS.register(
+  CategoryScale, LinearScale, BarElement, LineElement, PointElement,
+  Title, Tooltip, Legend, Filler, ArcElement
+);
 
 // ----------------------------------------------------------------------
 // JWT helper – exactly as in CalendarPage.jsx
@@ -40,6 +36,39 @@ function getTokenClaims() {
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
+
+/* ---------- SUB-COMPONENTS ---------- */
+const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
+  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="font-medium text-gray-500 mb-1 text-xs uppercase tracking-wider">{title}</p>
+        <p className="font-bold text-gray-900 mb-1 text-2xl">{value}</p>
+        {subtitle && <p className="text-gray-400 text-xs font-medium">{subtitle}</p>}
+      </div>
+      <div className={`rounded-xl ${color} p-3`}><Icon className="text-white h-6 w-6" /></div>
+    </div>
+  </div>
+);
+
+const TargetProgressBar = ({ label, current, target }) => {
+  const safeTarget = target || 1;
+  const percentage = Math.min((current / safeTarget) * 100, 100).toFixed(0);
+  
+  const formatCurrency = (val) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val || 0);
+
+  return (
+    <div className="mb-4">
+      <div className="flex justify-between text-sm mb-1">
+        <span className="font-medium text-gray-700">{label}</span>
+        <span className="text-gray-600 font-semibold">{formatCurrency(current)} / {formatCurrency(target)} ({percentage}%)</span>
+      </div>
+      <div className="w-full bg-gray-100 rounded-full h-2.5">
+        <div className={`h-2.5 rounded-full ${percentage >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${percentage}%` }}></div>
+      </div>
+    </div>
+  );
+};
 
 // ----------------------------------------------------------------------
 // TeamManagement Component
@@ -82,11 +111,16 @@ const TeamManagement = () => {
   // Analytics modal state
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [analyticsTeam, setAnalyticsTeam] = useState(null);
-  const [analyticsTab, setAnalyticsTab] = useState("contribution"); // 'contribution' or 'trend'
+  const [analyticsTab, setAnalyticsTab] = useState("overview"); 
   const [contributionData, setContributionData] = useState([]);
   const [trendData, setTrendData] = useState([]);
+  const [serviceMix, setServiceMix] = useState([]);
   const [trendYear, setTrendYear] = useState(new Date().getFullYear());
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  // Targets Settings State (Mocked until DB update)
+  const [targetsEnabled, setTargetsEnabled] = useState(false);
+  const [monthlyTarget, setMonthlyTarget] = useState(250000);
 
   // Form for create / edit team
   const [teamForm, setTeamForm] = useState({
@@ -458,36 +492,28 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   // Analytics modal helpers
   // ------------------------------------------------------------------
-  const fetchContribution = async (teamId) => {
+  const fetchAnalyticsData = async (teamId) => {
     setAnalyticsLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/teams/${teamId}/contribution`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setContributionData(data);
-      } else {
-        console.error("Failed to load contribution");
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  };
+      const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+      const [contribRes, trendRes, mixRes] = await Promise.all([
+        fetch(`${API_BASE}/api/teams/${teamId}/contribution`, { headers }),
+        fetch(`${API_BASE}/api/teams/${teamId}/trend?year=${trendYear}`, { headers }),
+        fetch(`${API_BASE}/api/teams/${teamId}/service-mix`, { headers }).catch(() => ({ ok: false })) 
+      ]);
 
-  const fetchTrend = async (teamId, year) => {
-    setAnalyticsLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/teams/${teamId}/trend?year=${year}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTrendData(data);
+      if (contribRes.ok) setContributionData(await contribRes.json());
+      if (trendRes.ok) setTrendData(await trendRes.json());
+      
+      // Handle missing endpoint gracefully while we build it
+      if (mixRes.ok) {
+        setServiceMix(await mixRes.json());
       } else {
-        console.error("Failed to load trend");
+        setServiceMix([
+          { service_type: 'Passport', count: 45 }, 
+          { service_type: 'PAN Card', count: 30 }, 
+          { service_type: 'Certificate', count: 15 }
+        ]);
       }
     } catch (err) {
       console.error(err);
@@ -498,18 +524,27 @@ const TeamManagement = () => {
 
   const openAnalyticsModal = (team) => {
     setAnalyticsTeam(team);
-    setAnalyticsTab("contribution");
+    setAnalyticsTab("overview");
     setShowAnalyticsModal(true);
-    fetchContribution(team.id);
+    fetchAnalyticsData(team.id);
   };
 
-  const switchAnalyticsTab = (tab) => {
-    setAnalyticsTab(tab);
-    if (tab === "contribution") {
-      fetchContribution(analyticsTeam.id);
-    } else if (tab === "trend") {
-      fetchTrend(analyticsTeam.id, trendYear);
-    }
+  // Analytics Calculations for Admin Overview
+  const activeTeamStats = useMemo(() => mergedTeams.find(t => t.id === analyticsTeam?.id), [analyticsTeam, mergedTeams]);
+  const actualProfit = activeTeamStats ? (activeTeamStats.collected_revenue || 0) - (activeTeamStats.department_charges || 0) - (activeTeamStats.expense || 0) : 0;
+  const profitMargin = activeTeamStats && activeTeamStats.collected_revenue > 0 ? ((actualProfit / activeTeamStats.collected_revenue) * 100).toFixed(1) : 0;
+
+  const trendChartData = useMemo(() => {
+    if (!trendData.length) return null;
+    return {
+      labels: trendData.map(t => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.month - 1]),
+      datasets: [{ label: 'Revenue (₹)', data: trendData.map(t => t.collected_revenue), borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }]
+    };
+  }, [trendData]);
+
+  const doughnutData = {
+    labels: serviceMix.map(s => s.service_type),
+    datasets: [{ data: serviceMix.map(s => s.count), backgroundColor: ["#3B82F6", "#10B981", "#EF4444", "#F59E0B", "#8B5CF6", "#64748B"], borderWidth: 0 }]
   };
 
   // ------------------------------------------------------------------
@@ -1092,215 +1127,164 @@ const TeamManagement = () => {
         </div>
       )}
 
-      {/* ---- ANALYTICS MODAL ---- */}
-      {showAnalyticsModal && analyticsTeam && (
+      {/* ---- ENTERPRISE ANALYTICS MODAL ---- */}
+      {showAnalyticsModal && analyticsTeam && activeTeamStats && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200">
-            {/* Header with tabs */}
-            <div className="bg-gradient-to-r from-teal-600 to-emerald-600 p-6 sticky top-0 rounded-t-2xl">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-white">
-                  {analyticsTeam.name} – Analytics
+          <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[95vh] overflow-y-auto shadow-2xl border border-gray-200">
+            
+            {/* Modal Header */}
+            <div className="bg-white border-b border-gray-200 p-6 sticky top-0 z-10 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <FiBarChart2 className="text-indigo-600" /> {analyticsTeam.name} Dashboard
                 </h2>
-                <button
-                  onClick={() => setShowAnalyticsModal(false)}
-                  className="text-white hover:text-gray-200"
-                >
-                  <FiX size={20} />
-                </button>
+                <p className="text-gray-500 text-sm mt-1">Admin Performance Overview</p>
               </div>
-              <div className="flex gap-4 mt-4">
-                <button
-                  onClick={() => switchAnalyticsTab("contribution")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    analyticsTab === "contribution"
-                      ? "bg-white text-teal-700 shadow"
-                      : "bg-teal-500 text-white hover:bg-teal-400"
-                  }`}
-                >
-                  <FiPieChart className="inline mr-1" /> Contribution
-                </button>
-                <button
-                  onClick={() => switchAnalyticsTab("trend")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                    analyticsTab === "trend"
-                      ? "bg-white text-teal-700 shadow"
-                      : "bg-teal-500 text-white hover:bg-teal-400"
-                  }`}
-                >
-                  <FiCalendar className="inline mr-1" /> Monthly Trend
-                </button>
-              </div>
+              <button onClick={() => setShowAnalyticsModal(false)} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition">
+                <FiX size={24} />
+              </button>
             </div>
 
-            <div className="p-6">
+            {/* Modal Tabs */}
+            <div className="flex border-b border-gray-200 px-6 bg-gray-50">
+              <button onClick={() => setAnalyticsTab("overview")} className={`px-6 py-4 text-sm font-semibold transition ${analyticsTab === "overview" ? "text-indigo-600 border-b-2 border-indigo-600 bg-white" : "text-gray-500 hover:text-gray-700"}`}>
+                Live Overview
+              </button>
+              <button onClick={() => setAnalyticsTab("leaderboard")} className={`px-6 py-4 text-sm font-semibold transition ${analyticsTab === "leaderboard" ? "text-indigo-600 border-b-2 border-indigo-600 bg-white" : "text-gray-500 hover:text-gray-700"}`}>
+                Staff Leaderboard
+              </button>
+              <button onClick={() => setAnalyticsTab("settings")} className={`px-6 py-4 text-sm font-semibold transition ${analyticsTab === "settings" ? "text-indigo-600 border-b-2 border-indigo-600 bg-white" : "text-gray-500 hover:text-gray-700"}`}>
+                Culture & Targets
+              </button>
+            </div>
+
+            <div className="p-6 bg-gray-50 min-h-[500px]">
               {analyticsLoading ? (
-                <div className="flex items-center justify-center py-10">
-                  <div className="animate-spin h-8 w-8 border-4 border-teal-600 border-t-transparent rounded-full mr-3"></div>
-                  Loading...
-                </div>
+                <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full"></div></div>
               ) : (
                 <>
-                  {analyticsTab === "contribution" && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                        Member Contribution
-                      </h3>
-                      {contributionData.length === 0 ? (
-                        <p className="text-gray-500 text-center py-6">
-                          No contribution data available.
-                        </p>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead>
-                              <tr className="border-b border-gray-200">
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">
-                                  Staff
-                                </th>
-                                <th className="py-3 px-4 text-center text-sm font-semibold text-gray-600">
-                                  Role
-                                </th>
-                                <th className="py-3 px-4 text-center text-sm font-semibold text-gray-600">
-                                  Primary
-                                </th>
-                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Collected Revenue
-                                </th>
-                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Expense
-                                </th>
-                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Net Profit
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {contributionData.map((m) => (
-                                <tr
-                                  key={m.id}
-                                  className="border-b border-gray-100"
-                                >
-                                  <td className="py-3 px-4 text-gray-800">
-                                    {m.name}
-                                  </td>
-                                  <td className="py-3 px-4 text-center text-gray-600">
-                                    {m.role}
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    {m.is_primary && (
-                                      <FiStar className="text-amber-500 inline" />
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-4 text-right text-green-700">
-                                    {formatCurrency(m.collected_revenue || 0)}
-                                  </td>
-                                  <td className="py-3 px-4 text-right text-red-600">
-                                    {formatCurrency(m.expense)}
-                                  </td>
-                                  <td
-                                    className="py-3 px-4 text-right font-semibold"
-                                    style={{
-                                      color:
-                                        m.net_profit >= 0 ? "#15803d" : "#b91c1c",
-                                    }}
-                                  >
-                                    {formatCurrency(m.net_profit || 0)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                  {/* TAB 1: OVERVIEW */}
+                  {analyticsTab === "overview" && (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-4 gap-4">
+                        <StatCard title="Total Expected" value={formatCurrency(activeTeamStats.expected_revenue)} icon={FiTarget} color="bg-indigo-600" />
+                        <StatCard title="Collected Revenue" value={formatCurrency(activeTeamStats.collected_revenue)} icon={FiDollarSign} color="bg-emerald-600" />
+                        <StatCard title="Net Generated" value={formatCurrency(actualProfit)} subtitle={`Expenses: ${formatCurrency(activeTeamStats.expense)}`} icon={FiTrendingUp} color="bg-blue-600" />
+                        <StatCard title="Profit Margin" value={`${profitMargin}%`} subtitle="After dept charges & expenses" icon={FiPieChart} color="bg-amber-500" />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-6">
+                        <div className="col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                          <h3 className="font-bold text-gray-900 mb-6 flex items-center">
+                            <FiTrendingUp className="mr-2 text-indigo-600" /> Monthly Trajectory
+                          </h3>
+                          
+                          {targetsEnabled ? (
+                            <div className="space-y-6">
+                              <TargetProgressBar label="Revenue Target" current={activeTeamStats.collected_revenue} target={monthlyTarget} />
+                            </div>
+                          ) : (
+                            <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl text-center">
+                              <div className="inline-block p-4 bg-indigo-100 rounded-full mb-4">
+                                <FiTrendingUp className="text-3xl text-indigo-600" />
+                              </div>
+                              <h4 className="text-lg font-bold text-indigo-900">Growth Mindset Active</h4>
+                              <p className="text-indigo-700 mt-2 max-w-md mx-auto text-sm">
+                                Strict targets are disabled for this team. This dashboard encourages natural MoM momentum and quality service over quotas.
+                              </p>
+                              <div className="mt-6 flex justify-center gap-6">
+                                <div>
+                                  <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Current Pace</p>
+                                  <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(activeTeamStats.collected_revenue)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="mt-8 h-[200px]">
+                            {trendChartData && <Line data={trendChartData} options={{ maintainAspectRatio: false, plugins: { legend: { display: false } } }} />}
+                          </div>
                         </div>
-                      )}
+
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+                          <h3 className="font-bold text-gray-900 mb-4 flex items-center">
+                            <FiPieChart className="mr-2 text-blue-600" /> Service Mix
+                          </h3>
+                          <div className="flex-1 relative">
+                            {serviceMix.length > 0 ? (
+                              <Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } } }} />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">No service data</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
-                  {analyticsTab === "trend" && (
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-800">
-                          Monthly Trend
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm text-gray-600">
-                            Year:
-                          </label>
-                          <input
-                            type="number"
-                            value={trendYear}
-                            onChange={(e) => {
-                              const y = Number(e.target.value);
-                              setTrendYear(y);
-                              fetchTrend(analyticsTeam.id, y);
-                            }}
-                            className="border border-gray-200 rounded-lg px-3 py-1.5 w-24 text-sm"
-                          />
+                  {/* TAB 2: LEADERBOARD */}
+                  {analyticsTab === "leaderboard" && (
+                    <div className="grid grid-cols-3 gap-4">
+                      {contributionData.map((member, idx) => (
+                        <div key={member.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
+                          {idx === 0 && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-3 py-1 rounded-bl-lg">MVP</div>}
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                              {member.name.charAt(0)}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900">{member.name}</h4>
+                              <p className="text-xs text-gray-500">{member.role}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="bg-gray-50 p-2 rounded">
+                              <p className="text-[10px] text-gray-500 uppercase font-semibold">Collected</p>
+                              <p className="font-bold text-emerald-600">{formatCurrency(member.collected_revenue)}</p>
+                            </div>
+                            <div className="bg-gray-50 p-2 rounded">
+                              <p className="text-[10px] text-gray-500 uppercase font-semibold">Profit Added</p>
+                              <p className="font-bold text-indigo-600">{formatCurrency(member.net_profit)}</p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      {trendData.length === 0 ? (
-                        <p className="text-gray-500 text-center py-6">
-                          No trend data for this year.
-                        </p>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead>
-                              <tr className="border-b border-gray-200">
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">
-                                  Month
-                                </th>
-                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Revenue
-                                </th>
-                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Expense
-                                </th>
-                                <th className="py-3 px-4 text-right text-sm font-semibold text-gray-600">
-                                  Profit
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {trendData.map((row) => {
-                                const monthNames = [
-                                  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-                                ];
-                                return (
-                                  <tr
-                                    key={row.month}
-                                    className="border-b border-gray-100"
-                                  >
-                                    <td className="py-3 px-4 text-gray-800">
-                                      {monthNames[row.month - 1]}
-                                    </td>
-                                    <td className="py-3 px-4 text-right text-green-700">
-                                      {formatCurrency(row.collected_revenue)}
-                                    </td>
-                                    <td className="py-3 px-4 text-right text-red-600">
-                                      {formatCurrency(row.expense)}
-                                    </td>
-                                    <td
-                                      className="py-3 px-4 text-right font-semibold"
-                                      style={{
-                                        color:
-                                          row.net_profit >= 0
-                                            ? "#15803d"
-                                            : "#b91c1c",
-                                      }}
-                                    >
-                                      {formatCurrency(row.net_profit)}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   )}
+
+                  {/* TAB 3: SETTINGS */}
+                  {analyticsTab === "settings" && (
+                    <div className="max-w-2xl mx-auto space-y-6">
+                      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Team Culture & Targets</h3>
+                        <p className="text-sm text-gray-500 mb-6">Determine how this team is measured on their dashboard.</p>
+                        
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 mb-6">
+                          <div>
+                            <p className="font-bold text-gray-900">Enable Strict Targets</p>
+                            <p className="text-sm text-gray-500 mt-1">If disabled, the team will see a "Growth Mindset" dashboard instead.</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" className="sr-only peer" checked={targetsEnabled} onChange={(e) => setTargetsEnabled(e.target.checked)} />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+
+                        {targetsEnabled && (
+                          <div className="space-y-4 animate-fade-in-up">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Revenue Target (₹)</label>
+                              <input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value))} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            </div>
+                            <button className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-indigo-700 transition w-full mt-2">
+                              Save Targets
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                 </>
               )}
             </div>

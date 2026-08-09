@@ -207,9 +207,17 @@ export const getGlobalStats = async (req, res) => {
 
 export const createAnnouncement = async (req, res) => {
     try {
-        const { title, content, category, priority, isPinned } = req.body;
+        // 🔥 Added teamId to the destructured body variables
+        const { title, content, category, priority, isPinned, teamId } = req.body; 
+        
         const announcement = await knowledgeService.createAnnouncement(
-            title, content, category, priority, isPinned, req.user.id
+            title, 
+            content, 
+            category, 
+            priority, 
+            isPinned, 
+            req.user.id, 
+            teamId // 🔥 Pass it to the service layer
         );
         res.status(201).json(announcement);
     } catch (err) {
@@ -220,7 +228,11 @@ export const createAnnouncement = async (req, res) => {
 
 export const getAnnouncements = async (req, res) => {
     try {
-        const announcements = await knowledgeService.getAnnouncements();
+        // 🔥 Extract teamId from query parameters
+        const { teamId } = req.query; 
+        
+        // 🔥 Pass it to the service layer
+        const announcements = await knowledgeService.getAnnouncements(teamId); 
         res.json(announcements);
     } catch (err) {
         console.error("💥 ANNOUNCEMENTS CRASH INFO:", err);

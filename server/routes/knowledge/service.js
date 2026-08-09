@@ -555,23 +555,33 @@ export const getMyBookmarks = async (staffId) => {
     return res.rows;
 };
 
-export const createAnnouncement = async (title, content, category, priority, isPinned, staffId) => {
+export const createAnnouncement = async (title, content, category, priority, isPinned, staffId, teamId = null) => {
     const res = await pool.query(
-        `INSERT INTO knowledge_announcements (title, content, category, priority, is_pinned, created_by) 
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [title, content, category, priority, isPinned, staffId]
+        `INSERT INTO knowledge_announcements (title, content, category, priority, is_pinned, created_by, team_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [title, content, category, priority, isPinned, staffId, teamId]
     );
     return res.rows[0];
 };
 
-export const getAnnouncements = async () => {
-    const res = await pool.query(`
+export const getAnnouncements = async (teamId = null) => {
+    // If teamId is passed, fetch global (NULL) + team specific. Otherwise, just global.
+    let query = `
         SELECT a.*, s.name as author_name 
         FROM knowledge_announcements a
         LEFT JOIN staff s ON a.created_by = s.id
-        ORDER BY a.is_pinned DESC, a.created_at DESC 
-        LIMIT 50
-    `);
+        WHERE a.team_id IS NULL
+    `;
+    const params = [];
+    
+    if (teamId) {
+        query += ` OR a.team_id = $1`;
+        params.push(teamId);
+    }
+    
+    query += ` ORDER BY a.is_pinned DESC, a.created_at DESC LIMIT 50`;
+    
+    const res = await pool.query(query, params);
     return res.rows;
 };
 
