@@ -800,6 +800,8 @@ const TeamManagement = () => {
                       <td className="py-4 px-5 text-center"><span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">{team.is_global ? "Global" : "Centre"}</span></td>
                       <td className="py-4 px-5 text-center font-bold text-gray-700">{team.member_count}</td>
                       <td className="py-4 px-5 text-right text-emerald-600 font-medium">{formatCurrency(team.collected_revenue)}</td>
+                      <td className="py-4 px-5 text-right text-red-500 font-medium">{formatCurrency(team.expense)}</td>
+                      
                       <td className="py-4 px-5 text-right font-bold text-indigo-600">{formatCurrency(team.net_profit)}</td>
                       <td className="py-4 px-5 text-center">
                         <div className="flex justify-center gap-2">
