@@ -1,4 +1,5 @@
 // TeamManagement.jsx
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FiUsers, FiGlobe, FiHome, FiBarChart2, FiSearch, FiPlus, FiX,
   FiUser, FiUserPlus, FiCheck, FiEdit, FiTrash2, FiStar,
