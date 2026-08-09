@@ -1,8 +1,8 @@
 // TeamManagement.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Fragment } from "react";
 import {
   FiUsers, FiGlobe, FiHome, FiBarChart2, FiSearch, FiPlus, FiX,
-  FiUser, FiUserPlus, FiCheck, FiEdit, FiTrash2, FiStar,
+  FiUser, FiUserPlus, FiCheck, FiEdit, FiTrash2, FiStar, FiChevronDown, FiChevronUp, FiLoader,
   FiTrendingUp, FiPieChart, FiCalendar, FiTarget, FiDollarSign, FiBriefcase
 } from "react-icons/fi";
 import {
@@ -118,6 +118,80 @@ const TeamManagement = () => {
   const [serviceMix, setServiceMix] = useState([]);
   const [trendYear, setTrendYear] = useState(new Date().getFullYear());
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  // --- EXPANDABLE ROW STATE (Replaces the Manage Members Modal) ---
+  const [expandedTeamId, setExpandedTeamId] = useState(null);
+  const [teamMembersMap, setTeamMembersMap] = useState({});
+  const [membersLoading, setMembersLoading] = useState(false);
+
+  const toggleTeamExpand = async (team) => {
+    if (expandedTeamId === team.id) {
+      setExpandedTeamId(null);
+      return;
+    }
+    setExpandedTeamId(team.id);
+    setMembersLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/teams/${team.id}/members`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const membersData = await response.json();
+      setTeamMembersMap(prev => ({ ...prev, [team.id]: membersData }));
+    } catch (error) {
+      console.error("Fetch members failed:", error);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const handleInlineAddMember = async (teamId) => {
+    const staffId = Number(addMemberValue);
+    if (!teamId || !staffId) return;
+    setSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/teams/${teamId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify({ staff_id: staffId, is_primary: false }),
+      });
+      if (!response.ok) throw new Error("Failed to add member");
+
+      // Refresh just this row
+      const updatedRes = await fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
+      const updatedMembers = await updatedRes.json();
+      setTeamMembersMap(prev => ({ ...prev, [teamId]: updatedMembers }));
+      setAddMemberValue("");
+      fetchTeams(); fetchFinancials();
+    } catch (error) { toast.error(error.message); } finally { setSubmitting(false); }
+  };
+
+  const handleInlineRemoveMember = async (teamId, staffId) => {
+    if (!window.confirm("Remove this member?")) return;
+    setSubmitting(true);
+    try {
+      await fetch(`${API_BASE}/api/teams/${teamId}/members/${staffId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const updatedRes = await fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
+      const updatedMembers = await updatedRes.json();
+      setTeamMembersMap(prev => ({ ...prev, [teamId]: updatedMembers }));
+      fetchTeams(); fetchFinancials();
+    } catch (error) { console.error(error); } finally { setSubmitting(false); }
+  };
+
+  const handleInlineSetPrimary = async (teamId, memberId) => {
+    setSubmitting(true);
+    try {
+      await fetch(`${API_BASE}/api/teams/member/${memberId}/primary`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const updatedRes = await fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
+      const updatedMembers = await updatedRes.json();
+      setTeamMembersMap(prev => ({ ...prev, [teamId]: updatedMembers }));
+    } catch (error) { console.error(error); } finally { setSubmitting(false); }
+  };
 
   // Targets Settings State (Mocked until DB update)
   const [targetsEnabled, setTargetsEnabled] = useState(false);
@@ -700,120 +774,111 @@ const TeamManagement = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan="7" className="py-10 text-center text-gray-500">
-                      Loading teams...
-                    </td>
-                  </tr>
-                ) : filteredTeams.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="py-10 text-center text-gray-500">
-                      No teams found.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTeams.map((team) => (
-                    <tr
-                      key={team.id}
-                      className="border-b border-gray-100 hover:bg-gray-50"
-                    >
+                {filteredTeams.map((team) => (
+                  <Fragment key={team.id}>
+                    
+                    {/* --- MAIN ROW --- */}
+                    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="py-4 px-5">
                         <div className="flex items-center">
-                          <div
-                            className={`p-2 rounded-lg mr-3 ${
-                              team.is_global
-                                ? "bg-purple-100 text-purple-800"
-                                : "bg-indigo-100 text-indigo-800"
-                            }`}
-                          >
+                          {/* The Arrow */}
+                          <button onClick={() => toggleTeamExpand(team)} className="mr-3 p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
+                             {expandedTeamId === team.id ? <FiChevronUp size={20}/> : <FiChevronDown size={20}/>}
+                          </button>
+                          
+                          <div className={`p-2 rounded-lg mr-3 ${team.is_global ? "bg-purple-100 text-purple-800" : "bg-indigo-100 text-indigo-800"}`}>
                             {team.is_global ? <FiGlobe /> : <FiHome />}
                           </div>
                           <div>
-                            <p className="font-medium text-gray-800">
+                            <p className="font-bold text-gray-800 cursor-pointer hover:text-indigo-600 transition" onClick={() => toggleTeamExpand(team)}>
                               {team.name}
                             </p>
-                            <p className="text-xs text-gray-500">
-                              {team.centre_id
-                                ? getCentreName(team.centre_id)
-                                : "Cross-Centre"}
-                            </p>
+                            <p className="text-xs text-gray-500">{team.centre_id ? getCentreName(team.centre_id) : "Cross-Centre"}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-5 text-center">
-                        <span
-                          className={`inline-block px-2 py-1 text-xs rounded-full font-medium ${
-                            team.is_global
-                              ? "bg-purple-100 text-purple-800"
-                              : "bg-blue-100 text-blue-800"
-                          }`}
-                        >
-                          {team.is_global ? "Global" : "Centre"}
-                        </span>
-                      </td>
-                      <td className="py-4 px-5 text-center font-medium">
-                        {team.member_count}
-                      </td>
-                      <td className="py-4 px-5 text-right text-green-700">
-                        {formatCurrency(team.collected_revenue || 0)}
-                      </td>
-                      <td className="py-4 px-5 text-right text-red-600">
-                        {formatCurrency(team.expense || 0)}
-                      </td>
-                      <td className="py-4 px-5 text-right">
-                        <span
-                          className={`font-semibold ${
-                            Number(team.net_profit || 0) >= 0
-                              ? "text-green-700"
-                              : "text-red-700"
-                          }`}
-                        >
-                          {formatCurrency(team.net_profit || 0)}
-                        </span>
-                      </td>
+                      <td className="py-4 px-5 text-center"><span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">{team.is_global ? "Global" : "Centre"}</span></td>
+                      <td className="py-4 px-5 text-center font-bold text-gray-700">{team.member_count}</td>
+                      <td className="py-4 px-5 text-right text-emerald-600 font-medium">{formatCurrency(team.collected_revenue)}</td>
+                      <td className="py-4 px-5 text-right font-bold text-indigo-600">{formatCurrency(team.net_profit)}</td>
                       <td className="py-4 px-5 text-center">
                         <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => openManageMembers(team)}
-                            className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded-lg hover:bg-indigo-50"
-                            title="Manage Members"
-                          >
-                            <FiUsers size={16} />
-                          </button>
-                          <button
-                            onClick={() => openAnalyticsModal(team)}
-                            className="text-teal-600 hover:text-teal-800 p-1.5 rounded-lg hover:bg-teal-50"
-                            title="View Analytics"
-                          >
-                            <FiTrendingUp size={16} />
+                          <button onClick={() => openAnalyticsModal(team)} className="text-teal-600 hover:text-teal-800 p-1.5 rounded-lg hover:bg-teal-50" title="View Dashboard">
+                            <FiBarChart2 size={18} />
                           </button>
                           {isAdmin && (
-                            <>
-                              <button
-                                onClick={() =>
-                                  alert("Edit team (to be implemented)")
-                                }
-                                className="text-gray-600 hover:text-gray-800 p-1.5 rounded-lg hover:bg-gray-100"
-                                title="Edit"
-                              >
-                                <FiEdit size={16} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTeam(team.id)}
-                                disabled={submitting}
-                                className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
-                                title="Delete"
-                              >
-                                <FiTrash2 size={16} />
-                              </button>
-                            </>
+                            <button onClick={() => handleDeleteTeam(team.id)} disabled={submitting} className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50" title="Delete">
+                              <FiTrash2 size={18} />
+                            </button>
                           )}
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
+
+                    {/* --- EXPANDED ROW (STAFF DETAILS) --- */}
+                    {expandedTeamId === team.id && (
+                      <tr className="bg-slate-50 border-b-2 border-indigo-100 shadow-inner">
+                         <td colSpan="6" className="p-0">
+                           <div className="px-14 py-6">
+                             {membersLoading ? (
+                                <div className="text-gray-500 text-sm py-4 flex items-center"><FiLoader className="animate-spin mr-2"/> Loading members...</div>
+                             ) : (
+                                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                                  
+                                  {/* Expanded Header & Add Member */}
+                                  <div className="flex justify-between items-center mb-5 border-b border-gray-100 pb-4">
+                                    <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                                       <FiUsers className="text-indigo-600"/> Team Roster
+                                    </h4>
+                                    <div className="flex gap-2">
+                                       <select 
+                                         className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-indigo-500 bg-gray-50 outline-none"
+                                         value={addMemberValue} onChange={(e) => setAddMemberValue(e.target.value)}
+                                       >
+                                          <option value="">+ Add Staff to {team.name}</option>
+                                          {availableStaff.filter(s => !teamMembersMap[team.id]?.some(m => m.staff_id === s.id)).map(staff => (
+                                             <option key={staff.id} value={staff.id}>{staff.name} ({staff.role})</option>
+                                          ))}
+                                       </select>
+                                       <button onClick={() => handleInlineAddMember(team.id)} disabled={!addMemberValue || submitting} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm disabled:opacity-50 font-medium shadow-sm transition">Add</button>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Staff Grid */}
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                     {teamMembersMap[team.id]?.map(member => (
+                                       <div key={member.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/50 transition">
+                                          <div className="flex items-center gap-3">
+                                             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700 flex items-center justify-center font-bold text-sm shadow-sm">
+                                               {member.name.charAt(0)}
+                                             </div>
+                                             <div>
+                                                <p className="text-sm font-bold text-gray-800">{member.name} {member.is_primary && <FiStar className="inline text-amber-500 ml-1 mb-0.5"/>}</p>
+                                                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mt-0.5">{member.role} • {member.centre_name}</p>
+                                             </div>
+                                          </div>
+                                          <div className="flex gap-1">
+                                            {isAdmin && !member.is_primary && (
+                                               <button onClick={() => handleInlineSetPrimary(team.id, member.id)} className="text-amber-500 hover:bg-amber-50 p-1.5 rounded-lg transition" title="Make Primary"><FiStar size={16}/></button>
+                                            )}
+                                            {isAdmin && (
+                                               <button onClick={() => handleInlineRemoveMember(team.id, member.staff_id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition" title="Remove"><FiTrash2 size={16}/></button>
+                                            )}
+                                          </div>
+                                       </div>
+                                     ))}
+                                     {teamMembersMap[team.id]?.length === 0 && <p className="text-sm text-gray-500 col-span-3 py-4 text-center italic">No members assigned to this team yet.</p>}
+                                  </div>
+                                  
+                                </div>
+                             )}
+                           </div>
+                         </td>
+                      </tr>
+                    )}
+
+                  </Fragment>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1013,117 +1078,6 @@ const TeamManagement = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ---- MANAGE MEMBERS MODAL ---- */}
-      {showManageMembersModal && selectedTeam && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-2xl border border-gray-200">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 sticky top-0 rounded-t-2xl">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-white">
-                  {selectedTeam.name} – Members
-                </h2>
-                <button
-                  onClick={() => setShowManageMembersModal(false)}
-                  className="text-white hover:text-gray-200"
-                >
-                  <FiX size={20} />
-                </button>
-              </div>
-            </div>
-            <div className="p-6">
-              {/* Add member section – dropdown + button */}
-              <div className="mb-6 flex items-center gap-3">
-                <select
-                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={addMemberValue}
-                  onChange={(e) => setAddMemberValue(e.target.value)}
-                  disabled={submitting}
-                >
-                  <option value="">-- Select staff to add --</option>
-                  {availableStaff
-                    .filter(
-                      (s) =>
-                        !selectedTeam.membersList?.some(
-                          (m) => m.staff_id === s.id
-                        )
-                    )
-                    .map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} {staff.role ? `(${staff.role})` : ""}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  onClick={() =>
-                    handleAddMemberToTeam(Number(addMemberValue))
-                  }
-                  disabled={!addMemberValue || submitting}
-                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <FiUserPlus /> Add
-                </button>
-              </div>
-
-              {/* Members list */}
-              <div className="divide-y divide-gray-100">
-                {selectedTeam.membersList?.map((member) => (
-                  <div
-                    key={member.id}
-                    className="py-3 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="bg-gray-100 p-2 rounded-lg">
-                        <FiUser className="text-gray-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-800">
-                          {member.name}
-                          {member.is_primary && (
-                            <span className="ml-2 inline-flex items-center text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                              <FiStar className="mr-1" size={12} /> Primary
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {member.role} – {member.centre_name}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      {isAdmin && !member.is_primary && (
-                        <button
-                          onClick={() => handleSetPrimary(member.id)}
-                          disabled={submitting}
-                          className="text-amber-600 hover:text-amber-800 p-1.5 rounded-lg hover:bg-amber-50 disabled:opacity-50"
-                          title="Set as primary team"
-                        >
-                          <FiStar size={16} />
-                        </button>
-                      )}
-                      {isAdmin && (
-                        <button
-                          onClick={() =>
-                            handleRemoveMember(
-                              selectedTeam.id,
-                              member.staff_id
-                            )
-                          }
-                          disabled={submitting}
-                          className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
-                          title="Remove"
-                        >
-                          <FiTrash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       )}
