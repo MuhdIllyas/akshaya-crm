@@ -193,9 +193,34 @@ const TeamManagement = () => {
     } catch (error) { console.error(error); } finally { setSubmitting(false); }
   };
 
-  // Targets Settings State (Mocked until DB update)
+  // Targets Settings State
   const [targetsEnabled, setTargetsEnabled] = useState(false);
   const [monthlyTarget, setMonthlyTarget] = useState(250000);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const handleSaveSettings = async () => {
+    if (!analyticsTeam) return;
+    setSavingSettings(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/teams/${analyticsTeam.id}/settings`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json", 
+          Authorization: `Bearer ${localStorage.getItem("token")}` 
+        },
+        body: JSON.stringify({
+          targets_enabled: targetsEnabled,
+          monthly_target: monthlyTarget
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to save settings");
+      toast.success("Team settings saved successfully!");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   // Form for create / edit team
   const [teamForm, setTeamForm] = useState({
@@ -571,25 +596,35 @@ const TeamManagement = () => {
     setAnalyticsLoading(true);
     try {
       const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
-      const [contribRes, trendRes, mixRes] = await Promise.all([
+      
+      // Fetch all 4 endpoints at the same time
+      const [contribRes, trendRes, mixRes, settingsRes] = await Promise.all([
         fetch(`${API_BASE}/api/teams/${teamId}/contribution`, { headers }),
         fetch(`${API_BASE}/api/teams/${teamId}/trend?year=${trendYear}`, { headers }),
-        fetch(`${API_BASE}/api/teams/${teamId}/service-mix`, { headers }).catch(() => ({ ok: false })) 
+        fetch(`${API_BASE}/api/teams/${teamId}/service-mix`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_BASE}/api/teams/${teamId}/settings`, { headers }).catch(() => ({ ok: false }))
       ]);
 
       if (contribRes.ok) setContributionData(await contribRes.json());
       if (trendRes.ok) setTrendData(await trendRes.json());
       
-      // Handle missing endpoint gracefully while we build it
+      // Handle Service Mix
       if (mixRes.ok) {
         setServiceMix(await mixRes.json());
       } else {
-        setServiceMix([
-          { service_type: 'Passport', count: 45 }, 
-          { service_type: 'PAN Card', count: 30 }, 
-          { service_type: 'Certificate', count: 15 }
-        ]);
+        setServiceMix([{ service_type: 'Passport', count: 45 }, { service_type: 'PAN Card', count: 30 }, { service_type: 'Certificate', count: 15 }]);
       }
+
+      // Handle Target Settings
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setTargetsEnabled(settingsData.targets_enabled || false);
+        setMonthlyTarget(settingsData.monthly_target || 250000);
+      } else {
+        setTargetsEnabled(false);
+        setMonthlyTarget(250000);
+      }
+
     } catch (err) {
       console.error(err);
     } finally {
@@ -1228,16 +1263,22 @@ const TeamManagement = () => {
                         </div>
 
                         {targetsEnabled && (
-                          <div className="space-y-4 animate-fade-in-up">
+                          <div className="space-y-4 animate-fade-in-up mb-6">
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Revenue Target (₹)</label>
                               <input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value))} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
                             </div>
-                            <button className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-indigo-700 transition w-full mt-2">
-                              Save Targets
-                            </button>
                           </div>
                         )}
+
+                        <button 
+                          onClick={handleSaveSettings} 
+                          disabled={savingSettings} 
+                          className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-indigo-700 transition w-full disabled:opacity-50 flex justify-center items-center"
+                        >
+                          {savingSettings ? <FiLoader className="animate-spin mr-2" /> : null}
+                          {savingSettings ? "Saving Settings..." : "Save Settings"}
+                        </button>
                       </div>
                     </div>
                   )}
