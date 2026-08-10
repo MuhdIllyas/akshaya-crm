@@ -441,7 +441,7 @@ const StaffTeamDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* ========== HEADER ========== */}
+      {/* ========== HEADER ========== */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -451,26 +451,35 @@ const StaffTeamDashboard = () => {
             <p className="text-gray-500 text-sm">Overview of your team's performance</p>
           </div>
           <div className="flex items-center gap-3 mt-3 md:mt-0 w-full md:w-auto">
-            {myTeams.length > 1 && (
-              <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 w-full md:w-auto">
-                <span className="text-sm text-gray-500 whitespace-nowrap">Viewing:</span>
+            
+            {/* THE TEAM SWITCHER */}
+            {myTeams.length > 0 ? (
+              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 w-full md:w-auto shadow-sm">
+                <span className="text-sm text-indigo-500 font-medium whitespace-nowrap">Viewing:</span>
                 <select 
                   value={selectedTeamId || ""} 
                   onChange={(e) => setSelectedTeamId(e.target.value)}
-                  className="bg-transparent font-semibold text-indigo-700 outline-none cursor-pointer w-full"
+                  className={`bg-transparent font-bold text-indigo-900 outline-none w-full ${myTeams.length > 1 ? 'cursor-pointer' : 'cursor-default appearance-none'}`}
+                  disabled={myTeams.length === 1}
                 >
                   {myTeams.map(team => (
                     <option key={team.id} value={team.id}>
-                      {team.name} {team.is_primary ? '(Primary)' : ''}
+                      {team.name}
                     </option>
                   ))}
                 </select>
               </div>
+            ) : (
+               <div className="text-sm font-medium text-amber-700 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200">
+                 No Teams Assigned
+               </div>
             )}
+
             <button
               onClick={fetchSpecificTeamData}
-              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+              className="p-2.5 bg-gray-100 rounded-lg hover:bg-gray-200 transition border border-gray-200"
               disabled={loading}
+              title="Refresh Dashboard"
             >
               <FiRefreshCw className={`h-5 w-5 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
             </button>
