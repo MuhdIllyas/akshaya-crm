@@ -10,6 +10,7 @@ import {
   LineElement, PointElement, Title, Tooltip, Legend, Filler, ArcElement
 } from "chart.js";
 import { Line, Doughnut } from "react-chartjs-2";
+import { toast } from "react-toastify";
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, LineElement, PointElement,
