@@ -251,8 +251,8 @@ const AchievementBadge = ({ achievement }) => (
 // ============ MAIN COMPONENT ============
 
 const StaffTeamDashboard = () => {
-  const [loading, setLoading] = useState(true);
   const [teamData, setTeamData] = useState(null);
+  const [teamStats, setTeamStats] = useState(null); 
   const [teamMembers, setTeamMembers] = useState([]);
   const [notices, setNotices] = useState([]);
   const [events, setEvents] = useState([]);
@@ -368,22 +368,6 @@ const StaffTeamDashboard = () => {
   useEffect(() => {
     fetchSpecificTeamData();
   }, [selectedTeamId, period]);
-
-  // Compute team performance stats
-  const teamStats = useMemo(() => {
-    if (!teamMembers || teamMembers.length === 0) return null;
-    const totalRevenue = teamMembers.reduce((sum, m) => sum + (m.revenue || 0), 0);
-    const totalApps = teamMembers.reduce((sum, m) => sum + (m.applications || 0), 0);
-    const avgRating = teamMembers.reduce((sum, m) => sum + (m.rating || 0), 0) / teamMembers.length;
-    return {
-      revenue: totalRevenue,
-      applications: totalApps,
-      avgRating: avgRating,
-      members: teamMembers.length,
-      target: teamData?.monthly_target || 300000,
-      goalCompletion: Math.round((totalRevenue / (teamData?.monthly_target || 300000)) * 100)
-    };
-  }, [teamMembers, teamData]);
 
   // My stats from myStats
   const myContribution = useMemo(() => {
