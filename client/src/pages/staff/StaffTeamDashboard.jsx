@@ -251,10 +251,30 @@ const AchievementBadge = ({ achievement }) => (
 // ============ MAIN COMPONENT ============
 
 const StaffTeamDashboard = () => {
+  // --- Core UI States ---
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [period, setPeriod] = useState('month');
+
+  // --- Identity & Team Switcher States ---
+  const [myUserId, setMyUserId] = useState(null);
+  const [myTeams, setMyTeams] = useState([]);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
+
+  // --- Live API Data States ---
   const [teamData, setTeamData] = useState(null);
-  const [teamStats, setTeamStats] = useState(null); 
+  const [teamStats, setTeamStats] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
-  const [notices, setNotices] = useState([]);
+  const [performanceTrend, setPerformanceTrend] = useState(null);
+  const [serviceMix, setServiceMix] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [notices, setNotices] = useState([]); // Keeps your old notice UI from breaking
+  
+  // --- Settings State ---
+  const [teamSettings, setTeamSettings] = useState({ targets_enabled: false, monthly_target: 250000 });
+
+  // --- Mock Data States (To be wired to backend later) ---
   const [events, setEvents] = useState([]);
   const [achievements, setAchievements] = useState([]);
   const [pendingWork, setPendingWork] = useState({});
@@ -263,14 +283,6 @@ const StaffTeamDashboard = () => {
   const [leaveStatus, setLeaveStatus] = useState([]);
   const [myStats, setMyStats] = useState(null);
   const [rank, setRank] = useState(null);
-  const [period, setPeriod] = useState('month');
-  const [performanceTrend, setPerformanceTrend] = useState(null);
-
-  // Target Settings & Team Switcher State
-  const [teamSettings, setTeamSettings] = useState({ targets_enabled: false, monthly_target: 250000 });
-  const [myTeams, setMyTeams] = useState([]);
-  const [selectedTeamId, setSelectedTeamId] = useState(null);
-  const [myUserId, setMyUserId] = useState(null);
 
   // 1. Initial Load: Get User Identity & Their Teams
   useEffect(() => {
