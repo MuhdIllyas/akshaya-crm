@@ -182,16 +182,30 @@ cron.schedule("* * * * *", async () => {
     timezone: "Asia/Kolkata"
 });
 
-// Run every day at 00:20 AM IST - Cleanup previous days' SMS/OTP logs
+// Run every day at 00:20 AM IST - Cleanup previous days' chat_messages (OTPs and Notifications)
 cron.schedule("20 0 * * *", async () => {
   try {
+    // 1. Bulletproof JS Time Calculation
+    const now = new Date();
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const istDate = new Date(utcTime + (330 * 60000));
+    
+    // 2. Format today's date in IST (Example: "2026-08-14")
+    const todayIST = istDate.toISOString().split('T')[0]; 
+    
+    // 3. Create a strict Postgres timestamp string for 00:00:00 IST today
+    const cutoffTimestamp = `${todayIST} 00:00:00+05:30`;
+
+    // 4. Delete specific OTP & text notification messages strictly older than midnight
     const result = await pool.query(`
-      DELETE FROM companion_sms_logs
-      WHERE (received_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
-    `);
-    console.log(`[CRON] 🗑️ Deleted ${result.rowCount} old SMS/OTP logs (cleared previous days' logs)`);
+      DELETE FROM chat_messages
+      WHERE (message LIKE '🚨 OTP RECEIVED 🚨%' OR message LIKE '📩 New Text Message%')
+      AND created_at < $1::timestamptz
+    `, [cutoffTimestamp]);
+
+    console.log(`[CRON] 🗑️ Deleted ${result.rowCount} old automated chat messages (older than ${cutoffTimestamp})`);
   } catch (err) {
-    console.error("[CRON] SMS log cleanup failed", err);
+    console.error("[CRON] Automated chat messages cleanup failed", err);
   }
 }, {
   timezone: "Asia/Kolkata"
