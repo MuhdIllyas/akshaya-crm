@@ -584,38 +584,33 @@ const StaffTeamDashboard = () => {
           </div>
         )}
 
-        {/* ========== TEAM PERFORMANCE ========== */}
+        {/* ========== TEAM PERFORMANCE (Real Data) ========== */}
         {teamStats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatCard
-              title="Revenue"
-              value={formatCurrency(teamStats.revenue)}
+              title="Expected Revenue"
+              value={formatCurrency(teamStats.expected_revenue)}
+              icon={FiTarget}
+              color="bg-indigo-600"
+            />
+            <StatCard
+              title="Collected Revenue"
+              value={formatCurrency(teamStats.collected_revenue)}
               icon={FiDollarSign}
               color="bg-emerald-600"
-              loading={false}
-              subtitle={`Goal: ${formatCurrency(teamStats.target)}`}
             />
             <StatCard
-              title="Completed Services"
-              value={teamStats.applications}
+              title="Team Expenses"
+              value={formatCurrency(teamStats.expense)}
               icon={FiBriefcase}
+              color="bg-rose-600"
+            />
+            <StatCard
+              title="Net Generated"
+              value={formatCurrency((teamStats.collected_revenue || 0) - (teamStats.department_charges || 0) - (teamStats.expense || 0))}
+              icon={FiTrendingUp}
               color="bg-blue-600"
-              loading={false}
-            />
-            <StatCard
-              title="Goal Completion"
-              value={`${teamStats.goalCompletion}%`}
-              icon={FiTarget}
-              color="bg-purple-600"
-              loading={false}
-            />
-            <StatCard
-              title="Average Rating"
-              value={teamStats.avgRating.toFixed(1) + '★'}
-              icon={FiStar}
-              color="bg-amber-600"
-              loading={false}
-              subtitle={`${teamStats.members} members`}
+              subtitle={`Margin: ${teamStats.collected_revenue > 0 ? ((((teamStats.collected_revenue || 0) - (teamStats.department_charges || 0) - (teamStats.expense || 0)) / teamStats.collected_revenue) * 100).toFixed(1) : 0}%`}
             />
           </div>
         )}
