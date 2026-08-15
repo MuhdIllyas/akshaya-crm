@@ -69,6 +69,35 @@ const formatTime = (time) => {
   });
 };
 
+const getDatesFromPeriod = (period) => {
+  const toDate = new Date();
+  let fromDate = new Date();
+
+  switch (period) {
+    case 'week':
+      fromDate.setDate(fromDate.getDate() - fromDate.getDay()); // Sunday of this week
+      break;
+    case 'month':
+      fromDate.setDate(1); // 1st of this month
+      break;
+    case 'quarter':
+      fromDate.setMonth(Math.floor(fromDate.getMonth() / 3) * 3);
+      fromDate.setDate(1); // 1st of current quarter
+      break;
+    case 'year':
+      fromDate.setMonth(0);
+      fromDate.setDate(1); // Jan 1st of this year
+      break;
+    default:
+      fromDate.setDate(1); // Default to month
+  }
+  
+  return { 
+    from: fromDate.toISOString().split('T')[0], 
+    to: toDate.toISOString().split('T')[0] 
+  };
+};
+
 // ============ SUB-COMPONENTS ============
 
 // Stat Card (reused from StaffPerformance)
@@ -279,23 +308,28 @@ const StaffTeamDashboard = () => {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
+      // Calculate the from and to dates based on the dropdown
+      const { from, to } = getDatesFromPeriod(period);
+
       // Set basic team info from the dropdown selection
       const currentTeam = myTeams.find(t => t.id === Number(selectedTeamId));
       if (currentTeam) setTeamData({ name: currentTeam.name, leader: 'Leader', member_count: currentTeam.member_count, status: 'active' });
 
-      // Run real API calls
-      const [summaryRes, trendRes, settingsRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/teams/analytics/summary?team_id=${selectedTeamId}`, { headers }),
+      // Run real API calls (Passing from & to into the analytics summary!)
+      const [summaryRes, contribRes, trendRes, mixRes, annRes, revRes, settingsRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/analytics/summary?team_id=${selectedTeamId}&from=${from}&to=${to}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/contribution`, { headers }),
         fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/trend?year=${new Date().getFullYear()}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/service-mix`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${import.meta.env.VITE_API_URL}/api/knowledge/hub/announcements?teamId=${selectedTeamId}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/reviews/team/${selectedTeamId}`, { headers }),
         fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/settings`, { headers }).catch(() => ({ ok: false }))
       ]);
 
       const summary = await summaryRes.json();
-      if (summary.teams && summary.teams.length > 0) {
-        const tStats = summary.teams[0];
-        // Inject into your existing mock structure for now
-        setTeamMembers([{ id: myUserId, name: 'You', role: 'Staff', applications: tStats.completed_services || 0, revenue: tStats.collected_revenue || 0 }]);
-      }
+      if (summary.teams && summary.teams.length > 0) setTeamStats(summary.teams[0]);
+      
+      setTeamMembers(await contribRes.json());
       
       if (trendRes.ok) {
         const trendData = await trendRes.json();
@@ -306,7 +340,15 @@ const StaffTeamDashboard = () => {
         });
       }
 
-      if (settingsRes.ok) {
+      if(mixRes.ok) setServiceMix(await mixRes.json());
+      setAnnouncements(await annRes.json());
+      
+      if(revRes.ok) {
+        const revData = await revRes.json();
+        setReviews(revData.reviews.slice(0, 5));
+      }
+
+      if(settingsRes.ok) {
         setTeamSettings(await settingsRes.json());
       } else {
         setTeamSettings({ targets_enabled: false, monthly_target: 250000 });
