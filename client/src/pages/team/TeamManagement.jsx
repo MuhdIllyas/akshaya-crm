@@ -72,6 +72,19 @@ const TargetProgressBar = ({ label, current, target }) => {
   );
 };
 
+const getDatesFromPeriod = (period) => {
+  const toDate = new Date();
+  let fromDate = new Date();
+  switch (period) {
+    case 'week': fromDate.setDate(fromDate.getDate() - fromDate.getDay()); break;
+    case 'month': fromDate.setDate(1); break;
+    case 'quarter': fromDate.setMonth(Math.floor(fromDate.getMonth() / 3) * 3); fromDate.setDate(1); break;
+    case 'year': fromDate.setMonth(0); fromDate.setDate(1); break;
+    default: fromDate.setDate(1);
+  }
+  return { from: fromDate.toISOString().split('T')[0], to: toDate.toISOString().split('T')[0] };
+};
+
 // ----------------------------------------------------------------------
 // TeamManagement Component
 // ----------------------------------------------------------------------
@@ -97,8 +110,9 @@ const TeamManagement = () => {
   const [financialData, setFinancialData] = useState({ teams: [], totals: {} });
 
   // Filters
+  const [period, setPeriod] = useState("month");
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all"); // all, centre, global
+  const [typeFilter, setTypeFilter] = useState("all"); 
   const [centreFilter, setCentreFilter] = useState("all");
 
   // Centres list (superadmin) + admin's own centre name
@@ -264,11 +278,12 @@ const TeamManagement = () => {
   };
 
   // ------------------------------------------------------------------
-  // Fetch financial summary
+  // Fetch financial summary (Now with Date Filters!)
   // ------------------------------------------------------------------
   const fetchFinancials = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/teams/analytics/summary`, {
+      const { from, to } = getDatesFromPeriod(period);
+      const response = await fetch(`${API_BASE}/api/teams/analytics/summary?from=${from}&to=${to}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (response.ok) {
@@ -343,13 +358,17 @@ const TeamManagement = () => {
     }
   };
 
-  // Initial load
+  // Initial load (Static data)
   useEffect(() => {
     fetchTeams();
     fetchCentres();
     fetchStaff();
-    fetchFinancials();
   }, []);
+
+  // Dynamic load (Fires when period changes)
+  useEffect(() => {
+    fetchFinancials();
+  }, [period]);
 
   // ------------------------------------------------------------------
   // Merge team list with financials
@@ -754,7 +773,24 @@ const TeamManagement = () => {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-4 mb-6">
+        <div className="flex flex-wrap items-center gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+          
+          {/* NEW DATE FILTER */}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <FiCalendar className="text-gray-500" />
+            <select 
+              value={period} 
+              onChange={(e) => setPeriod(e.target.value)} 
+              className="bg-transparent focus:outline-none text-gray-700 font-semibold cursor-pointer"
+            >
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="quarter">This Quarter</option>
+              <option value="year">This Year</option>
+            </select>
+          </div>
+
+          {/* Existing Filters */}
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
@@ -764,6 +800,7 @@ const TeamManagement = () => {
             <option value="centre">Centre Teams</option>
             <option value="global">Global Teams</option>
           </select>
+          
           {isSuperAdmin && (
             <select
               value={centreFilter}
