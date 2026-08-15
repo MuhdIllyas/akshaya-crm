@@ -483,8 +483,8 @@ const StaffTeamDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-      {/* ========== HEADER ========== */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        {/* ========== HEADER ========== */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <FiTeam className="text-indigo-600" />
@@ -492,34 +492,51 @@ const StaffTeamDashboard = () => {
             </h1>
             <p className="text-gray-500 text-sm">Overview of your team's performance</p>
           </div>
-          <div className="flex items-center gap-3 mt-3 md:mt-0 w-full md:w-auto">
+          
+          <div className="flex flex-wrap items-center gap-3 mt-4 lg:mt-0 w-full lg:w-auto">
             
+            {/* DATE / PERIOD FILTER */}
+            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 w-full sm:w-auto flex-1 sm:flex-none">
+              <FiCalendar className="text-gray-400" />
+              <select 
+                value={period} 
+                onChange={(e) => setPeriod(e.target.value)}
+                className="bg-transparent font-semibold text-gray-700 outline-none cursor-pointer w-full text-sm"
+              >
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+              </select>
+            </div>
+
             {/* THE TEAM SWITCHER */}
             {myTeams.length > 0 ? (
-              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 w-full md:w-auto shadow-sm">
+              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 w-full sm:w-auto flex-1 sm:flex-none shadow-sm">
                 <span className="text-sm text-indigo-500 font-medium whitespace-nowrap">Viewing:</span>
                 <select 
                   value={selectedTeamId || ""} 
                   onChange={(e) => setSelectedTeamId(e.target.value)}
-                  className={`bg-transparent font-bold text-indigo-900 outline-none w-full ${myTeams.length > 1 ? 'cursor-pointer' : 'cursor-default appearance-none'}`}
+                  className={`bg-transparent font-bold text-indigo-900 outline-none w-full text-sm ${myTeams.length > 1 ? 'cursor-pointer' : 'cursor-default appearance-none'}`}
                   disabled={myTeams.length === 1}
                 >
                   {myTeams.map(team => (
                     <option key={team.id} value={team.id}>
-                      {team.name}
+                      {team.name} {team.is_primary ? '(Primary)' : ''}
                     </option>
                   ))}
                 </select>
               </div>
             ) : (
-               <div className="text-sm font-medium text-amber-700 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200">
+               <div className="text-sm font-medium text-amber-700 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 w-full sm:w-auto text-center">
                  No Teams Assigned
                </div>
             )}
 
+            {/* REFRESH BUTTON */}
             <button
               onClick={fetchSpecificTeamData}
-              className="p-2.5 bg-gray-100 rounded-lg hover:bg-gray-200 transition border border-gray-200"
+              className="p-2.5 bg-gray-50 rounded-lg hover:bg-gray-200 transition border border-gray-200 flex-shrink-0"
               disabled={loading}
               title="Refresh Dashboard"
             >
