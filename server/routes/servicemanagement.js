@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
 import { logActivity } from "../utils/activityLogger.js";
 import { triggerNotification } from '../utils/communication/notificationEngine.js';
-import sendTokenUpdateWhatsApp from '../utils/sendTokenUpdateWhatsapp.js';
 import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
@@ -83,6 +82,53 @@ const sendPendingPaymentWhatsApp = async ({
   }
 };
 
+// ==========================================
+// TOKEN NOTIFICATION HELPER
+// ==========================================
+const sendTokenNotification = async ({
+  customerName,
+  phone,
+  tokenNumber,
+  status,
+  assignedStaff,
+  centreId
+}) => {
+  try {
+    // Map parameters exactly as your old 'campaigns' template expected them
+    const templateParams = [
+      customerName || 'Customer',
+      tokenNumber || 'N/A',
+      status || 'Pending',
+      assignedStaff || 'Waiting for Assignment'
+    ];
+
+    // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
+    const response = await triggerNotification({
+      eventKey: 'token_generated', // Ensure this key is mapped in communication_template_mappings
+      centreId: centreId,          
+      customerPhone: phone,
+      templateParams: templateParams
+    });
+
+    if (!response.success) {
+      throw new Error(response.error || response.reason);
+    }
+
+    console.log(`Token WhatsApp sent via Engine to ${phone}`);
+
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (err) {
+    console.error("Token WhatsApp failed:", err.message);
+    return {
+      success: false,
+      error: err.message,
+    };
+  }
+};
+
 // Get centres
 router.get('/centres', async (req, res) => {
   try {
@@ -96,50 +142,106 @@ router.get('/centres', async (req, res) => {
 
 // GET /api/servicemanagement/services
 router.get('/services', authenticateToken, async (req, res) => {
-  const { search } = req.query;
+  const { search, centre_id } = req.query;
   const client = await pool.connect();
   try {
+    // 🔥 SUPERADMIN MASTER VIEW (Returns raw services without centre configs)
+    if (req.user.role === 'superadmin' && !centre_id) {
+      let query = `
+        SELECT s.*, (
+          SELECT COALESCE(json_agg(sc), '[]'::json)
+          FROM (
+            SELECT sc.*, (
+              SELECT COALESCE(json_agg(rd), '[]'::json)
+              FROM required_documents rd
+              WHERE rd.sub_category_id = sc.id
+            ) AS required_documents
+            FROM subcategories sc
+            WHERE sc.service_id = s.id
+          ) sc
+        ) AS subcategories,
+        (
+          SELECT COALESCE(json_agg(rd), '[]'::json)
+          FROM required_documents rd
+          WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
+        ) AS required_documents
+        FROM services s
+      `;
+      let values = [];
+      if (search && (typeof search !== 'string' || search.length > 100)) {
+        return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
+      }
+      if (search) {
+        query += ` WHERE s.name ILIKE $1 OR s.description ILIKE $1
+                  OR EXISTS (
+                    SELECT 1 FROM subcategories sc
+                    WHERE sc.service_id = s.id AND sc.name ILIKE $1
+                  )`;
+        values = [`%${search}%`];
+      }
+      query += ' ORDER BY s.name ASC';
+      const result = await client.query(query, values);
+      return res.json(result.rows);
+    }
+
+    // 🔥 ADMIN/STAFF CONFIGURATION VIEW
+    const targetCentreId = centre_id ? parseInt(centre_id) : parseInt(req.user.centre_id);
+
     let query = `
-      SELECT s.*, (
-        SELECT COALESCE(json_agg(sc), '[]'::json)
-        FROM (
-          SELECT sc.*, (
-            SELECT COALESCE(json_agg(rd), '[]'::json)
-            FROM required_documents rd
-            WHERE rd.sub_category_id = sc.id
-          ) AS required_documents
-          FROM subcategories sc
-          WHERE sc.service_id = s.id
-        ) sc
-      ) AS subcategories,
-      (
-        SELECT COALESCE(json_agg(rd), '[]'::json)
-        FROM required_documents rd
-        WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
-      ) AS required_documents
+      SELECT 
+        s.id, s.name, s.description, s.website, s.status, s.requires_workflow, s.has_expiry,
+        sc.wallet_id,
+        COALESCE(sc.department_charge, 0) AS department_charges,
+        COALESCE(sc.service_charge, 0) AS service_charges,
+        COALESCE(sc.requires_wallet, s.requires_wallet) AS requires_wallet,
+        (
+          SELECT COALESCE(json_agg(sub), '[]'::json)
+          FROM (
+            SELECT 
+              scat.id, scat.name, scat.service_id,
+              subconf.wallet_id,
+              COALESCE(subconf.department_charge, 0) AS department_charges,
+              COALESCE(subconf.service_charge, 0) AS service_charges,
+              COALESCE(subconf.requires_wallet, false) AS requires_wallet,
+              (
+                SELECT COALESCE(json_agg(rd), '[]'::json)
+                FROM required_documents rd
+                WHERE rd.sub_category_id = scat.id
+              ) AS required_documents
+            FROM subcategories scat
+            -- 🔥 LEFT JOIN: Shows subcategories even if not configured yet
+            LEFT JOIN subcategory_configurations subconf ON scat.id = subconf.subcategory_id AND subconf.centre_id = $1
+            WHERE scat.service_id = s.id 
+              AND (subconf.is_enabled = true OR subconf.is_enabled IS NULL)
+          ) sub
+        ) AS subcategories,
+        (
+          SELECT COALESCE(json_agg(rd), '[]'::json)
+          FROM required_documents rd
+          WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
+        ) AS required_documents
       FROM services s
+      -- 🔥 LEFT JOIN: Shows master services to new centres so they can configure them!
+      LEFT JOIN service_configurations sc ON s.id = sc.service_id AND sc.centre_id = $1
+      WHERE s.status = 'active' AND (sc.is_enabled = true OR sc.is_enabled IS NULL)
     `;
-    let values = [];
-    if (search && (typeof search !== 'string' || search.length > 100)) {
-      return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
-    }
+
+    let values = [targetCentreId];
+
     if (search) {
-      query += ` WHERE s.name ILIKE $1 OR s.description ILIKE $1
+      query += ` AND (s.name ILIKE $2 OR s.description ILIKE $2
                 OR EXISTS (
-                  SELECT 1 FROM subcategories sc
-                  WHERE sc.service_id = s.id AND sc.name ILIKE $1
-                )`;
-      values = [`%${search}%`];
+                  SELECT 1 FROM subcategories scat
+                  WHERE scat.service_id = s.id AND scat.name ILIKE $2
+                ))`;
+      values.push(`%${search}%`);
     }
+
     const result = await client.query(query, values);
+    
     const services = result.rows.map(service => ({
       ...service,
-      wallet_name: null,
-      balance: null,
-      wallet_type: null,
-      is_shared: null,
-      wallet_status: null,
-      assigned_staff_id: null
+      wallet_name: null, balance: null, wallet_type: null, is_shared: null, wallet_status: null, assigned_staff_id: null
     }));
 
     for (let service of services) {
@@ -173,77 +275,91 @@ router.get('/workflow_services', authenticateToken, async (req, res) => {
   const { search } = req.query;
   const client = await pool.connect();
   try {
+    const targetCentreId = req.query.centre_id ? parseInt(req.query.centre_id) : parseInt(req.user.centre_id);
+
     let query = `
-      SELECT s.*, 
-      
-      -- 🔥 NEW: COUNTS OPEN DISCUSSIONS FOR THIS SERVICE
-      (
-        SELECT COUNT(*) 
-        FROM knowledge_discussions kd
-        JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
-        WHERE kw.service_id = s.id 
-          AND (kd.status != 'solved' OR kd.status IS NULL) 
-          AND kd.deleted_at IS NULL
-      ) AS open_discussions,
+      SELECT 
+        s.id, s.name, s.description, s.website, s.status, s.requires_workflow, s.has_expiry,
+        sc.wallet_id,
+        COALESCE(sc.department_charge, 0) AS department_charges,
+        COALESCE(sc.service_charge, 0) AS service_charges,
+        COALESCE(sc.requires_wallet, false) AS requires_wallet,
+        
+        -- PRESERVED: COUNTS OPEN DISCUSSIONS FOR THIS SERVICE
+        (
+          SELECT COUNT(*) 
+          FROM knowledge_discussions kd
+          JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+          WHERE kw.service_id = s.id 
+            AND (kd.status != 'solved' OR kd.status IS NULL) 
+            AND kd.deleted_at IS NULL
+        ) AS open_discussions,
 
-      -- 🔥 NEW: COUNTS SOLVED DISCUSSIONS FOR THIS SERVICE
-      (
-        SELECT COUNT(*) 
-        FROM knowledge_discussions kd
-        JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
-        WHERE kw.service_id = s.id 
-          AND kd.status = 'solved' 
-          AND kd.deleted_at IS NULL
-      ) AS closed_discussions,
+        -- PRESERVED: COUNTS SOLVED DISCUSSIONS FOR THIS SERVICE
+        (
+          SELECT COUNT(*) 
+          FROM knowledge_discussions kd
+          JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+          WHERE kw.service_id = s.id 
+            AND kd.status = 'solved' 
+            AND kd.deleted_at IS NULL
+        ) AS closed_discussions,
 
-      (
-        SELECT COALESCE(json_agg(sc), '[]'::json)
-        FROM (
-          SELECT sc.*, (
-            SELECT COALESCE(json_agg(rd), '[]'::json)
-            FROM required_documents rd
-            WHERE rd.sub_category_id = sc.id
-          ) AS required_documents
-          FROM subcategories sc
-          WHERE sc.service_id = s.id
-        ) sc
-      ) AS subcategories,
-      (
-        SELECT COALESCE(json_agg(rd), '[]'::json)
-        FROM required_documents rd
-        WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
-      ) AS required_documents
+        (
+          SELECT COALESCE(json_agg(sub), '[]'::json)
+          FROM (
+            SELECT 
+              scat.id, scat.name, scat.service_id,
+              subconf.wallet_id,
+              COALESCE(subconf.department_charge, 0) AS department_charges,
+              COALESCE(subconf.service_charge, 0) AS service_charges,
+              COALESCE(subconf.requires_wallet, false) AS requires_wallet,
+              (
+                SELECT COALESCE(json_agg(rd), '[]'::json)
+                FROM required_documents rd
+                WHERE rd.sub_category_id = scat.id
+              ) AS required_documents
+            FROM subcategories scat
+            JOIN subcategory_configurations subconf ON scat.id = subconf.subcategory_id
+            WHERE scat.service_id = s.id 
+              AND subconf.centre_id = $1 
+              AND subconf.is_enabled = true
+          ) sub
+        ) AS subcategories,
+        (
+          SELECT COALESCE(json_agg(rd), '[]'::json)
+          FROM required_documents rd
+          WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
+        ) AS required_documents
       FROM services s
-      WHERE s.requires_workflow = true
+      JOIN service_configurations sc ON s.id = sc.service_id
+      WHERE s.requires_workflow = true 
+        AND sc.centre_id = $1 
+        AND sc.is_enabled = true
     `;
     
-    let values = [];
+    let values = [targetCentreId];
+    
     if (search && (typeof search !== 'string' || search.length > 100)) {
       return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
     }
     
     if (search) {
-      query += ` AND (s.name ILIKE $1 OR s.description ILIKE $1
+      query += ` AND (s.name ILIKE $2 OR s.description ILIKE $2
                 OR EXISTS (
-                  SELECT 1 FROM subcategories sc
-                  WHERE sc.service_id = s.id AND sc.name ILIKE $1
+                  SELECT 1 FROM subcategories scat
+                  WHERE scat.service_id = s.id AND scat.name ILIKE $2
                 ))`;
-      values = [`%${search}%`];
+      values.push(`%${search}%`);
     }
     
     const result = await client.query(query, values);
     
     const services = result.rows.map(service => ({
       ...service,
-      // 🔥 NEW: Map the Discussion counts as integers!
       open_discussions: parseInt(service.open_discussions, 10) || 0,
       closed_discussions: parseInt(service.closed_discussions, 10) || 0,
-      wallet_name: null,
-      balance: null,
-      wallet_type: null,
-      is_shared: null,
-      wallet_status: null,
-      assigned_staff_id: null
+      wallet_name: null, balance: null, wallet_type: null, is_shared: null, wallet_status: null, assigned_staff_id: null
     }));
 
     for (let service of services) {
@@ -274,17 +390,9 @@ router.get('/workflow_services', authenticateToken, async (req, res) => {
 // POST /api/servicemanagement/services
 router.post('/services', authenticateToken, async (req, res) => {
   const {
-    name,
-    description,
-    wallet_id,
-    website,
-    status,
-    department_charges,
-    service_charges,
-    requires_wallet,
-    requires_workflow,
-    requiredDocuments,
-    has_expiry
+    name, description, wallet_id, website, status,
+    department_charges, service_charges, requires_wallet,
+    requires_workflow, requiredDocuments, has_expiry
   } = req.body;
 
   const client = await pool.connect();
@@ -298,7 +406,7 @@ router.post('/services', authenticateToken, async (req, res) => {
     let finalWalletId = null;
     if (req.user.role === 'superadmin') {
       if (wallet_id) {
-        throw new Error('Superadmins cannot set wallet_id for services');
+        throw new Error('Superadmins cannot set wallet_id for services at the master level');
       }
     } else if (requires_wallet && wallet_id) {
       const walletQuery = `SELECT id, centre_id FROM wallets WHERE id = $1`;
@@ -316,33 +424,35 @@ router.post('/services', authenticateToken, async (req, res) => {
       throw new Error('Wallet ID should not be provided when requires_wallet is false');
     }
 
+    // 🔥 1. Insert into Master Table (No Financials for true architecture, but legacy columns kept for safety)
     const serviceQuery = `
-      INSERT INTO services (name, description, wallet_id, website, status, department_charges, service_charges, requires_wallet, requires_workflow, has_expiry, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10 , NOW(), NOW())
+      INSERT INTO services (name, description, website, status, requires_workflow, has_expiry, created_at, updated_at, department_charges, service_charges, requires_wallet, wallet_id)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), $7, $8, $9, $10)
       RETURNING *
     `;
     const serviceValues = [
-      name,
-      description,
-      finalWalletId,
-      website,
-      status,
-      department_charges,
-      service_charges,
-      requires_wallet || false,
-      requires_workflow !== false,
-      has_expiry || false
+      name, description, website, status,
+      requires_workflow !== false, has_expiry || false,
+      department_charges, service_charges, requires_wallet || false, finalWalletId
     ];
     const serviceResult = await client.query(serviceQuery, serviceValues);
     const newService = serviceResult.rows[0];
 
+    // 🔥 2. Insert into Configuration Table ONLY if not Superadmin
+    if (req.user.role !== 'superadmin') {
+      const configQuery = `
+        INSERT INTO service_configurations (centre_id, service_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+      `;
+      await client.query(configQuery, [
+        req.user.centre_id, newService.id, finalWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
+    }
+
+    // 3. Insert Documents
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `
-        INSERT INTO required_documents (service_id, document_name)
-        VALUES ($1, $2)
-        RETURNING *
-      `;
+      const docQuery = `INSERT INTO required_documents (service_id, document_name) VALUES ($1, $2) RETURNING *`;
       for (const doc of requiredDocuments) {
         const docResult = await client.query(docQuery, [newService.id, doc]);
         documents.push(docResult.rows[0]);
@@ -351,39 +461,29 @@ router.post('/services', authenticateToken, async (req, res) => {
 
     const auditDetails = `Created service ${name} by ${req.user.role}`;
     await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
       ['Service Created', req.user.username, auditDetails, req.user.centre_id]
     );
 
     await client.query('COMMIT');
 
+    // Fetch Wallet Details for Frontend
     let wallet = null;
-    if (newService.wallet_id) {
+    if (finalWalletId) {
       const walletQuery = `SELECT * FROM wallets WHERE id = $1`;
-      const walletResult = await client.query(walletQuery, [newService.wallet_id]);
+      const walletResult = await client.query(walletQuery, [finalWalletId]);
       wallet = walletResult.rows[0];
     }
 
-    const subcategoriesQuery = `
-      SELECT *, (
-        SELECT COALESCE(json_agg(rd), '[]'::json)
-        FROM required_documents rd
-        WHERE rd.sub_category_id = subcategories.id
-      ) AS required_documents
-      FROM subcategories WHERE service_id = $1
-    `;
-    const subcategoriesResult = await client.query(subcategoriesQuery, [newService.id]);
-
     res.status(201).json({
       ...newService,
-      wallet_name: wallet?.name,
-      balance: wallet?.balance,
-      wallet_type: wallet?.wallet_type,
-      is_shared: wallet?.is_shared,
-      wallet_status: wallet?.status,
-      assigned_staff_id: wallet?.assigned_staff_id,
-      subcategories: subcategoriesResult.rows,
+      wallet_id: finalWalletId, // Override for frontend
+      department_charges: department_charges, // Override for frontend
+      service_charges: service_charges, // Override for frontend
+      requires_wallet: requires_wallet, // Override for frontend
+      wallet_name: wallet?.name, balance: wallet?.balance, wallet_type: wallet?.wallet_type,
+      is_shared: wallet?.is_shared, wallet_status: wallet?.status, assigned_staff_id: wallet?.assigned_staff_id,
+      subcategories: [], // Brand new service has no subcategories yet
       required_documents: documents
     });
   } catch (err) {
@@ -399,17 +499,9 @@ router.post('/services', authenticateToken, async (req, res) => {
 router.put('/services/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const {
-    name,
-    description,
-    wallet_id,
-    website,
-    status,
-    department_charges,
-    service_charges,
-    requires_wallet,
-    requires_workflow,
-    requiredDocuments,
-    has_expiry
+    name, description, wallet_id, website, status,
+    department_charges, service_charges, requires_wallet,
+    requires_workflow, requiredDocuments, has_expiry
   } = req.body;
 
   const client = await pool.connect();
@@ -421,24 +513,16 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const serviceCheck = await client.query('SELECT * FROM services WHERE id = $1', [id]);
-    if (serviceCheck.rows.length === 0) {
-      throw new Error('Service not found');
-    }
+    if (serviceCheck.rows.length === 0) throw new Error('Service not found');
 
     let finalWalletId = null;
     if (req.user.role === 'superadmin') {
-      if (wallet_id) {
-        throw new Error('Superadmins cannot set wallet_id for services');
-      }
+      if (wallet_id) throw new Error('Superadmins cannot set wallet_id for services');
     } else if (requires_wallet && wallet_id) {
       const walletQuery = `SELECT id, centre_id FROM wallets WHERE id = $1`;
       const walletResult = await client.query(walletQuery, [wallet_id]);
-      if (walletResult.rows.length === 0) {
-        throw new Error('Invalid wallet selected');
-      }
-      if (walletResult.rows[0].centre_id !== req.user.centre_id) {
-        throw new Error('Wallet does not belong to your centre');
-      }
+      if (walletResult.rows.length === 0) throw new Error('Invalid wallet selected');
+      if (walletResult.rows[0].centre_id !== req.user.centre_id) throw new Error('Wallet does not belong to your centre');
       finalWalletId = wallet_id;
     } else if (requires_wallet && !wallet_id) {
       throw new Error('Wallet ID is required when requires_wallet is true for admins');
@@ -446,42 +530,61 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
       throw new Error('Wallet ID should not be provided when requires_wallet is false');
     }
 
-    const serviceQuery = `
-      UPDATE services
-      SET name = $1, description = $2, wallet_id = $3, website = $4, status = $5,
-          department_charges = $6, service_charges = $7, requires_wallet = $8, requires_workflow = $9, has_expiry = $10,
-          updated_at = NOW()
-      WHERE id = $11
-      RETURNING *
-    `;
-    const serviceValues = [
-      name,
-      description,
-      finalWalletId,
-      website,
-      status,
-      department_charges,
-      service_charges,
-      requires_wallet || false,
-      requires_workflow !== false,
-      has_expiry || false,
-      id
-    ];
-    const serviceResult = await client.query(serviceQuery, serviceValues);
-    if (serviceResult.rows.length === 0) {
-      throw new Error('Service not found');
-    }
-    const updatedService = serviceResult.rows[0];
+    let updatedService;
 
-    await client.query('DELETE FROM required_documents WHERE service_id = $1 AND sub_category_id IS NULL', [id]);
-
-    let documents = [];
-    if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `
-        INSERT INTO required_documents (service_id, document_name)
-        VALUES ($1, $2)
+    // 🔥 1. Update Master Table (ONLY IF SUPERADMIN)
+    if (req.user.role === 'superadmin') {
+      const serviceQuery = `
+        UPDATE services
+        SET name = $1, description = $2, website = $3, status = $4, requires_workflow = $5, has_expiry = $6,
+            department_charges = $7, service_charges = $8, requires_wallet = $9, wallet_id = $10,
+            updated_at = NOW()
+        WHERE id = $11
         RETURNING *
       `;
+      const serviceValues = [
+        name, description, website, status, requires_workflow !== false, has_expiry || false,
+        department_charges, service_charges, requires_wallet || false, finalWalletId, id
+      ];
+      const serviceResult = await client.query(serviceQuery, serviceValues);
+      updatedService = serviceResult.rows[0];
+    } else {
+      // Centre Admins cannot alter the Global Master Name/Description. 
+      // We just fetch the existing data to return to the frontend.
+      const serviceResult = await client.query('SELECT * FROM services WHERE id = $1', [id]);
+      updatedService = serviceResult.rows[0];
+    }
+
+    // 🔥 2. Upsert Configuration Table for this specific centre
+    if (req.user.role !== 'superadmin') {
+      const configQuery = `
+        INSERT INTO service_configurations (centre_id, service_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+        ON CONFLICT (centre_id, service_id) 
+        DO UPDATE SET 
+            wallet_id = EXCLUDED.wallet_id,
+            service_charge = EXCLUDED.service_charge,
+            department_charge = EXCLUDED.department_charge,
+            requires_wallet = EXCLUDED.requires_wallet,
+            updated_at = NOW()
+      `;
+      await client.query(configQuery, [
+        req.user.centre_id, id, finalWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
+
+      // 🔥 3. CASCADE PATCH: Update inherited wallet for all subcategories
+      await client.query(`
+        UPDATE subcategory_configurations 
+        SET wallet_id = $1, updated_at = NOW() 
+        WHERE centre_id = $2 AND subcategory_id IN (SELECT id FROM subcategories WHERE service_id = $3)
+      `, [finalWalletId, req.user.centre_id, id]);
+    }
+
+    // 4. Update Documents
+    await client.query('DELETE FROM required_documents WHERE service_id = $1 AND sub_category_id IS NULL', [id]);
+    let documents = [];
+    if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
+      const docQuery = `INSERT INTO required_documents (service_id, document_name) VALUES ($1, $2) RETURNING *`;
       for (const doc of requiredDocuments) {
         const docResult = await client.query(docQuery, [id, doc]);
         documents.push(docResult.rows[0]);
@@ -490,25 +593,24 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
 
     const auditDetails = `Updated service ${name} by ${req.user.role}`;
     await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
       ['Service Updated', req.user.username, auditDetails, req.user.centre_id]
     );
 
     await client.query('COMMIT');
 
     let wallet = null;
-    if (updatedService.wallet_id) {
+    if (finalWalletId) {
       const walletQuery = `SELECT * FROM wallets WHERE id = $1`;
-      const walletResult = await client.query(walletQuery, [updatedService.wallet_id]);
+      const walletResult = await client.query(walletQuery, [finalWalletId]);
       wallet = walletResult.rows[0];
     }
 
+    // Fetch existing subcategories to return to frontend
     const subcategoriesQuery = `
       SELECT *, (
         SELECT COALESCE(json_agg(rd), '[]'::json)
-        FROM required_documents rd
-        WHERE rd.sub_category_id = subcategories.id
+        FROM required_documents rd WHERE rd.sub_category_id = subcategories.id
       ) AS required_documents
       FROM subcategories WHERE service_id = $1
     `;
@@ -516,14 +618,13 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
 
     res.json({
       ...updatedService,
-      wallet_name: wallet?.name,
-      balance: wallet?.balance,
-      wallet_type: wallet?.wallet_type,
-      is_shared: wallet?.is_shared,
-      wallet_status: wallet?.status,
-      assigned_staff_id: wallet?.assigned_staff_id,
-      subcategories: subcategoriesResult.rows,
-      required_documents: documents
+      wallet_id: finalWalletId,
+      department_charges: department_charges,
+      service_charges: service_charges,
+      requires_wallet: requires_wallet,
+      wallet_name: wallet?.name, balance: wallet?.balance, wallet_type: wallet?.wallet_type,
+      is_shared: wallet?.is_shared, wallet_status: wallet?.status, assigned_staff_id: wallet?.assigned_staff_id,
+      subcategories: subcategoriesResult.rows, required_documents: documents
     });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -580,15 +681,13 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
     await client.query('BEGIN');
 
     const serviceCheck = await client.query('SELECT requires_wallet FROM services WHERE id = $1', [id]);
-    if (serviceCheck.rows.length === 0) {
-      throw new Error('Service not found');
-    }
-    const serviceRequiresWallet = serviceCheck.rows[0].requires_wallet;
-
-    if (requires_wallet !== serviceRequiresWallet) {
+    if (serviceCheck.rows.length === 0) throw new Error('Service not found');
+    
+    if (requires_wallet !== serviceCheck.rows[0].requires_wallet) {
       throw new Error('Subcategory requires_wallet must match the parent service');
     }
 
+    // 🔥 1. Insert into Master Table
     const subcategoryQuery = `
       INSERT INTO subcategories (service_id, name, department_charges, service_charges, requires_wallet, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
@@ -598,13 +697,27 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
     const subcategoryResult = await client.query(subcategoryQuery, subcategoryValues);
     const newSubcategory = subcategoryResult.rows[0];
 
+    // 🔥 2 & 3. Fetch Parent's Config and Insert Sub Config ONLY if not Superadmin
+    if (req.user.role !== 'superadmin') {
+      const parentConfigRes = await client.query(`
+        SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2
+      `, [id, req.user.centre_id]);
+      
+      const inheritedWalletId = parentConfigRes.rows.length > 0 ? parentConfigRes.rows[0].wallet_id : null;
+
+      const subConfigQuery = `
+        INSERT INTO subcategory_configurations (centre_id, subcategory_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+      `;
+      await client.query(subConfigQuery, [
+        req.user.centre_id, newSubcategory.id, inheritedWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
+    }
+
+    // 4. Insert Documents
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `
-        INSERT INTO required_documents (service_id, sub_category_id, document_name)
-        VALUES ($1, $2, $3)
-        RETURNING *
-      `;
+      const docQuery = `INSERT INTO required_documents (service_id, sub_category_id, document_name) VALUES ($1, $2, $3) RETURNING *`;
       for (const doc of requiredDocuments) {
         const docResult = await client.query(docQuery, [id, newSubcategory.id, doc]);
         documents.push(docResult.rows[0]);
@@ -613,13 +726,11 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
 
     const auditDetails = `Added subcategory ${name} to service ID ${id} by ${req.user.role}`;
     await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
       ['Subcategory Created', req.user.username, auditDetails, req.user.centre_id]
     );
 
     await client.query('COMMIT');
-
     res.status(201).json({ ...newSubcategory, required_documents: documents });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -677,32 +788,54 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
     await client.query('BEGIN');
 
     const subCheck = await client.query('SELECT * FROM subcategories WHERE id = $1 AND service_id = $2', [subId, id]);
-    if (subCheck.rows.length === 0) {
-      throw new Error('Subcategory not found');
-    }
+    if (subCheck.rows.length === 0) throw new Error('Subcategory not found');
 
-    // Update subcategory
-    const updateQuery = `
-      UPDATE subcategories 
-      SET name = $1, department_charges = $2, service_charges = $3, requires_wallet = $4, updated_at = NOW()
-      WHERE id = $5 AND service_id = $6
-      RETURNING *
-    `;
-    const subResult = await client.query(updateQuery, [
-      name, department_charges, service_charges, requires_wallet || false, subId, id
-    ]);
-    const updatedSubcategory = subResult.rows[0];
+    let updatedSubcategory;
 
-    // Replace required documents
-    await client.query('DELETE FROM required_documents WHERE sub_category_id = $1', [subId]);
-
-    let documents = [];
-    if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `
-        INSERT INTO required_documents (service_id, sub_category_id, document_name)
-        VALUES ($1, $2, $3)
+    // 🔥 1. Update Master Table (ONLY IF SUPERADMIN)
+    if (req.user.role === 'superadmin') {
+      const updateQuery = `
+        UPDATE subcategories 
+        SET name = $1, department_charges = $2, service_charges = $3, requires_wallet = $4, updated_at = NOW()
+        WHERE id = $5 AND service_id = $6
         RETURNING *
       `;
+      const subResult = await client.query(updateQuery, [
+        name, department_charges, service_charges, requires_wallet || false, subId, id
+      ]);
+      updatedSubcategory = subResult.rows[0];
+    } else {
+      const subResult = await client.query('SELECT * FROM subcategories WHERE id = $1 AND service_id = $2', [subId, id]);
+      updatedSubcategory = subResult.rows[0];
+    }
+
+    // 🔥 2 & 3. Upsert Configuration Table (ONLY IF NOT SUPERADMIN)
+    if (req.user.role !== 'superadmin') {
+      const parentConfigRes = await client.query(`
+        SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2
+      `, [id, req.user.centre_id]);
+      const inheritedWalletId = parentConfigRes.rows.length > 0 ? parentConfigRes.rows[0].wallet_id : null;
+
+      const subConfigQuery = `
+        INSERT INTO subcategory_configurations (centre_id, subcategory_id, wallet_id, service_charge, department_charge, requires_wallet, is_enabled, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+        ON CONFLICT (centre_id, subcategory_id)
+        DO UPDATE SET 
+            service_charge = EXCLUDED.service_charge,
+            department_charge = EXCLUDED.department_charge,
+            requires_wallet = EXCLUDED.requires_wallet,
+            updated_at = NOW()
+      `;
+      await client.query(subConfigQuery, [
+        req.user.centre_id, subId, inheritedWalletId, service_charges, department_charges, requires_wallet || false
+      ]);
+    }
+
+    // 4. Replace required documents
+    await client.query('DELETE FROM required_documents WHERE sub_category_id = $1', [subId]);
+    let documents = [];
+    if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
+      const docQuery = `INSERT INTO required_documents (service_id, sub_category_id, document_name) VALUES ($1, $2, $3) RETURNING *`;
       for (const doc of requiredDocuments) {
         const docResult = await client.query(docQuery, [id, subId, doc]);
         documents.push(docResult.rows[0]);
@@ -711,8 +844,7 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
 
     const auditDetails = `Updated subcategory ${name} in service ID ${id} by ${req.user.role}`;
     await client.query(
-      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
       ['Subcategory Updated', req.user.username, auditDetails, req.user.centre_id]
     );
 
@@ -751,33 +883,50 @@ router.get('/wallets', authenticateToken, async (req, res) => {
 router.get('/categories', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
+    // 🔥 Handle Superadmin impersonating a centre, fallback to user's centre
+    const targetCentreId = req.query.centre_id ? parseInt(req.query.centre_id) : parseInt(req.user.centre_id);
+
     const query = `
       SELECT 
-        s.id, s.name, s.description, s.wallet_id, s.website, s.status,
-        COALESCE(s.department_charges, 0) AS department_charges,
-        COALESCE(s.service_charges, 0) AS service_charges,
-        COALESCE(s.requires_wallet, false) AS requires_wallet,
-        COALESCE(s.requires_workflow, false) AS requires_workflow,
-        COALESCE(s.has_expiry, false) AS has_expiry,
+        s.id, s.name, s.description, s.website, s.status,
+        s.requires_workflow, s.has_expiry,
+        sc.wallet_id, 
+        COALESCE(sc.department_charge, 0) AS department_charges,
+        COALESCE(sc.service_charge, 0) AS service_charges,
+        COALESCE(sc.requires_wallet, s.requires_wallet) AS requires_wallet,
+        
         (SELECT COALESCE(json_agg(rd), '[]'::json)
          FROM required_documents rd
          WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL) AS required_documents,
-        (SELECT COALESCE(json_agg(sc), '[]'::json)
-         FROM (SELECT sc.id, sc.name, sc.service_id,
-                      COALESCE(sc.department_charges, 0) AS department_charges,
-                      COALESCE(sc.service_charges, 0) AS service_charges,
-                      COALESCE(sc.requires_wallet, false) AS requires_wallet,
-                      (SELECT COALESCE(json_agg(rd2), '[]'::json)
-                       FROM required_documents rd2
-                       WHERE rd2.sub_category_id = sc.id) AS required_documents
-               FROM subcategories sc
-               WHERE sc.service_id = s.id) sc) AS subcategories
+         
+        (SELECT COALESCE(json_agg(sub), '[]'::json)
+         FROM (
+            SELECT 
+              sub.id, sub.name, sub.service_id,
+              subconf.wallet_id,
+              COALESCE(subconf.department_charge, 0) AS department_charges,
+              COALESCE(subconf.service_charge, 0) AS service_charges,
+              COALESCE(subconf.requires_wallet, false) AS requires_wallet,
+              (SELECT COALESCE(json_agg(rd2), '[]'::json)
+               FROM required_documents rd2
+               WHERE rd2.sub_category_id = sub.id) AS required_documents
+            FROM subcategories sub
+            JOIN subcategory_configurations subconf ON sub.id = subconf.subcategory_id
+            WHERE sub.service_id = s.id 
+              AND subconf.centre_id = $1 
+              AND subconf.is_enabled = true
+         ) sub) AS subcategories
+         
       FROM services s
-      WHERE s.status = 'active'
+      JOIN service_configurations sc ON s.id = sc.service_id
+      WHERE s.status = 'active' 
+        AND sc.centre_id = $1 
+        AND sc.is_enabled = true
       ORDER BY s.name ASC
     `;
 
-    const result = await client.query(query);
+    const result = await client.query(query, [targetCentreId]);
+    
     const categories = result.rows.map(category => ({
       id: category.id,
       name: category.name,
@@ -795,6 +944,7 @@ router.get('/categories', authenticateToken, async (req, res) => {
         id: sub.id,
         name: sub.name,
         service_id: sub.service_id,
+        wallet_id: sub.wallet_id, // 🔥 Explicitly passing the subcategory's wallet
         department_charges: parseFloat(sub.department_charges),
         service_charges: parseFloat(sub.service_charges),
         requires_wallet: sub.requires_wallet,
@@ -820,7 +970,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
     let query = `
       SELECT se.*, se.is_edited, se.customer_service_id, se.work_source,
              sc.name AS subcategory_name,
-             s.wallet_id AS service_wallet_id,
+             se.service_wallet_id AS service_wallet_id,
              s.name AS service_name,
              tr.id AS tracking_id,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
@@ -1037,7 +1187,7 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const result = await client.query(`
-      SELECT se.*, sc.name AS subcategory_name, s.wallet_id AS service_wallet_id, s.name AS service_name,
+      SELECT se.*, sc.name AS subcategory_name, se.service_wallet_id AS service_wallet_id, s.name AS service_name,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
@@ -1265,41 +1415,66 @@ router.post('/entry', authenticateToken, async (req, res) => {
     let serviceName = 'Quick Service', subcategoryName = null, resolvedServiceWalletId = null;
 
     if (!isQuickEntry) {
+      // 1. Fetch Master Data for Name and Expiry
       const categoryResult = await client.query(
-        'SELECT id, wallet_id, name, has_expiry FROM services WHERE id = $1',
+        'SELECT id, name, has_expiry FROM services WHERE id = $1',
         [parseInt(finalCategoryId)]
       );
       if (!categoryResult.rows.length) throw new Error(`Category ID ${finalCategoryId} not found`);
       const service = categoryResult.rows[0];
       serviceName = service.name;
-      resolvedServiceWalletId = service.wallet_id;
+      
       if (service.has_expiry && (!expiryDate || isNaN(Date.parse(expiryDate)))) {
         throw new Error('expiryDate required for this service');
       }
-      const subcategoryResult = await client.query(
-        'SELECT name FROM subcategories WHERE id = $1 AND service_id = $2',
-        [parseInt(finalSubcategoryId), parseInt(finalCategoryId)]
-      );
-      if (!subcategoryResult.rows.length) throw new Error(`Subcategory ID ${finalSubcategoryId} not found`);
-      subcategoryName = subcategoryResult.rows[0].name;
+
+      // 🔥 2. Fetch Wallet from Configurations (Subcategory overrides Service)
+      if (finalSubcategoryId) {
+        const subResult = await client.query(`
+          SELECT scat.name, sconf.wallet_id 
+          FROM subcategories scat
+          JOIN subcategory_configurations sconf ON scat.id = sconf.subcategory_id
+          WHERE scat.id = $1 AND sconf.centre_id = $2
+        `, [parseInt(finalSubcategoryId), req.user.centre_id]);
+        
+        if (!subResult.rows.length) throw new Error(`Subcategory ID ${finalSubcategoryId} configuration missing`);
+        subcategoryName = subResult.rows[0].name;
+        resolvedServiceWalletId = subResult.rows[0].wallet_id;
+      } else {
+        const sConfResult = await client.query(`
+          SELECT wallet_id 
+          FROM service_configurations 
+          WHERE service_id = $1 AND centre_id = $2
+        `, [parseInt(finalCategoryId), req.user.centre_id]);
+        
+        if (!sConfResult.rows.length) throw new Error(`Service configuration missing for your centre`);
+        resolvedServiceWalletId = sConfResult.rows[0].wallet_id;
+      }
     }
 
     const resolvedTeamId = await resolveFinancialTeam({
-      client,
-      staffId,
-      role: req.user.role,
-      selectedTeamId: team_id
+      client, staffId, role: req.user.role, selectedTeamId: team_id
     });
 
+    // 🔥 3. Snapshot the Wallet ID into the Ledger
     const result = await client.query(
-      `INSERT INTO service_entries (token_id, customer_name, phone, category_id, subcategory_id, service_charges, department_charges, total_charges, status, expiry_date, staff_id, customer_service_id, work_source, team_id, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()) RETURNING id`,
-      [tokenId || null, finalCustomerName ? finalCustomerName.trim() : null,
+      `INSERT INTO service_entries (
+          token_id, customer_name, phone, category_id, subcategory_id, 
+          service_charges, department_charges, total_charges, status, 
+          expiry_date, staff_id, customer_service_id, work_source, team_id, created_at, 
+          service_wallet_id -- 🔥 NEW: The Snapshot Column
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15) RETURNING id`,
+      [
+       tokenId || null, finalCustomerName ? finalCustomerName.trim() : null,
        (customerPhone || phone) ? (customerPhone || phone).trim() : null,
        finalCategoryId ? parseInt(finalCategoryId) : null,
        finalSubcategoryId ? parseInt(finalSubcategoryId) : null,
        finalServiceCharge, finalDepartmentCharge, finalTotalCharge,
-       status || 'completed', expiryDate || null, staffId, customerServiceId || null, workSource, resolvedTeamId]
+       status || 'completed', expiryDate || null, staffId, 
+       customerServiceId || null, workSource, resolvedTeamId, 
+       resolvedServiceWalletId // 🔥 NEW: Lock it in
+      ]
     );
 
     const serviceEntryId = result.rows[0].id;
@@ -1492,12 +1667,15 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
         INSERT INTO service_entries (
           token_id, customer_name, phone, category_id, subcategory_id, 
           service_charges, department_charges, total_charges, status, 
-          expiry_date, staff_id, customer_service_id, work_source, team_id, created_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()) RETURNING id
+          expiry_date, staff_id, customer_service_id, work_source, team_id, created_at,
+          service_wallet_id -- 🔥 NEW: The Snapshot Column (Valid inside the SQL string)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15) RETURNING id
       `, [
         tokenId || null, customerName, phone, svc.categoryId, svc.subcategoryId, 
         svcService, svcDept, svcTotal, svcStatus, svc.expiryDate || null, staffId, 
-        currentCustomerServiceId, currentCustomerServiceId ? 'online' : 'offline', resolvedTeamId
+        currentCustomerServiceId, currentCustomerServiceId ? 'online' : 'offline', 
+        resolvedTeamId, 
+        svc.serviceWalletId || null 
       ]);
       const newEntryId = insertRes.rows[0].id;
 
@@ -1663,18 +1841,31 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
 
     let finalCategoryId = existingEntry.category_id;
     let serviceName = null;
+    let resolvedServiceWalletId = undefined; // 🔥 NEW: Track if wallet needs updating
+    
+    // 1. Validate Category against Master Table (for name/expiry)
     if (categoryId) {
-      const categoryResult = await client.query('SELECT id, wallet_id, name, requires_wallet, has_expiry FROM services WHERE id = $1', [parseInt(categoryId)]);
+      const categoryResult = await client.query('SELECT id, name, has_expiry FROM services WHERE id = $1', [parseInt(categoryId)]);
       if (categoryResult.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: `Category ID ${categoryId} not found` });
       }
       finalCategoryId = parseInt(categoryId);
       serviceName = categoryResult.rows[0].name;
+      
+      // Ensure the centre actually has this service enabled AND grab the wallet
+      const confCheck = await client.query('SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2', [finalCategoryId, centreId]);
+      if (confCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `This service is not configured for your centre.` });
+      }
+      resolvedServiceWalletId = confCheck.rows[0].wallet_id; // 🔥 NEW: Grab the wallet
     }
 
     let finalSubcategoryId = existingEntry.subcategory_id;
     let subcategoryName = null;
+    
+    // 2. Validate Subcategory
     if (subcategoryId) {
       const subcategoryResult = await client.query('SELECT id, service_id, name FROM subcategories WHERE id = $1 AND service_id = $2', [parseInt(subcategoryId), parseInt(categoryId || finalCategoryId)]);
       if (subcategoryResult.rows.length === 0) {
@@ -1683,6 +1874,14 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       }
       finalSubcategoryId = parseInt(subcategoryId);
       subcategoryName = subcategoryResult.rows[0].name;
+      
+      // Ensure the centre actually has this subcategory enabled AND grab the wallet
+      const subConfCheck = await client.query('SELECT wallet_id FROM subcategory_configurations WHERE subcategory_id = $1 AND centre_id = $2', [finalSubcategoryId, centreId]);
+      if (subConfCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `This subcategory is not configured for your centre.` });
+      }
+      resolvedServiceWalletId = subConfCheck.rows[0].wallet_id; // 🔥 NEW: Subcategory wallet overrides parent
     }
 
     let finalStaffId = existingEntry.staff_id;
@@ -1712,6 +1911,13 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     if (status) { updateFields.push(`status = $${paramIndex++}`); updateValues.push(status); }
     if (expiryDate !== undefined) { updateFields.push(`expiry_date = $${paramIndex++}`); updateValues.push(expiryDate || null); }
     if (staffId) { updateFields.push(`staff_id = $${paramIndex++}`); updateValues.push(parseInt(staffId)); }
+    
+    // 🔥 NEW: Update the wallet snapshot if the category or subcategory was changed
+    if (resolvedServiceWalletId !== undefined) { 
+      updateFields.push(`service_wallet_id = $${paramIndex++}`); 
+      updateValues.push(resolvedServiceWalletId); 
+    }
+
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
     if (req.user.role === 'staff') updateFields.push(`is_edited = true`);
     updateValues.push(parseInt(id));
@@ -1721,7 +1927,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-  const updateQuery = `UPDATE service_entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+    const updateQuery = `UPDATE service_entries SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
     const result = await client.query(updateQuery, updateValues);
     let updatedEntry = result.rows[0];
 
@@ -1816,7 +2022,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       serviceCharge: parseFloat(updatedEntry.service_charges),
       departmentCharge: parseFloat(updatedEntry.department_charges),
       totalCharge: parseFloat(updatedEntry.total_charges),
-      serviceWalletId: updatedEntry.service_wallet_id,
+      serviceWalletId: updatedEntry.service_wallet_id, // 🔥 Ensure this reflects the updated snapshot
       staffId: parseInt(updatedEntry.staff_id),
       created_at: updatedEntry.created_at ? updatedEntry.created_at.toISOString() : null,
       paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
@@ -3344,7 +3550,7 @@ router.post('/tokens', authenticateToken, async (req, res) => {
     console.log('servicemanagement.js: Token created:', JSON.stringify(token, null, 2));
 
     // Send WhatsApp Notification (Non-blocking)
-    sendTokenUpdateWhatsApp({
+    sendTokenNotification({
       customerName: token.customer_name,
       phone: token.phone,
       tokenNumber: token.token_id,
@@ -3635,7 +3841,7 @@ router.put('/token/:tokenId/assign', authenticateToken, async (req, res) => {
     // =================================================================
 
     // Send WhatsApp Notification for Assignment (Non-blocking)
-    sendTokenUpdateWhatsApp({
+    sendTokenNotification({
       customerName: token.customer_name,
       phone: token.phone,
       tokenNumber: tokenId,
@@ -3697,7 +3903,7 @@ router.put('/token/:tokenId/status', authenticateToken, async (req, res) => {
     await client.query('COMMIT');
 
     // Send WhatsApp Notification for Status Update (Non-blocking)
-    sendTokenUpdateWhatsApp({
+    sendTokenNotification({
       customerName: tokenData.customer_name,
       phone: tokenData.phone,
       tokenNumber: tokenId,
