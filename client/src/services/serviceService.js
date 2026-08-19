@@ -214,10 +214,12 @@ export const getTokenData = async (tokenId) => {
 };
 
 // Get all service entries (staff)
-export const getServiceEntries = async (today = false, staffId = null, limit = null) => {
+export const getServiceEntries = async (today = false, staffId = null, limit = null, startDate = null, endDate = null) => {
   const params = { today };
   if (staffId) params.staff_id = staffId;
   if (limit) params.limit = limit;
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
   return await api.get('/entries', { params });
 };
 

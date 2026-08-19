@@ -961,9 +961,9 @@ router.get('/categories', authenticateToken, async (req, res) => {
   }
 });
 
-// 🔥 GET /api/servicemanagement/entries - FINAL CLEAN VERSION
+// GET /api/servicemanagement/entries
 router.get('/entries', authenticateToken, async (req, res) => {
-  const { today, staff_id, limit } = req.query; 
+  const { today, staff_id, limit, startDate, endDate } = req.query; 
   const client = await pool.connect();
 
   try {
@@ -984,8 +984,18 @@ router.get('/entries', authenticateToken, async (req, res) => {
     let values = [];
     let conditions = [];
 
+    // Prioritize the 'today' flag, otherwise use date ranges if provided
     if (today === 'true') {
       conditions.push(`se.created_at::date = CURRENT_DATE`);
+    } else {
+      if (startDate) {
+        conditions.push(`se.created_at >= $${values.length + 1}`);
+        values.push(`${startDate} 00:00:00`);
+      }
+      if (endDate) {
+        conditions.push(`se.created_at <= $${values.length + 1}`);
+        values.push(`${endDate} 23:59:59`);
+      }
     }
 
     // 1. Staff can ONLY ever see their own entries (highest security)

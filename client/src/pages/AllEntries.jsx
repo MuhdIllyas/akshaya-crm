@@ -54,6 +54,46 @@ const AllEntries = () => {
     fetchData();
   }, []);
 
+  // 1. Fetch static data only once on mount
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const categoriesResponse = await getCategories();
+        setCategories(categoriesResponse.data);
+
+        const centreId = user.role === 'superadmin' ? 'all' : user.centre_id;
+        const tokensResponse = await getTokens(centreId, 'all');
+        setTokens(tokensResponse.data);
+      } catch (error) {
+        console.error('Error fetching categories/tokens:', error);
+      }
+    };
+    fetchInitialData();
+  }, []);
+
+  // 2. Fetch entries whenever the date filters change
+  useEffect(() => {
+    const fetchEntries = async () => {
+      try {
+        setLoading(true);
+        // Format dates as YYYY-MM-DD for the backend
+        const formattedStart = filters.startDate ? filters.startDate.toISOString().split('T')[0] : null;
+        const formattedEnd = filters.endDate ? filters.endDate.toISOString().split('T')[0] : null;
+        
+        // Pass false for 'today' since we are sending explicit dates now
+        const entriesResponse = await getServiceEntries(false, null, null, formattedStart, formattedEnd);
+        setEntries(entriesResponse.data);
+      } catch (error) {
+        console.error('Error fetching entries:', error);
+        toast.error('Failed to load entries');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEntries();
+  }, [filters.startDate, filters.endDate]);
+
+  // Keep this exactly as it is - it handles the non-date frontend filters
   useEffect(() => {
     applyFilters();
   }, [filters, entries, tokens]);
@@ -107,18 +147,6 @@ const AllEntries = () => {
       filtered = filtered.filter(entry => entry.status === filters.status);
     }
 
-    if (filters.startDate || filters.endDate) {
-      filtered = filtered.filter(entry => {
-        const createdAt = new Date(entry.created_at);
-        const start = filters.startDate ? new Date(filters.startDate).setHours(0, 0, 0, 0) : null;
-        const end = filters.endDate ? new Date(filters.endDate).setHours(23, 59, 59, 999) : null;
-        return (
-          (!start || createdAt >= start) &&
-          (!end || createdAt <= end)
-        );
-      });
-    }
-
     if (filters.categoryId) {
       filtered = filtered.filter(entry => entry.category === parseInt(filters.categoryId));
     }
@@ -141,8 +169,8 @@ const AllEntries = () => {
   const resetFilters = () => {
     setFilters({
       tokenType: 'all',
-      startDate: null,
-      endDate: null,
+      startDate: new Date(), 
+      endDate: new Date(),
       categoryId: '',
       subcategoryId: '',
       searchQuery: '',
