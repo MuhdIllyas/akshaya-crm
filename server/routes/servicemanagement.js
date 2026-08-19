@@ -1825,14 +1825,14 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: `Service Entry ID ${id} not found` });
     }
     const existingEntry = entryResult.rows[0];
-    const createdDate = new Date(existingEntry.created_at);
+    /*const createdDate = new Date(existingEntry.created_at);
     const today = new Date();
     createdDate.setHours(0,0,0,0);
     today.setHours(0,0,0,0);
     if (createdDate.getTime() !== today.getTime()) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Editing allowed only for today\'s entries' });
-    }
+    }*/
     if (req.user.role === 'staff' && existingEntry.is_edited) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'You have already edited this entry' });

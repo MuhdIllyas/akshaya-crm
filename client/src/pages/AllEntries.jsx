@@ -48,6 +48,13 @@ const AllEntries = () => {
   const [loading, setLoading] = useState(true);
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [viewMode, setViewMode] = useState('list');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    customerName: '',
+    phone: '',
+    expiryDate: ''
+  });
+  const [saving, setSaving] = useState(false);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
@@ -236,6 +243,54 @@ const AllEntries = () => {
       return subcategory ? subcategory.name : 'N/A';
     }
     return 'N/A';
+  };
+
+  const handleEditToggle = () => {
+    if (!isEditing) {
+      // Populate form when entering edit mode
+      setEditForm({
+        customerName: selectedEntry.customerName || '',
+        phone: selectedEntry.phone || '',
+        // Ensure date is formatted properly for an input[type="date"]
+        expiryDate: selectedEntry.expiryDate ? new Date(selectedEntry.expiryDate).toISOString().split('T')[0] : ''
+      });
+    }
+    setIsEditing(!isEditing);
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const submitEdit = async () => {
+    try {
+      setSaving(true);
+      // Call the API with ONLY the allowed fields.
+      const payload = {
+        customerName: editForm.customerName,
+        phone: editForm.phone,
+        expiryDate: editForm.expiryDate || null,
+        // Send the existing category/subcategory so the backend validation passes
+        categoryId: selectedEntry.category,
+        subcategoryId: selectedEntry.subcategory,
+      };
+
+      const response = await updateServiceEntry(selectedEntry.id, payload);
+      
+      // Update local state to reflect changes instantly without refreshing the whole page
+      const updatedEntry = response.entry;
+      setEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, ...updatedEntry } : e));
+      setSelectedEntry(prev => ({ ...prev, ...updatedEntry }));
+      
+      toast.success('Entry updated successfully');
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating entry:', error);
+      toast.error(error.response?.data?.error || 'Failed to update entry');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -642,9 +697,19 @@ const AllEntries = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Service Entry Details</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Service Entry Details</h2>
+                  {!isEditing && (
+                    <button 
+                      onClick={handleEditToggle}
+                      className="px-3 py-1.5 text-sm bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-200 dark:border-indigo-800 font-medium"
+                    >
+                      Edit Info
+                    </button>
+                  )}
+                </div>
                 <button 
-                  onClick={() => setSelectedEntry(null)}
+                  onClick={() => { setSelectedEntry(null); setIsEditing(false); }}
                   className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   <FiX className="h-6 w-6" />
@@ -658,18 +723,71 @@ const AllEntries = () => {
                     Customer Information
                   </h3>
                   <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
-                    <div className="mb-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Customer Name</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{selectedEntry.customerName}</p>
-                    </div>
-                    <div className="mb-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Phone Number</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{selectedEntry.phone}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Entry Type</p>
-                      <div className="mt-1">{getTokenTypeBadge(selectedEntry)}</div>
-                    </div>
+                    {isEditing ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Customer Name</label>
+                          <input 
+                            type="text" 
+                            name="customerName"
+                            value={editForm.customerName} 
+                            onChange={handleEditChange}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Phone Number</label>
+                          <input 
+                            type="text" 
+                            name="phone"
+                            value={editForm.phone} 
+                            onChange={handleEditChange}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Expiry Date</label>
+                          <input 
+                            type="date" 
+                            name="expiryDate"
+                            value={editForm.expiryDate} 
+                            onChange={handleEditChange}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                          />
+                        </div>
+                        <div className="flex gap-2 pt-3 mt-2 border-t border-gray-200 dark:border-gray-600">
+                          <button 
+                            onClick={submitEdit} 
+                            disabled={saving} 
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium transition-colors"
+                          >
+                            {saving ? 'Saving...' : 'Save Changes'}
+                          </button>
+                          <button 
+                            onClick={handleEditToggle} 
+                            disabled={saving} 
+                            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 text-sm font-medium transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mb-3">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Customer Name</p>
+                          <p className="font-medium text-gray-900 dark:text-white">{selectedEntry.customerName}</p>
+                        </div>
+                        <div className="mb-3">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Phone Number</p>
+                          <p className="font-medium text-gray-900 dark:text-white">{selectedEntry.phone}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Entry Type</p>
+                          <div className="mt-1">{getTokenTypeBadge(selectedEntry)}</div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 
@@ -777,7 +895,7 @@ const AllEntries = () => {
               
               <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
                 <button 
-                  onClick={() => setSelectedEntry(null)}
+                  onClick={() => { setSelectedEntry(null); setIsEditing(false); }}
                   className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
                 >
                   Close
