@@ -266,11 +266,13 @@ const AllEntries = () => {
   const submitEdit = async () => {
     try {
       setSaving(true);
+      
       // Call the API with ONLY the allowed fields.
       const payload = {
         customerName: editForm.customerName,
         phone: editForm.phone,
-        expiryDate: editForm.expiryDate || null,
+        // Only send the expiry date if the service requires it; otherwise force null
+        expiryDate: requiresExpiry ? (editForm.expiryDate || null) : null,
         // Send the existing category/subcategory so the backend validation passes
         categoryId: selectedEntry.category,
         subcategoryId: selectedEntry.subcategory,
@@ -292,6 +294,10 @@ const AllEntries = () => {
       setSaving(false);
     }
   };
+
+  // Determine if the currently selected modal item requires an expiry date
+  const modalCategory = selectedEntry ? categories.find(cat => cat.id === selectedEntry.category) : null;
+  const requiresExpiry = modalCategory ? modalCategory.has_expiry : false;
 
   if (loading) {
     return (
@@ -745,16 +751,18 @@ const AllEntries = () => {
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                           />
                         </div>
-                        <div>
-                          <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Expiry Date</label>
-                          <input 
-                            type="date" 
-                            name="expiryDate"
-                            value={editForm.expiryDate} 
-                            onChange={handleEditChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                          />
-                        </div>
+                        {requiresExpiry && (
+                          <div>
+                            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Expiry Date</label>
+                            <input 
+                              type="date" 
+                              name="expiryDate"
+                              value={editForm.expiryDate} 
+                              onChange={handleEditChange}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                        )}
                         <div className="flex gap-2 pt-3 mt-2 border-t border-gray-200 dark:border-gray-600">
                           <button 
                             onClick={submitEdit} 
