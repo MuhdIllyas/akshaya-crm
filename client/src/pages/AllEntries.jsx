@@ -37,8 +37,8 @@ const AllEntries = () => {
   const [tokens, setTokens] = useState([]);
   const [filters, setFilters] = useState({
     tokenType: 'all',
-    startDate: null,
-    endDate: null,
+    startDate: new Date(),
+    endDate: new Date(),   
     categoryId: '',
     subcategoryId: '',
     searchQuery: '',
@@ -61,7 +61,8 @@ const AllEntries = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const entriesResponse = await getServiceEntries(false);
+      // Fetch only today's entries to drastically reduce load time
+      const entriesResponse = await getServiceEntries(true); 
       const entriesData = entriesResponse.data;
       setEntries(entriesData);
 
