@@ -28,7 +28,7 @@ import {
   FiGrid,
   FiList
 } from 'react-icons/fi';
-import { getServiceEntries, getCategories, getTokens } from '/src/services/serviceService';
+import { getServiceEntries, getCategories, getTokens, updateServiceEntry } from '/src/services/serviceService';
 
 const AllEntries = () => {
   const [entries, setEntries] = useState([]);
