@@ -83,7 +83,7 @@ class WhatsAppAdapter {
       };
 
       if (savedMessage.file_url) {
-        const baseUrl = process.env.VITE_API_URL || 'https://staging-api.akshayasahayi.com';
+        const baseUrl = process.env.VITE_API_URL || 'https://api.akshayasahayi.com';
         const safeBase = baseUrl.replace(/\/$/, '');
         const safePath = savedMessage.file_url.startsWith('/') ? savedMessage.file_url : `/${savedMessage.file_url}`;
         const fullPublicUrl = `${safeBase}${safePath}`;
