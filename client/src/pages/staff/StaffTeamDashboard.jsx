@@ -69,6 +69,35 @@ const formatTime = (time) => {
   });
 };
 
+const getDatesFromPeriod = (period) => {
+  const toDate = new Date();
+  let fromDate = new Date();
+
+  switch (period) {
+    case 'week':
+      fromDate.setDate(fromDate.getDate() - fromDate.getDay()); // Sunday of this week
+      break;
+    case 'month':
+      fromDate.setDate(1); // 1st of this month
+      break;
+    case 'quarter':
+      fromDate.setMonth(Math.floor(fromDate.getMonth() / 3) * 3);
+      fromDate.setDate(1); // 1st of current quarter
+      break;
+    case 'year':
+      fromDate.setMonth(0);
+      fromDate.setDate(1); // Jan 1st of this year
+      break;
+    default:
+      fromDate.setDate(1); // Default to month
+  }
+  
+  return { 
+    from: fromDate.toISOString().split('T')[0], 
+    to: toDate.toISOString().split('T')[0] 
+  };
+};
+
 // ============ SUB-COMPONENTS ============
 
 // Stat Card (reused from StaffPerformance)
@@ -102,6 +131,27 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, l
     </div>
   </motion.div>
 );
+
+const TargetProgressBar = ({ label, current, target }) => {
+  const safeTarget = target || 1;
+  const percentage = Math.min((current / safeTarget) * 100, 100).toFixed(0);
+  const formatCurrency = (val) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val || 0);
+
+  return (
+    <div className="mb-4">
+      <div className="flex justify-between text-sm mb-1">
+        <span className="font-medium text-gray-700">{label}</span>
+        <span className="text-gray-600 font-semibold">{formatCurrency(current)} / {formatCurrency(target)} ({percentage}%)</span>
+      </div>
+      <div className="w-full bg-gray-100 rounded-full h-2.5">
+        <motion.div 
+          initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 1 }}
+          className={`h-2.5 rounded-full ${percentage >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
+        />
+      </div>
+    </div>
+  );
+};
 
 // Member Card
 const MemberCard = ({ member, rank, isLeader }) => (
@@ -201,10 +251,30 @@ const AchievementBadge = ({ achievement }) => (
 // ============ MAIN COMPONENT ============
 
 const StaffTeamDashboard = () => {
+  // --- Core UI States ---
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [period, setPeriod] = useState('month');
+
+  // --- Identity & Team Switcher States ---
+  const [myUserId, setMyUserId] = useState(null);
+  const [myTeams, setMyTeams] = useState([]);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
+
+  // --- Live API Data States ---
   const [teamData, setTeamData] = useState(null);
+  const [teamStats, setTeamStats] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
-  const [notices, setNotices] = useState([]);
+  const [performanceTrend, setPerformanceTrend] = useState(null);
+  const [serviceMix, setServiceMix] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [notices, setNotices] = useState([]); // Keeps your old notice UI from breaking
+  
+  // --- Settings State ---
+  const [teamSettings, setTeamSettings] = useState({ targets_enabled: false, monthly_target: 250000 });
+
+  // --- Mock Data States (To be wired to backend later) ---
   const [events, setEvents] = useState([]);
   const [achievements, setAchievements] = useState([]);
   const [pendingWork, setPendingWork] = useState({});
@@ -213,236 +283,103 @@ const StaffTeamDashboard = () => {
   const [leaveStatus, setLeaveStatus] = useState([]);
   const [myStats, setMyStats] = useState(null);
   const [rank, setRank] = useState(null);
-  const [period, setPeriod] = useState('month');
-  const [performanceTrend, setPerformanceTrend] = useState(null);
 
-  // Fetch all team data
-  const fetchTeamData = async () => {
+  // 1. Initial Load: Get User Identity & Their Teams
+  useEffect(() => {
+    const initializeDashboard = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setMyUserId(payload.id);
+
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/teams`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const teamsList = await res.json();
+        
+        if (teamsList && teamsList.length > 0) {
+          setMyTeams(teamsList);
+          const primaryTeam = teamsList.find(t => t.is_primary) || teamsList[0];
+          setSelectedTeamId(primaryTeam.id);
+        } else {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load teams", err);
+        setLoading(false);
+      }
+    };
+    initializeDashboard();
+  }, []);
+
+  // 2. Fetch specific team data when selectedTeamId or period changes
+  const fetchSpecificTeamData = async () => {
+    if (!selectedTeamId) return;
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const centreId = localStorage.getItem('centre_id');
+      const headers = { Authorization: `Bearer ${token}` };
 
-      // In a real implementation, these would be actual API calls
-      // For now, we simulate with mock data and console logs
+      // Calculate the from and to dates based on the dropdown
+      const { from, to } = getDatesFromPeriod(period);
+
+      // Set basic team info from the dropdown selection
+      const currentTeam = myTeams.find(t => t.id === Number(selectedTeamId));
+      if (currentTeam) setTeamData({ name: currentTeam.name, leader: 'Leader', member_count: currentTeam.member_count, status: 'active' });
+
+      // Run real API calls (Passing from & to into the analytics summary!)
+      const [summaryRes, contribRes, trendRes, mixRes, annRes, revRes, settingsRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/analytics/summary?team_id=${selectedTeamId}&from=${from}&to=${to}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/contribution`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/trend?year=${new Date().getFullYear()}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/service-mix`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${import.meta.env.VITE_API_URL}/api/knowledge/hub/announcements?teamId=${selectedTeamId}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/reviews/team/${selectedTeamId}`, { headers }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/settings`, { headers }).catch(() => ({ ok: false }))
+      ]);
+
+      const summary = await summaryRes.json();
+      if (summary.teams && summary.teams.length > 0) setTeamStats(summary.teams[0]);
       
-      // 1. Team Overview
-      const teamOverviewRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/overview?centre_id=${centreId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (teamOverviewRes.ok) {
-        const overview = await teamOverviewRes.json();
-        setTeamData(overview.data);
-      } else {
-        // Fallback mock data
-        setTeamData({
-          name: 'Digital Services Team',
-          leader: 'Muhammed',
-          member_count: 6,
-          is_primary: true,
-          created_at: '2026-01-12',
-          monthly_target: 300000,
-          status: 'active'
-        });
-      }
-
-      // 2. Team Members
-      const membersRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/members?centre_id=${centreId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (membersRes.ok) {
-        const members = await membersRes.json();
-        setTeamMembers(members.data);
-      } else {
-        // Mock
-        setTeamMembers([
-          { id: 1, name: 'Muhammed', role: 'Leader', applications: 120, rating: 4.8, revenue: 54000, is_online: true, is_leader: true },
-          { id: 2, name: 'Rahul', role: 'Senior Staff', applications: 83, rating: 4.9, revenue: 42000, is_online: true },
-          { id: 3, name: 'Shibil', role: 'Staff', applications: 71, rating: 4.6, revenue: 38000, is_online: false },
-          { id: 4, name: 'Nisha', role: 'Staff', applications: 65, rating: 4.7, revenue: 35000, is_online: true },
-          { id: 5, name: 'Akhil', role: 'Staff', applications: 58, rating: 4.5, revenue: 31000, is_online: true },
-          { id: 6, name: 'Priya', role: 'Staff', applications: 45, rating: 4.4, revenue: 28000, is_online: false }
-        ]);
-      }
-
-      // 3. Notices
-      const noticesRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/notices?centre_id=${centreId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (noticesRes.ok) {
-        const notices = await noticesRes.json();
-        setNotices(notices.data);
-      } else {
-        setNotices([
-          { id: 1, title: 'Passport documents changed', content: 'All members please use new checklist for passport applications.', author: 'Muhammed', created_at: '2026-02-10' },
-          { id: 2, title: 'Training on New Software', content: 'Training session on updated CRM will be held on Friday.', author: 'Admin', created_at: '2026-02-09' }
-        ]);
-      }
-
-      // 4. Events
-      const eventsRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/events?centre_id=${centreId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (eventsRes.ok) {
-        const events = await eventsRes.json();
-        setEvents(events.data);
-      } else {
-        setEvents([
-          { id: 1, title: 'Passport Camp', date: '2026-02-14', description: 'Special camp for passport services' },
-          { id: 2, title: 'Training', date: '2026-02-15', description: 'CRM training for all staff' },
-          { id: 3, title: 'Collector Visit', date: '2026-02-17', description: 'District collector inspection' }
-        ]);
-      }
-
-      // 5. Achievements
-      const achRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/achievements?centre_id=${centreId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (achRes.ok) {
-        const ach = await achRes.json();
-        setAchievements(ach.data);
-      } else {
-        setAchievements([
-          { id: 1, icon: '🏆', title: 'Best Team', description: 'Best performing team of June', date: '2026-06-30' },
-          { id: 2, icon: '💰', title: 'Revenue Target Achieved', description: 'Exceeded monthly target by 20%', date: '2026-07-31' },
-          { id: 3, icon: '⭐', title: 'Customer Rating 4.9★', description: 'Highest customer satisfaction rating', date: '2026-08-15' },
-          { id: 4, icon: '😊', title: 'Zero Complaints', description: 'No complaints received in August', date: '2026-08-31' }
-        ]);
-      }
-
-      // 6. Pending Work
-      const pendingRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/pending-work?centre_id=${centreId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (pendingRes.ok) {
-        const pending = await pendingRes.json();
-        setPendingWork(pending.data);
-      } else {
-        setPendingWork({
-          pending_services: 14,
-          pending_payments: 2500,
-          applications_waiting: 8,
-          documents_missing: 3
-        });
-      }
-
-      // 7. Leader's Message
-      const msgRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/leader-message`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (msgRes.ok) {
-        const msg = await msgRes.json();
-        setLeaderMessage(msg.data);
-      } else {
-        setLeaderMessage({
-          content: 'Today\'s Goal: Finish Passport backlog. Everyone update tracking before 5PM.',
-          author: 'Muhammed',
-          date: '2026-02-12'
-        });
-      }
-
-      // 8. Birthdays
-      const bdayRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/birthdays`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (bdayRes.ok) {
-        const bday = await bdayRes.json();
-        setBirthdays(bday.data);
-      } else {
-        setBirthdays([
-          { id: 1, name: 'Rahul', date: '2026-02-13' },
-          { id: 2, name: 'Nisha', date: '2026-08-12' }
-        ]);
-      }
-
-      // 9. Leave Status
-      const leaveRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/leave-status`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (leaveRes.ok) {
-        const leave = await leaveRes.json();
-        setLeaveStatus(leave.data);
-      } else {
-        setLeaveStatus([
-          { id: 1, name: 'Rahul', status: 'Full Day', date: '2026-02-12' },
-          { id: 2, name: 'Shibil', status: 'Half Day', date: '2026-02-12' }
-        ]);
-      }
-
-      // 10. My Stats (from StaffPerformance)
-      const myStatsRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?period=${period}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (myStatsRes.ok) {
-        const stats = await myStatsRes.json();
-        setMyStats(stats.data.summary);
-        // Also get rank
-        const rankRes = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/team/my-rank`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (rankRes.ok) {
-          const rankData = await rankRes.json();
-          setRank(rankData.data.rank);
-        } else {
-          setRank(2); // mock
-        }
-      }
-
-      // 11. Performance Trend (Team)
-      const trendRes = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/team/performance-trend?period=${period}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      setTeamMembers(await contribRes.json());
+      
       if (trendRes.ok) {
-        const trend = await trendRes.json();
-        setPerformanceTrend(trend.data);
-      } else {
-        // Mock trend data
+        const trendData = await trendRes.json();
         setPerformanceTrend({
-          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-          applications: [65, 72, 80, 85, 90, 95],
-          revenue: [180000, 190000, 210000, 230000, 245000, 260000]
+          labels: trendData.map(t => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.month - 1]),
+          revenue: trendData.map(t => t.collected_revenue),
+          applications: trendData.map(t => t.collected_revenue / 1000) // Mocking apps for the line chart
         });
       }
+
+      if(mixRes.ok) setServiceMix(await mixRes.json());
+      setAnnouncements(await annRes.json());
+      
+      if(revRes.ok) {
+        const revData = await revRes.json();
+        setReviews(revData.reviews.slice(0, 5));
+      }
+
+      if(settingsRes.ok) {
+        setTeamSettings(await settingsRes.json());
+      } else {
+        setTeamSettings({ targets_enabled: false, monthly_target: 250000 });
+      }
+
+      // Mock remaining items (Notices, Events, etc.)
+      setNotices([{ id: 1, title: 'Welcome to your team', content: 'Check out the new dashboard!', author: 'Admin' }]);
+      setPendingWork({ pending_services: 14, pending_payments: 2500, applications_waiting: 8, documents_missing: 3 });
 
     } catch (error) {
       console.error('Error fetching team data:', error);
-      toast.error('Failed to load team data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTeamData();
-  }, [period]);
-
-  // Compute team performance stats
-  const teamStats = useMemo(() => {
-    if (!teamMembers || teamMembers.length === 0) return null;
-    const totalRevenue = teamMembers.reduce((sum, m) => sum + (m.revenue || 0), 0);
-    const totalApps = teamMembers.reduce((sum, m) => sum + (m.applications || 0), 0);
-    const avgRating = teamMembers.reduce((sum, m) => sum + (m.rating || 0), 0) / teamMembers.length;
-    return {
-      revenue: totalRevenue,
-      applications: totalApps,
-      avgRating: avgRating,
-      members: teamMembers.length,
-      target: teamData?.monthly_target || 300000,
-      goalCompletion: Math.round((totalRevenue / (teamData?.monthly_target || 300000)) * 100)
-    };
-  }, [teamMembers, teamData]);
+    fetchSpecificTeamData();
+  }, [selectedTeamId, period]);
 
   // My stats from myStats
   const myContribution = useMemo(() => {
@@ -543,29 +480,61 @@ const StaffTeamDashboard = () => {
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         {/* ========== HEADER ========== */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <FiTeam className="text-indigo-600" />
-              Team Dashboard
+              My Workspace
             </h1>
-            <p className="text-gray-500 text-sm">Overview of your team's performance and activities</p>
+            <p className="text-gray-500 text-sm">Overview of your team's performance</p>
           </div>
-          <div className="flex items-center gap-3 mt-3 md:mt-0">
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-            >
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-              <option value="year">This Year</option>
-            </select>
+          
+          <div className="flex flex-wrap items-center gap-3 mt-4 lg:mt-0 w-full lg:w-auto">
+            
+            {/* DATE / PERIOD FILTER */}
+            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 w-full sm:w-auto flex-1 sm:flex-none">
+              <FiCalendar className="text-gray-400" />
+              <select 
+                value={period} 
+                onChange={(e) => setPeriod(e.target.value)}
+                className="bg-transparent font-semibold text-gray-700 outline-none cursor-pointer w-full text-sm"
+              >
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+              </select>
+            </div>
+
+            {/* THE TEAM SWITCHER */}
+            {myTeams.length > 0 ? (
+              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 w-full sm:w-auto flex-1 sm:flex-none shadow-sm">
+                <span className="text-sm text-indigo-500 font-medium whitespace-nowrap">Viewing:</span>
+                <select 
+                  value={selectedTeamId || ""} 
+                  onChange={(e) => setSelectedTeamId(e.target.value)}
+                  className={`bg-transparent font-bold text-indigo-900 outline-none w-full text-sm ${myTeams.length > 1 ? 'cursor-pointer' : 'cursor-default appearance-none'}`}
+                  disabled={myTeams.length === 1}
+                >
+                  {myTeams.map(team => (
+                    <option key={team.id} value={team.id}>
+                      {team.name} {team.is_primary ? '(Primary)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+               <div className="text-sm font-medium text-amber-700 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 w-full sm:w-auto text-center">
+                 No Teams Assigned
+               </div>
+            )}
+
+            {/* REFRESH BUTTON */}
             <button
-              onClick={fetchTeamData}
-              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+              onClick={fetchSpecificTeamData}
+              className="p-2.5 bg-gray-50 rounded-lg hover:bg-gray-200 transition border border-gray-200 flex-shrink-0"
               disabled={loading}
+              title="Refresh Dashboard"
             >
               <FiRefreshCw className={`h-5 w-5 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -615,38 +584,33 @@ const StaffTeamDashboard = () => {
           </div>
         )}
 
-        {/* ========== TEAM PERFORMANCE ========== */}
+        {/* ========== TEAM PERFORMANCE (Real Data) ========== */}
         {teamStats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatCard
-              title="Revenue"
-              value={formatCurrency(teamStats.revenue)}
+              title="Expected Revenue"
+              value={formatCurrency(teamStats.expected_revenue)}
+              icon={FiTarget}
+              color="bg-indigo-600"
+            />
+            <StatCard
+              title="Collected Revenue"
+              value={formatCurrency(teamStats.collected_revenue)}
               icon={FiDollarSign}
               color="bg-emerald-600"
-              loading={false}
-              subtitle={`Goal: ${formatCurrency(teamStats.target)}`}
             />
             <StatCard
-              title="Completed Services"
-              value={teamStats.applications}
+              title="Team Expenses"
+              value={formatCurrency(teamStats.expense)}
               icon={FiBriefcase}
+              color="bg-rose-600"
+            />
+            <StatCard
+              title="Net Generated"
+              value={formatCurrency((teamStats.collected_revenue || 0) - (teamStats.department_charges || 0) - (teamStats.expense || 0))}
+              icon={FiTrendingUp}
               color="bg-blue-600"
-              loading={false}
-            />
-            <StatCard
-              title="Goal Completion"
-              value={`${teamStats.goalCompletion}%`}
-              icon={FiTarget}
-              color="bg-purple-600"
-              loading={false}
-            />
-            <StatCard
-              title="Average Rating"
-              value={teamStats.avgRating.toFixed(1) + '★'}
-              icon={FiStar}
-              color="bg-amber-600"
-              loading={false}
-              subtitle={`${teamStats.members} members`}
+              subtitle={`Margin: ${teamStats.collected_revenue > 0 ? ((((teamStats.collected_revenue || 0) - (teamStats.department_charges || 0) - (teamStats.expense || 0)) / teamStats.collected_revenue) * 100).toFixed(1) : 0}%`}
             />
           </div>
         )}
@@ -818,18 +782,44 @@ const StaffTeamDashboard = () => {
           )}
         </div>
 
-        {/* ========== PERFORMANCE TREND ========== */}
-        {trendChartData && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-4">
-              <FiBarChart2 className="text-indigo-600" />
-              Performance Trend
-            </h3>
-            <div className="h-64">
+        {/* ========== MONTHLY TRAJECTORY (TARGETS VS GROWTH) ========== */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 shadow-sm">
+          <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-6">
+            <FiTrendingUp className="text-indigo-600" /> Monthly Trajectory
+          </h3>
+          
+          {teamSettings.targets_enabled ? (
+            <div className="mb-8">
+              <TargetProgressBar 
+                label="Revenue Target Progress" 
+                current={teamStats?.revenue || 0} 
+                target={teamSettings.monthly_target} 
+              />
+            </div>
+          ) : (
+            <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-xl text-center mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-left flex items-center gap-4">
+                <div className="bg-indigo-100 p-3 rounded-full hidden sm:block">
+                  <FiTrendingUp className="text-xl text-indigo-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-indigo-900">Growth Mindset Active</h4>
+                  <p className="text-indigo-700 mt-1 text-xs max-w-md">Keep up the great work! Focus on quality service and beating last month's pace rather than a strict quota.</p>
+                </div>
+              </div>
+              <div className="bg-white px-5 py-3 rounded-xl shadow-sm border border-indigo-100 w-full sm:w-auto text-center">
+                <p className="text-[10px] text-indigo-500 uppercase tracking-wider font-bold">Current Pace</p>
+                <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(teamStats?.revenue)}</p>
+              </div>
+            </div>
+          )}
+
+          {trendChartData && (
+            <div className="h-64 mt-4 border-t border-gray-50 pt-6">
               <Line data={trendChartData} options={trendOptions} />
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* ========== BADGES (Gamification) ========== */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">

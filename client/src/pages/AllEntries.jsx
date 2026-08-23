@@ -236,6 +236,11 @@ const AllEntries = () => {
     return category ? category.name : 'N/A';
   };
 
+  const getInitials = (name) => {
+    if (!name) return 'C';
+    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  };
+
   const getSubcategoryName = (categoryId, subcategoryId) => {
     const category = categories.find(cat => cat.id === categoryId);
     if (category && category.subcategories) {
@@ -298,6 +303,23 @@ const AllEntries = () => {
   // Determine if the currently selected modal item requires an expiry date
   const modalCategory = selectedEntry ? categories.find(cat => cat.id === selectedEntry.category) : null;
   const requiresExpiry = modalCategory ? modalCategory.has_expiry : false;
+
+  // --- Calculate Analytics for Visuals ---
+  const statusCounts = filteredEntries.reduce((acc, entry) => {
+    acc[entry.status] = (acc[entry.status] || 0) + 1;
+    return acc;
+  }, { completed: 0, pending: 0, cancelled: 0 });
+
+  const categoryCounts = filteredEntries.reduce((acc, entry) => {
+    const catName = getCategoryName(entry.category);
+    acc[catName] = (acc[catName] || 0) + 1;
+    return acc;
+  }, {});
+
+  const topCategories = Object.entries(categoryCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4); // Get top 4 services
+  // ---------------------------------------
 
   if (loading) {
     return (
@@ -402,6 +424,63 @@ const AllEntries = () => {
             </div>
           </div>
         </div>
+
+        {/* NEW: Analytics Visuals */}
+        {filteredEntries.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+            
+            {/* Chart 1: Top Services Progress Bars */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <FiPieChart className="text-indigo-500" /> Top Services
+              </h3>
+              <div className="space-y-4">
+                {topCategories.map(([name, count], index) => {
+                  const percentage = Math.round((count / filteredEntries.length) * 100);
+                  const colors = ['bg-indigo-500', 'bg-purple-500', 'bg-emerald-500', 'bg-amber-500'];
+                  return (
+                    <div key={name}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-medium text-gray-700 dark:text-gray-300 truncate pr-2">{name}</span>
+                        <span className="text-gray-500">{percentage}% ({count})</span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
+                        <div className={`${colors[index % colors.length]} h-2 rounded-full`} style={{ width: `${percentage}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Chart 2: Status Breakdown */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <FiBarChart2 className="text-indigo-500" /> Pipeline Status
+              </h3>
+              <div className="flex h-4 rounded-full overflow-hidden mb-4">
+                <div style={{ width: `${(statusCounts.completed / filteredEntries.length) * 100}%` }} className="bg-emerald-500 transition-all"></div>
+                <div style={{ width: `${(statusCounts.pending / filteredEntries.length) * 100}%` }} className="bg-amber-400 transition-all"></div>
+                <div style={{ width: `${(statusCounts.cancelled / filteredEntries.length) * 100}%` }} className="bg-rose-500 transition-all"></div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center pt-2">
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded-lg">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-1">Completed</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{statusCounts.completed}</p>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mb-1">Pending</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{statusCounts.pending}</p>
+                </div>
+                <div className="bg-rose-50 dark:bg-rose-900/20 p-2 rounded-lg">
+                  <p className="text-xs text-rose-600 dark:text-rose-400 font-medium mb-1">Cancelled</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{statusCounts.cancelled}</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
 
         {/* Search and Filter Section */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-5 mb-6 shadow-sm border border-gray-200 dark:border-gray-700">
@@ -642,50 +721,70 @@ const AllEntries = () => {
             ))}
           </div>
         ) : (
-          // List View
+
+          // Upgraded List View
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700">
+                <thead className="bg-gray-50/50 dark:bg-gray-800/50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Customer</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Service</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Service Details</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700/50">
                   {filteredEntries.map(entry => (
-                    <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-medium text-gray-900 dark:text-white">{entry.customerName}</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                          <FiPhone className="h-3 w-3" /> {entry.phone}
+                    <tr key={entry.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-700/50 transition-colors group">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-9 w-9">
+                            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-inner">
+                              {getInitials(entry.customerName)}
+                            </div>
+                          </div>
+                          <div className="ml-3 min-w-0">
+                            {/* Changed to allow multi-line wrapping */}
+                            <div className="font-semibold text-gray-900 dark:text-white whitespace-normal break-words leading-tight">
+                              {entry.customerName}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1 whitespace-nowrap">
+                              <FiPhone className="h-3 w-3 flex-shrink-0" /> {entry.phone}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900 dark:text-white">{getCategoryName(entry.category)}</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">{getSubcategoryName(entry.category, entry.subcategory)}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getTokenTypeBadge(entry)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
-                        {formatCurrency(entry.totalCharge)}
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {formatCurrency(entry.totalCharge)}
+                        </div>
+                        {entry.pendingAmount > 0 && (
+                          <div className="text-xs text-rose-500 dark:text-rose-400 mt-0.5 font-medium">
+                            Pending: {formatCurrency(entry.pendingAmount)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(entry.status)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                         {formatDate(entry.created_at)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button 
                           onClick={() => setSelectedEntry(entry)}
-                          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
+                          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 transition-colors p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 opacity-0 group-hover:opacity-100 focus:opacity-100"
                         >
                           <FiEye className="h-5 w-5" />
                         </button>
@@ -700,8 +799,8 @@ const AllEntries = () => {
 
         {/* Entry Detail Modal */}
         {selectedEntry && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-4">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white">Service Entry Details</h2>
@@ -860,7 +959,11 @@ const AllEntries = () => {
                     {selectedEntry.serviceWalletId && (
                       <div className="mb-3">
                         <p className="text-sm text-gray-600 dark:text-gray-400">Service Wallet</p>
-                        <p className="font-medium text-gray-900 dark:text-white">Wallet #{selectedEntry.serviceWalletId}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {selectedEntry.serviceWalletName 
+                            ? `${selectedEntry.serviceWalletName} (#${selectedEntry.serviceWalletId})` 
+                            : `Wallet #${selectedEntry.serviceWalletId}`}
+                        </p>
                       </div>
                     )}
                     {selectedEntry.notes && (

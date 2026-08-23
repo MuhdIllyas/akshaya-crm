@@ -971,6 +971,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       SELECT se.*, se.is_edited, se.customer_service_id, se.work_source,
              sc.name AS subcategory_name,
              se.service_wallet_id AS service_wallet_id,
+             w.name AS service_wallet_name, -- 🔥 NEW: Select the wallet name
              s.name AS service_name,
              tr.id AS tracking_id,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
@@ -978,6 +979,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
       JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN wallets w ON se.service_wallet_id = w.id -- 🔥 NEW: Join the wallets table
       LEFT JOIN service_tracking tr ON tr.service_entry_id = se.id
     `;
 
@@ -1127,6 +1129,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
         totalCharge: parseFloat(entry.total_charges),
 
         serviceWalletId: entry.service_wallet_id,
+        serviceWalletName: entry.service_wallet_name,
         staffId: parseInt(entry.staff_id),
 
         created_at: entry.created_at
@@ -1151,6 +1154,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
           id: p.id,
           transaction_id: p.transaction_id,
           wallet: p.wallet_id,
+          walletName: p.wallet_name,
           method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
           amount: parseFloat(p.amount),
           status: p.status,
@@ -1197,11 +1201,15 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const result = await client.query(`
-      SELECT se.*, sc.name AS subcategory_name, se.service_wallet_id AS service_wallet_id, s.name AS service_name,
+      SELECT se.*, sc.name AS subcategory_name, 
+             se.service_wallet_id AS service_wallet_id, 
+             w.name AS service_wallet_name, -- 🔥 NEW
+             s.name AS service_name,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
+      LEFT JOIN wallets w ON se.service_wallet_id = w.id -- 🔥 NEW
       WHERE se.token_id = $1
     `, [tokenId]);
 
@@ -1254,6 +1262,7 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
       departmentCharge: parseFloat(entry.department_charges),
       totalCharge: parseFloat(entry.total_charges),
       serviceWalletId: entry.service_wallet_id,
+      serviceWalletName: entry.service_wallet_name,
       staffId: parseInt(entry.staff_id),
       created_at: entry.created_at ? entry.created_at.toISOString() : null,
       paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
@@ -1268,6 +1277,7 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
         id: p.id,
         transaction_id: p.transaction_id,
         wallet: p.wallet_id,
+        walletName: p.wallet_name,
         method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
         amount: parseFloat(p.amount),
         status: p.status,
@@ -1825,6 +1835,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: `Service Entry ID ${id} not found` });
     }
     const existingEntry = entryResult.rows[0];
+
     /*const createdDate = new Date(existingEntry.created_at);
     const today = new Date();
     createdDate.setHours(0,0,0,0);
@@ -1833,9 +1844,19 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Editing allowed only for today\'s entries' });
     }*/
-    if (req.user.role === 'staff' && existingEntry.is_edited) {
+
+    // 🔥 Check if this specific request is trying to change financials or categories
+    let isFinancialEdit = false;
+    if (serviceCharge !== undefined && parseFloat(serviceCharge) !== parseFloat(existingEntry.service_charges)) isFinancialEdit = true;
+    if (departmentCharge !== undefined && parseFloat(departmentCharge) !== parseFloat(existingEntry.department_charges)) isFinancialEdit = true;
+    if (totalCharge !== undefined && parseFloat(totalCharge) !== parseFloat(existingEntry.total_charges)) isFinancialEdit = true;
+    if (categoryId !== undefined && parseInt(categoryId) !== parseInt(existingEntry.category_id)) isFinancialEdit = true;
+    if (subcategoryId !== undefined && parseInt(subcategoryId) !== parseInt(existingEntry.subcategory_id)) isFinancialEdit = true;
+
+    // Block if they are trying to do a financial edit but have already used their 1 allowed edit
+    if (req.user.role === 'staff' && isFinancialEdit && existingEntry.is_edited) {
       await client.query('ROLLBACK');
-      return res.status(403).json({ error: 'You have already edited this entry' });
+      return res.status(403).json({ error: 'You have already used your one-time edit for financial details. You can only edit name, phone, and expiry dates.' });
     }
 
     const existingStaffResult = await client.query('SELECT centre_id FROM staff WHERE id = $1', [existingEntry.staff_id]);
@@ -1929,7 +1950,12 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     }
 
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    if (req.user.role === 'staff') updateFields.push(`is_edited = true`);
+    
+    // Only lock the entry if they actually changed financial data
+    if (req.user.role === 'staff' && isFinancialEdit && !existingEntry.is_edited) {
+      updateFields.push(`is_edited = true`);
+    }
+    
     updateValues.push(parseInt(id));
 
     if (updateFields.length === 1) {
@@ -2021,6 +2047,12 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       });
     }
 
+    // 🔥 Fetch the wallet name for the frontend response
+    const walletRes = updatedEntry.service_wallet_id 
+      ? await client.query('SELECT name FROM wallets WHERE id = $1', [updatedEntry.service_wallet_id]) 
+      : null;
+    const updatedWalletName = walletRes?.rows[0]?.name || null;
+
     const formattedEntry = {
       id: updatedEntry.id,
       tokenId: updatedEntry.token_id,
@@ -2033,6 +2065,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       departmentCharge: parseFloat(updatedEntry.department_charges),
       totalCharge: parseFloat(updatedEntry.total_charges),
       serviceWalletId: updatedEntry.service_wallet_id, // 🔥 Ensure this reflects the updated snapshot
+      serviceWalletName: updatedWalletName, // 🔥 Include the updated wallet name
       staffId: parseInt(updatedEntry.staff_id),
       created_at: updatedEntry.created_at ? updatedEntry.created_at.toISOString() : null,
       paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
@@ -2040,7 +2073,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       balanceAmount: parseFloat(updatedEntry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
       expiryDate: updatedEntry.expiry_date ? updatedEntry.expiry_date.toISOString().split('T')[0] : null,
       status: updatedEntry.status,
-      payments: paymentsResult.rows.map(p => ({ id: p.id, wallet: p.wallet_id, method: p.wallet_type === 'cash' ? 'cash' : 'wallet', amount: parseFloat(p.amount), status: p.status })),
+      payments: paymentsResult.rows.map(p => ({ id: p.id, wallet: p.wallet_id, walletName: p.wallet_name, method: p.wallet_type === 'cash' ? 'cash' : 'wallet', amount: parseFloat(p.amount), status: p.status })),
       customerServiceId: updatedEntry.customer_service_id,
     };
 
