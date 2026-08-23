@@ -740,17 +740,20 @@ const AllEntries = () => {
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700/50">
                   {filteredEntries.map(entry => (
                     <tr key={entry.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-700/50 transition-colors group">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-inner">
+                          <div className="flex-shrink-0 h-9 w-9">
+                            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-inner">
                               {getInitials(entry.customerName)}
                             </div>
                           </div>
-                          <div className="ml-4">
-                            <div className="font-semibold text-gray-900 dark:text-white">{entry.customerName}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
-                              <FiPhone className="h-3 w-3" /> {entry.phone}
+                          <div className="ml-3 min-w-0">
+                            {/* Changed to allow multi-line wrapping */}
+                            <div className="font-semibold text-gray-900 dark:text-white whitespace-normal break-words leading-tight">
+                              {entry.customerName}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1 whitespace-nowrap">
+                              <FiPhone className="h-3 w-3 flex-shrink-0" /> {entry.phone}
                             </div>
                           </div>
                         </div>
