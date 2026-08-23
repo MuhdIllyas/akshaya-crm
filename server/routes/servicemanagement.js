@@ -1825,6 +1825,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: `Service Entry ID ${id} not found` });
     }
     const existingEntry = entryResult.rows[0];
+
     /*const createdDate = new Date(existingEntry.created_at);
     const today = new Date();
     createdDate.setHours(0,0,0,0);
@@ -1833,9 +1834,19 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Editing allowed only for today\'s entries' });
     }*/
-    if (req.user.role === 'staff' && existingEntry.is_edited) {
+
+    // 🔥 Check if this specific request is trying to change financials or categories
+    let isFinancialEdit = false;
+    if (serviceCharge !== undefined && parseFloat(serviceCharge) !== parseFloat(existingEntry.service_charges)) isFinancialEdit = true;
+    if (departmentCharge !== undefined && parseFloat(departmentCharge) !== parseFloat(existingEntry.department_charges)) isFinancialEdit = true;
+    if (totalCharge !== undefined && parseFloat(totalCharge) !== parseFloat(existingEntry.total_charges)) isFinancialEdit = true;
+    if (categoryId !== undefined && parseInt(categoryId) !== parseInt(existingEntry.category_id)) isFinancialEdit = true;
+    if (subcategoryId !== undefined && parseInt(subcategoryId) !== parseInt(existingEntry.subcategory_id)) isFinancialEdit = true;
+
+    // Block if they are trying to do a financial edit but have already used their 1 allowed edit
+    if (req.user.role === 'staff' && isFinancialEdit && existingEntry.is_edited) {
       await client.query('ROLLBACK');
-      return res.status(403).json({ error: 'You have already edited this entry' });
+      return res.status(403).json({ error: 'You have already used your one-time edit for financial details. You can only edit name, phone, and expiry dates.' });
     }
 
     const existingStaffResult = await client.query('SELECT centre_id FROM staff WHERE id = $1', [existingEntry.staff_id]);
@@ -1929,7 +1940,12 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     }
 
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    if (req.user.role === 'staff') updateFields.push(`is_edited = true`);
+    
+    // Only lock the entry if they actually changed financial data
+    if (req.user.role === 'staff' && isFinancialEdit && !existingEntry.is_edited) {
+      updateFields.push(`is_edited = true`);
+    }
+    
     updateValues.push(parseInt(id));
 
     if (updateFields.length === 1) {
