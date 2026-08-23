@@ -971,6 +971,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       SELECT se.*, se.is_edited, se.customer_service_id, se.work_source,
              sc.name AS subcategory_name,
              se.service_wallet_id AS service_wallet_id,
+             w.name AS service_wallet_name, -- 🔥 NEW: Select the wallet name
              s.name AS service_name,
              tr.id AS tracking_id,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
@@ -978,6 +979,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
       JOIN staff st ON se.staff_id = st.id
+      LEFT JOIN wallets w ON se.service_wallet_id = w.id -- 🔥 NEW: Join the wallets table
       LEFT JOIN service_tracking tr ON tr.service_entry_id = se.id
     `;
 
@@ -1127,6 +1129,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
         totalCharge: parseFloat(entry.total_charges),
 
         serviceWalletId: entry.service_wallet_id,
+        serviceWalletName: entry.service_wallet_name,
         staffId: parseInt(entry.staff_id),
 
         created_at: entry.created_at
@@ -1197,11 +1200,15 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     const result = await client.query(`
-      SELECT se.*, sc.name AS subcategory_name, se.service_wallet_id AS service_wallet_id, s.name AS service_name,
+      SELECT se.*, sc.name AS subcategory_name, 
+             se.service_wallet_id AS service_wallet_id, 
+             w.name AS service_wallet_name, -- 🔥 NEW
+             s.name AS service_name,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
       JOIN services s ON se.category_id::integer = s.id
+      LEFT JOIN wallets w ON se.service_wallet_id = w.id -- 🔥 NEW
       WHERE se.token_id = $1
     `, [tokenId]);
 
@@ -1254,6 +1261,7 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
       departmentCharge: parseFloat(entry.department_charges),
       totalCharge: parseFloat(entry.total_charges),
       serviceWalletId: entry.service_wallet_id,
+      serviceWalletName: entry.service_wallet_name,
       staffId: parseInt(entry.staff_id),
       created_at: entry.created_at ? entry.created_at.toISOString() : null,
       paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
@@ -2037,6 +2045,12 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       });
     }
 
+    // 🔥 Fetch the wallet name for the frontend response
+    const walletRes = updatedEntry.service_wallet_id 
+      ? await client.query('SELECT name FROM wallets WHERE id = $1', [updatedEntry.service_wallet_id]) 
+      : null;
+    const updatedWalletName = walletRes?.rows[0]?.name || null;
+
     const formattedEntry = {
       id: updatedEntry.id,
       tokenId: updatedEntry.token_id,
@@ -2049,6 +2063,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       departmentCharge: parseFloat(updatedEntry.department_charges),
       totalCharge: parseFloat(updatedEntry.total_charges),
       serviceWalletId: updatedEntry.service_wallet_id, // 🔥 Ensure this reflects the updated snapshot
+      serviceWalletName: updatedWalletName, // 🔥 Include the updated wallet name
       staffId: parseInt(updatedEntry.staff_id),
       created_at: updatedEntry.created_at ? updatedEntry.created_at.toISOString() : null,
       paidAmount: paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),

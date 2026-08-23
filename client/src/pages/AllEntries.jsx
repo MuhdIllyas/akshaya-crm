@@ -860,7 +860,11 @@ const AllEntries = () => {
                     {selectedEntry.serviceWalletId && (
                       <div className="mb-3">
                         <p className="text-sm text-gray-600 dark:text-gray-400">Service Wallet</p>
-                        <p className="font-medium text-gray-900 dark:text-white">Wallet #{selectedEntry.serviceWalletId}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {selectedEntry.serviceWalletName 
+                            ? `${selectedEntry.serviceWalletName} (#${selectedEntry.serviceWalletId})` 
+                            : `Wallet #${selectedEntry.serviceWalletId}`}
+                        </p>
                       </div>
                     )}
                     {selectedEntry.notes && (
