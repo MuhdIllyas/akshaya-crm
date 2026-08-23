@@ -1154,6 +1154,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
           id: p.id,
           transaction_id: p.transaction_id,
           wallet: p.wallet_id,
+          walletName: p.wallet_name,
           method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
           amount: parseFloat(p.amount),
           status: p.status,
@@ -1276,6 +1277,7 @@ router.get('/entry/:tokenId', authenticateToken, async (req, res) => {
         id: p.id,
         transaction_id: p.transaction_id,
         wallet: p.wallet_id,
+        walletName: p.wallet_name,
         method: p.wallet_type === 'cash' ? 'cash' : 'wallet',
         amount: parseFloat(p.amount),
         status: p.status,
@@ -2071,7 +2073,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       balanceAmount: parseFloat(updatedEntry.total_charges) - paymentsResult.rows.filter(p => p.status === 'received').reduce((sum, p) => sum + parseFloat(p.amount), 0),
       expiryDate: updatedEntry.expiry_date ? updatedEntry.expiry_date.toISOString().split('T')[0] : null,
       status: updatedEntry.status,
-      payments: paymentsResult.rows.map(p => ({ id: p.id, wallet: p.wallet_id, method: p.wallet_type === 'cash' ? 'cash' : 'wallet', amount: parseFloat(p.amount), status: p.status })),
+      payments: paymentsResult.rows.map(p => ({ id: p.id, wallet: p.wallet_id, walletName: p.wallet_name, method: p.wallet_type === 'cash' ? 'cash' : 'wallet', amount: parseFloat(p.amount), status: p.status })),
       customerServiceId: updatedEntry.customer_service_id,
     };
 
