@@ -236,6 +236,11 @@ const AllEntries = () => {
     return category ? category.name : 'N/A';
   };
 
+  const getInitials = (name) => {
+    if (!name) return 'C';
+    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  };
+
   const getSubcategoryName = (categoryId, subcategoryId) => {
     const category = categories.find(cat => cat.id === categoryId);
     if (category && category.subcategories) {
@@ -716,7 +721,7 @@ const AllEntries = () => {
             ))}
           </div>
         ) : (
-          
+
           // Upgraded List View
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
