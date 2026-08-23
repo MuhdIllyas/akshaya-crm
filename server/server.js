@@ -83,10 +83,9 @@ const app = express();
 const httpServer = createServer(app);
 
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || "http://localhost:5173"
-  ],
-  credentials: true
+   origin: [ "https://akshayasahayi.com", "https://www.akshayasahayi.com" 
+   ], 
+   credentials: true 
 }));
 
 /* ================================
