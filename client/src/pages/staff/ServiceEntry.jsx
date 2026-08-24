@@ -393,7 +393,7 @@ const ServiceEntry = () => {
         
         toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
         
-        const entriesRes = await getServiceEntries(true);
+        const entriesRes = await getServiceEntries(true, null, 500);
         setServiceEntries(entriesRes.data);
         
         setCorrectionStatus(prev => {
@@ -787,7 +787,7 @@ const ServiceEntry = () => {
         }
 
         try {
-          const entriesRes = await getServiceEntries(true);
+          const entriesRes = await getServiceEntries(true, null, 500);
           console.log('ServiceEntry.jsx: Today\'s service entries response:', JSON.stringify(entriesRes.data, null, 2));
           setServiceEntries(entriesRes.data);
         } catch (err) {
@@ -1293,7 +1293,7 @@ const ServiceEntry = () => {
         
         // --- 1. Fetch updated entries so the table shows the new submission immediately ---
         try {
-          const entriesRes = await getServiceEntries(true);
+          const entriesRes = await getServiceEntries(true, null, 500);
           setServiceEntries(entriesRes.data || []);
         } catch (fetchErr) {
           console.error("Failed to refresh table", fetchErr);
