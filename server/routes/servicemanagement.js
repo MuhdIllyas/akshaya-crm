@@ -2469,7 +2469,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,$11,NOW())`,
       [
         original.wallet_id,
-        user.id,
+        original.staff_id,
         reverseType,
         original.amount,
         `Correction reversal: ${reason} (Original: ${original.description || `Txn #${original.id}`})`,
@@ -2529,7 +2529,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW()) RETURNING id`,
       [
         finalWalletId,
-        user.id,
+        original.staff_id,
         original.type,
         finalAmount,
         `Corrected: ${reason} (Was: ₹${original.amount} from ${original.wallet_name})`,

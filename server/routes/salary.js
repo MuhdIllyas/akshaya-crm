@@ -1,7 +1,7 @@
 import express from 'express';
 import pool from '../db.js';
 import { authMiddleware } from './staff.js';
-import { logActivity } from "../utils/activityLogger.js"; // Add this import
+import { logActivity } from "../utils/activityLogger.js";
 
 const router = express.Router();
 
@@ -185,8 +185,6 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
 
     // 1. Get Current Time in HH:mm format for server-side validation
     const now = new Date();
-    // Using Intl to ensure we get the time in a specific timezone (e.g., Asia/Kolkata) if needed, 
-    // or just standard local time if server/client are matched.
     const serverHHmm = now.toTimeString().split(' ')[0].substring(0, 5); 
     
     let punchTime = time;
@@ -195,17 +193,14 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
     if (punch_type === 'in') {
         if (!time) return res.status(400).json({ error: 'Time required for punch-in' });
     
-        // Use Intl to get the current time specifically in India Time (or your local zone)
-        // This ensures 'serverTime' matches the user's 'localTime' context
         const serverNow = new Date();
         const serverHHmm = serverNow.toLocaleTimeString('en-GB', { 
             hour: '2-digit', 
             minute: '2-digit', 
             hour12: false, 
-            timeZone: 'Asia/Kolkata' // Force India Time context
+            timeZone: 'Asia/Kolkata' 
         });
     
-        // Convert HH:mm to minutes from midnight
         const [pHT, pMT] = time.split(':').map(Number);
         const [sHT, sMT] = serverHHmm.split(':').map(Number);
         
@@ -213,14 +208,12 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
         const serverMinutes = sHT * 60 + sMT;
         const diff = Math.abs(serverMinutes - punchMinutes);
     
-        // Increase buffer to 30 minutes to be safe against slow networks
         if (diff > 30) {
             return res.status(400).json({ 
                 error: `Validation Error: Punch time (${time}) differs too much from Server time (${serverHHmm}).` 
             });
         }
     } else {
-        // For punch out, always force the server's current time
         const serverNow = new Date();
         punchTime = serverNow.toLocaleTimeString('en-GB', { 
             hour: '2-digit', 
@@ -230,19 +223,41 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
         });
     }
 
-    // 3. Check for existing open records
-    const existing = await client.query(
-      `SELECT id, punch_in, punch_out FROM attendance 
-       WHERE staff_id = $1 AND date = $2 AND punch_out IS NULL`,
+    // 3. Check for ANY existing record for today
+    const existingAll = await client.query(
+      `SELECT id, punch_in, punch_out, status FROM attendance 
+       WHERE staff_id = $1 AND date = $2`,
       [req.user.id, date]
     );
 
     if (punch_type === 'in') {
-      if (existing.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Already punched in. Please punch out first.' });
+      if (existingAll.rows.length > 0) {
+        const record = existingAll.rows[0];
+        
+        // OVERRIDE: If previously marked absent/half-day from a leave, convert to present
+        if ((record.status === 'absent' || record.status === 'half-day') && record.punch_in === null) {
+          const result = await client.query(
+            `UPDATE attendance 
+             SET punch_in = $1, status = 'present', updated_at = NOW() 
+             WHERE id = $2 
+             RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
+            [punchTime, record.id]
+          );
+          await client.query('COMMIT');
+          return res.status(201).json(result.rows[0]);
+        } 
+        
+        // standard validation for duplicates
+        if (record.punch_out === null) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Already punched in. Please punch out first.' });
+        } else {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Attendance already completed for today.' });
+        }
       }
       
+      // If no record exists at all, normal INSERT
       const result = await client.query(
         `INSERT INTO attendance (staff_id, date, punch_in, status, created_at)
          VALUES ($1, $2, $3, 'present', NOW()) 
@@ -255,12 +270,13 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
 
     } else {
       // PUNCH OUT Logic
-      if (existing.rows.length === 0) {
+      const openRecord = existingAll.rows.find(r => r.punch_out === null && r.punch_in !== null);
+      if (!openRecord) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'No active punch-in record found for today.' });
       }
 
-      const { id, punch_in } = existing.rows[0];
+      const { id, punch_in } = openRecord;
       const newBreaks = breaks || null;
       const hours = calculateHours(punch_in, punchTime, newBreaks);
 
@@ -542,12 +558,7 @@ router.get('/leaves', async (req, res) => {
 
     // --- Date Filtering (Overlap Logic) ---
     if (month) {
-      // month is YYYY-MM, we need YYYY-MM-01 for PostgreSQL DATE_TRUNC
       const monthStart = `${month}-01`;
-      
-      // SQL Overlap Logic: (Leave_From <= Month_End) AND (Leave_To >= Month_Start)
-      // Month_End calculation: DATE_TRUNC('month', $N::date) + interval '1 month' - interval '1 day'
-      // This reliably finds the last day of the given month.
       whereClause += ` 
         AND l.from_date <= DATE_TRUNC('month', $${paramIndex}::date) + interval '1 month' - interval '1 day'
         AND l.to_date >= DATE_TRUNC('month', $${paramIndex}::date)
@@ -583,7 +594,8 @@ router.get('/leaves', async (req, res) => {
 
 // POST /api/salary/leaves - Submit a leave application (staff only)
 router.post('/leaves', authMiddleware(['staff']), async (req, res) => {
-  const { type, from_date, to_date, reason } = req.body;
+  // Extract the new variables
+  const { type, from_date, to_date, reason, leave_duration = 'full', leave_time = null } = req.body;
   const client = await pool.connect();
   try {
     if (!type || !from_date || !to_date || !reason) {
@@ -591,9 +603,9 @@ router.post('/leaves', authMiddleware(['staff']), async (req, res) => {
     }
     await client.query('BEGIN');
     const result = await client.query(
-      `INSERT INTO leaves (staff_id, type, from_date, to_date, reason, status, applied_date, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'pending', CURRENT_DATE, NOW()) RETURNING *, TO_CHAR(applied_date, 'YYYY-MM-DD') AS applied_date`,
-      [req.user.id, type, from_date, to_date, reason]
+      `INSERT INTO leaves (staff_id, type, from_date, to_date, reason, leave_duration, leave_time, status, applied_date, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', CURRENT_DATE, NOW()) RETURNING *, TO_CHAR(applied_date, 'YYYY-MM-DD') AS applied_date`,
+      [req.user.id, type, from_date, to_date, reason, leave_duration, leave_time]
     );
     await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
@@ -602,7 +614,7 @@ router.post('/leaves', authMiddleware(['staff']), async (req, res) => {
     console.error('Error submitting leave:', {
       message: err.message,
       stack: err.stack,
-      params: { staff_id: req.user.id, type, from_date, to_date, reason },
+      params: { staff_id: req.user.id, type, from_date, to_date, reason, leave_duration, leave_time },
     });
     res.status(500).json({ error: 'Failed to submit leave', details: err.message });
   } finally {
@@ -638,7 +650,40 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Leave not found or unauthorized' });
     }
-    
+
+    // NEW BLOCK: Automatically mark attendance based on the approved leave
+    if (status === 'approved') {
+      const leave = result.rows[0];
+      const startDate = new Date(leave.from_date);
+      const endDate = new Date(leave.to_date);
+      
+      // Determine the overriding status
+      const attStatus = leave.leave_duration === 'half' ? 'half-day' : 'absent';
+
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        
+        // Check if an attendance record already exists for this date
+        const existingAtt = await client.query(
+          `SELECT id FROM attendance WHERE staff_id = $1 AND date = $2`,
+          [leave.staff_id, dateStr]
+        );
+
+        if (existingAtt.rows.length > 0) {
+          await client.query(
+            `UPDATE attendance SET status = $1, updated_at = NOW() WHERE id = $2`,
+            [attStatus, existingAtt.rows[0].id]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO attendance (staff_id, date, status, created_at)
+             VALUES ($1, $2, $3, NOW())`,
+            [leave.staff_id, dateStr, attStatus]
+          );
+        }
+      }
+    }
+
     await client.query('COMMIT');
 
     // ========== ACTIVITY LOGGING ==========
@@ -1816,44 +1861,106 @@ router.put('/centers/:centerId/attendance/:id', authMiddleware(['superadmin']), 
 });
 
 // PUT /api/salary/centers/:centerId/leaves/:id - Update leave status for specific center (superadmin only)
-router.put('/centers/:centerId/leaves/:id',authMiddleware(['superadmin']), async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
+router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), async (req, res) => {
+  const { centerId, id } = req.params;
+  const { status } = req.body;
 
-    if (!['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check if center exists
+    const center = await checkCenterExists(client, centerId);
+    if (!center) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Center not found' });
     }
 
-    const result = await req.db.query(
-      `
-      UPDATE leaves
-      SET status = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING *
-      `,
-      [status, id]
+    // Get leave details before update for logging
+    const leaveDetails = await client.query(
+      `SELECT l.*, s.name AS staff_name, s.centre_id 
+       FROM leaves l 
+       JOIN staff s ON l.staff_id = s.id 
+       WHERE l.id = $1`,
+      [id]
     );
 
-    if (!result.rows.length) {
-      return res.status(404).json({ error: 'Leave not found' });
+    // Update leave status
+    const result = await client.query(
+      `UPDATE leaves SET status = $1, updated_at = NOW()
+       WHERE id = $2 AND EXISTS (
+         SELECT 1 FROM staff s WHERE s.id = leaves.staff_id AND s.centre_id = $3
+       ) RETURNING *, TO_CHAR(applied_date, 'YYYY-MM-DD') AS applied_date`,
+      [status, id, centerId]
+    );
+
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Leave not found or unauthorized' });
     }
+
+    // NEW BLOCK: Automatically mark attendance based on the approved leave (same as admin route)
+    if (status === 'approved') {
+      const leave = result.rows[0];
+      const startDate = new Date(leave.from_date);
+      const endDate = new Date(leave.to_date);
+      
+      const attStatus = leave.leave_duration === 'half' ? 'half-day' : 'absent';
+
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        
+        const existingAtt = await client.query(
+          `SELECT id FROM attendance WHERE staff_id = $1 AND date = $2`,
+          [leave.staff_id, dateStr]
+        );
+
+        if (existingAtt.rows.length > 0) {
+          await client.query(
+            `UPDATE attendance SET status = $1, updated_at = NOW() WHERE id = $2`,
+            [attStatus, existingAtt.rows[0].id]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO attendance (staff_id, date, status, created_at)
+             VALUES ($1, $2, $3, NOW())`,
+            [leave.staff_id, dateStr, attStatus]
+          );
+        }
+      }
+    }
+
+    await client.query('COMMIT');
 
     // ========== ACTIVITY LOGGING ==========
     // Log leave approval/rejection for superadmin
-    await logActivity({
-      centre_id: centerId,
-      related_type: 'leave',
-      related_id: id,
-      action: status === 'approved' ? 'Leave Approved' : 'Leave Rejected',
-      description: `Superadmin ${status === 'approved' ? 'approved' : 'rejected'} leave request`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
+    if (leaveDetails.rows.length > 0) {
+      const leave = leaveDetails.rows[0];
+      await logActivity({
+        centre_id: leave.centre_id,
+        related_type: 'leave',
+        related_id: id,
+        action: status === 'approved' ? 'Leave Approved' : 'Leave Rejected',
+        description: `Superadmin ${status === 'approved' ? 'approved' : 'rejected'} leave request for ${leave.staff_name} (${leave.type}) from ${new Date(leave.from_date).toLocaleDateString()} to ${new Date(leave.to_date).toLocaleDateString()}`,
+        performed_by: req.user.id,
+        performed_by_role: req.user.role
+      });
+    }
     // ======================================
 
     res.json(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating leave for center:', err);
+    res.status(500).json({ error: 'Failed to update leave', details: err.message });
+  } finally {
+    client.release();
   }
-);
+});
 
 // POST /api/salary/centers/:centerId/salaries - Create salary for specific center (superadmin only)
 router.post('/centers/:centerId/salaries', authMiddleware(['superadmin']), async (req, res) => {
@@ -2160,33 +2267,32 @@ router.post('/centers/:centerId/salaries/bulk-send', authMiddleware(['superadmin
 });
 
 // SUPER ADMIN – delete calendar event (centre-aware)
-router.delete('/centers/:centerId/calendar/:id',authMiddleware(['superadmin']), async (req, res) => {
-    const { id } = req.params;
+router.delete('/centers/:centerId/calendar/:id', authMiddleware(['superadmin']), async (req, res) => {
+  const { id } = req.params;
 
-    const result = await req.db.query(
-      'DELETE FROM calendar_events WHERE id = $1 RETURNING *',
-      [id]
-    );
+  const result = await req.db.query(
+    'DELETE FROM calendar_events WHERE id = $1 RETURNING *',
+    [id]
+  );
 
-    if (!result.rows.length) {
-      return res.status(404).json({ error: 'Calendar event not found' });
-    }
-
-    // ========== ACTIVITY LOGGING ==========
-    // Log calendar event deletion for superadmin
-    await logActivity({
-      centre_id: result.rows[0].centre_id,
-      related_type: 'calendar',
-      related_id: id,
-      action: 'Calendar Event Deleted',
-      description: `Superadmin deleted calendar event`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
-
-    res.json({ success: true });
+  if (!result.rows.length) {
+    return res.status(404).json({ error: 'Calendar event not found' });
   }
-);
+
+  // ========== ACTIVITY LOGGING ==========
+  // Log calendar event deletion for superadmin
+  await logActivity({
+    centre_id: result.rows[0].centre_id,
+    related_type: 'calendar',
+    related_id: id,
+    action: 'Calendar Event Deleted',
+    description: `Superadmin deleted calendar event`,
+    performed_by: req.user.id,
+    performed_by_role: req.user.role
+  });
+  // ======================================
+
+  res.json({ success: true });
+});
 
 export default router;
