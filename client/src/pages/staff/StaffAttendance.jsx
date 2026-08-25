@@ -751,12 +751,28 @@ const StaffAttendance = () => {
     </tr>
   );
 
-  const LeaveApplicationRow = ({ application }) => (
-    <tr key={application.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-      <td className="py-4 px-4">
-        <p className="text-sm font-medium text-gray-900">{application.type}</p>
-      </td>
-      <td className="py-4 px-4">
+const LeaveApplicationRow = ({ application }) => {
+    // Helper to format 'casual_leave' to 'Casual Leave'
+    const formatLeaveType = (type) => {
+      if (!type) return 'Unknown';
+      return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    };
+
+    return (
+      <tr key={application.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+        <td className="py-4 px-4">
+          <p className="text-sm font-medium text-gray-900">{formatLeaveType(application.type)}</p>
+          <div className="mt-1">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+              application.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+            }`}>
+              {application.leave_duration === 'half' 
+                ? `Half Day ${application.leave_time ? `(${application.leave_time})` : ''}` 
+                : 'Full Day'}
+            </span>
+          </div>
+        </td>
+        <td className="py-4 px-4">
         <p className="text-sm text-gray-900">
           {new Date(application.from_date).toLocaleDateString('en-IN')}
         </p>
@@ -785,6 +801,7 @@ const StaffAttendance = () => {
       </td>
     </tr>
   );
+};
 
   const SalaryRow = ({ salary }) => (
     <tr key={`${salary.staff_id}-${salary.month}`} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
