@@ -1995,8 +1995,16 @@ const ServiceEntry = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  {/* 🔥 ADDED SERIAL NUMBER HEADER */}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                  
+                  {/* 🔥 CONDITIONALLY SHOW STAFF HEADER FOR ADMINS */}
+                  {(userRole === 'admin' || userRole === 'superadmin') && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
+                  )}
+                  
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
@@ -2005,23 +2013,30 @@ const ServiceEntry = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {serviceEntries.map(entry => {
+                {/* 🔥 ADDED 'index' FOR SERIAL NUMBER */}
+                {serviceEntries.map((entry, index) => {
                   const deptTx = entry.departmentChargeTransaction;
                   const serviceTx = entry.serviceChargeTransaction;
-                  
-                  // 🔥 SAFETY: Filter payments to only show latest non-reversal versions
                   const safePayments = getLatestTransactions(entry.payments || []);
                   
                   return (
                     <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
+                      {/* 🔥 RENDER SERIAL NUMBER */}
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                        {index + 1}
+                      </td>
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
-                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      </td>
+
+                      {/* 🔥 WRAPPED CUSTOMER NAME: Removed 'whitespace-nowrap' from td, added 'whitespace-normal break-words' to span */}
+                      <td className="px-6 py-4 text-sm text-gray-900">
                         <div className="font-medium flex items-center gap-2">
-                          <span className="truncate max-w-[150px] sm:max-w-xs">{entry.customerName}</span>
+                          <span className="whitespace-normal break-words max-w-[150px] sm:max-w-[200px]">
+                            {entry.customerName}
+                          </span>
                           
-                          {/* UPGRADED NOTES BADGE with better tooltip */}
                           {entry.notes_count > 0 && (
                             <span 
                               className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-100 flex-shrink-0 cursor-help transition-all hover:bg-indigo-100"
@@ -2032,8 +2047,26 @@ const ServiceEntry = () => {
                             </span>
                           )}
                         </div>
-                        <div className="text-gray-500">{entry.phone}</div>
-                       </td>
+                        <div className="text-gray-500 mt-0.5">{entry.phone}</div>
+                      </td>
+
+                      {/* 🔥 CONDITIONALLY RENDER STAFF NAME FOR ADMINS */}
+                      {(userRole === 'admin' || userRole === 'superadmin') && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                          {entry.staffName || 'Unknown'}
+                        </td>
+                      )}
+
+                      <td className="px-6 py-4 text-sm">
+                        <div className="font-semibold text-gray-900">{getCategoryName(entry.category)}</div>
+                        <div className="text-gray-500 mb-1.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
+                        {entry.expiryDate && entry.expiryDate !== 'N/A' && (
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
+                            <FiCalendar className="h-3 w-3" /> 
+                            Exp: {new Date(entry.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="font-semibold text-gray-900">{getCategoryName(entry.category)}</div>
                         <div className="text-gray-500 mb-1.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>

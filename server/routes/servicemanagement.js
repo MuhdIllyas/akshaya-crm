@@ -973,6 +973,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
              se.service_wallet_id AS service_wallet_id,
              w.name AS service_wallet_name, -- 🔥 NEW: Select the wallet name
              s.name AS service_name,
+             st.name AS staff_name,
              tr.id AS tracking_id,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
@@ -1131,6 +1132,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
         serviceWalletId: entry.service_wallet_id,
         serviceWalletName: entry.service_wallet_name,
         staffId: parseInt(entry.staff_id),
+        staffName: entry.staff_name,
 
         created_at: entry.created_at
           ? entry.created_at.toISOString()
