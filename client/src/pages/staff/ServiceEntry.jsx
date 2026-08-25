@@ -1245,6 +1245,9 @@ const ServiceEntry = () => {
           delete editPayload.payments;
           delete editPayload.services;
 
+          // 🔥 when admin edits: Remove the logged-in admin's ID so the backend preserves the original staff member
+          delete editPayload.staffId;
+
           await updateServiceEntry(editingEntryId, editPayload);
           toast.success('Service entry updated successfully!');
         } else {
