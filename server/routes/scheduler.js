@@ -212,7 +212,7 @@ cron.schedule("20 0 * * *", async () => {
 });
 
 // Run every day at 23:55 (11:55 PM) - Auto-mark Absent
-cron.schedule('59 23 * * *', async () => {
+cron.schedule('9 0 * * *', async () => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -251,7 +251,7 @@ cron.schedule('59 23 * * *', async () => {
 });
 
 // Run every day at 23:59 (11:59 PM)
-cron.schedule('59 23 * * *', async () => {
+cron.schedule('8 0 * * *', async () => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
