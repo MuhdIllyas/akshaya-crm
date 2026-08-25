@@ -1031,8 +1031,11 @@ const AdminAttendance = () => {
     try { 
       const upd = await updateLeave(id, act); 
       setPendingLeaves(p => p.filter(l => l.id !== id)); 
-      // Update allLeaves state on action
-      setAllLeaves(p => p.map(l => l.id === id ? upd : l)); 
+      
+      // FIX: Merge the existing leave data (l) with the updated response (upd)
+      // This preserves 'staff_name' and 'department' while updating the 'status'
+      setAllLeaves(p => p.map(l => l.id === id ? { ...l, ...upd } : l)); 
+      
       setShowLeaveActionModal(false); 
       setSelectedLeave(null); 
       toast.success(`Leave ${act}`); 
