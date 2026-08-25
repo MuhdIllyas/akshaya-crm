@@ -211,6 +211,45 @@ cron.schedule("20 0 * * *", async () => {
   timezone: "Asia/Kolkata"
 });
 
+// Run every day at 23:55 (11:55 PM) - Auto-mark Absent
+cron.schedule('59 23 * * *', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // This single query finds all active staff on a working day who have NO attendance record
+    // for today (whether present, leave, or otherwise) and marks them absent.
+    const result = await client.query(`
+      INSERT INTO attendance (staff_id, date, status, created_at)
+      SELECT s.id, CURRENT_DATE, 'absent', NOW()
+      FROM staff s
+      WHERE s.status = 'Active'
+        -- 1. Ensure today is an official working day for their specific centre
+        AND EXISTS (
+          SELECT 1 FROM calendar_events ce 
+          WHERE ce.centre_id = s.centre_id 
+            AND ce.date = CURRENT_DATE 
+            AND ce.type = 'working'
+        )
+        -- 2. Ensure they don't already have an attendance record for today
+        AND NOT EXISTS (
+          SELECT 1 FROM attendance a 
+          WHERE a.staff_id = s.id 
+            AND a.date = CURRENT_DATE
+        )
+      RETURNING id;
+    `);
+
+    await client.query('COMMIT');
+    console.log(`Auto-marked ${result.rowCount} staff members as absent.`);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error in auto-absent cron job:', err);
+  } finally {
+    client.release();
+  }
+});
+
 // Run every day at 23:59 (11:59 PM)
 cron.schedule('59 23 * * *', async () => {
   const client = await pool.connect();
