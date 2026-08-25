@@ -211,4 +211,49 @@ cron.schedule("20 0 * * *", async () => {
   timezone: "Asia/Kolkata"
 });
 
+// Run every day at 23:59 (11:59 PM)
+cron.schedule('59 23 * * *', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Find all records from today where staff punched in but haven't punched out
+    const openPunches = await client.query(`
+      SELECT id, staff_id, punch_in, breaks, TO_CHAR(date, 'YYYY-MM-DD') AS date
+      FROM attendance 
+      WHERE date = CURRENT_DATE AND punch_in IS NOT NULL AND punch_out IS NULL
+    `);
+
+    for (const record of openPunches.rows) {
+      // Fetch the staff's scheduled end time for today
+      const scheduleRes = await client.query(`
+        SELECT end_time FROM staff_schedules 
+        WHERE staff_id = $1 AND effective_from <= $2 
+        ORDER BY effective_from DESC LIMIT 1
+      `, [record.staff_id, record.date]);
+
+      const endTime = scheduleRes.rows.length > 0 ? scheduleRes.rows[0].end_time : '18:00'; 
+      const hours = calculateHours(record.punch_in, endTime, record.breaks);
+
+      // Update the record with the auto-punch-out time
+      await client.query(`
+        UPDATE attendance 
+        SET punch_out = $1, hours = $2, status = 'present', updated_at = NOW()
+        WHERE id = $3
+      `, [endTime, hours, record.id]);
+
+      // Recalculate late/extra minutes
+      await recalculateDayDeviation(client, record.staff_id, record.date);
+    }
+    
+    await client.query('COMMIT');
+    console.log(`Auto-punched out ${openPunches.rows.length} staff members.`);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error in auto-punch-out cron job:', err);
+  } finally {
+    client.release();
+  }
+});
+
 export default cron;
