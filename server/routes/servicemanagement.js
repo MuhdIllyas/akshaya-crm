@@ -2448,6 +2448,18 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
 
     const correctionGroupId = original.correction_group_id || crypto.randomUUID();
 
+    // 🔥 Always tie the money to the Service Owner
+    let trueStaffId = original.staff_id;
+    if (original.reference_id) {
+      const seOwnerRes = await client.query(
+        `SELECT staff_id FROM service_entries WHERE id = $1`, 
+        [original.reference_id]
+      );
+      if (seOwnerRes.rows.length > 0) {
+        trueStaffId = seOwnerRes.rows[0].staff_id;
+      }
+    }
+
     // 🔥 STAFF LIMIT
     if (user.role === 'staff') {
       const countRes = await client.query(
@@ -2471,7 +2483,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,$11,NOW())`,
       [
         original.wallet_id,
-        original.staff_id,
+        trueStaffId, // ✅ Forces the reversal to hit the original staff member
         reverseType,
         original.amount,
         `Correction reversal: ${reason} (Original: ${original.description || `Txn #${original.id}`})`,
@@ -2531,7 +2543,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW()) RETURNING id`,
       [
         finalWalletId,
-        original.staff_id,
+        trueStaffId, // ✅ Forces the new corrected money to credit the original staff member
         original.type,
         finalAmount,
         `Corrected: ${reason} (Was: ₹${original.amount} from ${original.wallet_name})`,
