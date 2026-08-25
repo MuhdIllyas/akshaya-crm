@@ -664,36 +664,58 @@ const AttendanceRow = ({ record, staffList, onEdit }) => {
   );
 };
 
-// MODIFIED LeaveApplicationRow to show status and action buttons only for 'pending'
-const LeaveApplicationRow = ({ application, handleLeaveAction }) => (
-  <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-    <td className="py-4 px-4"><p className="text-sm font-medium text-gray-900">{application.staff_name}</p><p className="text-xs text-gray-500">{application.department}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{application.type}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.from_date).toLocaleDateString('en-IN')}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.to_date).toLocaleDateString('en-IN')}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{application.reason}</p></td>
-    <td className="py-4 px-4">
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-        application.status === 'approved' ? 'bg-emerald-50 text-emerald-700'
-          : application.status === 'rejected' ? 'bg-red-50 text-red-700'
-          : 'bg-amber-50 text-amber-700'
-      }`}>
-        {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-      </span>
-     </td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-600">{new Date(application.applied_date).toLocaleDateString('en-IN')}</p></td>
-    <td className="py-4 px-4">
-      {application.status === 'pending' ? (
-        <div className="flex items-center space-x-2">
-          <button onClick={() => handleLeaveAction(application.id, 'approved')} className="px-3 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"><FiCheck className="h-4 w-4" /></button>
-          <button onClick={() => handleLeaveAction(application.id, 'rejected')} className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"><FiX className="h-4 w-4" /></button>
+// MODIFIED LeaveApplicationRow to show status, action buttons, and duration badges
+const LeaveApplicationRow = ({ application, handleLeaveAction }) => {
+  // Helper to format 'casual_leave' to 'Casual Leave'
+  const formatLeaveType = (type) => {
+    if (!type) return 'Unknown';
+    return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
+  return (
+    <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+      <td className="py-4 px-4">
+        <p className="text-sm font-medium text-gray-900">{application.staff_name}</p>
+        <p className="text-xs text-gray-500">{application.department}</p>
+      </td>
+      <td className="py-4 px-4">
+        <p className="text-sm font-medium text-gray-900">{formatLeaveType(application.type)}</p>
+        <div className="mt-1">
+          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+            application.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+          }`}>
+            {application.leave_duration === 'half' 
+              ? `Half Day ${application.leave_time ? `(${application.leave_time})` : ''}` 
+              : 'Full Day'}
+          </span>
         </div>
-      ) : (
-        <span className="text-sm text-gray-400">-</span>
-      )}
-     </td>
-   </tr>
-);
+      </td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.from_date).toLocaleDateString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.to_date).toLocaleDateString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">{application.reason}</p></td>
+      <td className="py-4 px-4">
+        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+          application.status === 'approved' ? 'bg-emerald-50 text-emerald-700'
+            : application.status === 'rejected' ? 'bg-red-50 text-red-700'
+            : 'bg-amber-50 text-amber-700'
+        }`}>
+          {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+        </span>
+       </td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-600">{new Date(application.applied_date).toLocaleDateString('en-IN')}</p></td>
+      <td className="py-4 px-4">
+        {application.status === 'pending' ? (
+          <div className="flex items-center space-x-2">
+            <button onClick={() => handleLeaveAction(application.id, 'approved')} className="px-3 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"><FiCheck className="h-4 w-4" /></button>
+            <button onClick={() => handleLeaveAction(application.id, 'rejected')} className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"><FiX className="h-4 w-4" /></button>
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">-</span>
+        )}
+       </td>
+     </tr>
+  );
+};
 
 const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => (
   <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
@@ -2185,7 +2207,16 @@ const AdminAttendance = () => {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-700">Leave Type</p>
-                  <p className="text-gray-900">{selectedLeave.type}</p>
+                  <p className="text-gray-900 flex items-center">
+                    {selectedLeave.type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                    <span className={`ml-3 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      selectedLeave.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {selectedLeave.leave_duration === 'half' 
+                        ? `Half Day ${selectedLeave.leave_time ? `(${selectedLeave.leave_time})` : ''}` 
+                        : 'Full Day'}
+                    </span>
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
