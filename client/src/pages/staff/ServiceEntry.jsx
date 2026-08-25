@@ -2067,16 +2067,6 @@ const ServiceEntry = () => {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm">
-                        <div className="font-semibold text-gray-900">{getCategoryName(entry.category)}</div>
-                        <div className="text-gray-500 mb-1.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
-                        {entry.expiryDate && entry.expiryDate !== 'N/A' && (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
-                            <FiCalendar className="h-3 w-3" /> 
-                            Exp: {new Date(entry.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </div>
-                        )}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         ₹{entry.totalCharge.toFixed(2)}
                        </td>
