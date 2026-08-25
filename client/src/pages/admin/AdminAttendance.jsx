@@ -556,8 +556,33 @@ const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
       <div className="flex items-center space-x-3 mb-4">
-        {staff.photo ? <img src={staff.photo} alt={staff.name} className="w-10 h-10 rounded-full object-cover border border-gray-200" /> :
-          <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center"><span className="text-white font-medium text-sm">{staff.name.split(' ').map(n => n[0]).join('')}</span></div>}
+        {staff.photo ? (
+          <>
+            <img 
+              src={staff.photo.startsWith('http') || staff.photo.startsWith('data:') 
+                ? staff.photo 
+                : `${import.meta.env.VITE_API_URL || ''}${staff.photo.startsWith('/') ? '' : '/'}${staff.photo}`} 
+              alt={staff.name} 
+              className="w-10 h-10 rounded-full object-cover border border-gray-200" 
+              onError={(e) => {
+                e.target.style.display = 'none';
+                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+            {/* Hidden fallback div that appears if the image fails to load */}
+            <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full items-center justify-center hidden">
+              <span className="text-white font-medium text-sm">
+                {staff.name ? staff.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : ''}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-white font-medium text-sm">
+              {staff.name ? staff.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : ''}
+            </span>
+          </div>
+        )}
         <div>
           <p className="font-medium text-gray-900">{staff.name}</p>
           <p className="text-sm text-gray-500">{staff.position}</p>
