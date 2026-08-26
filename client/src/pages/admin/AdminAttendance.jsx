@@ -1486,123 +1486,73 @@ const AdminAttendance = () => {
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900">Salary Management</h2>
-                  <div className="flex items-center space-x-3">
-                    <select 
-                      className="border border-gray-300 rounded-lg px-3 py-2" 
-                      value={selectedSalaryMonth} 
-                      onChange={e => setSelectedSalaryMonth(e.target.value)}
-                    >
-                      {monthOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button onClick={handleSendSalary} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
-                      <FiSend className="h-4 w-4" /><span>Send Salaries</span>
-                    </button>
-                    <button onClick={() => { 
-                      setSalaryEdit({ 
-                        staff_id: '', month: selectedSalaryMonth, basic: '', hra: '', ta: '', other_allowances: '', deductions: '', working_days: '', present_days: '', additional_components: [] 
-                      }); 
-                      setShowCreateSalaryModal(true); 
-                    }} className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                      <FiRefreshCw className="h-4 w-4" /><span>Generate Payroll</span>
-                    </button>
-                    <button onClick={() => setShowCalendarModal(true)} className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors">
-                      <FiCalendar className="h-4 w-4" /><span>Manage Offdays</span>
-                    </button>
-                  </div>
+                <div className="flex items-center space-x-3">
+                  <select
+                    className="border border-gray-300 rounded-lg px-3 py-2"
+                    value={selectedSalaryMonth}
+                    onChange={e => setSelectedSalaryMonth(e.target.value)}
+                  >
+                    {monthOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button onClick={handleSendSalary} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
+                    <FiSend className="h-4 w-4" /><span>Send Salaries</span>
+                  </button>
+                  <button onClick={() => {
+                    setSalaryEdit({
+                      staff_id: '', month: selectedSalaryMonth, basic: '', hra: '', ta: '', other_allowances: '', deductions: '', working_days: '', present_days: '', additional_components: []
+                    });
+                    setShowCreateSalaryModal(true);
+                  }} className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                    <FiRefreshCw className="h-4 w-4" /><span>Generate Payroll</span>
+                  </button>
+                  <button onClick={() => setShowCalendarModal(true)} className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors">
+                    <FiCalendar className="h-4 w-4" /><span>Manage Offdays</span>
+                  </button>
                 </div>
-                <div className="mt-4">
-                  <p className="text-sm text-gray-600 mb-4">
-                    Managing salaries for: <span className="font-semibold">{formatMonthForDisplay(selectedSalaryMonth)}</span>
-                  </p>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="bg-blue-50 rounded-lg p-4"><p className="text-sm text-blue-600 font-medium">Total Payroll</p><p className="text-xl font-bold text-blue-900">₹{salaryData.filter(s=>s.month===selectedSalaryMonth).reduce((a,s)=>a+Number(s.net_salary),0).toLocaleString()}</p></div>
-                    <div className="bg-emerald-50 rounded-lg p-4"><p className="text-sm text-emerald-600 font-medium">Sent</p><p className="text-xl font-bold text-emerald-900">{salaryData.filter(s=>s.month===selectedSalaryMonth && s.status==='sent').length}</p></div>
-                    <div className="bg-amber-50 rounded-lg p-4"><p className="text-sm text-amber-600 font-medium">Pending</p><p className="text-xl font-bold text-amber-900">{salaryData.filter(s=>s.month===selectedSalaryMonth && s.status==='pending').length}</p></div>
-                    <div className="bg-purple-50 rounded-lg p-4"><p className="text-sm text-purple-600 font-medium">Staff</p><p className="text-xl font-bold text-purple-900">{salaryData.filter(s=>s.month===selectedSalaryMonth).length}</p></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 🔥 THE NEW EXCEL-STYLE PAYROLL GRID */}
-              <div className="overflow-x-auto pb-4">
-                <table className="w-full text-sm text-left whitespace-nowrap">
-                  <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-y border-gray-200">
-                    <tr>
-                      <th className="py-3 px-4 sticky left-0 bg-gray-100 z-10 border-r border-gray-200 align-bottom" rowSpan="2">Staff Name</th>
-                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
-                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Service Revenue</th>
-                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
-                      <th className="py-3 px-4 text-right align-bottom" rowSpan="2">Net Pay</th>
-                      <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Status</th>
-                      <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Actions</th>
-                    </tr>
-                    <tr>
-                      {/* Hours */}
-                      <th className="py-2 px-3 text-gray-500 font-medium border-l border-gray-200">Target</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium">Worked</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
-                      {/* Revenue */}
-                      <th className="py-2 px-3 text-gray-500 font-medium">Target</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium">Actual</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
-                      {/* Earnings */}
-                      <th className="py-2 px-3 text-gray-500 font-medium">Bonus %</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium">Basic</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium">Bonus</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium">Allowances</th>
-                      <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">Ded.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {salaryData
-                      .filter(salary => salary.month === selectedSalaryMonth)
-                      .map(salary => (
-                        <SalaryRow key={`${salary.staff_id}-${salary.month}`} salary={salary} onSendToStaff={handleSendToStaff} handleEditSalary={handleEditSalary} />
-                      ))}
-                  </tbody>
-                </table>
-                {salaryData.filter(s => s.month === selectedSalaryMonth).length === 0 && (
-                  <div className="text-center py-12">
-                    <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg font-medium">No payroll data generated yet for {formatMonthForDisplay(selectedSalaryMonth)}</p>
-                    <p className="text-gray-400 mt-1">Click "Generate Payroll" to calculate staff salaries.</p>
-                  </div>
-                )}
-              </div>
-            </div>
               </div>
               <div className="mt-4">
                 <p className="text-sm text-gray-600 mb-4">
                   Managing salaries for: <span className="font-semibold">{formatMonthForDisplay(selectedSalaryMonth)}</span>
                 </p>
                 <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-blue-50 rounded-lg p-4"><p className="text-sm text-blue-600 font-medium">Total Payroll</p><p className="text-xl font-bold text-blue-900">₹{salaryData.filter(s=>s.month===selectedSalaryMonth).reduce((a,s)=>a+Number(s.net_salary),0).toLocaleString()}</p></div>
-                  <div className="bg-green-50 rounded-lg p-4"><p className="text-sm text-green-600 font-medium">Sent</p><p className="text-xl font-bold text-green-900">{salaryData.filter(s=>s.month===selectedSalaryMonth && s.status==='sent').length}</p></div>
-                  <div className="bg-amber-50 rounded-lg p-4"><p className="text-sm text-amber-600 font-medium">Pending</p><p className="text-xl font-bold text-amber-900">{salaryData.filter(s=>s.month===selectedSalaryMonth && s.status==='pending').length}</p></div>
-                  <div className="bg-purple-50 rounded-lg p-4"><p className="text-sm text-purple-600 font-medium">Staff</p><p className="text-xl font-bold text-purple-900">{salaryData.filter(s=>s.month===selectedSalaryMonth).length}</p></div>
+                  <div className="bg-blue-50 rounded-lg p-4"><p className="text-sm text-blue-600 font-medium">Total Payroll</p><p className="text-xl font-bold text-blue-900">₹{salaryData.filter(s => s.month === selectedSalaryMonth).reduce((a, s) => a + Number(s.net_salary), 0).toLocaleString()}</p></div>
+                  <div className="bg-emerald-50 rounded-lg p-4"><p className="text-sm text-emerald-600 font-medium">Sent</p><p className="text-xl font-bold text-emerald-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'sent').length}</p></div>
+                  <div className="bg-amber-50 rounded-lg p-4"><p className="text-sm text-amber-600 font-medium">Pending</p><p className="text-xl font-bold text-amber-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'pending').length}</p></div>
+                  <div className="bg-purple-50 rounded-lg p-4"><p className="text-sm text-purple-600 font-medium">Staff</p><p className="text-xl font-bold text-purple-900">{salaryData.filter(s => s.month === selectedSalaryMonth).length}</p></div>
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead><tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Staff</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Basic</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">HRA</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">TA</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Other Allowances</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Deductions</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Total Hours</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Net Salary</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                 </tr></thead>
+
+            <div className="overflow-x-auto pb-4">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-y border-gray-200">
+                  <tr>
+                    <th className="py-3 px-4 sticky left-0 bg-gray-100 z-10 border-r border-gray-200 align-bottom" rowSpan="2">Staff Name</th>
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Service Revenue</th>
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
+                    <th className="py-3 px-4 text-right align-bottom" rowSpan="2">Net Pay</th>
+                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Status</th>
+                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Actions</th>
+                  </tr>
+                  <tr>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-l border-gray-200">Target</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Worked</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Target</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Actual</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus %</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Basic</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Allowances</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">Ded.</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {salaryData
                     .filter(salary => salary.month === selectedSalaryMonth)
@@ -1612,9 +1562,10 @@ const AdminAttendance = () => {
                 </tbody>
               </table>
               {salaryData.filter(s => s.month === selectedSalaryMonth).length === 0 && (
-                <div className="text-center py-8">
-                  <FiFileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No salary records found for {formatMonthForDisplay(selectedSalaryMonth)}</p>
+                <div className="text-center py-12">
+                  <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg font-medium">No payroll data generated yet for {formatMonthForDisplay(selectedSalaryMonth)}</p>
+                  <p className="text-gray-400 mt-1">Click "Generate Payroll" to calculate staff salaries.</p>
                 </div>
               )}
             </div>
