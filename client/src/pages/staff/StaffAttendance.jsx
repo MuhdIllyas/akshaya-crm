@@ -30,8 +30,11 @@ import {
   getLeaves,
   submitLeave,
   postAttendance,
-  postBreak
+  postBreak, getCalendarData
 } from '/src/services/salaryService';
+import CalendarView from '/src/components/CalendarView';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Register Chart.js components
 ChartJS.register(
@@ -362,12 +365,16 @@ const StaffAttendance = () => {
     type: 'casual_leave',
     from_date: '',
     to_date: '',
-    reason: ''
+    reason: '',
+    leave_duration: 'full', 
+    leave_time: ''          
   });
   
   const [punchStatus, setPunchStatus] = useState('out');
   const [lastPunchTime, setLastPunchTime] = useState(null);
   const [elapsedTime, setElapsedTime] = useState('N/A');
+
+  const [calendarEvents, setCalendarEvents] = useState([]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -430,6 +437,14 @@ const StaffAttendance = () => {
         const currentMonth = getCurrentMonth();
         const attendanceData = await getAllAttendance(currentMonth);
         setAttendance(attendanceData);
+
+        // Fetch calendar data
+        try {
+          const calData = await getCalendarData(); 
+          setCalendarEvents(calData);
+        } catch (e) {
+          console.error("Failed to load calendar", e);
+        }
         
         const allSalaries = await fetchAllSalaryData();
         const currentMonthSalary = allSalaries.filter(s => s.month === currentMonth && ['sent', 'viewed'].includes(s.status));
@@ -649,11 +664,101 @@ const StaffAttendance = () => {
       }
       
       setShowLeaveModal(false);
-      setNewLeave({ type: 'casual_leave', from_date: '', to_date: '', reason: '' });
+      setNewLeave({ type: 'casual_leave', from_date: '', to_date: '', reason: '', leave_duration: 'full', leave_time: '' });
       toast.success('Leave application submitted!');
     } catch (error) {
       console.error('Error submitting leave:', error);
       toast.error(error.response?.data?.error || error.message || 'Failed to submit leave application.');
+    }
+  };
+
+  const handleDownloadPayslip = async (salary) => {
+    toast.info("Generating Payslip PDF...");
+    
+    // Create a temporary hidden div to hold the payslip design
+    const payslipDiv = document.createElement("div");
+    payslipDiv.id = "payslip-pdf-container";
+    payslipDiv.style.width = "800px";
+    payslipDiv.style.padding = "40px";
+    payslipDiv.style.backgroundColor = "white";
+    payslipDiv.style.position = "absolute";
+    payslipDiv.style.left = "-9999px"; // Keep it off-screen
+    
+    payslipDiv.innerHTML = `
+      <div style="font-family: Arial, sans-serif; color: #333;">
+        <div style="text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
+          <h1 style="color: #4f46e5; margin: 0; font-size: 28px;">AKSHAYA CRM</h1>
+          <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Official Payslip Statement</p>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+          <div>
+            <p><strong>Employee Name:</strong> ${staff?.name || 'N/A'}</p>
+            <p><strong>Employee ID:</strong> ${staff?.employeeId || 'N/A'}</p>
+            <p><strong>Department:</strong> ${staff?.department || 'N/A'}</p>
+          </div>
+          <div style="text-align: right;">
+            <p><strong>Salary Month:</strong> ${getMonthName(salary.month)}</p>
+            <p><strong>Working Days:</strong> ${salary.working_days}</p>
+            <p><strong>Present Days:</strong> ${salary.present_days}</p>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+          <thead>
+            <tr style="background-color: #f3f4f6;">
+              <th style="padding: 12px; border: 1px solid #d1d5db; text-align: left;">Earnings</th>
+              <th style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 12px; border: 1px solid #d1d5db;">Basic Salary</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.basic).toLocaleString('en-IN')}</td>
+            </tr>
+            <tr>
+              <td style="padding: 12px; border: 1px solid #d1d5db;">HRA</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.hra).toLocaleString('en-IN')}</td>
+            </tr>
+            <tr>
+              <td style="padding: 12px; border: 1px solid #d1d5db;">Other Allowances</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.other_allowances).toLocaleString('en-IN')}</td>
+            </tr>
+            <tr>
+              <td style="padding: 12px; border: 1px solid #d1d5db; color: #dc2626;"><strong>Deductions</strong></td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #dc2626;">-${Number(salary.deductions).toLocaleString('en-IN')}</td>
+            </tr>
+            <tr style="background-color: #f3f4f6; font-weight: bold;">
+              <td style="padding: 12px; border: 1px solid #d1d5db; font-size: 16px;">Net Salary Payable</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; font-size: 16px; color: #059669;">₹${Number(salary.net_salary).toLocaleString('en-IN')}</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div style="margin-top: 50px; text-align: center; color: #888; font-size: 12px;">
+          <p>This is a system generated document and does not require a physical signature.</p>
+          <p>Generated on ${new Date().toLocaleDateString('en-IN')}</p>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(payslipDiv);
+
+    try {
+      const canvas = await html2canvas(payslipDiv, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Payslip_${staff?.name.replace(/\s+/g, '_')}_${salary.month}.pdf`);
+      toast.success("Payslip downloaded successfully!");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF. Please try again.");
+    } finally {
+      document.body.removeChild(payslipDiv); // Clean up
     }
   };
 
@@ -749,12 +854,28 @@ const StaffAttendance = () => {
     </tr>
   );
 
-  const LeaveApplicationRow = ({ application }) => (
-    <tr key={application.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-      <td className="py-4 px-4">
-        <p className="text-sm font-medium text-gray-900">{application.type}</p>
-      </td>
-      <td className="py-4 px-4">
+const LeaveApplicationRow = ({ application }) => {
+    // Helper to format 'casual_leave' to 'Casual Leave'
+    const formatLeaveType = (type) => {
+      if (!type) return 'Unknown';
+      return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    };
+
+    return (
+      <tr key={application.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+        <td className="py-4 px-4">
+          <p className="text-sm font-medium text-gray-900">{formatLeaveType(application.type)}</p>
+          <div className="mt-1">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+              application.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+            }`}>
+              {application.leave_duration === 'half' 
+                ? `Half Day ${application.leave_time ? `(${application.leave_time})` : ''}` 
+                : 'Full Day'}
+            </span>
+          </div>
+        </td>
+        <td className="py-4 px-4">
         <p className="text-sm text-gray-900">
           {new Date(application.from_date).toLocaleDateString('en-IN')}
         </p>
@@ -783,6 +904,7 @@ const StaffAttendance = () => {
       </td>
     </tr>
   );
+};
 
   const SalaryRow = ({ salary }) => (
     <tr key={`${salary.staff_id}-${salary.month}`} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
@@ -891,20 +1013,21 @@ const StaffAttendance = () => {
             </motion.button>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-2 mb-8">
-            <nav className="flex space-x-1">
+            <nav className="flex space-x-1 overflow-x-auto custom-scrollbar pb-2">
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: FiHome },
-                { id: 'attendance', label: 'Attendance', icon: FiClock },
-                { id: 'salary', label: 'Salary', icon: FiDollarSign },
-                { id: 'leave', label: 'Leave', icon: FiCalendar },
-                { id: 'profile', label: 'Profile', icon: FiUser }
+                { id: 'attendance', label: 'Attendance', icon: FiCheckCircle },
+                { id: 'leave', label: 'Leave', icon: FiCoffee },
+                { id: 'calendar', label: 'Calendar', icon: FiCalendar },
+                { id: 'schedule', label: 'My Schedule', icon: FiClock },
+                { id: 'payslips', label: 'Payslips', icon: FiFileText }
               ].map(tab => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center space-x-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                    className={`flex items-center space-x-2 px-4 py-3 rounded-lg font-medium transition-colors whitespace-nowrap ${
                       activeTab === tab.id
                         ? 'bg-indigo-50 text-indigo-600'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -1205,110 +1328,126 @@ const StaffAttendance = () => {
                 </div>
               </div>
             )}
-            {activeTab === 'profile' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <div className="flex items-center space-x-6">
-                      {staff?.photo ? (
-                        <img
-                          src={staff.photo}
-                          alt={`${staff.name}'s profile`}
-                          className="w-24 h-24 rounded-full object-cover"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'flex';
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className="w-24 h-24 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center"
-                        style={{ display: staff?.photo ? 'none' : 'flex' }}
-                      >
-                        <span className="text-white font-bold text-2xl">
-                          {staff?.name?.split(' ').map(n => n[0]).join('') || ''}
-                        </span>
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-bold text-gray-900">{staff?.name}</h2>
-                        <p className="text-gray-600">{staff?.position}</p>
-                        <p className="text-gray-500">{staff?.department}</p>
-                      </div>
+            {activeTab === 'calendar' && (
+              <div className="fade-in">
+                <CalendarView
+                  calendarData={calendarEvents}
+                  leavesData={leaveApplications}
+                  userRole="staff" // Hides the edit/delete/drag-and-drop features intended for admins
+                  onAddEvent={() => toast.info("Only admins can add calendar events.")}
+                  onEditEvent={() => {}}
+                  onDeleteEvent={() => {}}
+                  onUpdateEvent={() => {}}
+                />
+              </div>
+            )}
+            {activeTab === 'schedule' && (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden fade-in">
+                <div className="p-6 border-b border-gray-200">
+                  <h2 className="text-xl font-bold text-gray-900">My Shift Schedule</h2>
+                  <p className="text-gray-500 text-sm mt-1">Your current and historical working hours.</p>
+                </div>
+                <div className="p-6">
+                  {staff?.schedules && staff.schedules.length > 0 ? (
+                    <div className="space-y-4">
+                      {staff.schedules.map((schedule, idx) => (
+                        <div key={idx} className={`p-4 rounded-xl border ${idx === 0 ? 'bg-indigo-50 border-indigo-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="flex items-center justify-between mb-4">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${idx === 0 ? 'bg-indigo-200 text-indigo-800' : 'bg-gray-200 text-gray-700'}`}>
+                              {idx === 0 ? 'Current Active Schedule' : 'Past Schedule'}
+                            </span>
+                            <span className="text-sm font-medium text-gray-600">
+                              Effective: {new Date(schedule.effective_from).toLocaleDateString('en-IN')} 
+                              {schedule.effective_to ? ` to ${new Date(schedule.effective_to).toLocaleDateString('en-IN')}` : ' - Present'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-white p-3 rounded-lg border border-gray-100 text-center">
+                              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Punch In Time</p>
+                              <p className="text-xl font-bold text-gray-900">{schedule.start_time}</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-gray-100 text-center">
+                              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Punch Out Time</p>
+                              <p className="text-xl font-bold text-gray-900">{schedule.end_time}</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-gray-100 text-center">
+                              <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Standard Hours</p>
+                              <p className="text-xl font-bold text-gray-900">{schedule.standard_hours}h</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h3 className="text-lg font-bold text-gray-900 mb-6">Personal Information</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                        <p className="text-gray-900">{staff?.name}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
-                        <p className="text-gray-900">{staff?.position}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                        <p className="text-gray-900">{staff?.department}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Employee ID</label>
-                        <p className="text-gray-900">{staff?.employeeId}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                        <p className="text-gray-900">{staff?.email}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                        <p className="text-gray-900">{staff?.phone}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Join Date</label>
-                        <p className="text-gray-900">
-                          {staff?.joinDate ? new Date(staff.joinDate).toLocaleDateString('en-IN') : 'N/A'}
-                        </p>
-                      </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <FiClock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-500">No schedule information assigned yet.</p>
                     </div>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h3 className="text-lg font-bold text-gray-900 mb-6">Bank Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
-                        <p className="text-gray-900">{staff?.bank_account || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">IFSC Code</label>
-                        <p className="text-gray-900">{staff?.ifsc_code || 'N/A'}</p>
-                      </div>
-                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {activeTab === 'payslips' && (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden fade-in">
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">My Payslips</h2>
+                    <p className="text-gray-500 text-sm mt-1">Download your monthly salary statements.</p>
                   </div>
                 </div>
-                <div className="space-y-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Stats</h3>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center py-2">
-                        <span className="text-gray-600">Total Present</span>
-                        <span className="font-semibold text-emerald-600">{stats.presentDays} days</span>
-                      </div>
-                      <div className="flex justify-between items-center py-2">
-                        <span className="text-gray-600">Leaves Taken</span>
-                        <span className="font-semibold text-amber-600">{stats.leaveDays} days</span>
-                      </div>
-                      <div className="flex justify-between items-center py-2">
-                        <span className="text-gray-600">Avg. Hours</span>
-                        <span className="font-semibold text-blue-600">{stats.avgHours}h</span>
-                      </div>
-                      <div className="flex justify-between items-center py-2">
-                        <span className="text-gray-600">Latest Salary</span>
-                        <span className="font-semibold text-purple-600">
-                          {stats.currentSalary ? `₹${stats.currentSalary.toLocaleString('en-IN')}` : 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Salary Month</th>
+                        <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Days (Present/Total)</th>
+                        <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Net Amount</th>
+                        <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="py-4 px-6 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {allSalaryData.filter(s => ['sent', 'viewed'].includes(s.status)).length === 0 ? (
+                        <tr>
+                          <td colSpan="5" className="py-12 text-center text-gray-500">
+                            <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                            No payslips are currently available for download.
+                          </td>
+                        </tr>
+                      ) : (
+                        allSalaryData
+                          .filter(s => ['sent', 'viewed'].includes(s.status))
+                          .sort((a, b) => b.month.localeCompare(a.month))
+                          .map((salary) => (
+                            <tr key={salary.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="py-4 px-6 font-medium text-gray-900">
+                                {getMonthName(salary.month)}
+                              </td>
+                              <td className="py-4 px-6 text-sm text-gray-600">
+                                {salary.present_days} / {salary.working_days}
+                              </td>
+                              <td className="py-4 px-6 font-bold text-emerald-600">
+                                ₹{Number(salary.net_salary).toLocaleString('en-IN')}
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className="px-2.5 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                                  Issued
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-right">
+                                <button 
+                                  onClick={() => handleDownloadPayslip(salary)}
+                                  className="inline-flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 rounded-lg text-sm font-semibold transition-colors"
+                                >
+                                  <FiDownload className="mr-2 h-4 w-4" />
+                                  Download PDF
+                                </button>
+                              </td>
+                            </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
@@ -1480,6 +1619,34 @@ const StaffAttendance = () => {
                         <option value="paternity_leave">Paternity Leave</option>
                         <option value="emergency_leave">Emergency Leave</option>
                       </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Duration</label>
+                        <select
+                          value={newLeave.leave_duration}
+                          onChange={e => setNewLeave(prev => ({ ...prev, leave_duration: e.target.value, leave_time: e.target.value === 'full' ? '' : prev.leave_time }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="full">Full Day</option>
+                          <option value="half">Half Day</option>
+                        </select>
+                      </div>
+                      
+                      {newLeave.leave_duration === 'half' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Time Segment</label>
+                          <select
+                            value={newLeave.leave_time}
+                            onChange={e => setNewLeave(prev => ({ ...prev, leave_time: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">Select Time...</option>
+                            <option value="Morning">Morning</option>
+                            <option value="Afternoon">Afternoon</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>

@@ -556,8 +556,33 @@ const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
       <div className="flex items-center space-x-3 mb-4">
-        {staff.photo ? <img src={staff.photo} alt={staff.name} className="w-10 h-10 rounded-full object-cover border border-gray-200" /> :
-          <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center"><span className="text-white font-medium text-sm">{staff.name.split(' ').map(n => n[0]).join('')}</span></div>}
+        {staff.photo ? (
+          <>
+            <img 
+              src={staff.photo.startsWith('http') || staff.photo.startsWith('data:') 
+                ? staff.photo 
+                : `${import.meta.env.VITE_API_URL || ''}${staff.photo.startsWith('/') ? '' : '/'}${staff.photo}`} 
+              alt={staff.name} 
+              className="w-10 h-10 rounded-full object-cover border border-gray-200" 
+              onError={(e) => {
+                e.target.style.display = 'none';
+                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+            {/* Hidden fallback div that appears if the image fails to load */}
+            <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full items-center justify-center hidden">
+              <span className="text-white font-medium text-sm">
+                {staff.name ? staff.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : ''}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-white font-medium text-sm">
+              {staff.name ? staff.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : ''}
+            </span>
+          </div>
+        )}
         <div>
           <p className="font-medium text-gray-900">{staff.name}</p>
           <p className="text-sm text-gray-500">{staff.position}</p>
@@ -664,62 +689,130 @@ const AttendanceRow = ({ record, staffList, onEdit }) => {
   );
 };
 
-// MODIFIED LeaveApplicationRow to show status and action buttons only for 'pending'
-const LeaveApplicationRow = ({ application, handleLeaveAction }) => (
-  <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-    <td className="py-4 px-4"><p className="text-sm font-medium text-gray-900">{application.staff_name}</p><p className="text-xs text-gray-500">{application.department}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{application.type}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.from_date).toLocaleDateString('en-IN')}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.to_date).toLocaleDateString('en-IN')}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{application.reason}</p></td>
-    <td className="py-4 px-4">
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-        application.status === 'approved' ? 'bg-emerald-50 text-emerald-700'
-          : application.status === 'rejected' ? 'bg-red-50 text-red-700'
-          : 'bg-amber-50 text-amber-700'
-      }`}>
-        {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-      </span>
-     </td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-600">{new Date(application.applied_date).toLocaleDateString('en-IN')}</p></td>
-    <td className="py-4 px-4">
-      {application.status === 'pending' ? (
-        <div className="flex items-center space-x-2">
-          <button onClick={() => handleLeaveAction(application.id, 'approved')} className="px-3 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"><FiCheck className="h-4 w-4" /></button>
-          <button onClick={() => handleLeaveAction(application.id, 'rejected')} className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"><FiX className="h-4 w-4" /></button>
-        </div>
-      ) : (
-        <span className="text-sm text-gray-400">-</span>
-      )}
-     </td>
-   </tr>
-);
+// MODIFIED LeaveApplicationRow to show status, action buttons, and duration badges
+const LeaveApplicationRow = ({ application, handleLeaveAction }) => {
+  // Helper to format 'casual_leave' to 'Casual Leave'
+  const formatLeaveType = (type) => {
+    if (!type) return 'Unknown';
+    return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
 
-const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => (
-  <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-    <td className="py-4 px-4"><p className="text-sm font-medium text-gray-900">{salary.staff_name}</p></td>
-    <td className="py-4 px-4"><p className="text-sm font-medium text-gray-900">{salary.month}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.basic).toLocaleString()}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.hra).toLocaleString()}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.ta).toLocaleString()}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.other_allowances).toLocaleString()}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-red-600">-₹{Number(salary.deductions).toLocaleString()}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{salary.present_days}/{salary.working_days}</p></td>
-    <td className="py-4 px-4"><p className="text-sm text-gray-900">{Number(salary.total_hours).toFixed(2)}h</p></td>
-    <td className="py-4 px-4"><p className="text-sm font-bold text-emerald-600">₹{Number(salary.net_salary).toLocaleString()}</p></td>
-    <td className="py-4 px-4">
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${salary.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : salary.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-        {salary.status === 'sent' ? 'Sent' : salary.status === 'viewed' ? 'Viewed' : 'Pending'}
-      </span>
-     </td>
-    <td className="py-4 px-4">
-      <div className="flex items-center space-x-2">
-        <button onClick={() => handleEditSalary(salary)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><FiEdit className="h-4 w-4" /></button>
-        <button onClick={() => onSendToStaff(salary)} disabled={salary.status === 'sent'} className={`p-2 rounded-lg ${salary.status === 'sent' ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:bg-green-50'}`}><FiSend className="h-4 w-4" /></button>
-      </div>
-     </td>
-   </tr>
-);
+  return (
+    <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+      <td className="py-4 px-4">
+        <p className="text-sm font-medium text-gray-900">{application.staff_name}</p>
+        <p className="text-xs text-gray-500">{application.department}</p>
+      </td>
+      <td className="py-4 px-4">
+        <p className="text-sm font-medium text-gray-900">{formatLeaveType(application.type)}</p>
+        <div className="mt-1">
+          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+            application.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+          }`}>
+            {application.leave_duration === 'half' 
+              ? `Half Day ${application.leave_time ? `(${application.leave_time})` : ''}` 
+              : 'Full Day'}
+          </span>
+        </div>
+      </td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.from_date).toLocaleDateString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">{new Date(application.to_date).toLocaleDateString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">{application.reason}</p></td>
+      <td className="py-4 px-4">
+        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+          application.status === 'approved' ? 'bg-emerald-50 text-emerald-700'
+            : application.status === 'rejected' ? 'bg-red-50 text-red-700'
+            : 'bg-amber-50 text-amber-700'
+        }`}>
+          {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+        </span>
+       </td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-600">{new Date(application.applied_date).toLocaleDateString('en-IN')}</p></td>
+      <td className="py-4 px-4">
+        {application.status === 'pending' ? (
+          <div className="flex items-center space-x-2">
+            <button onClick={() => handleLeaveAction(application.id, 'approved')} className="px-3 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"><FiCheck className="h-4 w-4" /></button>
+            <button onClick={() => handleLeaveAction(application.id, 'rejected')} className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"><FiX className="h-4 w-4" /></button>
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">-</span>
+        )}
+       </td>
+     </tr>
+  );
+};
+
+const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => {
+  // Map fields gracefully to support both the old and new backend schema
+  const targetHrs = salary.total_targeted_hours || 0;
+  const workedHrs = salary.total_worked_hours || salary.total_hours || 0;
+  const hrsPct = salary.working_hours_percent || 0;
+
+  const targetRev = salary.total_monthly_target || 0;
+  const actualRev = salary.achieved_service_revenue || salary.collection || 0;
+  const revPct = salary.revenue_percent || salary.collection_percent || 0;
+
+  const bonusPct = salary.bonus_percent || 0;
+  const basicPay = salary.basic_pay || salary.basic || 0;
+  const bonusPay = salary.bonus || 0;
+  const allowances = Number(salary.ta_pay || salary.ta || 0) + Number(salary.fa_pay || salary.fa || 0) + Number(salary.paid_offdays || 0) + Number(salary.other_allowances || 0);
+  const ded = salary.deductions || 0;
+  const netPay = salary.net_salary || salary.net_pay || 0;
+
+  return (
+    <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors bg-white group">
+      {/* Sticky Staff Column */}
+      <td className="py-3 px-4 font-medium text-gray-900 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10">
+        {salary.staff_name}
+      </td>
+      
+      {/* Hours Group */}
+      <td className="py-3 px-3 text-gray-600 border-l border-gray-200">{Number(targetHrs).toFixed(1)}h</td>
+      <td className="py-3 px-3 text-gray-900 font-medium">{Number(workedHrs).toFixed(1)}h</td>
+      <td className="py-3 px-3 border-r border-gray-200">
+        <span className={`font-semibold ${hrsPct >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
+          {Number(hrsPct).toFixed(1)}%
+        </span>
+      </td>
+
+      {/* Revenue Group */}
+      <td className="py-3 px-3 text-gray-600">₹{Number(targetRev).toLocaleString('en-IN')}</td>
+      <td className="py-3 px-3 text-gray-900 font-medium">₹{Number(actualRev).toLocaleString('en-IN')}</td>
+      <td className="py-3 px-3 border-r border-gray-200">
+        <span className={`font-semibold ${revPct >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
+          {Number(revPct).toFixed(1)}%
+        </span>
+      </td>
+
+      {/* Earnings Group */}
+      <td className="py-3 px-3 text-indigo-600 font-medium">{Number(bonusPct).toFixed(1)}%</td>
+      <td className="py-3 px-3 text-gray-600">₹{Number(basicPay).toLocaleString('en-IN')}</td>
+      <td className="py-3 px-3 text-emerald-600 font-medium">₹{Number(bonusPay).toLocaleString('en-IN')}</td>
+      <td className="py-3 px-3 text-gray-600">₹{Number(allowances).toLocaleString('en-IN')}</td>
+      <td className="py-3 px-3 text-rose-600 border-r border-gray-200">-₹{Number(ded).toLocaleString('en-IN')}</td>
+
+      {/* Final Group */}
+      <td className="py-3 px-4 text-right font-bold text-gray-900 bg-gray-50">
+        ₹{Number(netPay).toLocaleString('en-IN')}
+      </td>
+      <td className="py-3 px-4 text-center">
+        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${salary.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : salary.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+          {salary.status === 'sent' ? 'Sent' : salary.status === 'viewed' ? 'Viewed' : 'Draft'}
+        </span>
+      </td>
+      <td className="py-3 px-4 text-center">
+        <div className="flex items-center justify-center space-x-2">
+          <button onClick={() => handleEditSalary(salary)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition" title="View Breakdown">
+            <FiEye className="h-4 w-4" />
+          </button>
+          <button onClick={() => onSendToStaff(salary)} disabled={salary.status === 'sent'} className={`p-1.5 rounded-lg transition ${salary.status === 'sent' ? 'text-gray-400 cursor-not-allowed' : 'text-emerald-600 hover:bg-emerald-50'}`} title="Send to Staff">
+            <FiSend className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+};
 
 // ---------------------------------------------------------------------
 // MAIN COMPONENT
@@ -1009,8 +1102,11 @@ const AdminAttendance = () => {
     try { 
       const upd = await updateLeave(id, act); 
       setPendingLeaves(p => p.filter(l => l.id !== id)); 
-      // Update allLeaves state on action
-      setAllLeaves(p => p.map(l => l.id === id ? upd : l)); 
+      
+      // FIX: Merge the existing leave data (l) with the updated response (upd)
+      // This preserves 'staff_name' and 'department' while updating the 'status'
+      setAllLeaves(p => p.map(l => l.id === id ? { ...l, ...upd } : l)); 
+      
       setShowLeaveActionModal(false); 
       setSelectedLeave(null); 
       toast.success(`Leave ${act}`); 
@@ -1391,9 +1487,9 @@ const AdminAttendance = () => {
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900">Salary Management</h2>
                 <div className="flex items-center space-x-3">
-                  <select 
-                    className="border border-gray-300 rounded-lg px-3 py-2" 
-                    value={selectedSalaryMonth} 
+                  <select
+                    className="border border-gray-300 rounded-lg px-3 py-2"
+                    value={selectedSalaryMonth}
                     onChange={e => setSelectedSalaryMonth(e.target.value)}
                   >
                     {monthOptions.map((option) => (
@@ -1402,23 +1498,20 @@ const AdminAttendance = () => {
                       </option>
                     ))}
                   </select>
-                  <button onClick={handleSendSalary} className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><FiSend className="h-4 w-4" /><span>Send Salaries</span></button>
-                  <button onClick={() => { 
-                    setSalaryEdit({ 
-                      staff_id: '', 
-                      month: selectedSalaryMonth, 
-                      basic: '', 
-                      hra: '', 
-                      ta: '', 
-                      other_allowances: '', 
-                      deductions: '', 
-                      working_days: '', 
-                      present_days: '', 
-                      additional_components: [] 
-                    }); 
-                    setShowCreateSalaryModal(true); 
-                  }} className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><FiPlus className="h-4 w-4" /><span>Create Salary</span></button>
-                  <button onClick={() => setShowCalendarModal(true)} className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"><FiCalendar className="h-4 w-4" /><span>Manage Working Days</span></button>
+                  <button onClick={handleSendSalary} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
+                    <FiSend className="h-4 w-4" /><span>Send Salaries</span>
+                  </button>
+                  <button onClick={() => {
+                    setSalaryEdit({
+                      staff_id: '', month: selectedSalaryMonth, basic: '', hra: '', ta: '', other_allowances: '', deductions: '', working_days: '', present_days: '', additional_components: []
+                    });
+                    setShowCreateSalaryModal(true);
+                  }} className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                    <FiRefreshCw className="h-4 w-4" /><span>Generate Payroll</span>
+                  </button>
+                  <button onClick={() => setShowCalendarModal(true)} className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors">
+                    <FiCalendar className="h-4 w-4" /><span>Manage Offdays</span>
+                  </button>
                 </div>
               </div>
               <div className="mt-4">
@@ -1426,29 +1519,40 @@ const AdminAttendance = () => {
                   Managing salaries for: <span className="font-semibold">{formatMonthForDisplay(selectedSalaryMonth)}</span>
                 </p>
                 <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-blue-50 rounded-lg p-4"><p className="text-sm text-blue-600 font-medium">Total Payroll</p><p className="text-xl font-bold text-blue-900">₹{salaryData.filter(s=>s.month===selectedSalaryMonth).reduce((a,s)=>a+Number(s.net_salary),0).toLocaleString()}</p></div>
-                  <div className="bg-green-50 rounded-lg p-4"><p className="text-sm text-green-600 font-medium">Sent</p><p className="text-xl font-bold text-green-900">{salaryData.filter(s=>s.month===selectedSalaryMonth && s.status==='sent').length}</p></div>
-                  <div className="bg-amber-50 rounded-lg p-4"><p className="text-sm text-amber-600 font-medium">Pending</p><p className="text-xl font-bold text-amber-900">{salaryData.filter(s=>s.month===selectedSalaryMonth && s.status==='pending').length}</p></div>
-                  <div className="bg-purple-50 rounded-lg p-4"><p className="text-sm text-purple-600 font-medium">Staff</p><p className="text-xl font-bold text-purple-900">{salaryData.filter(s=>s.month===selectedSalaryMonth).length}</p></div>
+                  <div className="bg-blue-50 rounded-lg p-4"><p className="text-sm text-blue-600 font-medium">Total Payroll</p><p className="text-xl font-bold text-blue-900">₹{salaryData.filter(s => s.month === selectedSalaryMonth).reduce((a, s) => a + Number(s.net_salary), 0).toLocaleString()}</p></div>
+                  <div className="bg-emerald-50 rounded-lg p-4"><p className="text-sm text-emerald-600 font-medium">Sent</p><p className="text-xl font-bold text-emerald-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'sent').length}</p></div>
+                  <div className="bg-amber-50 rounded-lg p-4"><p className="text-sm text-amber-600 font-medium">Pending</p><p className="text-xl font-bold text-amber-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'pending').length}</p></div>
+                  <div className="bg-purple-50 rounded-lg p-4"><p className="text-sm text-purple-600 font-medium">Staff</p><p className="text-xl font-bold text-purple-900">{salaryData.filter(s => s.month === selectedSalaryMonth).length}</p></div>
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead><tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Staff</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Basic</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">HRA</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">TA</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Other Allowances</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Deductions</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Total Hours</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Net Salary</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                 </tr></thead>
+
+            <div className="overflow-x-auto pb-4">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-y border-gray-200">
+                  <tr>
+                    <th className="py-3 px-4 sticky left-0 bg-gray-100 z-10 border-r border-gray-200 align-bottom" rowSpan="2">Staff Name</th>
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Service Revenue</th>
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
+                    <th className="py-3 px-4 text-right align-bottom" rowSpan="2">Net Pay</th>
+                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Status</th>
+                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Actions</th>
+                  </tr>
+                  <tr>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-l border-gray-200">Target</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Worked</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Target</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Actual</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus %</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Basic</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium">Allowances</th>
+                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">Ded.</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {salaryData
                     .filter(salary => salary.month === selectedSalaryMonth)
@@ -1458,9 +1562,10 @@ const AdminAttendance = () => {
                 </tbody>
               </table>
               {salaryData.filter(s => s.month === selectedSalaryMonth).length === 0 && (
-                <div className="text-center py-8">
-                  <FiFileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No salary records found for {formatMonthForDisplay(selectedSalaryMonth)}</p>
+                <div className="text-center py-12">
+                  <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg font-medium">No payroll data generated yet for {formatMonthForDisplay(selectedSalaryMonth)}</p>
+                  <p className="text-gray-400 mt-1">Click "Generate Payroll" to calculate staff salaries.</p>
                 </div>
               )}
             </div>
@@ -2185,7 +2290,16 @@ const AdminAttendance = () => {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-700">Leave Type</p>
-                  <p className="text-gray-900">{selectedLeave.type}</p>
+                  <p className="text-gray-900 flex items-center">
+                    {selectedLeave.type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                    <span className={`ml-3 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      selectedLeave.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {selectedLeave.leave_duration === 'half' 
+                        ? `Half Day ${selectedLeave.leave_time ? `(${selectedLeave.leave_time})` : ''}` 
+                        : 'Full Day'}
+                    </span>
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>

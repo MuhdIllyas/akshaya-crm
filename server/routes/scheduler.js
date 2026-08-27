@@ -211,4 +211,88 @@ cron.schedule("20 0 * * *", async () => {
   timezone: "Asia/Kolkata"
 });
 
+// Run every day at 23:55 (11:55 PM) - Auto-mark Absent
+cron.schedule('55 23 * * *', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // This single query finds all active staff on a working day who have NO attendance record
+    // for today (whether present, leave, or otherwise) and marks them absent.
+    const result = await client.query(`
+      INSERT INTO attendance (staff_id, date, status, created_at)
+      SELECT s.id, CURRENT_DATE, 'absent', NOW()
+      FROM staff s
+      WHERE s.status = 'Active'
+        -- 1. Ensure today is an official working day for their specific centre
+        AND EXISTS (
+          SELECT 1 FROM calendar_events ce 
+          WHERE ce.centre_id = s.centre_id 
+            AND ce.date = CURRENT_DATE 
+            AND ce.type = 'working'
+        )
+        -- 2. Ensure they don't already have an attendance record for today
+        AND NOT EXISTS (
+          SELECT 1 FROM attendance a 
+          WHERE a.staff_id = s.id 
+            AND a.date = CURRENT_DATE
+        )
+      RETURNING id;
+    `);
+
+    await client.query('COMMIT');
+    console.log(`Auto-marked ${result.rowCount} staff members as absent.`);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error in auto-absent cron job:', err);
+  } finally {
+    client.release();
+  }
+});
+
+// Run every day at 23:59 (11:59 PM)
+cron.schedule('59 23 * * *', async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Find all records from today where staff punched in but haven't punched out
+    const openPunches = await client.query(`
+      SELECT id, staff_id, punch_in, breaks, TO_CHAR(date, 'YYYY-MM-DD') AS date
+      FROM attendance 
+      WHERE date = CURRENT_DATE AND punch_in IS NOT NULL AND punch_out IS NULL
+    `);
+
+    for (const record of openPunches.rows) {
+      // Fetch the staff's scheduled end time for today
+      const scheduleRes = await client.query(`
+        SELECT end_time FROM staff_schedules 
+        WHERE staff_id = $1 AND effective_from <= $2 
+        ORDER BY effective_from DESC LIMIT 1
+      `, [record.staff_id, record.date]);
+
+      const endTime = scheduleRes.rows.length > 0 ? scheduleRes.rows[0].end_time : '18:00'; 
+      const hours = calculateHours(record.punch_in, endTime, record.breaks);
+
+      // Update the record with the auto-punch-out time
+      await client.query(`
+        UPDATE attendance 
+        SET punch_out = $1, hours = $2, status = 'present', updated_at = NOW()
+        WHERE id = $3
+      `, [endTime, hours, record.id]);
+
+      // Recalculate late/extra minutes
+      await recalculateDayDeviation(client, record.staff_id, record.date);
+    }
+    
+    await client.query('COMMIT');
+    console.log(`Auto-punched out ${openPunches.rows.length} staff members.`);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error in auto-punch-out cron job:', err);
+  } finally {
+    client.release();
+  }
+});
+
 export default cron;
