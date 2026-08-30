@@ -847,46 +847,58 @@ router.get('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) =>
   }
 });;
 
-// 2. Create a Draft Run (FULLY AUTOMATED FROM CALENDAR)
-router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
-  const { payroll_month } = req.body;
-  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.body.centre_id;
+// 1.a Fetch Calendar Preview for a Payroll Month
+router.get('/run-preview', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const { month } = req.query; // YYYY-MM format
+  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
   
-  if (!centreId) {
-      return res.status(400).json({ error: "Centre ID is required to create a payroll run." });
-  }
+  if (!centreId || !month) return res.status(400).json({ error: "Centre ID and month required" });
 
   const client = await pool.connect();
   try {
-      // 1. Calculate Total Calendar Days for the Month
-      const [year, monthNum] = payroll_month.split('-');
+      // 1. Total Calendar Days
+      const [year, monthNum] = month.split('-');
       const calendar_days = new Date(year, monthNum, 0).getDate();
 
-      // 2. Fetch Working Days from the Calendar
+      // 2. Fetch configured working days
       const workingDaysRes = await client.query(`
           SELECT COUNT(*) as count 
           FROM calendar_events 
-          WHERE centre_id = $1 
-            AND TO_CHAR(date, 'YYYY-MM') = $2 
-            AND type = 'working'
-      `, [centreId, payroll_month]);
+          WHERE centre_id = $1 AND TO_CHAR(date, 'YYYY-MM') = $2 AND type = 'working'
+      `, [centreId, month]);
       
-      const days_targeted = parseInt(workingDaysRes.rows[0].count);
-
-      // 3. Safety Check: Ensure the calendar is actually filled out!
-      if (days_targeted === 0) {
-          return res.status(400).json({ 
-              error: `No working days found for ${payroll_month}. Please configure the Working Days calendar first before creating a payroll run.` 
-          });
-      }
-
-      // 4. Automated Offday Math (DL is strictly 1)
-      const dl_days = 1;
-      const total_offdays = calendar_days - days_targeted;
+      const working_days = parseInt(workingDaysRes.rows[0].count);
+      const dl_days = 1; // Fixed baseline
+      
+      // Calculate remaining offdays (Assume 0 Sundays by default, bundled into other)
+      const total_offdays = calendar_days - working_days;
       const other_offdays = Math.max(0, total_offdays - dl_days);
-      const sundays = 0; // Sundays are absorbed into 'other_offdays' mathematically
 
-      // 5. Insert the Run
+      res.json({
+          calendar_days,
+          working_days,
+          sundays: 0,
+          dl_days,
+          other_offdays
+      });
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 2. Create a Draft Run (Accepts User Overrides)
+router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const { payroll_month, calendar_days, sundays, dl_days, other_offdays } = req.body;
+  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.body.centre_id;
+  
+  if (!centreId) return res.status(400).json({ error: "Centre ID is required." });
+
+  const days_targeted = Number(calendar_days) - (Number(sundays) + Number(dl_days) + Number(other_offdays));
+  const client = await pool.connect();
+  
+  try {
       const result = await client.query(`
           INSERT INTO salary_runs (
               centre_id, payroll_month, calendar_days, sundays, dl_days, 
@@ -897,11 +909,8 @@ router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) =
       
       res.status(201).json(result.rows[0]);
   } catch (err) {
-      if (err.code === '23505') {
-          res.status(400).json({ error: 'A payroll run already exists for this month.' });
-      } else {
-          res.status(500).json({ error: err.message });
-      }
+      if (err.code === '23505') res.status(400).json({ error: 'A payroll run already exists for this month.' });
+      else res.status(500).json({ error: err.message });
   } finally {
       client.release();
   }

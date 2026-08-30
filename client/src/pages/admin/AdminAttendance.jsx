@@ -779,8 +779,44 @@ const AdminAttendance = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   
   const [newRunData, setNewRunData] = useState({
-    payroll_month: getCurrentMonth()
+    payroll_month: getCurrentMonth(),
+    calendar_days: 0,
+    sundays: 0,
+    dl_days: 1,
+    other_offdays: 0,
+    is_loading: false
   });
+
+  // Auto-fetch calendar stats when the modal opens or the month changes
+  useEffect(() => {
+    const fetchPreview = async () => {
+      if (!showRunModal) return;
+      setNewRunData(prev => ({ ...prev, is_loading: true }));
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const centreId = urlParams.get('centre_id');
+        const params = { month: newRunData.payroll_month };
+        if (centreId) params.centre_id = centreId;
+        
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/run-preview`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+          params
+        });
+        
+        setNewRunData(prev => ({
+          ...prev,
+          calendar_days: res.data.calendar_days,
+          sundays: res.data.sundays,
+          dl_days: res.data.dl_days,
+          other_offdays: res.data.other_offdays,
+          is_loading: false
+        }));
+      } catch (err) {
+        setNewRunData(prev => ({ ...prev, is_loading: false }));
+      }
+    };
+    fetchPreview();
+  }, [newRunData.payroll_month, showRunModal]);
 
   const [wallets, setWallets] = useState([]);          
   const [selectedWalletId, setSelectedWalletId] = useState(""); 
@@ -1388,7 +1424,7 @@ const AdminAttendance = () => {
       {/* Attendance Edit Modal */}
       <AnimatePresence>
         {showAttendanceEditModal && selectedAttendance && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1472,30 +1508,54 @@ const AdminAttendance = () => {
         )}
       </AnimatePresence>
 
-      {/* Create Run Modal (Automated) */}
+      {/* Create Run Modal (Preview & Override) */}
       <AnimatePresence>
         {showRunModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-gray-900">Initiate Payroll Batch</h3>
                 <button onClick={() => setShowRunModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><FiX /></button>
               </div>
               <div className="space-y-4">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
-                  <p className="text-sm text-blue-800">
-                    <FiCalendar className="inline mr-2" />
-                    Target Days, Duty Leaves (1), and Offdays will be automatically calculated based on your Centre's calendar configuration.
-                  </p>
-                </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Select Payroll Month</label>
-                  <select value={newRunData.payroll_month} onChange={e => setNewRunData({payroll_month: e.target.value})} className="w-full border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-900 font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <select value={newRunData.payroll_month} onChange={e => setNewRunData({...newRunData, payroll_month: e.target.value})} className="w-full border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-900 font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
                     {monthOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
                 </div>
+                
+                {newRunData.is_loading ? (
+                  <div className="py-8 text-center text-gray-500"><FiRefreshCw className="animate-spin h-6 w-6 mx-auto mb-2" /> Syncing with Calendar...</div>
+                ) : (
+                  <>
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mt-4">
+                      <p className="text-sm text-indigo-800 font-medium mb-3">
+                        <FiCalendar className="inline mr-2" />
+                        Values synced from Centre Calendar. Override if needed.
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Calendar Days</label><input type="number" value={newRunData.calendar_days} onChange={e => setNewRunData({...newRunData, calendar_days: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Duty Leaves (DL)</label><input type="number" value={newRunData.dl_days} onChange={e => setNewRunData({...newRunData, dl_days: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Sundays</label><input type="number" value={newRunData.sundays} onChange={e => setNewRunData({...newRunData, sundays: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Other Offdays</label><input type="number" value={newRunData.other_offdays} onChange={e => setNewRunData({...newRunData, other_offdays: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-2 text-right text-base font-black text-gray-900 flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Final Target Working Days:</span>
+                      <span className="bg-gray-100 px-3 py-1 rounded-md border border-gray-200">
+                        {Number(newRunData.calendar_days) - (Number(newRunData.sundays) + Number(newRunData.dl_days) + Number(newRunData.other_offdays))} Days
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
-              <button onClick={handleCreateRun} className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition shadow-sm">
+              <button 
+                onClick={handleCreateRun} 
+                disabled={newRunData.is_loading}
+                className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition shadow-sm disabled:opacity-50"
+              >
                 Create Batch
               </button>
             </motion.div>
@@ -1506,7 +1566,7 @@ const AdminAttendance = () => {
       {/* Review & Pay Data Grid Modal */}
       <AnimatePresence>
         {showReviewModal && selectedRun && (
-          <div className="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="bg-white rounded-xl w-full max-w-[95vw] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
               {/* Header */}
               <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
@@ -1625,7 +1685,7 @@ const AdminAttendance = () => {
       {/* Calendar Event Modal */}
       <AnimatePresence>
         {showCalendarModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1696,7 +1756,7 @@ const AdminAttendance = () => {
       {/* Leave Action Modal */}
       <AnimatePresence>
         {showLeaveActionModal && selectedLeave && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
