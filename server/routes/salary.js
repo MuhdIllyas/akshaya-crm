@@ -860,24 +860,33 @@ router.get('/run-preview', authMiddleware(['admin', 'superadmin']), async (req, 
       const [year, monthNum] = month.split('-');
       const calendar_days = new Date(year, monthNum, 0).getDate();
 
-      // 2. Fetch configured working days
-      const workingDaysRes = await client.query(`
+      // 2. Mathematically Calculate Exact Sundays
+      let sundays = 0;
+      for (let i = 1; i <= calendar_days; i++) {
+          // Javascript Date months are 0-indexed, so we subtract 1 from monthNum
+          const date = new Date(year, parseInt(monthNum) - 1, i);
+          if (date.getDay() === 0) sundays++; // 0 represents Sunday
+      }
+
+      // 3. Fixed Duty Leave
+      const dl_days = 1;
+
+      // 4. Fetch EXPLICIT Holidays from the Calendar (other_offdays)
+      const holidaysRes = await client.query(`
           SELECT COUNT(*) as count 
           FROM calendar_events 
-          WHERE centre_id = $1 AND TO_CHAR(date, 'YYYY-MM') = $2 AND type = 'working'
+          WHERE centre_id = $1 AND TO_CHAR(date, 'YYYY-MM') = $2 AND type = 'holiday'
       `, [centreId, month]);
       
-      const working_days = parseInt(workingDaysRes.rows[0].count);
-      const dl_days = 1; // Fixed baseline
-      
-      // Calculate remaining offdays (Assume 0 Sundays by default, bundled into other)
-      const total_offdays = calendar_days - working_days;
-      const other_offdays = Math.max(0, total_offdays - dl_days);
+      const other_offdays = parseInt(holidaysRes.rows[0].count);
+
+      // 5. Calculate Expected Target Working Days
+      const working_days = calendar_days - (sundays + dl_days + other_offdays);
 
       res.json({
           calendar_days,
           working_days,
-          sundays: 0,
+          sundays,
           dl_days,
           other_offdays
       });
