@@ -1006,6 +1006,20 @@ const AdminAttendance = () => {
     }
   };
 
+  const handleDeleteRun = async (runId) => {
+    if (!window.confirm("Are you sure you want to delete this payroll run? You can recreate it from the calendar later.")) return;
+    
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/salary/runs/${runId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success("Payroll run deleted successfully");
+      fetchSalaryRuns();
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to delete run"); 
+    }
+  };
+
   const handleReviewRun = async (run) => {
     setSelectedRun(run);
     try {
@@ -1319,15 +1333,28 @@ const AdminAttendance = () => {
                         </span>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        {run.status === 'draft' ? (
-                          <button onClick={() => handleGenerateRun(run.id)} className="text-sm px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium transition">
-                            Generate
-                          </button>
-                        ) : (
-                          <button onClick={() => handleReviewRun(run)} className="text-sm px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium transition">
-                            Review & Pay
-                          </button>
-                        )}
+                        <div className="flex items-center justify-end space-x-2">
+                          {run.status === 'draft' ? (
+                            <button onClick={() => handleGenerateRun(run.id)} className="text-sm px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium transition">
+                              Generate
+                            </button>
+                          ) : (
+                            <button onClick={() => handleReviewRun(run)} className="text-sm px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium transition">
+                              Review & Pay
+                            </button>
+                          )}
+                          
+                          {/* ONLY allow deletion if it hasn't been finalized and locked */}
+                          {run.status !== 'finalized' && (
+                            <button 
+                              onClick={() => handleDeleteRun(run.id)} 
+                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="Delete Run"
+                            >
+                              <FiTrash2 className="h-5 w-5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1444,7 +1471,7 @@ const AdminAttendance = () => {
           </div>
         )}
       </AnimatePresence>
-      
+
       {/* Create Run Modal (Automated) */}
       <AnimatePresence>
         {showRunModal && (

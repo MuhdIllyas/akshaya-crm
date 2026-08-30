@@ -961,6 +961,39 @@ router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async
   }
 });
 
+// 3.a Delete a Draft or Generated Run
+router.delete('/runs/:id', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+      await client.query('BEGIN');
+      
+      const runRes = await client.query(`SELECT * FROM salary_runs WHERE id = $1`, [req.params.id]);
+      if (runRes.rows.length === 0) throw new Error('Run not found');
+      
+      const run = runRes.rows[0];
+      
+      // Security Check: Only admins from that centre can delete, and they cannot delete finalized runs
+      if (req.user.role === 'admin' && run.centre_id !== req.user.centre_id) {
+          throw new Error('Unauthorized');
+      }
+      if (run.status === 'finalized') {
+          throw new Error('Cannot delete a finalized payroll run. It must be retained for auditing.');
+      }
+
+      // Delete the generated records first, then the run itself
+      await client.query(`DELETE FROM salary_records WHERE salary_run_id = $1`, [run.id]);
+      await client.query(`DELETE FROM salary_runs WHERE id = $1`, [run.id]);
+
+      await client.query('COMMIT');
+      res.json({ message: 'Payroll run deleted successfully' });
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(400).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
 // 4. Get Records for Admin Review
 router.get('/runs/:id/records', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   try {
