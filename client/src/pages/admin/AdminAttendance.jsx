@@ -1444,34 +1444,33 @@ const AdminAttendance = () => {
           </div>
         )}
       </AnimatePresence>
-
-      {/* Create Run Modal */}
+      
+      {/* Create Run Modal (Automated) */}
       <AnimatePresence>
         {showRunModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Configure Payroll Month</h3>
+                <h3 className="text-lg font-bold text-gray-900">Initiate Payroll Batch</h3>
                 <button onClick={() => setShowRunModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><FiX /></button>
               </div>
               <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+                  <p className="text-sm text-blue-800">
+                    <FiCalendar className="inline mr-2" />
+                    Target Days, Duty Leaves (1), and Offdays will be automatically calculated based on your Centre's calendar configuration.
+                  </p>
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                  <select value={newRunData.payroll_month} onChange={e => setNewRunData({...newRunData, payroll_month: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Select Payroll Month</label>
+                  <select value={newRunData.payroll_month} onChange={e => setNewRunData({payroll_month: e.target.value})} className="w-full border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-900 font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
                     {monthOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Calendar Days</label><input type="number" value={newRunData.calendar_days} onChange={e => setNewRunData({...newRunData, calendar_days: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Sundays</label><input type="number" value={newRunData.sundays} onChange={e => setNewRunData({...newRunData, sundays: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">DL Days</label><input type="number" value={newRunData.dl_days} onChange={e => setNewRunData({...newRunData, dl_days: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Other Offdays</label><input type="number" value={newRunData.other_offdays} onChange={e => setNewRunData({...newRunData, other_offdays: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
-                </div>
-                <div className="pt-4 border-t border-gray-100 text-right text-sm font-bold text-indigo-700">
-                  Total Target Days: {newRunData.calendar_days - newRunData.sundays - newRunData.dl_days - newRunData.other_offdays}
-                </div>
               </div>
-              <button onClick={handleCreateRun} className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Create Batch</button>
+              <button onClick={handleCreateRun} className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition shadow-sm">
+                Create Batch
+              </button>
             </motion.div>
           </div>
         )}
