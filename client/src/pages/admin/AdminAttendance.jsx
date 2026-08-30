@@ -779,11 +779,7 @@ const AdminAttendance = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   
   const [newRunData, setNewRunData] = useState({
-    payroll_month: getCurrentMonth(),
-    calendar_days: 30,
-    sundays: 4,
-    dl_days: 0,
-    other_offdays: 0
+    payroll_month: getCurrentMonth()
   });
 
   const [wallets, setWallets] = useState([]);          
@@ -989,9 +985,25 @@ const AdminAttendance = () => {
       await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs/${runId}/generate`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      toast.success("Payroll Generated Successfully!", { id: toastId });
+      
+      // 🔥 FIX: Properly resolve the loading toast into a success message
+      toast.update(toastId, { 
+        render: "Payroll Generated Successfully!", 
+        type: "success", 
+        isLoading: false, 
+        autoClose: 3000 
+      });
+      
       fetchSalaryRuns();
-    } catch (err) { toast.error(err.response?.data?.error || "Generation failed", { id: toastId }); }
+    } catch (err) { 
+      // 🔥 FIX: Properly resolve the loading toast into an error message
+      toast.update(toastId, { 
+        render: err.response?.data?.error || "Generation failed", 
+        type: "error", 
+        isLoading: false, 
+        autoClose: 5000 
+      }); 
+    }
   };
 
   const handleReviewRun = async (run) => {

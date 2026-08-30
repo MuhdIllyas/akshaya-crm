@@ -752,12 +752,17 @@ const getPayrollSchedule = async (client, staffId, payrollMonthDate) => {
   return result.rows[0] ? parseFloat(result.rows[0].standard_hours) : 9.0;
 };
 
-const calculateSalaryRecord = (structure, run, workedHours, achievedRevenue, bonusSlabs, standardHours) => {
-  const offdays = run.sundays + run.dl_days + run.other_offdays;
-  const daysTargeted = run.calendar_days - offdays;
+const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRaw, bonusSlabs, standardHoursRaw) => {
+  // 🔥 Strict Number enforcement to prevent NaN database crashes
+  const workedHours = Number(workedHoursRaw) || 0;
+  const achievedRevenue = Number(achievedRevenueRaw) || 0;
+  const standardHours = Number(standardHoursRaw) || 9.0;
+  
+  const offdays = Number(run.sundays) + Number(run.dl_days) + Number(run.other_offdays);
+  const daysTargeted = Number(run.calendar_days) - offdays;
   
   const targetHours = daysTargeted * standardHours;
-  const targetRevenue = targetHours * structure.hourly_service_revenue_target; 
+  const targetRevenue = targetHours * Number(structure.hourly_service_revenue_target || 0); 
   
   const workingHoursPercent = targetHours > 0 ? (workedHours / targetHours) * 100 : 0;
   const revenuePercent = targetRevenue > 0 ? (achievedRevenue / targetRevenue) * 100 : 0;
@@ -765,17 +770,17 @@ const calculateSalaryRecord = (structure, run, workedHours, achievedRevenue, bon
   let bonusPercent = 0;
   for (const slab of bonusSlabs) {
       if (
-          workingHoursPercent >= slab.min_working_hours_pct &&
-          (slab.max_working_hours_pct === null || workingHoursPercent < slab.max_working_hours_pct) &&
-          revenuePercent >= slab.min_collection_pct &&
-          (slab.max_collection_pct === null || revenuePercent < slab.max_collection_pct)
+          workingHoursPercent >= Number(slab.min_working_hours_pct) &&
+          (slab.max_working_hours_pct === null || workingHoursPercent < Number(slab.max_working_hours_pct)) &&
+          revenuePercent >= Number(slab.min_collection_pct) &&
+          (slab.max_collection_pct === null || revenuePercent < Number(slab.max_collection_pct))
       ) {
-          bonusPercent = slab.bonus_pct;
+          bonusPercent = Number(slab.bonus_pct);
           break;
       }
   }
 
-  const dailyRate = structure.basic_salary / run.calendar_days;
+  const dailyRate = Number(structure.basic_salary) / Number(run.calendar_days);
   const basicPayPerHour = standardHours > 0 ? dailyRate / standardHours : 0;
   
   const basicPay = workedHours * basicPayPerHour;
@@ -783,16 +788,16 @@ const calculateSalaryRecord = (structure, run, workedHours, achievedRevenue, bon
   const bonus = (bonusPercent / 100) * surplusRevenue;
   
   const offdayPay = workingHoursPercent >= 100 ? offdays * dailyRate : offdays * (workingHoursPercent / 100) * dailyRate;
-  const taPay = workingHoursPercent >= 100 ? Number(structure.ta) : Number(structure.ta) * (workingHoursPercent / 100);
-  const faPay = workingHoursPercent >= 100 ? Number(structure.fa) : Number(structure.fa) * (workingHoursPercent / 100);
+  const taPay = workingHoursPercent >= 100 ? Number(structure.ta || 0) : Number(structure.ta || 0) * (workingHoursPercent / 100);
+  const faPay = workingHoursPercent >= 100 ? Number(structure.fa || 0) : Number(structure.fa || 0) * (workingHoursPercent / 100);
 
   const fullPay = basicPay + bonus + offdayPay + taPay + faPay;
 
   return {
       calculation_version: 'v2_automated',
-      snapshot_basic_salary: structure.basic_salary,
+      snapshot_basic_salary: Number(structure.basic_salary),
       snapshot_daily_hours: standardHours,
-      snapshot_hourly_target: structure.hourly_service_revenue_target,
+      snapshot_hourly_target: Number(structure.hourly_service_revenue_target || 0),
       monthly_work_days: daysTargeted,
       total_targeted_hours: targetHours,
       total_monthly_target: targetRevenue,
@@ -842,28 +847,61 @@ router.get('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) =>
   }
 });;
 
-// 2. Create a Draft Run
+// 2. Create a Draft Run (FULLY AUTOMATED FROM CALENDAR)
 router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
-  const { payroll_month, calendar_days, sundays, dl_days, other_offdays } = req.body;
+  const { payroll_month } = req.body;
   const centreId = req.user.role === 'admin' ? req.user.centre_id : req.body.centre_id;
   
-  // 🔥 Add this safety check so it doesn't crash the database!
   if (!centreId) {
       return res.status(400).json({ error: "Centre ID is required to create a payroll run." });
   }
 
-  const days_targeted = calendar_days - (sundays + dl_days + other_offdays);
   const client = await pool.connect();
-  
   try {
+      // 1. Calculate Total Calendar Days for the Month
+      const [year, monthNum] = payroll_month.split('-');
+      const calendar_days = new Date(year, monthNum, 0).getDate();
+
+      // 2. Fetch Working Days from the Calendar
+      const workingDaysRes = await client.query(`
+          SELECT COUNT(*) as count 
+          FROM calendar_events 
+          WHERE centre_id = $1 
+            AND TO_CHAR(date, 'YYYY-MM') = $2 
+            AND type = 'working'
+      `, [centreId, payroll_month]);
+      
+      const days_targeted = parseInt(workingDaysRes.rows[0].count);
+
+      // 3. Safety Check: Ensure the calendar is actually filled out!
+      if (days_targeted === 0) {
+          return res.status(400).json({ 
+              error: `No working days found for ${payroll_month}. Please configure the Working Days calendar first before creating a payroll run.` 
+          });
+      }
+
+      // 4. Automated Offday Math (DL is strictly 1)
+      const dl_days = 1;
+      const total_offdays = calendar_days - days_targeted;
+      const other_offdays = Math.max(0, total_offdays - dl_days);
+      const sundays = 0; // Sundays are absorbed into 'other_offdays' mathematically
+
+      // 5. Insert the Run
       const result = await client.query(`
-          INSERT INTO salary_runs (centre_id, payroll_month, calendar_days, sundays, dl_days, other_offdays, days_targeted, status, created_by, created_at)
+          INSERT INTO salary_runs (
+              centre_id, payroll_month, calendar_days, sundays, dl_days, 
+              other_offdays, days_targeted, status, created_by, created_at
+          )
           VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, NOW()) RETURNING *
       `, [centreId, `${payroll_month}-01`, calendar_days, sundays, dl_days, other_offdays, days_targeted, req.user.id]);
       
       res.status(201).json(result.rows[0]);
   } catch (err) {
-      res.status(400).json({ error: 'Run already exists for this month or invalid data.' });
+      if (err.code === '23505') {
+          res.status(400).json({ error: 'A payroll run already exists for this month.' });
+      } else {
+          res.status(500).json({ error: err.message });
+      }
   } finally {
       client.release();
   }
