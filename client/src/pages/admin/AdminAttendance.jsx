@@ -1623,11 +1623,21 @@ const AdminAttendance = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {runRecords.map((r) => {
+                    {/* 1. FORCE ALPHABETICAL SORTING BY STAFF NAME */}
+                    {[...runRecords]
+                      .sort((a, b) => a.staff_name.localeCompare(b.staff_name))
+                      .map((r) => {
                       const alwcs = Number(r.ta_pay) + Number(r.fa_pay) + Number(r.paid_offdays);
                       return (
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors bg-white group">
-                          <td className="py-3 px-4 font-bold text-gray-900 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10">{r.staff_name}</td>
+                          
+                          {/* 2. ENHANCED STAFF NAME COLUMN WITH SCHEDULE VIEW */}
+                          <td className="py-3 px-4 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10 border-r border-gray-100">
+                            <div className="font-bold text-gray-900">{r.staff_name}</div>
+                            <div className="text-[11px] text-indigo-600 font-bold mt-0.5 uppercase tracking-wider">
+                              Shift: {Number(r.snapshot_daily_hours).toFixed(1)}h / Day
+                            </div>
+                          </td>
                           
                           <td className="py-3 px-3 text-gray-500 border-l border-gray-100">{Number(r.total_targeted_hours).toFixed(1)}h</td>
                           <td className="py-3 px-3 font-medium text-gray-900">{Number(r.total_worked_hours).toFixed(1)}h</td>
