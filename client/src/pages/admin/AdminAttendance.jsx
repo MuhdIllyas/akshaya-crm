@@ -915,6 +915,22 @@ const AdminAttendance = () => {
     } catch { toast.error('Failed'); }
   };
 
+  const handleLeaveAction = async (id, act) => {
+    try { 
+      const upd = await updateLeave(id, act); 
+      setPendingLeaves(p => p.filter(l => l.id !== id)); 
+      
+      // Merge the existing leave data (l) with the updated response (upd)
+      // This preserves 'staff_name' and 'department' while updating the 'status'
+      setAllLeaves(p => p.map(l => l.id === id ? { ...l, ...upd } : l)); 
+      
+      setShowLeaveActionModal(false); 
+      setSelectedLeave(null); 
+      toast.success(`Leave ${act}`); 
+    }
+    catch { toast.error(`Failed`); }
+  };
+
   const handleUpdateCalendarEvent = async (id, ev) => {
     try { const upd = await updateCalendarEvent(id, ev); setCalendarData(p => p.map(e => e.id === id ? upd : e)); }
     catch { toast.error('Update failed'); }
