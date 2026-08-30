@@ -742,78 +742,6 @@ const LeaveApplicationRow = ({ application, handleLeaveAction }) => {
   );
 };
 
-const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => {
-  // Map fields gracefully to support both the old and new backend schema
-  const targetHrs = salary.total_targeted_hours || 0;
-  const workedHrs = salary.total_worked_hours || salary.total_hours || 0;
-  const hrsPct = salary.working_hours_percent || 0;
-
-  const targetRev = salary.total_monthly_target || 0;
-  const actualRev = salary.achieved_service_revenue || salary.collection || 0;
-  const revPct = salary.revenue_percent || salary.collection_percent || 0;
-
-  const bonusPct = salary.bonus_percent || 0;
-  const basicPay = salary.basic_pay || salary.basic || 0;
-  const bonusPay = salary.bonus || 0;
-  const allowances = Number(salary.ta_pay || salary.ta || 0) + Number(salary.fa_pay || salary.fa || 0) + Number(salary.paid_offdays || 0) + Number(salary.other_allowances || 0);
-  const ded = salary.deductions || 0;
-  const netPay = salary.net_salary || salary.net_pay || 0;
-
-  return (
-    <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors bg-white group">
-      {/* Sticky Staff Column */}
-      <td className="py-3 px-4 font-medium text-gray-900 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10">
-        {salary.staff_name}
-      </td>
-      
-      {/* Hours Group */}
-      <td className="py-3 px-3 text-gray-600 border-l border-gray-200">{Number(targetHrs).toFixed(1)}h</td>
-      <td className="py-3 px-3 text-gray-900 font-medium">{Number(workedHrs).toFixed(1)}h</td>
-      <td className="py-3 px-3 border-r border-gray-200">
-        <span className={`font-semibold ${hrsPct >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
-          {Number(hrsPct).toFixed(1)}%
-        </span>
-      </td>
-
-      {/* Revenue Group */}
-      <td className="py-3 px-3 text-gray-600">₹{Number(targetRev).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-gray-900 font-medium">₹{Number(actualRev).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 border-r border-gray-200">
-        <span className={`font-semibold ${revPct >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
-          {Number(revPct).toFixed(1)}%
-        </span>
-      </td>
-
-      {/* Earnings Group */}
-      <td className="py-3 px-3 text-indigo-600 font-medium">{Number(bonusPct).toFixed(1)}%</td>
-      <td className="py-3 px-3 text-gray-600">₹{Number(basicPay).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-emerald-600 font-medium">₹{Number(bonusPay).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-gray-600">₹{Number(allowances).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-rose-600 border-r border-gray-200">-₹{Number(ded).toLocaleString('en-IN')}</td>
-
-      {/* Final Group */}
-      <td className="py-3 px-4 text-right font-bold text-gray-900 bg-gray-50">
-        ₹{Number(netPay).toLocaleString('en-IN')}
-      </td>
-      <td className="py-3 px-4 text-center">
-        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${salary.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : salary.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-          {salary.status === 'sent' ? 'Sent' : salary.status === 'viewed' ? 'Viewed' : 'Draft'}
-        </span>
-      </td>
-      <td className="py-3 px-4 text-center">
-        <div className="flex items-center justify-center space-x-2">
-          <button onClick={() => handleEditSalary(salary)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition" title="View Breakdown">
-            <FiEye className="h-4 w-4" />
-          </button>
-          <button onClick={() => onSendToStaff(salary)} disabled={salary.status === 'sent'} className={`p-1.5 rounded-lg transition ${salary.status === 'sent' ? 'text-gray-400 cursor-not-allowed' : 'text-emerald-600 hover:bg-emerald-50'}`} title="Send to Staff">
-            <FiSend className="h-4 w-4" />
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
-};
-
 // ---------------------------------------------------------------------
 // MAIN COMPONENT
 // ---------------------------------------------------------------------
@@ -835,16 +763,29 @@ const AdminAttendance = () => {
   const [allAttendance, setAllAttendance] = useState([]);
   const [pendingLeaves, setPendingLeaves] = useState([]);
   const [allLeaves, setAllLeaves] = useState([]); // Added state for all leaves
-  const [salaryData, setSalaryData] = useState([]);
+  
   const [calendarData, setCalendarData] = useState([]);
   const [showAttendanceEditModal, setShowAttendanceEditModal] = useState(false);
   const [showLeaveActionModal, setShowLeaveActionModal] = useState(false);
-  const [showSalaryEditModal, setShowSalaryEditModal] = useState(false);
-  const [showCreateSalaryModal, setShowCreateSalaryModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [selectedAttendance, setSelectedAttendance] = useState(null);
   const [selectedLeave, setSelectedLeave] = useState(null);
-  const [selectedSalary, setSelectedSalary] = useState(null);
+
+  // --- NEW PAYROLL ENGINE STATES ---
+  const [salaryRuns, setSalaryRuns] = useState([]);
+  const [selectedRun, setSelectedRun] = useState(null);
+  const [runRecords, setRunRecords] = useState([]);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  
+  const [newRunData, setNewRunData] = useState({
+    payroll_month: getCurrentMonth(),
+    calendar_days: 30,
+    sundays: 4,
+    dl_days: 0,
+    other_offdays: 0
+  });
+
   const [wallets, setWallets] = useState([]);          
   const [selectedWalletId, setSelectedWalletId] = useState(""); 
   const [walletLoading, setWalletLoading] = useState(false);
@@ -858,401 +799,90 @@ const AdminAttendance = () => {
   const monthOptions = useMemo(() => generateMonthOptions(), []);
   
   const [attendanceEdit, setAttendanceEdit] = useState({ punch_in: '', punch_out: '', breaks: '', status: 'present' });
-  const [salaryEdit, setSalaryEdit] = useState({ 
-    staff_id: '', 
-    month: getCurrentMonth(), 
-    basic: '', 
-    hra: '', 
-    ta: '', 
-    other_allowances: '', 
-    deductions: '', 
-    working_days: '', 
-    present_days: '', 
-    additional_components: [] 
-  });
-  const [newComponent, setNewComponent] = useState({ name: '', amount: '', operation: 'addition', base: 'basic' });
   const [calendarEdit, setCalendarEdit] = useState({ date: '', type: 'working', description: '' });
 
-  // Helper functions for salary operations
-  const getOperationColor = (operation) => {
-    const colors = {
-      addition: 'bg-emerald-100 text-emerald-700',
-      subtraction: 'bg-rose-100 text-rose-700',
-      multiplication: 'bg-blue-100 text-blue-700',
-      division: 'bg-purple-100 text-purple-700',
-      percentage: 'bg-amber-100 text-amber-700'
-    };
-    return colors[operation] || 'bg-gray-100 text-gray-700';
-  };
 
-  const getOperationIcon = (operation) => {
-    const icons = {
-      addition: <FiAdd className="h-3 w-3" />,
-      subtraction: <FiMinus className="h-3 w-3" />,
-      multiplication: <FiMultiply className="h-3 w-3" />,
-      division: <FiDivide className="h-3 w-3" />,
-      percentage: <FiPercent className="h-3 w-3" />
-    };
-    return icons[operation] || <FiPlus className="h-3 w-3" />;
-  };
-
-  const handleAddComponent = () => {
-    if (!newComponent.name || !newComponent.amount) return;
-    setSalaryEdit(prev => ({
-      ...prev,
-      additional_components: [...prev.additional_components, { ...newComponent }]
-    }));
-    setNewComponent({ name: '', amount: '', operation: 'addition', base: 'basic' });
-  };
-
-  const handleRemoveComponent = (index) => {
-    setSalaryEdit(prev => ({
-      ...prev,
-      additional_components: prev.additional_components.filter((_, i) => i !== index)
-    }));
-  };
-
-  const [autoCalc, setAutoCalc] = useState({
-    working_days: 0,
-    present_days: 0,
-    total_hours: 0,
-  });
-
-  // FIXED: Correct URL for wallet debit
-  const debitSalaryFromWallet = async (walletId, amount, staffName, month) => {
+  // --- NEW PAYROLL LIFECYCLE HANDLERS ---
+  const fetchSalaryRuns = async () => {
     try {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/wallet/debit-salary`,
-        { wallet_id: walletId, amount, staff_name: staffName, month },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      );
-    } catch (err) {
-      console.error('Wallet debit failed:', err);
-      throw err; // let the caller show toast
-    }
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/runs`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        params: { centre_id: req?.user?.role === 'admin' ? req.user.centre_id : undefined }
+      });
+      setSalaryRuns(res.data);
+    } catch (err) { console.error(err); }
   };
 
-  // ------------------- STATS -------------------
-  const stats = useMemo(() => {
-    const total = staffList.length;
-    const active = staffList.filter(s => s.status === 'Active').length;
-    const today = new Date().toISOString().split('T')[0];
-    const todayAtt = allAttendance.filter(a => normalizeDate(a.date) === today);
-
-    const presentStaffIds = new Set(
-      todayAtt.filter(a => a.status === 'present').map(a => a.staff_id)
-      );
-  const present = presentStaffIds.size;
-
-    const leave = todayAtt.filter(a => a.status.includes('leave')).length;
-    const absent = todayAtt.filter(a => a.status === 'absent').length;
-    const totalSal = staffList.reduce((s, st) => s + (Number(st.salary) || 0), 0);
-      let lateH = 0, extraH = 0, recWithSch = 0;
-      todayAtt.forEach(r => {
-      if (r.status === 'present') {
-        const st = staffList.find(s => s.id === r.staff_id);
-        if (st) {
-          const dev = calculateScheduleDeviations(r, st);
-          if (dev.hasSchedule) { lateH += dev.lateHours; extraH += dev.extraHours; recWithSch++; }
-        }
-      }
-    });
-    return {
-      totalStaff: total, activeStaff: active, presentToday: present, onLeaveToday: leave,
-      totalSalary: Math.round(totalSal), attendanceRate: total ? Math.round((present / total) * 100) : 0,
-      todayLateHours: Number(lateH.toFixed(2)), todayExtraHours: Number(extraH.toFixed(2)),
-      todayRecordsWithSchedule: recWithSch
-    };
-  }, [staffList, allAttendance]);
-
-  // ------------------- FETCH DATA -------------------
   useEffect(() => {
-    const load = async () => {
-      try {
-        const staffRaw = await getStaffList();
-        const staff = await Promise.all(staffRaw.map(async s => ({
-          ...s,
-          schedules: await getStaffSchedules(s.id).catch(() => [])
-        })));
-        setStaffList(staff);
-        const att = await getAllAttendance(selectedMonth);
-        setAllAttendance(att);
-        const leaves = await getPendingLeaves();
-        setPendingLeaves(leaves);
-        const allL = await getLeaves(selectedLeaveMonth); // Fetch all leaves for the current leave month
-        setAllLeaves(allL); //
-        const sal = await getSalaryData(selectedSalaryMonth);
-        setSalaryData(sal);
-        const cal = await getCalendarData();
-        setCalendarData(cal);
-      } catch { toast.error('Failed to load data'); }
-    };
-    load();
-  }, []);
+    if (activeTab === 'salary') fetchSalaryRuns();
+  }, [activeTab]);
 
-  useEffect(() => { 
-    if (selectedMonth) {
-      getAllAttendance(selectedMonth)
-        .then(setAllAttendance)
-        .catch(() => toast.error('Failed to load attendance'));
-    }
-  }, [selectedMonth]);
-  
-  useEffect(() => { 
-    if (selectedSalaryMonth) {
-      getSalaryData(selectedSalaryMonth)
-        .then(setSalaryData)
-        .catch(() => toast.error('Failed to load salary data'));
-    }
-  }, [selectedSalaryMonth]);
-  
-  // New effect to load all leaves when the month changes
-  useEffect(() => {
-    if (selectedLeaveMonth) {
-      getLeaves(selectedLeaveMonth)
-        .then(setAllLeaves)
-        .catch(() => toast.error('Failed to load leave history'));
-    }
-  }, [selectedLeaveMonth]);
-  // End of new effect
-
-  useEffect(() => {
-    if (salaryEdit.staff_id && salaryEdit.month) {
-      getAutoCalc(salaryEdit.staff_id, salaryEdit.month)
-        .then(data => {
-          setAutoCalc(data);
-          setSalaryEdit(prev => ({
-            ...prev,
-            working_days: data.working_days.toString(),
-            present_days: data.present_days.toString(),
-            total_hours: data.total_hours,
-          }));
-        })
-        .catch(() => toast.error('Failed to load auto-calc'));
-    }
-  }, [salaryEdit.staff_id, salaryEdit.month]);
-
-  // Update salaryEdit month when salary month changes
-  useEffect(() => {
-    setSalaryEdit(prev => ({
-      ...prev,
-      month: selectedSalaryMonth
-    }));
-  }, [selectedSalaryMonth]);
-
-  useEffect(() => {
-    const loadWallets = async () => {
-      try {
-        setWalletLoading(true);
-        const data = await getWalletsForCentre();
-        setWallets(data);
-        // optionally pre-select the first wallet
-        if (data.length > 0 && !selectedWalletId) {
-          setSelectedWalletId(data[0].id);
-        }
-      } catch (err) {
-        toast.error("Failed to load wallets");
-        console.error(err);
-      } finally {
-        setWalletLoading(false);
-      }
-    };
-
-    loadWallets();
-  }, []); 
-
-  // ------------------- ATTENDANCE -------------------
-  const handleEditAttendance = (rec) => {
-    setSelectedAttendance(rec);
-    setAttendanceEdit({ punch_in: rec.punch_in || '', punch_out: rec.punch_out || '', breaks: rec.breaks || '', status: rec.status || 'present' });
-    setShowAttendanceEditModal(true);
-  };
-  const calculateHours = (inT, outT) => {
-    if (!inT || !outT) return 0;
-    const [ih, im] = inT.split(':').map(Number);
-    const [oh, om] = outT.split(':').map(Number);
-    let h = oh - ih, m = om - im;
-    if (m < 0) { h--; m += 60; }
-    return Number(h + m / 60).toFixed(2);
-  };
-  const handleSaveAttendance = async () => {
-    const data = { ...attendanceEdit, hours: calculateHours(attendanceEdit.punch_in, attendanceEdit.punch_out) };
+  const handleCreateRun = async () => {
     try {
-      const upd = await updateAttendance(selectedAttendance.id, data);
-      setAllAttendance(p => p.map(i => i.id === selectedAttendance.id ? upd : i));
-      setShowAttendanceEditModal(false); setSelectedAttendance(null);
-      toast.success('Attendance updated');
-    } catch { toast.error('Failed'); }
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs`, newRunData, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setSalaryRuns([res.data, ...salaryRuns]);
+      setShowRunModal(false);
+      toast.success("Draft Run Created. Ready to Generate.");
+    } catch (err) { toast.error(err.response?.data?.error || "Failed to create run"); }
   };
 
-  // ------------------- CALENDAR -------------------
-  const handleUpdateCalendarEvent = async (id, ev) => {
-    try { const upd = await updateCalendarEvent(id, ev); setCalendarData(p => p.map(e => e.id === id ? upd : e)); }
-    catch { throw new Error(); }
-  };
-  const handleDeleteCalendarEvent = async (ev) => {
-    if (window.confirm('Delete?')) {
-      try { await deleteCalendarEvent(ev.id); setCalendarData(p => p.filter(e => e.id !== ev.id)); toast.success('Deleted'); }
-      catch { toast.error('Failed'); }
-    }
-  };
-
-  // ------------------- LEAVE -------------------
-  const handleLeaveAction = async (id, act) => {
-    try { 
-      const upd = await updateLeave(id, act); 
-      setPendingLeaves(p => p.filter(l => l.id !== id)); 
-      
-      // FIX: Merge the existing leave data (l) with the updated response (upd)
-      // This preserves 'staff_name' and 'department' while updating the 'status'
-      setAllLeaves(p => p.map(l => l.id === id ? { ...l, ...upd } : l)); 
-      
-      setShowLeaveActionModal(false); 
-      setSelectedLeave(null); 
-      toast.success(`Leave ${act}`); 
-    }
-    catch { toast.error(`Failed`); }
-  };
-
-  // ------------------- SALARY -------------------
-  const handleEditSalary = (s) => {
-    setSelectedSalary(s);
-    setSalaryEdit({ ...s, additional_components: s.additional_components || [] });
-    setShowSalaryEditModal(true);
-  };
-  const calculateWithOperations = (base, comps) => {
-    let res = Number(base) || 0;
-    comps.forEach(c => {
-      const amt = Number(c.amount) || 0;
-      switch (c.operation) {
-        case 'addition': res += amt; break;
-        case 'subtraction': res -= amt; break;
-        case 'multiplication': res = (c.base === 'basic' ? Number(salaryEdit.basic) : res) * amt; break;
-        case 'division': res = amt !== 0 ? (c.base === 'basic' ? Number(salaryEdit.basic) : res) / amt : res; break;
-        case 'percentage': res += ((c.base === 'basic' ? Number(salaryEdit.basic) : res) * amt) / 100; break;
-      }
-    });
-    return Number(res.toFixed(2));
-  };
-  const handleSaveSalary = async () => {
-  const base = Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances);
-  const net = calculateWithOperations(base, salaryEdit.additional_components) - Number(salaryEdit.deductions);
-
-  const upd = {
-    ...salaryEdit,
-    net_salary: Number(net.toFixed(2)),
-    total_hours: autoCalc.total_hours,
-    working_days: autoCalc.working_days,
-    present_days: autoCalc.present_days,
-  };
-
-  try {
-    const saved = await updateSalary(selectedSalary.id, upd);
-    setSalaryData(p => p.map(i => i.id === selectedSalary.id ? saved : i));
-    setShowSalaryEditModal(false); setSelectedSalary(null);
-    toast.success('Salary updated');
-  } catch {
-    toast.error('Failed');
-  }
-};
-  const handleCreateSalary = async () => {
-  // Validation
-  if (!salaryEdit.staff_id) return toast.error("Please select a staff member");
-  if (!salaryEdit.month) return toast.error("Month is required");
-  if (!salaryEdit.basic || salaryEdit.basic <= 0) return toast.error("Basic salary is required");
-  if (!selectedWalletId) return toast.error("Please select a wallet to debit from");
-
-  const base = Number(salaryEdit.basic) + Number(salaryEdit.hra || 0) + Number(salaryEdit.ta || 0) + Number(salaryEdit.other_allowances || 0);
-  const netAfterComponents = calculateWithOperations(base, salaryEdit.additional_components || []);
-  const netSalary = netAfterComponents - Number(salaryEdit.deductions || 0);
-
-  const payload = {
-    staff_id: Number(salaryEdit.staff_id),
-    month: salaryEdit.month,
-    basic: Number(salaryEdit.basic),
-    hra: Number(salaryEdit.hra || 0),
-    ta: Number(salaryEdit.ta || 0),
-    other_allowances: Number(salaryEdit.other_allowances || 0),
-    deductions: Number(salaryEdit.deductions || 0),
-    net_salary: Number(netSalary.toFixed(2)),
-    working_days: Number(autoCalc.working_days),
-    present_days: Number(autoCalc.present_days),
-    total_hours: Number(autoCalc.total_hours),
-  };
-
-  try {
-    // Step 1: Create salary
-    const createdSalary = await createSalary(payload);
-    setSalaryData(prev => [...prev, createdSalary]);
-
-    // Step 2: Try to debit wallet (but don't crash if it fails)
+  const handleGenerateRun = async (runId) => {
+    const toastId = toast.loading("Calculating payroll...");
     try {
-      // FIXED: Correct URL
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/wallet/debit-salary`,
-        {
-          wallet_id: selectedWalletId,
-          amount: netSalary,
-          salary_id: createdSalary.id,
-          month: salaryEdit.month
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-      );
-
-      // Success: Both salary created AND wallet debited
-      toast.success(`Salary created and ₹${netSalary.toLocaleString()} debited successfully!`);
-
-    } catch (walletError) {
-      console.error("Wallet debit failed:", walletError);
-      // Salary created, but wallet failed → warn user
-      toast.warn(
-        `Salary created successfully, but wallet debit failed: ${walletError.response?.data?.error || walletError.message}`
-      );
-    }
-
-    // Always close modal on success
-    setShowCreateSalaryModal(false);
-    setSelectedWalletId("");
-    setSalaryEdit({
-      staff_id: '',
-      month: getCurrentMonth(),
-      basic: '',
-      hra: '',
-      ta: '',
-      other_allowances: '',
-      deductions: '',
-      working_days: '',
-      present_days: '',
-      additional_components: []
-    });
-
-  } catch (err) {
-    console.error("Salary creation failed:", err);
-    toast.error(
-      err.response?.data?.error || 
-      "Failed to create salary. Please try again."
-    );
-  }
-};
-  const handleSendToStaff = async (s) => {
-    try { const upd = await sendSalary(s.id); setSalaryData(p => p.map(i => i.id === s.id ? upd : i)); toast.success('Sent'); }
-    catch { toast.error('Failed'); }
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs/${runId}/generate`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success("Payroll Generated Successfully!", { id: toastId });
+      fetchSalaryRuns();
+    } catch (err) { toast.error(err.response?.data?.error || "Generation failed", { id: toastId }); }
   };
-  const handleSendSalary = async () => {
-    const pending = salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'pending');
-    if (!pending.length) return toast.warn('No pending');
-    const ct = toast.info(
-      <div><p>Send {pending.length}?</p><div className="mt-2 flex justify-end gap-2">
-        <button onClick={async () => { toast.dismiss(ct); try { const list = await bulkSendSalaries(selectedSalaryMonth); setSalaryData(list); toast.success('Sent'); } catch { toast.error('Failed'); } }} className="px-3 py-1 bg-green-500 text-white rounded">Yes</button>
-        <button onClick={() => toast.dismiss(ct)} className="px-3 py-1 bg-gray-400 text-white rounded">Cancel</button>
-      </div></div>,
-      { autoClose: false, closeOnClick: false }
-    );
+
+  const handleReviewRun = async (run) => {
+    setSelectedRun(run);
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/runs/${run.id}/records`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setRunRecords(res.data);
+      setShowReviewModal(true);
+    } catch (err) { toast.error("Failed to load records"); }
   };
+
+  const handleUpdateDeduction = async (recordId, newDeduction) => {
+    try {
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}`, { deductions: newDeduction }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, deductions: res.data.deductions, net_pay: res.data.net_pay } : r));
+      toast.success("Deduction updated");
+    } catch (err) { toast.error("Update failed"); }
+  };
+
+  const handleFinalizeRun = async () => {
+    if (!window.confirm("Are you sure? This will lock the payroll and prevent future recalculations.")) return;
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs/${selectedRun.id}/finalize`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success("Payroll Finalized!");
+      setShowReviewModal(false);
+      fetchSalaryRuns();
+    } catch (err) { toast.error("Failed to finalize"); }
+  };
+
+  const handlePayRecord = async (recordId) => {
+    if (!selectedWalletId) return toast.error("Please select a wallet to debit from");
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}/pay`, { wallet_id: selectedWalletId }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, payment_status: 'paid' } : r));
+      toast.success("Payment issued successfully");
+    } catch (err) { toast.error(err.response?.data?.error || "Payment failed"); }
+  };
+
   const handleAddCalendarEvent = async () => {
     if (!calendarEdit.date || !calendarEdit.type) return toast.error('Required');
     try { const ev = await addCalendarEvent(calendarEdit); setCalendarData(p => [...p, ev]); setShowCalendarModal(false); setCalendarEdit({ date: '', type: 'working', description: '' }); toast.success('Added'); }
@@ -1480,94 +1110,70 @@ const AdminAttendance = () => {
           </div>
         )}
 
-        {/* Salary Tab */}
+        {/* NEW PAYROLL BATCH UI */}
         {activeTab === 'salary' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Salary Management</h2>
-                <div className="flex items-center space-x-3">
-                  <select
-                    className="border border-gray-300 rounded-lg px-3 py-2"
-                    value={selectedSalaryMonth}
-                    onChange={e => setSelectedSalaryMonth(e.target.value)}
-                  >
-                    {monthOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button onClick={handleSendSalary} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
-                    <FiSend className="h-4 w-4" /><span>Send Salaries</span>
-                  </button>
-                  <button onClick={() => {
-                    setSalaryEdit({
-                      staff_id: '', month: selectedSalaryMonth, basic: '', hra: '', ta: '', other_allowances: '', deductions: '', working_days: '', present_days: '', additional_components: []
-                    });
-                    setShowCreateSalaryModal(true);
-                  }} className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                    <FiRefreshCw className="h-4 w-4" /><span>Generate Payroll</span>
-                  </button>
-                  <button onClick={() => setShowCalendarModal(true)} className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors">
-                    <FiCalendar className="h-4 w-4" /><span>Manage Offdays</span>
-                  </button>
-                </div>
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Payroll Runs</h2>
+                <p className="text-gray-500 text-sm mt-1">Manage monthly salary calculations and batches.</p>
               </div>
-              <div className="mt-4">
-                <p className="text-sm text-gray-600 mb-4">
-                  Managing salaries for: <span className="font-semibold">{formatMonthForDisplay(selectedSalaryMonth)}</span>
-                </p>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-blue-50 rounded-lg p-4"><p className="text-sm text-blue-600 font-medium">Total Payroll</p><p className="text-xl font-bold text-blue-900">₹{salaryData.filter(s => s.month === selectedSalaryMonth).reduce((a, s) => a + Number(s.net_salary), 0).toLocaleString()}</p></div>
-                  <div className="bg-emerald-50 rounded-lg p-4"><p className="text-sm text-emerald-600 font-medium">Sent</p><p className="text-xl font-bold text-emerald-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'sent').length}</p></div>
-                  <div className="bg-amber-50 rounded-lg p-4"><p className="text-sm text-amber-600 font-medium">Pending</p><p className="text-xl font-bold text-amber-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'pending').length}</p></div>
-                  <div className="bg-purple-50 rounded-lg p-4"><p className="text-sm text-purple-600 font-medium">Staff</p><p className="text-xl font-bold text-purple-900">{salaryData.filter(s => s.month === selectedSalaryMonth).length}</p></div>
-                </div>
-              </div>
+              <button 
+                onClick={() => setShowRunModal(true)} 
+                className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                <FiPlus className="h-4 w-4" /><span>Create New Run</span>
+              </button>
             </div>
 
-            <div className="overflow-x-auto pb-4">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-y border-gray-200">
-                  <tr>
-                    <th className="py-3 px-4 sticky left-0 bg-gray-100 z-10 border-r border-gray-200 align-bottom" rowSpan="2">Staff Name</th>
-                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
-                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Service Revenue</th>
-                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
-                    <th className="py-3 px-4 text-right align-bottom" rowSpan="2">Net Pay</th>
-                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Status</th>
-                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Actions</th>
-                  </tr>
-                  <tr>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-l border-gray-200">Target</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Worked</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Target</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Actual</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus %</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Basic</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Allowances</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">Ded.</th>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-white">
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Month</th>
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target Days</th>
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {salaryData
-                    .filter(salary => salary.month === selectedSalaryMonth)
-                    .map(salary => (
-                      <SalaryRow key={`${salary.staff_id}-${salary.month}`} salary={salary} onSendToStaff={handleSendToStaff} handleEditSalary={handleEditSalary} />
-                    ))}
+                <tbody className="divide-y divide-gray-100">
+                  {salaryRuns.map((run) => (
+                    <tr key={run.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-4 px-6 font-bold text-gray-900">{formatMonthForDisplay(run.payroll_month.substring(0,7))}</td>
+                      <td className="py-4 px-6 text-sm text-gray-600">{run.days_targeted} days</td>
+                      <td className="py-4 px-6 text-sm text-gray-600">{new Date(run.created_at).toLocaleDateString('en-IN')}</td>
+                      <td className="py-4 px-6">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                          run.status === 'finalized' ? 'bg-emerald-100 text-emerald-800' : 
+                          run.status === 'generated' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {run.status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        {run.status === 'draft' ? (
+                          <button onClick={() => handleGenerateRun(run.id)} className="text-sm px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium transition">
+                            Generate
+                          </button>
+                        ) : (
+                          <button onClick={() => handleReviewRun(run)} className="text-sm px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium transition">
+                            Review & Pay
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {salaryRuns.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="py-12 text-center text-gray-500">
+                        <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                        No payroll runs found. Create your first batch above.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
-              {salaryData.filter(s => s.month === selectedSalaryMonth).length === 0 && (
-                <div className="text-center py-12">
-                  <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg font-medium">No payroll data generated yet for {formatMonthForDisplay(selectedSalaryMonth)}</p>
-                  <p className="text-gray-400 mt-1">Click "Generate Payroll" to calculate staff salaries.</p>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -1672,518 +1278,151 @@ const AdminAttendance = () => {
         )}
       </AnimatePresence>
 
+      {/* Create Run Modal */}
       <AnimatePresence>
-        {showSalaryEditModal && selectedSalary && (
+        {showRunModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Edit Salary - {selectedSalary.staff_name}</h3>
-                <button
-                  onClick={() => {
-                    setShowSalaryEditModal(false);
-                    setSelectedSalary(null);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <FiX className="h-5 w-5 text-gray-600" />
-                </button>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-gray-900">Configure Payroll Month</h3>
+                <button onClick={() => setShowRunModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><FiX /></button>
               </div>
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-semibold text-gray-900 mb-2">Salary Distribution Status</h4>
-                <div className="flex items-center space-x-4 text-sm">
-                  <span
-                    className={`px-3 py-1 rounded-full font-medium ${
-                      selectedSalary.status === 'sent' ? 'bg-emerald-100 text-emerald-700'
-                        : selectedSalary.status === 'viewed'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    Status:{' '}
-                    {selectedSalary.status === 'sent'
-                      ? 'Sent to Staff'
-                      : selectedSalary.status === 'viewed'
-                      ? 'Viewed by Staff'
-                      : 'Pending'}
-                  </span>
-                  {selectedSalary.sent_date && (
-                    <span className="text-gray-600">
-                      Sent on: {new Date(selectedSalary.sent_date).toLocaleDateString('en-IN')}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.basic}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, basic: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">HRA</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.hra}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, hra: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Travel Allowance</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.ta}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, ta: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Other Allowances</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.other_allowances}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, other_allowances: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Deductions</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.deductions}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, deductions: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Working Days</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.working_days}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, working_days: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Present Days</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.present_days}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, present_days: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Wallet (Debit from)</label>
-                  <select
-                    value={selectedWalletId}
-                    onChange={(e) => setSelectedWalletId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">-- Select Wallet --</option>
-                    {wallets.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} – ₹{Number(w.balance).toLocaleString()}
-                      </option>
-                    ))}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                  <select value={newRunData.payroll_month} onChange={e => setNewRunData({...newRunData, payroll_month: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                    {monthOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
                 </div>
-              </div>
-              <div className="mb-6">
-                <h4 className="font-semibold text-gray-900 mb-4">Advanced Salary Components</h4>
-                <div className="space-y-3 mb-4">
-                  {salaryEdit.additional_components.map((component, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getOperationColor(component.operation)}`}>
-                        {getOperationIcon(component.operation)}
-                      </span>
-                      <span className="flex-1 text-sm font-medium">{component.name}</span>
-                      <span className="text-sm">
-                        {component.operation === 'percentage' ? `${component.amount}%` : component.amount}
-                        {component.base && component.base !== 'basic' && ` of ${component.base}`}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveComponent(index)}
-                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                      >
-                        <FiX className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Calendar Days</label><input type="number" value={newRunData.calendar_days} onChange={e => setNewRunData({...newRunData, calendar_days: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Sundays</label><input type="number" value={newRunData.sundays} onChange={e => setNewRunData({...newRunData, sundays: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">DL Days</label><input type="number" value={newRunData.dl_days} onChange={e => setNewRunData({...newRunData, dl_days: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Other Offdays</label><input type="number" value={newRunData.other_offdays} onChange={e => setNewRunData({...newRunData, other_offdays: e.target.value})} className="w-full border-gray-300 rounded-lg p-2.5 bg-gray-50" /></div>
                 </div>
-                <div className="grid grid-cols-12 gap-2 mb-3">
-                  <div className="col-span-4">
-                    <input
-                      type="text"
-                      placeholder="Component name"
-                      value={newComponent.name}
-                      onChange={e => setNewComponent(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <input
-                      type="number"
-                      placeholder="Value"
-                      value={newComponent.amount}
-                      onChange={e => setNewComponent(prev => ({ ...prev, amount: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <select
-                      value={newComponent.operation}
-                      onChange={e => setNewComponent(prev => ({ ...prev, operation: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="addition">Addition (+)</option>
-                      <option value="subtraction">Subtraction (-)</option>
-                      <option value="multiplication">Multiplication (×)</option>
-                      <option value="division">Division (÷)</option>
-                      <option value="percentage">Percentage (%)</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <select
-                      value={newComponent.base}
-                      onChange={e => setNewComponent(prev => ({ ...prev, base: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="basic">Basic</option>
-                      <option value="current">Current Total</option>
-                    </select>
-                  </div>
-                  <div className="col-span-1">
-                    <button
-                      onClick={handleAddComponent}
-                      className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-                    >
-                      <FiPlus className="h-4 w-4" />
-                    </button>
-                  </div>
+                <div className="pt-4 border-t border-gray-100 text-right text-sm font-bold text-indigo-700">
+                  Total Target Days: {newRunData.calendar_days - newRunData.sundays - newRunData.dl_days - newRunData.other_offdays}
                 </div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <h4 className="font-semibold text-gray-900 mb-3">Salary Preview</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
-                    <span>Basic + HRA + TA + Allowances:</span>
-                    <span>
-                      ₹{(Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances)).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Components:</span>
-                    <span>
-                      ₹{calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Deductions:</span>
-                    <span className="font-bold text-emerald-600">
-                      ₹{(calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ) - Number(salaryEdit.deductions)).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    setShowSalaryEditModal(false);
-                    setSelectedSalary(null);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveSalary}
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Save Salary
-                </button>
-              </div>
+              <button onClick={handleCreateRun} className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Create Batch</button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Create Salary Modal */}
+      {/* Review & Pay Data Grid Modal */}
       <AnimatePresence>
-        {showCreateSalaryModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Create New Salary</h3>
-                <button
-                  onClick={() => setShowCreateSalaryModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <FiX className="h-5 w-5 text-gray-600" />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+        {showReviewModal && selectedRun && (
+          <div className="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="bg-white rounded-xl w-full max-w-[95vw] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Staff Member</label>
-                  <select
-                    value={salaryEdit.staff_id}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, staff_id: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select Staff</option>
-                    {staffList.map(staff => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} ({staff.employeeId})
-                      </option>
-                    ))}
-                  </select>
+                  <h3 className="text-xl font-bold text-gray-900">Payroll Review: {formatMonthForDisplay(selectedRun.payroll_month.substring(0,7))}</h3>
+                  <p className="text-sm text-gray-500 mt-1">Status: <span className="uppercase font-bold text-indigo-600 ml-1">{selectedRun.status}</span></p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-                  <select
-                    value={salaryEdit.month}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, month: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {monthOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Wallet (Debit from)</label>
-                  {walletLoading ? (
-                    <p className="text-sm text-gray-500">Loading wallets…</p>
-                  ) : wallets.length === 0 ? (
-                    <p className="text-sm text-red-600">No wallets available</p>
-                  ) : (
-                    <select
-                      value={selectedWalletId}
-                      onChange={(e) => setSelectedWalletId(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      required
-                    >
-                      <option value="">-- Select Wallet --</option>
-                      {wallets.map((w) => (
-                        <option key={w.id} value={w.id}>
-                          {w.name} ({w.wallet_type}) – ₹{Number(w.balance).toLocaleString()} bal.
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.basic}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, basic: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">HRA</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.hra}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, hra: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Travel Allowance</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.ta}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, ta: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Other Allowances</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.other_allowances}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, other_allowances: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Deductions</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.deductions}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, deductions: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Working Days (auto)</label>
-                  <input
-                    type="text"
-                    value={autoCalc.working_days}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Present Days (auto)</label>
-                  <input
-                    type="text"
-                    value={autoCalc.present_days}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Total Hours (auto)</label>
-                  <input
-                    type="text"
-                    value={autoCalc.total_hours}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  />
-                </div>
-              </div>
-              <div className="mb-6">
-                <h4 className="font-semibold text-gray-900 mb-4">Advanced Salary Components</h4>
-                <div className="space-y-3 mb-4">
-                  {salaryEdit.additional_components.map((component, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getOperationColor(component.operation)}`}>
-                        {getOperationIcon(component.operation)}
-                      </span>
-                      <span className="flex-1 text-sm font-medium">{component.name}</span>
-                      <span className="text-sm">
-                        {component.operation === 'percentage' ? `${component.amount}%` : component.amount}
-                        {component.base && component.base !== 'basic' && ` of ${component.base}`}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveComponent(index)}
-                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                      >
-                        <FiX className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-12 gap-2 mb-3">
-                  <div className="col-span-4">
-                    <input
-                      type="text"
-                      placeholder="Component name"
-                      value={newComponent.name}
-                      onChange={e => setNewComponent(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <input
-                      type="number"
-                      placeholder="Value"
-                      value={newComponent.amount}
-                      onChange={e => setNewComponent(prev => ({ ...prev, amount: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <select
-                      value={newComponent.operation}
-                      onChange={e => setNewComponent(prev => ({ ...prev, operation: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="addition">Addition (+)</option>
-                      <option value="subtraction">Subtraction (-)</option>
-                      <option value="multiplication">Multiplication (×)</option>
-                      <option value="division">Division (÷)</option>
-                      <option value="percentage">Percentage (%)</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <select
-                      value={newComponent.base}
-                      onChange={e => setNewComponent(prev => ({ ...prev, base: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="basic">Basic</option>
-                      <option value="current">Current Total</option>
-                    </select>
-                  </div>
-                  <div className="col-span-1">
-                    <button
-                      onClick={handleAddComponent}
-                      className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-                    >
-                      <FiPlus className="h-4 w-4" />
+                <div className="flex items-center space-x-4">
+                  {selectedRun.status === 'generated' && (
+                    <button onClick={handleFinalizeRun} className="px-5 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 shadow-sm transition">
+                      Lock & Finalize Payroll
                     </button>
-                  </div>
+                  )}
+                  {selectedRun.status === 'finalized' && (
+                    <div className="flex items-center space-x-2 border-l border-gray-300 pl-4">
+                      <select value={selectedWalletId} onChange={(e) => setSelectedWalletId(e.target.value)} className="border-gray-300 rounded-lg p-2.5 text-sm bg-white shadow-sm">
+                        <option value="">-- Select Disbursement Wallet --</option>
+                        {wallets.map((w) => <option key={w.id} value={w.id}>{w.name} (₹{w.balance})</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <button onClick={() => setShowReviewModal(false)} className="p-2.5 text-gray-500 hover:bg-gray-200 rounded-lg transition"><FiX className="h-6 w-6" /></button>
                 </div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <h4 className="font-semibold text-gray-900 mb-3">Salary Preview</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
-                    <span>Basic + HRA + TA + Allowances:</span>
-                    <span>
-                      ₹{(Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances)).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Components:</span>
-                    <span>
-                      ₹{calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Deductions:</span>
-                    <span className="font-bold text-emerald-600">
-                      ₹{(calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ) - Number(salaryEdit.deductions)).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowCreateSalaryModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateSalary}
-                  disabled={!salaryEdit.staff_id || !salaryEdit.month || !salaryEdit.basic || !salaryEdit.working_days || !salaryEdit.present_days}
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Create Salary
-                </button>
+
+              {/* The Grid */}
+              <div className="overflow-auto grow p-0">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b border-gray-200 sticky top-0 z-20">
+                    <tr>
+                      <th className="py-3 px-4 sticky left-0 bg-gray-100 z-30 border-r border-gray-200" rowSpan="2">Staff Name</th>
+                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
+                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Service Revenue</th>
+                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
+                      <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Deductions</th>
+                      <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Net Pay</th>
+                      <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Payment</th>
+                    </tr>
+                    <tr>
+                      {/* Hours */}
+                      <th className="py-2 px-3 border-l border-gray-200">Target</th>
+                      <th className="py-2 px-3">Worked</th>
+                      <th className="py-2 px-3 border-r border-gray-200">%</th>
+                      {/* Revenue */}
+                      <th className="py-2 px-3">Target</th>
+                      <th className="py-2 px-3">Actual</th>
+                      <th className="py-2 px-3 border-r border-gray-200">%</th>
+                      {/* Earnings */}
+                      <th className="py-2 px-3 text-indigo-600">Bonus %</th>
+                      <th className="py-2 px-3">Basic</th>
+                      <th className="py-2 px-3">Bonus</th>
+                      <th className="py-2 px-3">Alwcs (TA+FA+Off)</th>
+                      <th className="py-2 px-3 border-r border-gray-200">Total Gross</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {runRecords.map((r) => {
+                      const alwcs = Number(r.ta_pay) + Number(r.fa_pay) + Number(r.paid_offdays);
+                      return (
+                        <tr key={r.id} className="hover:bg-gray-50 transition-colors bg-white group">
+                          <td className="py-3 px-4 font-bold text-gray-900 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10">{r.staff_name}</td>
+                          
+                          <td className="py-3 px-3 text-gray-500 border-l border-gray-100">{Number(r.total_targeted_hours).toFixed(1)}h</td>
+                          <td className="py-3 px-3 font-medium text-gray-900">{Number(r.total_worked_hours).toFixed(1)}h</td>
+                          <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${r.working_hours_percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.working_hours_percent).toFixed(1)}%</span></td>
+                          
+                          <td className="py-3 px-3 text-gray-500">₹{Number(r.total_monthly_target).toLocaleString()}</td>
+                          <td className="py-3 px-3 font-medium text-gray-900">₹{Number(r.achieved_service_revenue).toLocaleString()}</td>
+                          <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${r.revenue_percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.revenue_percent).toFixed(1)}%</span></td>
+                          
+                          <td className="py-3 px-3 text-indigo-600 font-bold bg-indigo-50/30">{Number(r.bonus_percent).toFixed(1)}%</td>
+                          <td className="py-3 px-3 text-gray-700">₹{Number(r.basic_pay).toLocaleString()}</td>
+                          <td className="py-3 px-3 text-emerald-600 font-bold">₹{Number(r.bonus).toLocaleString()}</td>
+                          <td className="py-3 px-3 text-gray-700">₹{alwcs.toLocaleString()}</td>
+                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay).toLocaleString()}</td>
+                          
+                          <td className="py-2 px-3 border-r border-gray-100 bg-red-50/20">
+                            {selectedRun.status === 'generated' ? (
+                              <input 
+                                type="number" 
+                                defaultValue={r.deductions}
+                                onBlur={(e) => handleUpdateDeduction(r.id, e.target.value)}
+                                className="w-24 text-right p-1.5 border border-red-200 rounded text-red-700 font-medium text-sm focus:ring-1 focus:ring-red-500"
+                              />
+                            ) : (
+                              <span className="text-red-600 font-medium block text-right pr-2">₹{Number(r.deductions).toLocaleString()}</span>
+                            )}
+                          </td>
+                          
+                          <td className="py-3 px-4 text-right font-black text-gray-900 bg-emerald-50/30 border-r border-gray-100 text-base">
+                            ₹{Number(r.net_pay).toLocaleString()}
+                          </td>
+                          
+                          <td className="py-3 px-4 text-center bg-gray-50/50">
+                            {r.payment_status === 'paid' ? (
+                              <span className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-md text-xs font-bold">Paid</span>
+                            ) : selectedRun.status === 'finalized' ? (
+                              <button onClick={() => handlePayRecord(r.id)} className="px-4 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-md text-xs font-bold transition shadow-sm">
+                                Issue Pay
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400 font-medium">Pending Finalization</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </motion.div>
           </div>

@@ -816,7 +816,21 @@ const calculateSalaryRecord = (structure, run, workedHours, achievedRevenue, bon
 // 🔥 PAYROLL LIFECYCLE API ROUTES
 // =====================================================================
 
-// 1. Create a Draft Run
+// 1. Get Runs for a Centre
+router.get('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
+  const client = await pool.connect();
+  try {
+      const result = await client.query(`SELECT * FROM salary_runs WHERE centre_id = $1 ORDER BY payroll_month DESC`, [centreId]);
+      res.json(result.rows);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 2. Create a Draft Run
 router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const { payroll_month, calendar_days, sundays, dl_days, other_offdays } = req.body;
   const centreId = req.user.role === 'admin' ? req.user.centre_id : req.body.centre_id;
@@ -837,7 +851,7 @@ router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) =
   }
 });
 
-// 2. Generate/Regenerate Records for a Run
+// 3. Generate/Regenerate Records for a Run
 router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -891,7 +905,7 @@ router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async
   }
 });
 
-// 3. Get Records for Admin Review
+// 4. Get Records for Admin Review
 router.get('/runs/:id/records', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   try {
       const result = await pool.query(`
@@ -899,6 +913,7 @@ router.get('/runs/:id/records', authMiddleware(['admin', 'superadmin']), async (
           FROM salary_records sr
           JOIN staff s ON sr.staff_id = s.id
           WHERE sr.salary_run_id = $1
+          ORDER BY s.name ASC
       `, [req.params.id]);
       res.json(result.rows);
   } catch (err) {
@@ -906,7 +921,7 @@ router.get('/runs/:id/records', authMiddleware(['admin', 'superadmin']), async (
   }
 });
 
-// 4. Manual Deduction Update (Before Finalizing)
+// 5. Manual Deduction Update (Before Finalizing)
 router.put('/records/:id', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -925,6 +940,50 @@ router.put('/records/:id', authMiddleware(['admin', 'superadmin']), async (req, 
 
       await client.query('COMMIT');
       res.json(result.rows[0]);
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 6. Finalize Run
+router.post('/runs/:id/finalize', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  try {
+      await pool.query(`UPDATE salary_runs SET status = 'finalized', finalized_at = NOW() WHERE id = $1`, [req.params.id]);
+      res.json({ message: 'Payroll Run Finalized' });
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Pay Record (Debit Wallet)
+router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+      const { wallet_id } = req.body;
+      await client.query('BEGIN');
+      
+      const recordResult = await client.query(`
+          SELECT sr.*, r.payroll_month, s.name as staff_name 
+          FROM salary_records sr
+          JOIN salary_runs r ON sr.salary_run_id = r.id
+          JOIN staff s ON sr.staff_id = s.id
+          WHERE sr.id = $1
+      `, [req.params.id]);
+      const record = recordResult.rows[0];
+
+      if (record.payment_status === 'paid') throw new Error('Already paid');
+
+      // Update Wallet
+      await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [record.net_pay, wallet_id]);
+      
+      // Update Record
+      await client.query(`UPDATE salary_records SET payment_status = 'paid', paid_amount = $1, total_paid_amount = $1 WHERE id = $2`, [record.net_pay, req.params.id]);
+
+      await client.query('COMMIT');
+      res.json({ message: 'Paid successfully' });
   } catch (err) {
       await client.query('ROLLBACK');
       res.status(500).json({ error: err.message });
@@ -1273,20 +1332,17 @@ router.get('/centers', authMiddleware(['superadmin']), async (req, res) => {
   try {
     const result = await client.query(
       `SELECT 
-        c.id,
-        c.name,
-        c.created_by AS "createdBy",
-        c.admin_id AS "adminId",
-        c.created_at AS "createdAt",
+        c.id, c.name, c.created_by AS "createdBy", c.admin_id AS "adminId", c.created_at AS "createdAt",
         COUNT(DISTINCT s.id) AS "staffCount",
         COUNT(DISTINCT CASE WHEN s.status = 'Active' THEN s.id END) AS "activeStaff",
-        COALESCE(SUM(sal.net_salary), 0) AS "totalSalary"
+        COALESCE(SUM(sal.net_pay), 0) AS "totalSalary"
        FROM centres c
        LEFT JOIN staff s ON c.id = s.centre_id
        LEFT JOIN (
-         SELECT staff_id, net_salary 
-         FROM salaries 
-         WHERE month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+         SELECT sr.staff_id, sr.net_pay 
+         FROM salary_records sr
+         JOIN salary_runs r ON sr.salary_run_id = r.id
+         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
        ) sal ON s.id = sal.staff_id
        GROUP BY c.id, c.name, c.created_by, c.admin_id, c.created_at
        ORDER BY c.name`
@@ -1474,46 +1530,6 @@ router.get('/centers/:centerId/leaves/pending', authMiddleware(['superadmin']), 
   }
 });
 
-// GET /api/salary/centers/:centerId/salaries - Get salaries by center (superadmin only)
-router.get('/centers/:centerId/salaries', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId } = req.params;
-  const { month } = req.query;
-  const client = await pool.connect();
-  try {
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    let query = `
-      SELECT 
-        s.*,
-        st.name AS staff_name,
-        st.employee_id AS "employeeId",
-        TO_CHAR(s.sent_date, 'YYYY-MM-DD') AS sent_date
-      FROM salaries s
-      JOIN staff st ON s.staff_id = st.id
-      WHERE st.centre_id = $1
-    `;
-    const params = [centerId];
-    
-    if (month) {
-      query += ` AND s.month = $2`;
-      params.push(month);
-    }
-    
-    query += ` ORDER BY s.month DESC, st.name`;
-    
-    const result = await client.query(query, params);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching salaries by center:', err);
-    res.status(500).json({ error: 'Failed to fetch salaries', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
 // GET /api/salary/centers/:centerId/calendar - Get calendar by center (superadmin only)
 router.get('/centers/:centerId/calendar', authMiddleware(['superadmin']), async (req, res) => {
   const { centerId } = req.params;
@@ -1560,9 +1576,10 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
     
     const currentMonth = new Date().toISOString().slice(0, 7);
     const salaryResult = await client.query(
-      `SELECT COALESCE(SUM(net_salary), 0) as total_salary
-       FROM salaries 
-       WHERE month = $1`,
+      `SELECT COALESCE(SUM(sr.net_pay), 0) as total_salary
+       FROM salary_records sr
+       JOIN salary_runs r ON sr.salary_run_id = r.id
+       WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = $1`,
       [currentMonth]
     );
     
@@ -1610,11 +1627,10 @@ router.get('/super-admin/centers-summary', authMiddleware(['superadmin']), async
   try {
     const result = await client.query(
       `SELECT 
-        c.id AS "centerId",
-        c.name AS "centerName",
+        c.id AS "centerId", c.name AS "centerName",
         COUNT(DISTINCT s.id) AS "staffCount",
         COUNT(DISTINCT CASE WHEN s.status = 'Active' THEN s.id END) AS "activeStaff",
-        COALESCE(SUM(sal.net_salary), 0) AS "totalSalary",
+        COALESCE(SUM(sal.net_pay), 0) AS "totalSalary",
         COALESCE(ROUND(AVG(CASE 
           WHEN a.status = 'present' AND a.date = CURRENT_DATE THEN 1 
           ELSE 0 
@@ -1622,9 +1638,10 @@ router.get('/super-admin/centers-summary', authMiddleware(['superadmin']), async
        FROM centres c
        LEFT JOIN staff s ON c.id = s.centre_id
        LEFT JOIN (
-         SELECT staff_id, month, net_salary 
-         FROM salaries 
-         WHERE month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+         SELECT sr.staff_id, sr.net_pay 
+         FROM salary_records sr
+         JOIN salary_runs r ON sr.salary_run_id = r.id
+         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
        ) sal ON s.id = sal.staff_id
        LEFT JOIN attendance a ON s.id = a.staff_id
        GROUP BY c.id, c.name
@@ -1771,286 +1788,6 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
     await client.query('ROLLBACK');
     console.error('Error updating leave for center:', err);
     res.status(500).json({ error: 'Failed to update leave', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /api/salary/centers/:centerId/salaries - Create salary for specific center (superadmin only)
-router.post('/centers/:centerId/salaries', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId } = req.params;
-  const {
-    staff_id,
-    month,
-    basic,
-    hra = 0,
-    ta = 0,
-    other_allowances = 0,
-    deductions = 0,
-    additional_components = []
-  } = req.body;
-
-  const client = await pool.connect();
-
-  try {
-    if (!staff_id || !month || basic === undefined) {
-      return res.status(400).json({ error: 'staff_id, month, and basic are required' });
-    }
-
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-
-    const staffRes = await client.query(
-      'SELECT centre_id, name FROM staff WHERE id = $1',
-      [staff_id]
-    );
-    if (staffRes.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid staff_id' });
-    }
-
-    if (staffRes.rows[0].centre_id !== parseInt(centerId)) {
-      return res.status(400).json({ error: 'Staff does not belong to this center' });
-    }
-
-    const exists = await client.query(
-      'SELECT id FROM salaries WHERE staff_id = $1 AND month = $2',
-      [staff_id, month]
-    );
-    if (exists.rows.length > 0) {
-      return res.status(400).json({ error: `Salary already exists for ${month}` });
-    }
-
-    const autoCalc = await client.query(
-      `SELECT 
-         COUNT(*) FILTER (WHERE status = 'present') AS present_days,
-         COALESCE(SUM(hours), 0) AS total_hours
-       FROM attendance 
-       WHERE staff_id = $1 
-         AND TO_CHAR(date, 'YYYY-MM') = $2`,
-      [staff_id, month]
-    );
-
-    const { present_days, total_hours } = autoCalc.rows[0];
-    const working_days = await client.query(
-      `SELECT COUNT(*) AS cnt
-       FROM calendar_events 
-       WHERE centre_id = $1 
-         AND TO_CHAR(date, 'YYYY-MM') = $2 
-         AND type = 'working'`,
-      [centerId, month]
-    );
-
-    const workingDaysCount = parseInt(working_days.rows[0].cnt || 0);
-
-    const baseSalary = Number(basic) + Number(hra) + Number(ta) + Number(other_allowances);
-    let netSalary = baseSalary;
-
-    additional_components.forEach(comp => {
-      const amt = Number(comp.amount) || 0;
-      const baseVal = comp.base === 'basic' ? Number(basic) : netSalary;
-      switch (comp.operation) {
-        case 'addition': netSalary += amt; break;
-        case 'subtraction': netSalary -= amt; break;
-        case 'multiplication': netSalary = baseVal * amt; break;
-        case 'division': netSalary = amt !== 0 ? baseVal / amt : netSalary; break;
-        case 'percentage': netSalary += (baseVal * amt) / 100; break;
-      }
-    });
-
-    netSalary = Number((netSalary - Number(deductions || 0)).toFixed(2));
-
-    const result = await client.query(
-      `INSERT INTO salaries (
-        staff_id, month, basic, hra, ta, other_allowances, deductions,
-        net_salary, working_days, present_days, total_hours,
-        additional_components, status, created_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-        $12::jsonb, 'pending', NOW()
-      ) RETURNING *,
-        (SELECT name FROM staff WHERE id = $1) AS staff_name`,
-      [
-        staff_id,
-        month,
-        Number(basic),
-        Number(hra),
-        Number(ta),
-        Number(other_allowances),
-        Number(deductions),
-        netSalary,
-        workingDaysCount,
-        Number(present_days || 0),
-        Number(total_hours || 0),
-        JSON.stringify(additional_components)
-      ]
-    );
-
-    await client.query('COMMIT');
-
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: result.rows[0].id,
-      action: 'Salary Created',
-      description: `Superadmin created salary for ${staffRes.rows[0].name} for month ${month} - Net: ₹${netSalary}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-
-    res.status(201).json(result.rows[0]);
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Create salary error for center:', err);
-    res.status(500).json({
-      error: 'Failed to create salary',
-      details: err.message,
-      code: err.code
-    });
-  } finally {
-    client.release();
-  }
-});
-
-// PUT /api/salary/centers/:centerId/salaries/:id - Update salary for specific center (superadmin only)
-router.put('/centers/:centerId/salaries/:id', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId, id } = req.params;
-  const { basic, hra, ta, other_allowances, deductions, net_salary, working_days, present_days, total_hours, additional_components } = req.body;
-  const client = await pool.connect();
-  try {
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries SET basic = $1, hra = $2, ta = $3, other_allowances = $4, deductions = $5, net_salary = $6,
-       working_days = $7, present_days = $8, total_hours = $9, additional_components = $10, updated_at = NOW()
-       WHERE id = $11 AND EXISTS (
-         SELECT 1 FROM staff s WHERE s.id = salaries.staff_id AND s.centre_id = $12
-       )
-       RETURNING *, (SELECT name FROM staff WHERE id = salaries.staff_id) AS staff_name`,
-      [basic, hra, ta, other_allowances, deductions, net_salary, working_days, present_days, total_hours, additional_components ? JSON.stringify(additional_components) : '[]', id, centerId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Salary not found or unauthorized' });
-    }
-    
-    await client.query('COMMIT');
-
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: id,
-      action: 'Salary Updated',
-      description: `Superadmin updated salary record for ${result.rows[0].staff_name}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error updating salary for center:', err);
-    res.status(500).json({ error: 'Failed to update salary', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /api/salary/centers/:centerId/salaries/:id/send - Send salary for specific center (superadmin only)
-router.post('/centers/:centerId/salaries/:id/send', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId, id } = req.params;
-  const client = await pool.connect();
-  try {
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries SET status = 'sent', sent_date = NOW()
-       WHERE id = $1 AND EXISTS (
-         SELECT 1 FROM staff s WHERE s.id = salaries.staff_id AND s.centre_id = $2
-       )
-       RETURNING *, (SELECT name FROM staff WHERE id = salaries.staff_id) AS staff_name`,
-      [id, centerId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Salary not found or unauthorized' });
-    }
-    
-    await client.query('COMMIT');
-
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: id,
-      action: 'Salary Sent',
-      description: `Superadmin sent salary to ${result.rows[0].staff_name} for month ${result.rows[0].month}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error sending salary for center:', err);
-    res.status(500).json({ error: 'Failed to send salary', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /api/salary/centers/:centerId/salaries/bulk-send - Bulk send salaries for specific center (superadmin only)
-router.post('/centers/:centerId/salaries/bulk-send', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId } = req.params;
-  const { month } = req.body;
-  const client = await pool.connect();
-  try {
-    if (!month) {
-      return res.status(400).json({ error: 'Month is required' });
-    }
-
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries s SET status = 'sent', sent_date = NOW()
-       FROM staff st
-       WHERE s.staff_id = st.id AND st.centre_id = $1 AND s.month = $2 AND s.status = 'pending'
-       RETURNING s.*, (SELECT name FROM staff WHERE id = s.staff_id) AS staff_name`,
-      [centerId, month]
-    );
-    
-    await client.query('COMMIT');
-
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: null,
-      action: 'Bulk Salaries Sent',
-      description: `Superadmin sent ${result.rows.length} salaries for month ${month}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-
-    res.json(result.rows);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error bulk sending salaries for center:', err);
-    res.status(500).json({ error: 'Failed to bulk send salaries', details: err.message });
   } finally {
     client.release();
   }
