@@ -801,6 +801,131 @@ const AdminAttendance = () => {
   const [attendanceEdit, setAttendanceEdit] = useState({ punch_in: '', punch_out: '', breaks: '', status: 'present' });
   const [calendarEdit, setCalendarEdit] = useState({ date: '', type: 'working', description: '' });
 
+  // ------------------- STATS -------------------
+  const stats = useMemo(() => {
+    const total = staffList.length;
+    const active = staffList.filter(s => s.status === 'Active').length;
+    const today = new Date().toISOString().split('T')[0];
+    const todayAtt = allAttendance.filter(a => normalizeDate(a.date) === today);
+
+    const presentStaffIds = new Set(
+      todayAtt.filter(a => a.status === 'present').map(a => a.staff_id)
+    );
+    const present = presentStaffIds.size;
+
+    const leave = todayAtt.filter(a => a.status.includes('leave')).length;
+    const absent = todayAtt.filter(a => a.status === 'absent').length;
+    const totalSal = staffList.reduce((s, st) => s + (Number(st.salary) || 0), 0);
+    let lateH = 0, extraH = 0, recWithSch = 0;
+    
+    todayAtt.forEach(r => {
+      if (r.status === 'present') {
+        const st = staffList.find(s => s.id === r.staff_id);
+        if (st) {
+          const dev = calculateScheduleDeviations(r, st);
+          if (dev.hasSchedule) { lateH += dev.lateHours; extraH += dev.extraHours; recWithSch++; }
+        }
+      }
+    });
+    
+    return {
+      totalStaff: total, activeStaff: active, presentToday: present, onLeaveToday: leave,
+      totalSalary: Math.round(totalSal), attendanceRate: total ? Math.round((present / total) * 100) : 0,
+      todayLateHours: Number(lateH.toFixed(2)), todayExtraHours: Number(extraH.toFixed(2)),
+      todayRecordsWithSchedule: recWithSch
+    };
+  }, [staffList, allAttendance]);
+
+  // ------------------- FETCH DATA -------------------
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const staffRaw = await getStaffList();
+        const staff = await Promise.all(staffRaw.map(async s => ({
+          ...s,
+          schedules: await getStaffSchedules(s.id).catch(() => [])
+        })));
+        setStaffList(staff);
+        const att = await getAllAttendance(selectedMonth);
+        setAllAttendance(att);
+        const leaves = await getPendingLeaves();
+        setPendingLeaves(leaves);
+        const allL = await getLeaves(selectedLeaveMonth);
+        setAllLeaves(allL);
+        const cal = await getCalendarData();
+        setCalendarData(cal);
+      } catch { toast.error('Failed to load data'); }
+    };
+    load();
+  }, []);
+
+  useEffect(() => { 
+    if (selectedMonth) {
+      getAllAttendance(selectedMonth).then(setAllAttendance).catch(() => toast.error('Failed to load attendance'));
+    }
+  }, [selectedMonth]);
+  
+  useEffect(() => {
+    if (selectedLeaveMonth) {
+      getLeaves(selectedLeaveMonth).then(setAllLeaves).catch(() => toast.error('Failed to load leave history'));
+    }
+  }, [selectedLeaveMonth]);
+
+  useEffect(() => {
+    const loadWallets = async () => {
+      try {
+        setWalletLoading(true);
+        const data = await getWalletsForCentre();
+        setWallets(data);
+        if (data.length > 0 && !selectedWalletId) {
+          setSelectedWalletId(data[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setWalletLoading(false);
+      }
+    };
+    loadWallets();
+  }, []); 
+
+  // ------------------- ATTENDANCE & CALENDAR HANDLERS -------------------
+  const handleEditAttendance = (rec) => {
+    setSelectedAttendance(rec);
+    setAttendanceEdit({ punch_in: rec.punch_in || '', punch_out: rec.punch_out || '', breaks: rec.breaks || '', status: rec.status || 'present' });
+    setShowAttendanceEditModal(true);
+  };
+
+  const calculateHours = (inT, outT) => {
+    if (!inT || !outT) return 0;
+    const [ih, im] = inT.split(':').map(Number);
+    const [oh, om] = outT.split(':').map(Number);
+    let h = oh - ih, m = om - im;
+    if (m < 0) { h--; m += 60; }
+    return Number(h + m / 60).toFixed(2);
+  };
+
+  const handleSaveAttendance = async () => {
+    const data = { ...attendanceEdit, hours: calculateHours(attendanceEdit.punch_in, attendanceEdit.punch_out) };
+    try {
+      const upd = await updateAttendance(selectedAttendance.id, data);
+      setAllAttendance(p => p.map(i => i.id === selectedAttendance.id ? upd : i));
+      setShowAttendanceEditModal(false); setSelectedAttendance(null);
+      toast.success('Attendance updated');
+    } catch { toast.error('Failed'); }
+  };
+
+  const handleUpdateCalendarEvent = async (id, ev) => {
+    try { const upd = await updateCalendarEvent(id, ev); setCalendarData(p => p.map(e => e.id === id ? upd : e)); }
+    catch { toast.error('Update failed'); }
+  };
+
+  const handleDeleteCalendarEvent = async (ev) => {
+    if (window.confirm('Delete?')) {
+      try { await deleteCalendarEvent(ev.id); setCalendarData(p => p.filter(e => e.id !== ev.id)); toast.success('Deleted'); }
+      catch { toast.error('Failed'); }
+    }
+  };
 
   // --- NEW PAYROLL LIFECYCLE HANDLERS ---
   const fetchSalaryRuns = async () => {
