@@ -834,6 +834,12 @@ router.get('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) =>
 router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const { payroll_month, calendar_days, sundays, dl_days, other_offdays } = req.body;
   const centreId = req.user.role === 'admin' ? req.user.centre_id : req.body.centre_id;
+  
+  // 🔥 Add this safety check so it doesn't crash the database!
+  if (!centreId) {
+      return res.status(400).json({ error: "Centre ID is required to create a payroll run." });
+  }
+
   const days_targeted = calendar_days - (sundays + dl_days + other_offdays);
   const client = await pool.connect();
   

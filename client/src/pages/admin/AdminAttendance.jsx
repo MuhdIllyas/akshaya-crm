@@ -946,12 +946,17 @@ const AdminAttendance = () => {
   // --- NEW PAYROLL LIFECYCLE HANDLERS ---
   const fetchSalaryRuns = async () => {
     try {
+      // Safely grab centre_id from URL if a Superadmin is viewing a specific centre
+      const urlParams = new URLSearchParams(window.location.search);
+      const centreId = urlParams.get('centre_id');
+      const params = centreId ? { centre_id: centreId } : {};
+
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/runs`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        params: { centre_id: req?.user?.role === 'admin' ? req.user.centre_id : undefined }
+        params
       });
       setSalaryRuns(res.data);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error("Error fetching runs:", err); }
   };
 
   useEffect(() => {
@@ -960,13 +965,22 @@ const AdminAttendance = () => {
 
   const handleCreateRun = async () => {
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs`, newRunData, {
+      // Safely attach centre_id for Superadmins
+      const urlParams = new URLSearchParams(window.location.search);
+      const centreId = urlParams.get('centre_id');
+      const payload = { ...newRunData };
+      if (centreId) payload.centre_id = centreId;
+
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs`, payload, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
+      
       setSalaryRuns([res.data, ...salaryRuns]);
       setShowRunModal(false);
       toast.success("Draft Run Created. Ready to Generate.");
-    } catch (err) { toast.error(err.response?.data?.error || "Failed to create run"); }
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to create run. Ensure a centre is selected."); 
+    }
   };
 
   const handleGenerateRun = async (runId) => {
