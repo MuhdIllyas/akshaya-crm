@@ -975,6 +975,43 @@ const AdminAttendance = () => {
     }
   };
 
+  // --- PAYROLL CONFIGURATION STATE & HANDLERS ---
+  const [showStructuresModal, setShowStructuresModal] = useState(false);
+  const [salaryStructures, setSalaryStructures] = useState([]);
+
+  const fetchSalaryStructures = async () => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const centreId = urlParams.get('centre_id');
+      const params = centreId ? { centre_id: centreId } : {};
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/structures`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        params
+      });
+      setSalaryStructures(res.data);
+      setShowStructuresModal(true);
+    } catch (err) { toast.error("Failed to load payroll configurations"); }
+  };
+
+  const handleUpdateStructureInput = (staffId, field, value) => {
+    setSalaryStructures(prev => prev.map(s => s.staff_id === staffId ? { ...s, [field]: value } : s));
+  };
+
+  const handleSaveStructure = async (staffId) => {
+    const struct = salaryStructures.find(s => s.staff_id === staffId);
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/structures/${staffId}`, {
+        basic_salary: struct.basic_salary,
+        hourly_service_revenue_target: struct.hourly_service_revenue_target,
+        ta: struct.ta,
+        fa: struct.fa
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success(`${struct.staff_name}'s payroll config updated successfully!`);
+    } catch (err) { toast.error("Failed to update structure"); }
+  };
+
   // --- NEW PAYROLL LIFECYCLE HANDLERS ---
   const fetchSalaryRuns = async () => {
     try {
@@ -1335,12 +1372,20 @@ const AdminAttendance = () => {
                 <h2 className="text-xl font-bold text-gray-900">Payroll Runs</h2>
                 <p className="text-gray-500 text-sm mt-1">Manage monthly salary calculations and batches.</p>
               </div>
-              <button 
-                onClick={() => setShowRunModal(true)} 
-                className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                <FiPlus className="h-4 w-4" /><span>Create New Run</span>
-              </button>
+              <div className="flex items-center space-x-3">
+                <button 
+                  onClick={fetchSalaryStructures} 
+                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                >
+                  <FiSettings className="h-4 w-4" /><span>Payroll Config</span>
+                </button>
+                <button 
+                  onClick={() => setShowRunModal(true)} 
+                  className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                  <FiPlus className="h-4 w-4" /><span>Create New Run</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -1831,6 +1876,66 @@ const AdminAttendance = () => {
                 >
                   Approve
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Payroll Configuration Modal (Bulk Editor) */}
+      <AnimatePresence>
+        {showStructuresModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl w-full max-w-5xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Staff Payroll Configuration</h3>
+                  <p className="text-sm text-gray-500 mt-1">Set Basic Salary, Target Revenue per Hour, TA, and FA for each staff member.</p>
+                </div>
+                <button onClick={() => setShowStructuresModal(false)} className="p-2.5 text-gray-500 hover:bg-gray-200 rounded-lg transition"><FiX className="h-6 w-6" /></button>
+              </div>
+              
+              <div className="overflow-auto grow p-0">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b border-gray-200 sticky top-0 z-20">
+                    <tr>
+                      <th className="py-3 px-4 sticky left-0 bg-gray-100 z-30 border-r border-gray-200 shadow-[1px_0_0_0_#e5e7eb]">Staff Name</th>
+                      <th className="py-3 px-4">Basic Salary (₹)</th>
+                      <th className="py-3 px-4">Hourly Target (₹)</th>
+                      <th className="py-3 px-4">TA (₹)</th>
+                      <th className="py-3 px-4">FA (₹)</th>
+                      <th className="py-3 px-4 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {salaryStructures.map((s) => (
+                      <tr key={s.staff_id} className="hover:bg-gray-50 bg-white">
+                        <td className="py-3 px-4 font-bold text-gray-900 sticky left-0 bg-white border-r border-gray-100 shadow-[1px_0_0_0_#f3f4f6]">
+                          {s.staff_name}
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.basic_salary} onChange={e => handleUpdateStructureInput(s.staff_id, 'basic_salary', e.target.value)} className="w-32 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.hourly_service_revenue_target} onChange={e => handleUpdateStructureInput(s.staff_id, 'hourly_service_revenue_target', e.target.value)} className="w-32 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.ta} onChange={e => handleUpdateStructureInput(s.staff_id, 'ta', e.target.value)} className="w-24 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.fa} onChange={e => handleUpdateStructureInput(s.staff_id, 'fa', e.target.value)} className="w-24 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button onClick={() => handleSaveStructure(s.staff_id)} className="px-4 py-2 bg-indigo-50 text-indigo-700 font-bold rounded-lg hover:bg-indigo-100 transition shadow-sm border border-indigo-200">
+                            Save
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {salaryStructures.length === 0 && (
+                      <tr><td colSpan="6" className="py-8 text-center text-gray-500">No active staff structures found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </motion.div>
           </div>

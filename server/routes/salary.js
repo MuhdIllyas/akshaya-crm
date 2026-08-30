@@ -1926,4 +1926,64 @@ router.delete('/centers/:centerId/calendar/:id', authMiddleware(['superadmin']),
   res.json({ success: true });
 });
 
+// =====================================================================
+// 🔥 STAFF PAYROLL CONFIGURATION (SALARY STRUCTURES)
+// =====================================================================
+
+// 8. Get all active salary structures for the centre
+router.get('/structures', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
+  const client = await pool.connect();
+  try {
+      const result = await client.query(`
+          SELECT ss.id, ss.staff_id, ss.basic_salary, ss.hourly_service_revenue_target, ss.ta, ss.fa, s.name as staff_name 
+          FROM salary_structures ss
+          JOIN staff s ON ss.staff_id = s.id
+          WHERE s.centre_id = $1 AND ss.status = 'active'
+          ORDER BY s.name ASC
+      `, [centreId]);
+      res.json(result.rows);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 9. Update a staff member's salary structure
+router.put('/structures/:staff_id', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const staffId = req.params.staff_id;
+  const { basic_salary, hourly_service_revenue_target, ta, fa } = req.body;
+  const client = await pool.connect();
+  
+  try {
+      await client.query('BEGIN');
+      
+      // 1. Archive the old structure
+      await client.query(`
+          UPDATE salary_structures 
+          SET effective_to = CURRENT_DATE - INTERVAL '1 day', status = 'archived'
+          WHERE staff_id = $1 AND status = 'active'
+      `, [staffId]);
+      
+      // 2. Create the new effective structure
+      const result = await client.query(`
+          INSERT INTO salary_structures (
+              staff_id, basic_salary, hourly_service_revenue_target, ta, fa, effective_from, created_by
+          ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6) RETURNING *
+      `, [staffId, basic_salary || 0, hourly_service_revenue_target || 0, ta || 0, fa || 0, req.user.id]);
+      
+      // 3. Sync the 'salary' column back to the generic staff profile table
+      await client.query(`UPDATE staff SET salary = $1 WHERE id = $2`, [basic_salary || 0, staffId]);
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
 export default router;
