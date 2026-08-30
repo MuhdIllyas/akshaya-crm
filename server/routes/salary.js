@@ -816,19 +816,31 @@ const calculateSalaryRecord = (structure, run, workedHours, achievedRevenue, bon
 // 🔥 PAYROLL LIFECYCLE API ROUTES
 // =====================================================================
 
-// 1. Get Runs for a Centre
+// 1. Get Runs for a Centre 
 router.get('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
   const client = await pool.connect();
   try {
-      const result = await client.query(`SELECT * FROM salary_runs WHERE centre_id = $1 ORDER BY payroll_month DESC`, [centreId]);
+      let query = `SELECT * FROM salary_runs`;
+      let params = [];
+      
+      // Only filter by centre if a centreId is actually provided
+      if (centreId) {
+          query += ` WHERE centre_id = $1`;
+          params.push(centreId);
+      }
+      
+      query += ` ORDER BY payroll_month DESC`;
+      
+      const result = await client.query(query, params);
       res.json(result.rows);
   } catch (err) {
+      console.error("GET /runs error:", err.message);
       res.status(500).json({ error: err.message });
   } finally {
       client.release();
   }
-});
+});;
 
 // 2. Create a Draft Run
 router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
