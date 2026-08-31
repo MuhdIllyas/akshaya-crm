@@ -746,6 +746,26 @@ const getPayrollCollection = async (client, staffId, payrollMonthDate) => {
   return result.rows[0];
 };
 
+// Helper: Exact Month Deductions (Salary Advances from Expenses)
+const getPayrollDeductions = async (client, staffId, payrollMonthDate) => {
+  // NOTE: Assuming your expenses table uses 'date' for the transaction date. 
+  // If it uses 'created_at', change 'date::date' below to 'created_at::date'.
+  const result = await client.query(`
+      WITH target_month AS (
+          SELECT DATE_TRUNC('month', $2::DATE)::date as start_date,
+                 (DATE_TRUNC('month', $2::DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date as end_date
+      )
+      SELECT COALESCE(SUM(amount), 0) AS total_advance
+      FROM expenses
+      CROSS JOIN target_month tm
+      WHERE category_id = 2 
+        AND staff_id = $1
+        AND date::date BETWEEN tm.start_date AND tm.end_date
+  `, [staffId, payrollMonthDate]);
+  
+  return result.rows[0] ? parseFloat(result.rows[0].total_advance) : 0;
+};
+
 // Helper: Schedule active during the exact month
 const getPayrollSchedule = async (client, staffId, payrollMonthDate) => {
   const result = await client.query(`
@@ -760,10 +780,11 @@ const getPayrollSchedule = async (client, staffId, payrollMonthDate) => {
   return result.rows[0] ? parseFloat(result.rows[0].standard_hours) : 9.0;
 };
 
-const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRaw, bonusSlabs, standardHoursRaw) => {
+const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRaw, bonusSlabs, standardHoursRaw, advanceDeductionRaw) => {
   const workedHours = Number(workedHoursRaw) || 0;
   const achievedRevenue = Number(achievedRevenueRaw) || 0;
   const standardHours = Number(standardHoursRaw) || 9.0;
+  const advanceDeduction = Number(advanceDeductionRaw) || 0; // 🔥 NEW: Advance Deductions
   
   const calendarDays = Number(run.calendar_days) || 30;
   const offdays = Number(run.sundays) + Number(run.dl_days) + Number(run.other_offdays);
@@ -789,18 +810,14 @@ const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRa
   }
 
   // --- EXCEL MATCHING MATH ---
-  
-  // 1. Basic Pay Calculations (Based strictly on Calendar Days)
   const dailyRate = Number(structure.basic_salary) / calendarDays;
   const basicPayPerHour = standardHours > 0 ? dailyRate / standardHours : 0;
   const basicPay = workedHours * basicPayPerHour;
 
-  // 2. Offdays Pay (Pro-rated if working hours < 100%)
   const offdayPay = workingHoursPercent >= 100 
       ? offdays * dailyRate 
       : offdays * (workingHoursPercent / 100) * dailyRate;
 
-  // 3. TA and FA (Pro-rated if working hours < 100%)
   const taPay = workingHoursPercent >= 100 
       ? Number(structure.ta || 0) 
       : Number(structure.ta || 0) * (workingHoursPercent / 100);
@@ -809,12 +826,13 @@ const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRa
       ? Number(structure.fa || 0) 
       : Number(structure.fa || 0) * (workingHoursPercent / 100);
   
-  // 4. Bonus Calculation (Only on surplus revenue)
   const surplusRevenue = Math.max(0, achievedRevenue - targetRevenue);
   const bonus = (bonusPercent / 100) * surplusRevenue;
   
-  // 5. Total Gross Pay
   const fullPay = basicPay + bonus + offdayPay + taPay + faPay;
+
+  // 🔥 NEW: Subtract the advance deduction to calculate the true Net Pay
+  const netPay = fullPay - advanceDeduction;
 
   return {
       calculation_version: 'v4_excel_matched',
@@ -835,8 +853,8 @@ const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRa
       ta_pay: taPay,
       fa_pay: faPay,
       full_pay: fullPay,
-      deductions: 0, // Initiates at 0; Admin uses the UI grid to manually enter deductions before locking
-      net_pay: fullPay
+      deductions: advanceDeduction, // 🔥 Passes the advance into the grid
+      net_pay: netPay               // 🔥 Pre-calculates the net pay
   };
 };
 
@@ -973,7 +991,11 @@ router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async
           const coll = await getPayrollCollection(client, struct.staff_id, run.payroll_month);
           const standardHours = await getPayrollSchedule(client, struct.staff_id, run.payroll_month);
           
-          const calc = calculateSalaryRecord(struct, run, att.worked_hours, coll.achieved_revenue, slabs, standardHours);
+          // 🔥 Fetch the deductions
+          const deductions = await getPayrollDeductions(client, struct.staff_id, run.payroll_month);
+          
+          // 🔥 Pass deductions as the 7th argument
+          const calc = calculateSalaryRecord(struct, run, att.worked_hours, coll.achieved_revenue, slabs, standardHours, deductions);
           
           await client.query(`
               INSERT INTO salary_records (
