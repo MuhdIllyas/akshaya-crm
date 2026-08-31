@@ -1158,9 +1158,9 @@ router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (
       // 5. Log into Expenses Table (category_id = 1 is standard for Salary/Wages)
       const expRes = await client.query(`
           INSERT INTO expenses (
-              centre_id, wallet_id, category_id, amount, expense_date, staff_id,
+              centre_id, wallet_id, category_id, category, amount, expense_date, staff_id,
               description, payment_method, status, created_at, approved_at, approved_by
-          ) VALUES ($1, $2, 1, $3, CURRENT_DATE, $4, $5, 'Wallet Transfer', 'approved', NOW(), NOW(), $6)
+          ) VALUES ($1, $2, 1, 'Salary', $3, CURRENT_DATE, $4, $5, 'Wallet Transfer', 'approved', NOW(), NOW(), $6)
           RETURNING id
       `, [record.centre_id, wallet_id, amount, record.staff_id, description, req.user.id]);
 
