@@ -765,8 +765,9 @@ const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRa
   const achievedRevenue = Number(achievedRevenueRaw) || 0;
   const standardHours = Number(standardHoursRaw) || 9.0;
   
+  const calendarDays = Number(run.calendar_days) || 30;
   const offdays = Number(run.sundays) + Number(run.dl_days) + Number(run.other_offdays);
-  const daysTargeted = Number(run.calendar_days) - offdays;
+  const daysTargeted = calendarDays - offdays;
   
   const targetHours = daysTargeted * standardHours;
   const targetRevenue = targetHours * Number(structure.hourly_service_revenue_target || 0); 
@@ -787,21 +788,37 @@ const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRa
       }
   }
 
-  // 🔥 FIXED: Pass Basic, TA, and FA exactly as configured in the Payroll Config. No prorating!
-  const basicPay = Number(structure.basic_salary) || 0;
-  const taPay = Number(structure.ta) || 0;
-  const faPay = Number(structure.fa) || 0;
+  // --- EXCEL MATCHING MATH ---
   
-  // Calculate Bonus only on the surplus revenue above their target
+  // 1. Basic Pay Calculations (Based strictly on Calendar Days)
+  const dailyRate = Number(structure.basic_salary) / calendarDays;
+  const basicPayPerHour = standardHours > 0 ? dailyRate / standardHours : 0;
+  const basicPay = workedHours * basicPayPerHour;
+
+  // 2. Offdays Pay (Pro-rated if working hours < 100%)
+  const offdayPay = workingHoursPercent >= 100 
+      ? offdays * dailyRate 
+      : offdays * (workingHoursPercent / 100) * dailyRate;
+
+  // 3. TA and FA (Pro-rated if working hours < 100%)
+  const taPay = workingHoursPercent >= 100 
+      ? Number(structure.ta || 0) 
+      : Number(structure.ta || 0) * (workingHoursPercent / 100);
+      
+  const faPay = workingHoursPercent >= 100 
+      ? Number(structure.fa || 0) 
+      : Number(structure.fa || 0) * (workingHoursPercent / 100);
+  
+  // 4. Bonus Calculation (Only on surplus revenue)
   const surplusRevenue = Math.max(0, achievedRevenue - targetRevenue);
   const bonus = (bonusPercent / 100) * surplusRevenue;
   
-  // Total Gross Pay
-  const fullPay = basicPay + bonus + taPay + faPay;
+  // 5. Total Gross Pay
+  const fullPay = basicPay + bonus + offdayPay + taPay + faPay;
 
   return {
-      calculation_version: 'v3_fixed_base',
-      snapshot_basic_salary: basicPay,
+      calculation_version: 'v4_excel_matched',
+      snapshot_basic_salary: Number(structure.basic_salary),
       snapshot_daily_hours: standardHours,
       snapshot_hourly_target: Number(structure.hourly_service_revenue_target || 0),
       monthly_work_days: daysTargeted,
@@ -814,11 +831,11 @@ const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRa
       bonus_percent: bonusPercent,
       basic_pay: basicPay,
       bonus: bonus,
-      paid_offdays: 0, // No longer needed since Basic is fixed
+      paid_offdays: offdayPay,
       ta_pay: taPay,
       fa_pay: faPay,
       full_pay: fullPay,
-      deductions: 0,
+      deductions: 0, // Initiates at 0; Admin uses the UI grid to manually enter deductions before locking
       net_pay: fullPay
   };
 };
