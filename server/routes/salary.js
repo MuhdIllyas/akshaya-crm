@@ -2031,4 +2031,71 @@ router.put('/structures/:staff_id', authMiddleware(['admin', 'superadmin']), asy
   }
 });
 
+// =====================================================================
+// 🔥 MANUAL HOURS OVERRIDE & RECALCULATION
+// =====================================================================
+router.put('/records/:id/override-hours', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const recordId = req.params.id;
+  const { override_hours } = req.body;
+  const client = await pool.connect();
+  
+  try {
+      await client.query('BEGIN');
+      
+      // 1. Fetch the necessary context (Record, Run, Structure, Slabs)
+      const recRes = await client.query('SELECT * FROM salary_records WHERE id = $1', [recordId]);
+      if (!recRes.rows.length) throw new Error('Record not found');
+      const record = recRes.rows[0];
+      
+      const runRes = await client.query('SELECT * FROM salary_runs WHERE id = $1', [record.salary_run_id]);
+      const run = runRes.rows[0];
+      if (run.status === 'finalized') throw new Error('Cannot edit a finalized run');
+      
+      const structRes = await client.query(`SELECT * FROM salary_structures WHERE staff_id = $1 AND status = 'active'`, [record.staff_id]);
+      if (!structRes.rows.length) throw new Error('No active salary structure found');
+      const structure = structRes.rows[0];
+      
+      const slabsRes = await client.query('SELECT * FROM bonus_slabs ORDER BY min_working_hours_pct ASC');
+      
+      // 2. Re-run the exact same math engine using the new manual hours
+      const calc = calculateSalaryRecord(
+          structure, 
+          run, 
+          override_hours, 
+          record.achieved_service_revenue, 
+          slabsRes.rows, 
+          record.snapshot_daily_hours, 
+          record.deductions
+      );
+      
+      // 3. Update the record
+      const updateRes = await client.query(`
+          UPDATE salary_records SET
+              total_worked_hours = $1,
+              working_hours_percent = $2,
+              bonus_percent = $3,
+              basic_pay = $4,
+              bonus = $5,
+              paid_offdays = $6,
+              ta_pay = $7,
+              fa_pay = $8,
+              full_pay = $9,
+              net_pay = $10
+          WHERE id = $11 RETURNING *
+      `, [
+          calc.total_worked_hours, calc.working_hours_percent, calc.bonus_percent, 
+          calc.basic_pay, calc.bonus, calc.paid_offdays, calc.ta_pay, calc.fa_pay, 
+          calc.full_pay, calc.net_pay, recordId
+      ]);
+      
+      await client.query('COMMIT');
+      res.json(updateRes.rows[0]);
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
 export default router;

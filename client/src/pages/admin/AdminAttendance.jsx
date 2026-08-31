@@ -1114,6 +1114,20 @@ const AdminAttendance = () => {
     } catch (err) { toast.error("Update failed"); }
   };
 
+  const handleUpdateWorkedHours = async (recordId, newHours) => {
+    try {
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}/override-hours`, 
+        { override_hours: newHours }, 
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      // Immediately merge the recalculated math back into the table row
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, ...res.data } : r));
+      toast.success("Hours overridden and salary recalculated!");
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to update hours"); 
+    }
+  };
+
   const handleFinalizeRun = async () => {
     if (!window.confirm("Are you sure? This will lock the payroll and prevent future recalculations.")) return;
     try {
@@ -1729,7 +1743,25 @@ const AdminAttendance = () => {
                           
                           {/* HOURS */}
                           <td className="py-3 px-3 text-gray-500">{Number(r.total_targeted_hours || 0).toFixed(1)}h</td>
-                          <td className="py-3 px-3 font-medium text-gray-900">{Number(r.total_worked_hours || 0).toFixed(1)}h</td>
+                          
+                          {/* OVERRIDEABLE WORKED HOURS INPUT */}
+                          <td className="py-2 px-3 bg-blue-50/10">
+                            {selectedRun.status === 'generated' ? (
+                              <div className="flex items-center">
+                                <input 
+                                  type="number" 
+                                  defaultValue={Number(r.total_worked_hours || 0).toFixed(1)}
+                                  onBlur={(e) => handleUpdateWorkedHours(r.id, e.target.value)}
+                                  className="w-20 text-right p-1.5 border border-blue-200 rounded text-blue-700 font-bold text-sm focus:ring-1 focus:ring-blue-500 bg-white shadow-sm"
+                                  step="0.1"
+                                />
+                                <span className="ml-1 text-gray-500 text-xs font-medium">h</span>
+                              </div>
+                            ) : (
+                              <span className="font-medium text-gray-900 block px-1">{Number(r.total_worked_hours || 0).toFixed(1)}h</span>
+                            )}
+                          </td>
+                          
                           <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${Number(r.working_hours_percent || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.working_hours_percent || 0).toFixed(1)}%</span></td>
                           
                           {/* SERVICE CHARGE & COLLECTION % */}
