@@ -1680,14 +1680,22 @@ const AdminAttendance = () => {
                   <tbody className="divide-y divide-gray-100">
                     {/* 1. FORCE ALPHABETICAL SORTING BY STAFF NAME */}
                     {[...runRecords]
-                      .sort((a, b) => a.staff_name.localeCompare(b.staff_name))
+                      .sort((a, b) => (a.staff_name || "").localeCompare(b.staff_name || ""))
                       .map((r) => {
                       
-                      // Calculate Base Rates on the fly
-                      const basicPayPerDay = Number(r.snapshot_basic_salary) / Number(selectedRun.calendar_days);
-                      const basicPayPerHour = Number(r.snapshot_daily_hours) > 0 ? basicPayPerDay / Number(r.snapshot_daily_hours) : 0;
+                      // Calculate Base Rates safely with fallbacks to prevent NaN
+                      const basicSalary = Number(r.snapshot_basic_salary || r.basic_pay || 0);
+                      const calendarDays = Number(selectedRun.calendar_days || 30);
+                      const basicPayPerDay = calendarDays > 0 ? basicSalary / calendarDays : 0;
                       
-                      const alwcs = Number(r.ta_pay) + Number(r.fa_pay) + Number(r.paid_offdays);
+                      const dailyHours = Number(r.snapshot_daily_hours || 9);
+                      const basicPayPerHour = dailyHours > 0 ? basicPayPerDay / dailyHours : 0;
+                      
+                      // Safely sum allowances (handles older DB schemas where columns might be empty)
+                      const ta = Number(r.ta_pay || r.ta || 0);
+                      const fa = Number(r.fa_pay || r.fa || 0);
+                      const off = Number(r.paid_offdays || 0);
+                      const alwcs = ta + fa + off;
                       
                       return (
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors bg-white group">
