@@ -1643,6 +1643,10 @@ const AdminAttendance = () => {
                   <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b border-gray-200 sticky top-0 z-20">
                     <tr>
                       <th className="py-3 px-4 sticky left-0 bg-gray-100 z-30 border-r border-gray-200" rowSpan="2">Staff Name</th>
+                      
+                      {/* NEW: Base Rates Group */}
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-blue-50/50" colSpan="2">Base Rates (₹)</th>
+                      
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-emerald-50/50" colSpan="3">Service Charge Earned</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
@@ -1651,17 +1655,23 @@ const AdminAttendance = () => {
                       <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Payment</th>
                     </tr>
                     <tr>
+                      {/* Base Rates */}
+                      <th className="py-2 px-3 border-l border-gray-200 bg-blue-50/50">Per Day</th>
+                      <th className="py-2 px-3 border-r border-gray-200 bg-blue-50/50">Per Hour</th>
+                      
                       {/* Hours */}
-                      <th className="py-2 px-3 border-l border-gray-200">Target</th>
+                      <th className="py-2 px-3">Target</th>
                       <th className="py-2 px-3">Worked</th>
                       <th className="py-2 px-3 border-r border-gray-200">%</th>
+                      
                       {/* Service Charge */}
                       <th className="py-2 px-3 bg-emerald-50/50">Target</th>
                       <th className="py-2 px-3 bg-emerald-50/50">Actual Earned</th>
-                    <th className="py-2 px-3 border-r border-gray-200 bg-emerald-50/50">%</th>
+                      <th className="py-2 px-3 border-r border-gray-200 bg-emerald-50/50">Col %</th>
+                      
                       {/* Earnings */}
                       <th className="py-2 px-3 text-indigo-600">Bonus %</th>
-                      <th className="py-2 px-3">Basic</th>
+                      <th className="py-2 px-3">Basic Pay</th>
                       <th className="py-2 px-3">Bonus</th>
                       <th className="py-2 px-3">Alwcs (TA+FA+Off)</th>
                       <th className="py-2 px-3 border-r border-gray-200">Total Gross</th>
@@ -1672,11 +1682,17 @@ const AdminAttendance = () => {
                     {[...runRecords]
                       .sort((a, b) => a.staff_name.localeCompare(b.staff_name))
                       .map((r) => {
+                      
+                      // Calculate Base Rates on the fly
+                      const basicPayPerDay = Number(r.snapshot_basic_salary) / Number(selectedRun.calendar_days);
+                      const basicPayPerHour = Number(r.snapshot_daily_hours) > 0 ? basicPayPerDay / Number(r.snapshot_daily_hours) : 0;
+                      
                       const alwcs = Number(r.ta_pay) + Number(r.fa_pay) + Number(r.paid_offdays);
+                      
                       return (
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors bg-white group">
                           
-                          {/* 2. ENHANCED STAFF NAME COLUMN WITH SCHEDULE VIEW */}
+                          {/* ENHANCED STAFF NAME COLUMN WITH SCHEDULE VIEW */}
                           <td className="py-3 px-4 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10 border-r border-gray-100">
                             <div className="font-bold text-gray-900">{r.staff_name}</div>
                             <div className="text-[11px] text-indigo-600 font-bold mt-0.5 uppercase tracking-wider">
@@ -1684,19 +1700,26 @@ const AdminAttendance = () => {
                             </div>
                           </td>
                           
-                          <td className="py-3 px-3 text-gray-500 border-l border-gray-100">{Number(r.total_targeted_hours).toFixed(1)}h</td>
+                          {/* NEW: BASE RATES */}
+                          <td className="py-3 px-3 text-blue-700 font-medium bg-blue-50/20 border-l border-gray-100">₹{basicPayPerDay.toFixed(2)}</td>
+                          <td className="py-3 px-3 text-blue-700 font-medium bg-blue-50/20 border-r border-gray-100">₹{basicPayPerHour.toFixed(2)}</td>
+                          
+                          {/* HOURS */}
+                          <td className="py-3 px-3 text-gray-500">{Number(r.total_targeted_hours).toFixed(1)}h</td>
                           <td className="py-3 px-3 font-medium text-gray-900">{Number(r.total_worked_hours).toFixed(1)}h</td>
                           <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${r.working_hours_percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.working_hours_percent).toFixed(1)}%</span></td>
                           
+                          {/* SERVICE CHARGE & COLLECTION % */}
                           <td className="py-3 px-3 text-gray-500">₹{Number(r.total_monthly_target).toLocaleString()}</td>
                           <td className="py-3 px-3 font-medium text-gray-900">₹{Number(r.achieved_service_revenue).toLocaleString()}</td>
-                          <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${r.revenue_percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.revenue_percent).toFixed(1)}%</span></td>
+                          <td className="py-3 px-3 border-r border-gray-100 bg-emerald-50/30"><span className={`font-bold ${r.revenue_percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.revenue_percent).toFixed(1)}%</span></td>
                           
-                          <td className="py-3 px-3 text-indigo-600 font-bold bg-indigo-50/30">{Number(r.bonus_percent).toFixed(1)}%</td>
-                          <td className="py-3 px-3 text-gray-700">₹{Number(r.basic_pay).toLocaleString()}</td>
-                          <td className="py-3 px-3 text-emerald-600 font-bold">₹{Number(r.bonus).toLocaleString()}</td>
-                          <td className="py-3 px-3 text-gray-700">₹{alwcs.toLocaleString()}</td>
-                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay).toLocaleString()}</td>
+                          {/* EARNINGS & BONUS % */}
+                          <td className="py-3 px-3 text-indigo-600 font-bold bg-indigo-50/50">{Number(r.bonus_percent).toFixed(1)}%</td>
+                          <td className="py-3 px-3 text-gray-700">₹{Number(r.basic_pay).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 text-emerald-600 font-bold">₹{Number(r.bonus).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 text-gray-700">₹{Number(r.offdayPay).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           
                           <td className="py-2 px-3 border-r border-gray-100 bg-red-50/20">
                             {selectedRun.status === 'generated' ? (
