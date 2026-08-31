@@ -713,7 +713,7 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
 // =====================================================================
 // 🔥 PAYROLL ENGINE & DATA AGGREGATORS
 // =====================================================================
-
+// Helper: Exact Month Attendance
 const getPayrollAttendance = async (client, staffId, payrollMonthDate) => {
   const result = await client.query(`
       SELECT 
@@ -728,17 +728,23 @@ const getPayrollAttendance = async (client, staffId, payrollMonthDate) => {
   return result.rows[0];
 };
 
+// Helper: Exact Month Service Charges
 const getPayrollCollection = async (client, staffId, payrollMonthDate) => {
   const result = await client.query(`
+      WITH target_month AS (
+          SELECT DATE_TRUNC('month', $2::DATE)::date as start_date,
+                 (DATE_TRUNC('month', $2::DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date as end_date
+      )
       SELECT COALESCE(SUM(se.service_charges), 0) AS achieved_revenue
       FROM service_entries se
+      CROSS JOIN target_month tm
       WHERE se.staff_id = $1
-        AND se.status = 'completed'
-        AND DATE_TRUNC('month', se.updated_at) = DATE_TRUNC('month', $2::DATE)
+        AND se.created_at::date BETWEEN tm.start_date AND tm.end_date
   `, [staffId, payrollMonthDate]);
   return result.rows[0];
 };
 
+// Helper: Schedule active during the exact month
 const getPayrollSchedule = async (client, staffId, payrollMonthDate) => {
   const result = await client.query(`
       SELECT standard_hours 
@@ -847,7 +853,7 @@ router.get('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) =>
   }
 });;
 
-// 1.a Fetch Calendar Preview for a Payroll Month
+// 1.a Fetch Calendar Preview for an EXACT Payroll Month
 router.get('/run-preview', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const { month } = req.query; // YYYY-MM format
   const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
@@ -856,14 +862,13 @@ router.get('/run-preview', authMiddleware(['admin', 'superadmin']), async (req, 
 
   const client = await pool.connect();
   try {
-      // 1. Total Calendar Days
+      // 1. Total Calendar Days for the Exact Selected Month
       const [year, monthNum] = month.split('-');
       const calendar_days = new Date(year, monthNum, 0).getDate();
 
       // 2. Mathematically Calculate Exact Sundays
       let sundays = 0;
       for (let i = 1; i <= calendar_days; i++) {
-          // Javascript Date months are 0-indexed, so we subtract 1 from monthNum
           const date = new Date(year, parseInt(monthNum) - 1, i);
           if (date.getDay() === 0) sundays++; // 0 represents Sunday
       }
@@ -871,7 +876,7 @@ router.get('/run-preview', authMiddleware(['admin', 'superadmin']), async (req, 
       // 3. Fixed Duty Leave
       const dl_days = 1;
 
-      // 4. Fetch EXPLICIT Holidays from the Calendar (other_offdays)
+      // 4. Fetch EXPLICIT Holidays from the Calendar
       const holidaysRes = await client.query(`
           SELECT COUNT(*) as count 
           FROM calendar_events 
