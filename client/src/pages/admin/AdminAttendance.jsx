@@ -10,7 +10,7 @@ import {
   FiClock as FiTime, FiUserCheck, FiUserX, FiWatch, FiUsers,
   FiEye, FiCheck, FiXCircle, FiMenu, FiBell, FiMail, FiBarChart,
   FiPercent, FiDivide, FiX as FiMultiply, FiMinus, FiPlus as FiAdd,
-  FiChevronLeft, FiChevronRight, FiMapPin, FiMove
+  FiChevronLeft, FiChevronRight, FiMapPin, FiMove, FiInfo
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -1673,7 +1673,9 @@ const AdminAttendance = () => {
                       <th className="py-2 px-3 text-indigo-600">Bonus %</th>
                       <th className="py-2 px-3">Basic Pay</th>
                       <th className="py-2 px-3">Bonus</th>
-                      <th className="py-2 px-3">Alwcs (TA+FA+Off)</th>
+                      <th className="py-2 px-3">Offday Pay</th>
+                      <th className="py-2 px-3">TA</th>
+                      <th className="py-2 px-3">FA</th>
                       <th className="py-2 px-3 border-r border-gray-200">Total Gross</th>
                     </tr>
                   </thead>
@@ -1691,11 +1693,24 @@ const AdminAttendance = () => {
                       const dailyHours = Number(r.snapshot_daily_hours || 9);
                       const basicPayPerHour = dailyHours > 0 ? basicPayPerDay / dailyHours : 0;
                       
-                      // Safely sum allowances
-                      const ta = Number(r.ta_pay) || 0;
-                      const fa = Number(r.fa_pay) || 0;
-                      const off = Number(r.paid_offdays) || 0;
-                      const alwcs = ta + fa + off;
+                      // Calculate Tooltip Math
+                      const ta = Number(r.ta_pay || r.ta || 0);
+                      const fa = Number(r.fa_pay || r.fa || 0);
+                      const off = Number(r.paid_offdays || 0);
+                      
+                      const workPct = Number(r.working_hours_percent || 0);
+                      const isFull = workPct >= 100;
+                      const offdaysCount = Number(selectedRun.sundays || 0) + Number(selectedRun.dl_days || 0) + Number(selectedRun.other_offdays || 0);
+                      const surplus = Math.max(0, Number(r.achieved_service_revenue || 0) - Number(r.total_monthly_target || 0));
+
+                      // Hover Strings
+                      const basicTooltip = `${Number(r.total_worked_hours || 0).toFixed(1)} Worked Hrs × ₹${basicPayPerHour.toFixed(2)}/hr`;
+                      const bonusTooltip = `${Number(r.bonus_percent || 0).toFixed(1)}% × ₹${surplus.toLocaleString()} (Surplus Service Charge)`;
+                      const offdayTooltip = isFull 
+                          ? `${offdaysCount} Offdays × ₹${basicPayPerDay.toFixed(2)}/day\n(100%+ attendance)` 
+                          : `${offdaysCount} Offdays × ₹${basicPayPerDay.toFixed(2)}/day × ${workPct.toFixed(1)}%\n(Prorated due to <100% attendance)`;
+                      const taTooltip = isFull ? "100%+ attendance (Full TA)" : `Prorated at ${workPct.toFixed(1)}% attendance`;
+                      const faTooltip = isFull ? "100%+ attendance (Full FA)" : `Prorated at ${workPct.toFixed(1)}% attendance`;
                       
                       return (
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors bg-white group">
@@ -1722,13 +1737,39 @@ const AdminAttendance = () => {
                           <td className="py-3 px-3 font-medium text-gray-900">₹{Number(r.achieved_service_revenue || 0).toLocaleString()}</td>
                           <td className="py-3 px-3 border-r border-gray-100 bg-emerald-50/30"><span className={`font-bold ${Number(r.revenue_percent || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.revenue_percent || 0).toFixed(1)}%</span></td>
                           
-                          {/* EARNINGS & BONUS % */}
+                          {/* EARNINGS WITH INFO TOOLTIPS */}
                           <td className="py-3 px-3 text-indigo-600 font-bold bg-indigo-50/50">{Number(r.bonus_percent || 0).toFixed(1)}%</td>
-                          <td className="py-3 px-3 text-gray-700">₹{Number(r.basic_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-3 text-emerald-600 font-bold">₹{Number(r.bonus || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           
-                          {/* 🔥 FIXED: Now rendering the alwcs variable instead of r.offdayPay */}
-                          <td className="py-3 px-3 text-gray-700">₹{alwcs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={basicTooltip}>
+                              <span>₹{Number(r.basic_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-emerald-600 font-bold">
+                            <div className="flex items-center justify-between cursor-help" title={bonusTooltip}>
+                              <span>₹{Number(r.bonus || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-emerald-400 hover:text-emerald-600" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={offdayTooltip}>
+                              <span>₹{off.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={taTooltip}>
+                              <span>₹{ta.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={faTooltip}>
+                              <span>₹{fa.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
                           
                           <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           
