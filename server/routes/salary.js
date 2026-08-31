@@ -1166,10 +1166,10 @@ router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (
 
       const newExpenseId = expRes.rows[0].id;
 
-      // 6. Log into Wallet Transactions Table
+      // 6. Log into Wallet Transactions Table (Tracking who performed the transaction)
       await client.query(`
           INSERT INTO wallet_transactions (
-              wallet_id, amount, type, description, reference_type, reference_id, created_by, created_at
+              wallet_id, amount, type, description, reference_type, reference_id, staff_id, created_at
           ) VALUES ($1, $2, 'debit', $3, 'expense', $4, $5, NOW())
       `, [wallet_id, amount, description, newExpenseId, req.user.id]);
 
