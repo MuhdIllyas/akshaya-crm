@@ -1114,6 +1114,20 @@ const AdminAttendance = () => {
     } catch (err) { toast.error("Update failed"); }
   };
 
+  const handleUpdateNetPay = async (recordId, newNetPay) => {
+    try {
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}/override-net-pay`, 
+        { net_pay: newNetPay }, 
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      // Update the UI immediately
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, net_pay: res.data.net_pay } : r));
+      toast.success("Final Net Pay manually adjusted!");
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to update Net Pay"); 
+    }
+  };
+
   const handleUpdateWorkedHours = async (recordId, newHours) => {
     try {
       const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}/override-hours`, 
@@ -1818,7 +1832,21 @@ const AdminAttendance = () => {
                             )}
                           </td>
                           
-                          <td className="py-3 px-4 text-right font-black text-gray-900 bg-emerald-50/30 border-r border-gray-100 text-base">
+                          <td className="py-2 px-3 text-right bg-emerald-50/30 border-r border-gray-100">
+                            {selectedRun.status === 'generated' ? (
+                              <div className="flex items-center justify-end">
+                                <span className="text-gray-500 font-bold mr-1">₹</span>
+                                <input 
+                                  type="number" 
+                                  defaultValue={Number(r.net_pay || 0).toFixed(0)}
+                                  onBlur={(e) => handleUpdateNetPay(r.id, e.target.value)}
+                                  className="w-24 text-right p-1.5 border border-emerald-200 rounded text-emerald-700 font-black text-base focus:ring-1 focus:ring-emerald-500 bg-white shadow-sm"
+                                />
+                              </div>
+                            ) : (
+                              <span className="font-black text-gray-900 text-base block px-2">₹{Number(r.net_pay || 0).toLocaleString()}</span>
+                            )}
+                          </td><td className="py-3 px-4 text-right font-black text-gray-900 bg-emerald-50/30 border-r border-gray-100 text-base">
                             ₹{Number(r.net_pay || 0).toLocaleString()}
                           </td>
                           

@@ -2098,4 +2098,35 @@ router.put('/records/:id/override-hours', authMiddleware(['admin', 'superadmin']
   }
 });
 
+// =====================================================================
+// 🔥 MANUAL NET PAY OVERRIDE (FINAL ROUNDING/ADJUSTMENTS)
+// =====================================================================
+router.put('/records/:id/override-net-pay', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const recordId = req.params.id;
+  const { net_pay } = req.body;
+  const client = await pool.connect();
+  
+  try {
+      // 1. Ensure the run is not finalized
+      const recRes = await client.query('SELECT salary_run_id FROM salary_records WHERE id = $1', [recordId]);
+      if (!recRes.rows.length) throw new Error('Record not found');
+      
+      const runRes = await client.query('SELECT status FROM salary_runs WHERE id = $1', [recRes.rows[0].salary_run_id]);
+      if (runRes.rows[0].status === 'finalized') throw new Error('Cannot edit a finalized run');
+
+      // 2. Forcefully override the final net pay column
+      const updateRes = await client.query(`
+          UPDATE salary_records 
+          SET net_pay = $1 
+          WHERE id = $2 RETURNING *
+      `, [net_pay, recordId]);
+      
+      res.json(updateRes.rows[0]);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
 export default router;
