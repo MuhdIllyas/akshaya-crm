@@ -1110,35 +1110,95 @@ router.post('/runs/:id/finalize', authMiddleware(['admin', 'superadmin']), async
   }
 });
 
-// 7. Pay Record (Debit Wallet)
+// 7. Pay Record (Debit Wallet, Log Expense & Transaction)
 router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const recordId = req.params.id;
+  const { wallet_id } = req.body;
   const client = await pool.connect();
+
   try {
-      const { wallet_id } = req.body;
-      await client.query('BEGIN');
-      
-      const recordResult = await client.query(`
-          SELECT sr.*, r.payroll_month, s.name as staff_name 
+      if (!wallet_id) throw new Error('Wallet ID is required to process payment');
+
+      await client.query('BEGIN'); // Start strict financial transaction
+
+      // 1. Fetch Salary Record, Run context, and Staff context (Including Centre ID)
+      const recRes = await client.query(`
+          SELECT sr.*, r.payroll_month, s.name as staff_name, s.centre_id
           FROM salary_records sr
           JOIN salary_runs r ON sr.salary_run_id = r.id
           JOIN staff s ON sr.staff_id = s.id
           WHERE sr.id = $1
-      `, [req.params.id]);
-      const record = recordResult.rows[0];
+      `, [recordId]);
 
-      if (record.payment_status === 'paid') throw new Error('Already paid');
+      if (!recRes.rows.length) throw new Error('Salary record not found');
+      const record = recRes.rows[0];
 
-      // Update Wallet
-      await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [record.net_pay, wallet_id]);
-      
-      // Update Record
-      await client.query(`UPDATE salary_records SET payment_status = 'paid', paid_amount = $1, total_paid_amount = $1 WHERE id = $2`, [record.net_pay, req.params.id]);
+      // 2. Auth Check for Admin (Superadmin naturally bypasses this)
+      if (req.user.role === 'admin' && record.centre_id !== req.user.centre_id) {
+          throw new Error('Unauthorized: Staff belongs to a different centre');
+      }
 
+      if (record.payment_status === 'paid') throw new Error('This salary has already been paid');
+
+      const amount = Number(record.net_pay);
+      if (amount <= 0) throw new Error('Cannot process a payment of ₹0 or less');
+
+      // 3. Check and Deduct Wallet Balance safely
+      const walletRes = await client.query('SELECT balance FROM wallets WHERE id = $1 AND centre_id = $2', [wallet_id, record.centre_id]);
+      if (!walletRes.rows.length) throw new Error('Wallet not found or does not belong to this centre');
+      if (Number(walletRes.rows[0].balance) < amount) throw new Error('Insufficient wallet balance to clear this payslip');
+
+      await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [amount, wallet_id]);
+
+      // 4. Format dynamic description for accounting ledgers
+      const dateObj = new Date(record.payroll_month);
+      const monthString = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const description = `Salary Payout: ${record.staff_name} (${monthString})`;
+
+      // 5. Log into Expenses Table (category_id = 1 is standard for Salary/Wages)
+      const expRes = await client.query(`
+          INSERT INTO expenses (
+              centre_id, wallet_id, category_id, amount, expense_date, staff_id,
+              description, payment_method, status, created_at, approved_at, approved_by
+          ) VALUES ($1, $2, 1, $3, CURRENT_DATE, $4, $5, 'Wallet Transfer', 'approved', NOW(), NOW(), $6)
+          RETURNING id
+      `, [record.centre_id, wallet_id, amount, record.staff_id, description, req.user.id]);
+
+      const newExpenseId = expRes.rows[0].id;
+
+      // 6. Log into Wallet Transactions Table
+      await client.query(`
+          INSERT INTO wallet_transactions (
+              wallet_id, centre_id, amount, type, description, reference_type, reference_id, created_by, created_at
+          ) VALUES ($1, $2, $3, 'debit', $4, 'expense', $5, $6, NOW())
+      `, [wallet_id, record.centre_id, amount, description, newExpenseId, req.user.id]);
+
+      // 7. Lock the Salary Record as Paid
+      const updateRes = await client.query(`
+          UPDATE salary_records
+          SET payment_status = 'paid', paid_amount = $1, total_paid_amount = $1
+          WHERE id = $2 RETURNING *
+      `, [amount, recordId]);
+
+      // 8. Activity Log for Auditing
+      await logActivity({
+          centre_id: record.centre_id,
+          related_type: 'salary',
+          related_id: recordId,
+          action: 'Salary Sent',
+          description: `${req.user.role === 'superadmin' ? 'Superadmin' : 'Admin'} sent salary to ${record.staff_name} for ${monthString} via Wallet`,
+          performed_by: req.user.id,
+          performed_by_role: req.user.role
+      });
+
+      // If everything succeeded, commit to the database!
       await client.query('COMMIT');
-      res.json({ message: 'Paid successfully' });
+      res.json(updateRes.rows[0]);
+      
   } catch (err) {
       await client.query('ROLLBACK');
-      res.status(500).json({ error: err.message });
+      console.error("Payment Error: ", err);
+      res.status(400).json({ error: err.message });
   } finally {
       client.release();
   }
