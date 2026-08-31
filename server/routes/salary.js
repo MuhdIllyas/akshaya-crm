@@ -748,8 +748,6 @@ const getPayrollCollection = async (client, staffId, payrollMonthDate) => {
 
 // Helper: Exact Month Deductions (Salary Advances from Expenses)
 const getPayrollDeductions = async (client, staffId, payrollMonthDate) => {
-  // NOTE: Assuming your expenses table uses 'date' for the transaction date. 
-  // If it uses 'created_at', change 'date::date' below to 'created_at::date'.
   const result = await client.query(`
       WITH target_month AS (
           SELECT DATE_TRUNC('month', $2::DATE)::date as start_date,
@@ -760,7 +758,10 @@ const getPayrollDeductions = async (client, staffId, payrollMonthDate) => {
       CROSS JOIN target_month tm
       WHERE category_id = 2 
         AND staff_id = $1
-        AND date::date BETWEEN tm.start_date AND tm.end_date
+        AND expense_date BETWEEN tm.start_date AND tm.end_date
+        AND COALESCE(is_reversal, FALSE) = FALSE 
+        -- 🔥 STRICT STATUS CHECK: Only deduct advances that were explicitly approved
+        AND status IN ('approved', 'auto_approved')
   `, [staffId, payrollMonthDate]);
   
   return result.rows[0] ? parseFloat(result.rows[0].total_advance) : 0;
