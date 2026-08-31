@@ -1169,9 +1169,9 @@ router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (
       // 6. Log into Wallet Transactions Table
       await client.query(`
           INSERT INTO wallet_transactions (
-              wallet_id, centre_id, amount, type, description, reference_type, reference_id, created_by, created_at
-          ) VALUES ($1, $2, $3, 'debit', $4, 'expense', $5, $6, NOW())
-      `, [wallet_id, record.centre_id, amount, description, newExpenseId, req.user.id]);
+              wallet_id, amount, type, description, reference_type, reference_id, created_by, created_at
+          ) VALUES ($1, $2, 'debit', $3, 'expense', $4, $5, NOW())
+      `, [wallet_id, amount, description, newExpenseId, req.user.id]);
 
       // 7. Lock the Salary Record as Paid
       const updateRes = await client.query(`
