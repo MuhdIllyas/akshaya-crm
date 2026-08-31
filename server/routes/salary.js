@@ -728,7 +728,7 @@ const getPayrollAttendance = async (client, staffId, payrollMonthDate) => {
   return result.rows[0];
 };
 
-// Helper: Exact Month Service Charges
+// Helper: Exact Month Service Charges (NO OFFSETS)
 const getPayrollCollection = async (client, staffId, payrollMonthDate) => {
   const result = await client.query(`
       WITH target_month AS (
@@ -739,8 +739,10 @@ const getPayrollCollection = async (client, staffId, payrollMonthDate) => {
       FROM service_entries se
       CROSS JOIN target_month tm
       WHERE se.staff_id = $1
+        -- Matches exactly July 1st to July 31st if July is selected
         AND se.created_at::date BETWEEN tm.start_date AND tm.end_date
   `, [staffId, payrollMonthDate]);
+  
   return result.rows[0];
 };
 

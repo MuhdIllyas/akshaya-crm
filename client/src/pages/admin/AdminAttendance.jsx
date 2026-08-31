@@ -1575,9 +1575,9 @@ const AdminAttendance = () => {
                 ) : (
                   <>
                     <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mt-4">
-                      <p className="text-sm text-indigo-800 font-medium mb-3">
+                    <p className="text-sm text-indigo-800 font-medium mb-3">
                         <FiCalendar className="inline mr-2" />
-                        Values synced from Centre Calendar. Override if needed.
+                        Evaluating performance for <strong className="uppercase">{formatMonthForDisplay(newRunData.payroll_month)}</strong>. Values synced from calendar.
                       </p>
                       <div className="grid grid-cols-2 gap-4">
                         <div><label className="block text-xs font-bold text-indigo-900 mb-1">Calendar Days</label><input type="number" value={newRunData.calendar_days} onChange={e => setNewRunData({...newRunData, calendar_days: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
@@ -1644,7 +1644,7 @@ const AdminAttendance = () => {
                     <tr>
                       <th className="py-3 px-4 sticky left-0 bg-gray-100 z-30 border-r border-gray-200" rowSpan="2">Staff Name</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
-                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Service Revenue</th>
+                      <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-emerald-50/50" colSpan="3">Service Charge Earned</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
                       <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Deductions</th>
                       <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Net Pay</th>
@@ -1655,10 +1655,10 @@ const AdminAttendance = () => {
                       <th className="py-2 px-3 border-l border-gray-200">Target</th>
                       <th className="py-2 px-3">Worked</th>
                       <th className="py-2 px-3 border-r border-gray-200">%</th>
-                      {/* Revenue */}
-                      <th className="py-2 px-3">Target</th>
-                      <th className="py-2 px-3">Actual</th>
-                      <th className="py-2 px-3 border-r border-gray-200">%</th>
+                      {/* Service Charge */}
+                      <th className="py-2 px-3 bg-emerald-50/50">Target</th>
+                      <th className="py-2 px-3 bg-emerald-50/50">Actual Earned</th>
+                    <th className="py-2 px-3 border-r border-gray-200 bg-emerald-50/50">%</th>
                       {/* Earnings */}
                       <th className="py-2 px-3 text-indigo-600">Bonus %</th>
                       <th className="py-2 px-3">Basic</th>
