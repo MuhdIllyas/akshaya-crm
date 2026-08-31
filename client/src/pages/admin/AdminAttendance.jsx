@@ -1691,10 +1691,10 @@ const AdminAttendance = () => {
                       const dailyHours = Number(r.snapshot_daily_hours || 9);
                       const basicPayPerHour = dailyHours > 0 ? basicPayPerDay / dailyHours : 0;
                       
-                      // Safely sum allowances (handles older DB schemas where columns might be empty)
-                      const ta = Number(r.ta_pay || r.ta || 0);
-                      const fa = Number(r.fa_pay || r.fa || 0);
-                      const off = Number(r.paid_offdays || 0);
+                      // Safely sum allowances
+                      const ta = Number(r.ta_pay) || 0;
+                      const fa = Number(r.fa_pay) || 0;
+                      const off = Number(r.paid_offdays) || 0;
                       const alwcs = ta + fa + off;
                       
                       return (
@@ -1704,7 +1704,7 @@ const AdminAttendance = () => {
                           <td className="py-3 px-4 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10 border-r border-gray-100">
                             <div className="font-bold text-gray-900">{r.staff_name}</div>
                             <div className="text-[11px] text-indigo-600 font-bold mt-0.5 uppercase tracking-wider">
-                              Shift: {Number(r.snapshot_daily_hours).toFixed(1)}h / Day
+                              Shift: {Number(r.snapshot_daily_hours || 9).toFixed(1)}h / Day
                             </div>
                           </td>
                           
@@ -1713,21 +1713,24 @@ const AdminAttendance = () => {
                           <td className="py-3 px-3 text-blue-700 font-medium bg-blue-50/20 border-r border-gray-100">₹{basicPayPerHour.toFixed(2)}</td>
                           
                           {/* HOURS */}
-                          <td className="py-3 px-3 text-gray-500">{Number(r.total_targeted_hours).toFixed(1)}h</td>
-                          <td className="py-3 px-3 font-medium text-gray-900">{Number(r.total_worked_hours).toFixed(1)}h</td>
-                          <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${r.working_hours_percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.working_hours_percent).toFixed(1)}%</span></td>
+                          <td className="py-3 px-3 text-gray-500">{Number(r.total_targeted_hours || 0).toFixed(1)}h</td>
+                          <td className="py-3 px-3 font-medium text-gray-900">{Number(r.total_worked_hours || 0).toFixed(1)}h</td>
+                          <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${Number(r.working_hours_percent || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.working_hours_percent || 0).toFixed(1)}%</span></td>
                           
                           {/* SERVICE CHARGE & COLLECTION % */}
-                          <td className="py-3 px-3 text-gray-500">₹{Number(r.total_monthly_target).toLocaleString()}</td>
-                          <td className="py-3 px-3 font-medium text-gray-900">₹{Number(r.achieved_service_revenue).toLocaleString()}</td>
-                          <td className="py-3 px-3 border-r border-gray-100 bg-emerald-50/30"><span className={`font-bold ${r.revenue_percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.revenue_percent).toFixed(1)}%</span></td>
+                          <td className="py-3 px-3 text-gray-500">₹{Number(r.total_monthly_target || 0).toLocaleString()}</td>
+                          <td className="py-3 px-3 font-medium text-gray-900">₹{Number(r.achieved_service_revenue || 0).toLocaleString()}</td>
+                          <td className="py-3 px-3 border-r border-gray-100 bg-emerald-50/30"><span className={`font-bold ${Number(r.revenue_percent || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.revenue_percent || 0).toFixed(1)}%</span></td>
                           
                           {/* EARNINGS & BONUS % */}
-                          <td className="py-3 px-3 text-indigo-600 font-bold bg-indigo-50/50">{Number(r.bonus_percent).toFixed(1)}%</td>
-                          <td className="py-3 px-3 text-gray-700">₹{Number(r.basic_pay).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-3 text-emerald-600 font-bold">₹{Number(r.bonus).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-3 text-gray-700">₹{Number(r.offdayPay).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 text-indigo-600 font-bold bg-indigo-50/50">{Number(r.bonus_percent || 0).toFixed(1)}%</td>
+                          <td className="py-3 px-3 text-gray-700">₹{Number(r.basic_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 text-emerald-600 font-bold">₹{Number(r.bonus || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          
+                          {/* 🔥 FIXED: Now rendering the alwcs variable instead of r.offdayPay */}
+                          <td className="py-3 px-3 text-gray-700">₹{alwcs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          
+                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           
                           <td className="py-2 px-3 border-r border-gray-100 bg-red-50/20">
                             {selectedRun.status === 'generated' ? (
@@ -1738,12 +1741,12 @@ const AdminAttendance = () => {
                                 className="w-24 text-right p-1.5 border border-red-200 rounded text-red-700 font-medium text-sm focus:ring-1 focus:ring-red-500"
                               />
                             ) : (
-                              <span className="text-red-600 font-medium block text-right pr-2">₹{Number(r.deductions).toLocaleString()}</span>
+                              <span className="text-red-600 font-medium block text-right pr-2">₹{Number(r.deductions || 0).toLocaleString()}</span>
                             )}
                           </td>
                           
                           <td className="py-3 px-4 text-right font-black text-gray-900 bg-emerald-50/30 border-r border-gray-100 text-base">
-                            ₹{Number(r.net_pay).toLocaleString()}
+                            ₹{Number(r.net_pay || 0).toLocaleString()}
                           </td>
                           
                           <td className="py-3 px-4 text-center bg-gray-50/50">
