@@ -641,7 +641,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
     const incentiveData = apiData.incentiveReport || [];
     const totalSuggestedBonus = incentiveData.reduce((sum, r) => sum + r.suggested_bonus, 0);
 
-        salaryData.forEach(s => {
+    salaryData.forEach(s => {
         salarySummary.totalPayroll += s.net_salary;
         salarySummary.totalDeductions += s.deductions;
         if (s.status === 'pending') salarySummary.pendingPayouts++;
@@ -3134,8 +3134,9 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                             <tr>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Month</th>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Staff Name</th>
-                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Attendance</th>
-                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Basic + Allowances</th>
+                                                {/* 👇 Updated Header */}
+                                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Target vs Actual</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Earnings Breakdown</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Deductions</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Net Salary</th>
                                                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
@@ -3151,21 +3152,23 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                             <div className="text-[10px] text-gray-400 capitalize font-normal mt-0.5">{row.role}</div>
                                                         </td>
                                                         <td className="px-4 py-3 text-sm text-gray-600 text-center">
-                                                            {row.present_days} / {row.working_days}
+                                                            <div className="font-bold text-gray-900">{row.present_days} / {row.working_days} Days</div>
+                                                            <div className="text-[10px] text-indigo-500 font-medium mt-0.5">Based on hours</div>
                                                         </td>
                                                         <td className="px-4 py-3 text-sm text-gray-600 text-right">
                                                             <div>₹{row.basic.toLocaleString('en-IN')} Basic</div>
-                                                            <div className="text-xs text-gray-400">+ ₹{row.total_allowances.toLocaleString('en-IN')} Allw</div>
+                                                            <div className="text-xs text-gray-500">+ ₹{row.total_allowances.toLocaleString('en-IN')} Alwcs & Bonus</div>
                                                         </td>
                                                         <td className="px-4 py-3 text-sm text-rose-600 text-right font-medium">
                                                             - ₹{row.deductions.toLocaleString('en-IN')}
                                                         </td>
-                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-bold">
+                                                        <td className="px-4 py-3 text-sm text-indigo-600 text-right font-black bg-indigo-50/30">
                                                             ₹{row.net_salary.toLocaleString('en-IN')}
                                                         </td>
                                                         <td className="px-4 py-3 text-center">
+                                                            {/* 👇 Safely handles both 'sent' (old engine) and 'paid' (new engine) */}
                                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
-                                                                row.status === 'sent' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                                                (row.status === 'sent' || row.status === 'paid') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                                                             }`}>
                                                                 {row.status.toUpperCase()}
                                                             </span>
@@ -3179,7 +3182,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                             <FiDollarSign className="h-5 w-5 text-gray-400" />
                                                         </div>
                                                         <h3 className="text-sm font-medium text-gray-900 mb-1">No Salary Records</h3>
-                                                        <p className="text-xs text-gray-500">No salaries were generated for the selected months.</p>
+                                                        <p className="text-xs text-gray-500">No finalized payrolls were generated for the selected period.</p>
                                                     </td>
                                                 </tr>
                                             )}

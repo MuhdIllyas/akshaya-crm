@@ -657,33 +657,39 @@ const fetchPerformanceAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ Salary Report Fetcher (Payroll Calculations)
+// ✅ Salary Report Fetcher (New Payroll Engine)
 const fetchSalaryAnalytics = async (client, centreId, dates) => {
   try {
     console.log(`[API] Fetching Salaries for Centre ${centreId} from ${dates.fromDate} to ${dates.toDate}`);
     
     const res = await client.query(`
       SELECT 
-        s.id,
+        sr.id,
         st.name as staff_name,
         COALESCE(st.role, 'staff') as role,
-        s.month,
-        s.basic,
-        s.hra,
-        s.ta,
-        s.other_allowances,
-        s.deductions,
-        s.net_salary,
-        s.status,
-        s.working_days,
-        s.present_days
-      FROM salaries s
-      JOIN staff st ON s.staff_id = st.id
-      WHERE st.centre_id = $1 
-        -- 👇 Smartly match the YYYY-MM strings based on the selected date range
-        AND s.month >= TO_CHAR($2::date, 'YYYY-MM')
-        AND s.month <= TO_CHAR($3::date, 'YYYY-MM')
-      ORDER BY s.month DESC, s.net_salary DESC
+        TO_CHAR(r.payroll_month, 'YYYY-MM') as month,
+        sr.basic_pay as basic,
+        
+        -- 👇 Bundle all the new dynamic allowances together
+        (COALESCE(sr.ta_pay, 0) + COALESCE(sr.fa_pay, 0) + COALESCE(sr.paid_offdays, 0) + COALESCE(sr.bonus, 0)) as total_allowances,
+        
+        sr.deductions,
+        sr.net_pay as net_salary,
+        COALESCE(sr.payment_status, 'pending') as status,
+        
+        sr.monthly_work_days as working_days,
+        -- 👇 Convert the exact worked hours back into 'Days' for the old frontend UI
+        (sr.total_worked_hours / NULLIF(sr.snapshot_daily_hours, 1)) as present_days
+        
+      FROM salary_records sr
+      JOIN salary_runs r ON sr.salary_run_id = r.id
+      JOIN staff st ON sr.staff_id = st.id
+      WHERE r.centre_id = $1 
+        AND TO_CHAR(r.payroll_month, 'YYYY-MM') >= TO_CHAR($2::date, 'YYYY-MM')
+        AND TO_CHAR(r.payroll_month, 'YYYY-MM') <= TO_CHAR($3::date, 'YYYY-MM')
+        -- Only show data from runs that are finalized or at least generated
+        AND r.status IN ('generated', 'finalized')
+      ORDER BY r.payroll_month DESC, sr.net_pay DESC
     `, [centreId, dates.fromDate, dates.toDate]);
 
     return res.rows.map(row => ({
@@ -691,13 +697,15 @@ const fetchSalaryAnalytics = async (client, centreId, dates) => {
       role: row.role,
       month: row.month,
       basic: Number(row.basic || 0),
-      // Group all allowances together for cleaner reporting
-      total_allowances: Number(row.hra || 0) + Number(row.ta || 0) + Number(row.other_allowances || 0),
+      total_allowances: Number(row.total_allowances || 0),
       deductions: Number(row.deductions || 0),
       net_salary: Number(row.net_salary || 0),
-      status: row.status.toLowerCase(), // 'pending' or 'sent'
+      
+      // Map the new 'paid' status back to 'sent' if the frontend UI relies on that exact word
+      status: row.status.toLowerCase() === 'paid' ? 'sent' : 'pending', 
+      
       working_days: Number(row.working_days || 0),
-      present_days: Number(row.present_days || 0)
+      present_days: Number(Number(row.present_days || 0).toFixed(1)) // e.g., 24.5 days
     }));
   } catch (error) {
     console.error("SQL Error in fetchSalaryAnalytics:", error.message);
