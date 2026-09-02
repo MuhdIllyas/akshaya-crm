@@ -256,7 +256,14 @@ cron.schedule('59 23 * * *', async () => {
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    // Get today's date according to IST
+    const dateRes = await client.query(`
+      SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS today
+    `);
+
+    const today = dateRes.rows[0].today;
+
+    // Find all open punches for today
     const openPunches = await client.query(`
       SELECT
         id,
@@ -265,66 +272,147 @@ cron.schedule('59 23 * * *', async () => {
         breaks,
         TO_CHAR(date, 'YYYY-MM-DD') AS date
       FROM attendance
-      WHERE date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+      WHERE date = $1
         AND punch_in IS NOT NULL
         AND punch_out IS NULL
-    `);
+    `, [today]);
 
-    for (const record of openPunches.rows) {
-      const scheduleRes = await client.query(`
-        SELECT end_time
-        FROM staff_schedules
-        WHERE staff_id = $1
-          AND effective_from <= $2
-          AND (effective_to IS NULL OR effective_to >= $2)
-        ORDER BY effective_from DESC
-        LIMIT 1
-      `, [record.staff_id, record.date]);
-      const endTime =
-        scheduleRes.rows.length > 0
-          ? scheduleRes.rows[0].end_time
-          : '18:00';
-      const hours = calculateHours(
-        record.punch_in,
-        endTime,
-        record.breaks
-      );
-      const updateRes = await client.query(`
-        UPDATE attendance
-        SET
-          punch_out = $1,
-          hours = $2,
-          status = 'present',
-          updated_at = NOW()
-        WHERE id = $3
-          AND punch_out IS NULL
-        RETURNING id
-      `, [endTime, hours, record.id]);
-      if (updateRes.rowCount === 0) {
-        console.log(
-          `[CRON] Attendance ${record.id} was already punched out. Skipping.`
-        );
-        continue;
-      }
-      await recalculateDayDeviation(
-        client,
-        record.staff_id,
-        record.date
-      );
-      console.log(
-        `[CRON] Auto-punched out staff ${record.staff_id} at ${endTime} (${hours} hrs)`
-      );
-    }
-    await client.query('COMMIT');
+    let successCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
 
     console.log(
-      `[CRON] Auto-punch-out completed. Found ${openPunches.rows.length} open punches.`
+      `[CRON] Auto-punch-out started for ${today}. ` +
+      `Found ${openPunches.rows.length} open punches.`
+    );
+
+    for (const record of openPunches.rows) {
+
+      // --------------------------------------------------
+      // Each staff member gets their own transaction
+      // --------------------------------------------------
+      try {
+        await client.query('BEGIN');
+
+        // Get the schedule effective on this exact date
+        const scheduleRes = await client.query(`
+          SELECT end_time
+          FROM staff_schedules
+          WHERE staff_id = $1
+            AND effective_from <= $2
+            AND (effective_to IS NULL OR effective_to >= $2)
+          ORDER BY effective_from DESC
+          LIMIT 1
+        `, [record.staff_id, record.date]);
+
+        let endTime;
+
+        if (scheduleRes.rows.length > 0) {
+          endTime = scheduleRes.rows[0].end_time;
+        } else {
+          // Keep existing fallback
+          endTime = '18:00';
+
+          console.warn(
+            `[CRON] ⚠️ No schedule found for staff ${record.staff_id} ` +
+            `on ${record.date}. Using fallback ${endTime}.`
+          );
+        }
+
+        // Calculate worked hours using the SAME function
+        // used by normal manual punch-out.
+        const hours = calculateHours(
+          record.punch_in,
+          endTime,
+          record.breaks
+        );
+
+        // --------------------------------------------------
+        // IMPORTANT:
+        // Only update if punch_out is STILL NULL.
+        // This prevents overwriting a manual punch-out.
+        // --------------------------------------------------
+        const updateRes = await client.query(`
+          UPDATE attendance
+          SET
+            punch_out = $1,
+            hours = $2,
+            status = 'present',
+            updated_at = NOW()
+          WHERE id = $3
+            AND punch_out IS NULL
+          RETURNING id
+        `, [
+          endTime,
+          hours,
+          record.id
+        ]);
+
+        // Somebody may have punched out after our initial SELECT
+        if (updateRes.rowCount === 0) {
+          await client.query('ROLLBACK');
+          skippedCount++;
+          console.log(
+            `[CRON] Attendance ${record.id} was already punched out. ` +
+            `Skipping staff ${record.staff_id}.`
+          );
+          continue;
+        }
+        // Recalculate late/extra minutes using the SAME
+        // function used by salary.js.
+        await recalculateDayDeviation(
+          client,
+          record.staff_id,
+          record.date
+        );
+        await client.query('COMMIT');
+        successCount++;
+        console.log(
+          `[CRON] ✅ Auto-punched out staff ${record.staff_id} ` +
+          `at ${endTime} (${hours} hrs)`
+        );
+      } catch (staffError) {
+        // Roll back ONLY this staff member
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error(
+            `[CRON] Rollback failed for staff ${record.staff_id}:`,
+            rollbackError
+          );
+        }
+        errorCount++;
+        console.error(
+          `[CRON] ❌ Failed to auto-punch staff ${record.staff_id} ` +
+          `(attendance ${record.id}):`,
+          staffError
+        );
+        // IMPORTANT:
+        // Continue processing the remaining staff.
+        continue;
+      }
+    }
+    console.log(
+      `[CRON] ========================================`
+    );
+    console.log(
+      `[CRON] Auto-punch-out completed for ${today}`
+    );
+    console.log(
+      `[CRON] Successful : ${successCount}`
+    );
+    console.log(
+      `[CRON] Skipped    : ${skippedCount}`
+    );
+    console.log(
+      `[CRON] Failed     : ${errorCount}`
+    );
+    console.log(
+      `[CRON] ========================================`
     );
   } catch (err) {
-    await client.query('ROLLBACK');
-
     console.error(
-      '[CRON] Error in auto-punch-out cron job:',
+      '[CRON] ❌ Auto-punch-out job failed:',
       err
     );
   } finally {
