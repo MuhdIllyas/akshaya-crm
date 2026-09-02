@@ -7,6 +7,7 @@ import generateRecurringTasks from "../controllers/recurringTaskService.js";
 import { getReportData } from '../routes/reports/analyticsService.js';
 import { buildPDF } from '../utils/exportBuilder.js';
 import { sendReportEmail } from '../utils/emailService.js';
+import { calculateHours, recalculateDayDeviation } from './salary.js';
 
 // ==========================================
 // 1. END OF DAY OPERATIONS (Midnight)
@@ -253,46 +254,84 @@ cron.schedule('55 23 * * *', async () => {
 // Run every day at 23:59 (11:59 PM)
 cron.schedule('59 23 * * *', async () => {
   const client = await pool.connect();
+
   try {
     await client.query('BEGIN');
-    
-    // Find all records from today where staff punched in but haven't punched out
     const openPunches = await client.query(`
-      SELECT id, staff_id, punch_in, breaks, TO_CHAR(date, 'YYYY-MM-DD') AS date
-      FROM attendance 
-      WHERE date = CURRENT_DATE AND punch_in IS NOT NULL AND punch_out IS NULL
+      SELECT
+        id,
+        staff_id,
+        punch_in,
+        breaks,
+        TO_CHAR(date, 'YYYY-MM-DD') AS date
+      FROM attendance
+      WHERE date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+        AND punch_in IS NOT NULL
+        AND punch_out IS NULL
     `);
 
     for (const record of openPunches.rows) {
-      // Fetch the staff's scheduled end time for today
       const scheduleRes = await client.query(`
-        SELECT end_time FROM staff_schedules 
-        WHERE staff_id = $1 AND effective_from <= $2 
-        ORDER BY effective_from DESC LIMIT 1
+        SELECT end_time
+        FROM staff_schedules
+        WHERE staff_id = $1
+          AND effective_from <= $2
+          AND (effective_to IS NULL OR effective_to >= $2)
+        ORDER BY effective_from DESC
+        LIMIT 1
       `, [record.staff_id, record.date]);
-
-      const endTime = scheduleRes.rows.length > 0 ? scheduleRes.rows[0].end_time : '18:00'; 
-      const hours = calculateHours(record.punch_in, endTime, record.breaks);
-
-      // Update the record with the auto-punch-out time
-      await client.query(`
-        UPDATE attendance 
-        SET punch_out = $1, hours = $2, status = 'present', updated_at = NOW()
+      const endTime =
+        scheduleRes.rows.length > 0
+          ? scheduleRes.rows[0].end_time
+          : '18:00';
+      const hours = calculateHours(
+        record.punch_in,
+        endTime,
+        record.breaks
+      );
+      const updateRes = await client.query(`
+        UPDATE attendance
+        SET
+          punch_out = $1,
+          hours = $2,
+          status = 'present',
+          updated_at = NOW()
         WHERE id = $3
+          AND punch_out IS NULL
+        RETURNING id
       `, [endTime, hours, record.id]);
-
-      // Recalculate late/extra minutes
-      await recalculateDayDeviation(client, record.staff_id, record.date);
+      if (updateRes.rowCount === 0) {
+        console.log(
+          `[CRON] Attendance ${record.id} was already punched out. Skipping.`
+        );
+        continue;
+      }
+      await recalculateDayDeviation(
+        client,
+        record.staff_id,
+        record.date
+      );
+      console.log(
+        `[CRON] Auto-punched out staff ${record.staff_id} at ${endTime} (${hours} hrs)`
+      );
     }
-    
     await client.query('COMMIT');
-    console.log(`Auto-punched out ${openPunches.rows.length} staff members.`);
+
+    console.log(
+      `[CRON] Auto-punch-out completed. Found ${openPunches.rows.length} open punches.`
+    );
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Error in auto-punch-out cron job:', err);
+
+    console.error(
+      '[CRON] Error in auto-punch-out cron job:',
+      err
+    );
   } finally {
     client.release();
   }
+}, {
+  timezone: 'Asia/Kolkata'
 });
 
 export default cron;

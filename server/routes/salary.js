@@ -310,7 +310,7 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
 });
 
 // Recalculate late/extra for the ENTIRE DAY (first in, last out)
-const recalculateDayDeviation = async (client, staffId, date) => {
+export const recalculateDayDeviation = async (client, staffId, date) => {
   try {
     // 1. Get ALL punches for this staff on this date
     const dayPunches = await client.query(
@@ -374,14 +374,14 @@ const recalculateDayDeviation = async (client, staffId, date) => {
 };
 
 // Helper function: time to minutes
-const timeToMinutes = (timeStr) => {
+export const timeToMinutes = (timeStr) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 };
 
 // Calculate hours, accounting for breaks
-const calculateHours = (punchIn, punchOut, breaks) => {
+export const calculateHours = (punchIn, punchOut, breaks) => {
   if (!punchIn || !punchOut) return 0;
   const [inHour, inMinute] = punchIn.split(':').map(Number);
   const [outHour, outMinute] = punchOut.split(':').map(Number);
