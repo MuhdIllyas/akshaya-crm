@@ -228,24 +228,33 @@ const calculateDayDeviation = (firstIn, lastOut, schedule) => {
    GROUP ATTENDANCE – ONE ROW PER STAFF PER DAY
    ------------------------------------------------------------- */
 const groupAttendance = (attendance, staffList) => {
-  const map = new Map(); // key = staff_id + date
+  const map = new Map();
 
   attendance.forEach((rec) => {
-    const key = `${rec.staff_id}-${normalizeDate(rec.date)}`;
+    const normalizedDate = normalizeDate(rec.date);
+    const key = `${rec.staff_id}-${normalizedDate}`;
+
     if (!map.has(key)) {
       const staff = staffList.find(s => s.id === rec.staff_id);
       const schedule = findEffectiveSchedule(staff, rec.date);
+
       map.set(key, {
         staff_id: rec.staff_id,
         staff_name: rec.staff_name,
         date: rec.date,
-        punch_in: rec.punch_in,
-        punch_out: rec.punch_out,
-        breaks: rec.breaks,
+
+        // These will be calculated from all sessions below
+        punch_in: null,
+        punch_out: null,
+
         status: rec.status,
-        hours: rec.hours,
         schedule,
-        raw: [],               // keep every punch for dropdown
+
+        // Keep every individual session
+        raw: [],
+
+        // Daily totals
+        hours: 0,
         lateMinutes: 0,
         extraMinutes: 0,
       });
@@ -253,30 +262,81 @@ const groupAttendance = (attendance, staffList) => {
 
     const entry = map.get(key);
 
-    // first punch-in of the day
-    if (!entry.punch_in || rec.punch_in < entry.punch_in) entry.punch_in = rec.punch_in;
-    // last punch-out of the day
-    if (rec.punch_out && (!entry.punch_out || rec.punch_out > entry.punch_out))
-      entry.punch_out = rec.punch_out;
-
+    // Add this session
     entry.raw.push(rec);
+
+    // ------------------------------------------------------------
+    // TOTAL HOURS
+    // ------------------------------------------------------------
+    entry.hours += Number(rec.hours) || 0;
+
+    // ------------------------------------------------------------
+    // FIRST PUNCH IN OF THE DAY
+    // ------------------------------------------------------------
+    if (
+      rec.punch_in &&
+      (!entry.punch_in || rec.punch_in < entry.punch_in)
+    ) {
+      entry.punch_in = rec.punch_in;
+    }
+
+    // ------------------------------------------------------------
+    // LAST PUNCH OUT OF THE DAY
+    // ------------------------------------------------------------
+    if (
+      rec.punch_out &&
+      (!entry.punch_out || rec.punch_out > entry.punch_out)
+    ) {
+      entry.punch_out = rec.punch_out;
+    }
   });
 
-  // ---- ONE-TIME LATE/EXTRA CALCULATION ----
+  // ------------------------------------------------------------
+  // DAILY CALCULATIONS
+  // ------------------------------------------------------------
   return Array.from(map.values()).map(g => {
-    const { lateMinutes, extraMinutes } = calculateDayDeviation(
+
+    // Always show sessions chronologically
+    g.raw.sort((a, b) => {
+      const aTime = timeToMinutes(a.punch_in);
+      const bTime = timeToMinutes(b.punch_in);
+      return aTime - bTime;
+    });
+
+    // Use FIRST IN + LAST OUT for daily schedule deviation
+    const {
+      lateMinutes,
+      extraMinutes
+    } = calculateDayDeviation(
       g.punch_in,
       g.punch_out,
       g.schedule
     );
+
     return {
       ...g,
+
+      // Round total daily hours
+      hours: Number(g.hours.toFixed(2)),
+
+      // Daily deviation — only once
       lateMinutes,
       extraMinutes,
+
       lateHours: Number((lateMinutes / 60).toFixed(2)),
       extraHours: Number((extraMinutes / 60).toFixed(2)),
+
       lateTime: minutesToTime(lateMinutes),
       extraTime: minutesToTime(extraMinutes),
+
+      // Useful for UI
+      sessionCount: g.raw.length,
+
+      // Display all break values from all sessions
+      breaks: g.raw
+        .map(r => r.breaks)
+        .filter(Boolean)
+        .join(', ') || null,
     };
   });
 };
