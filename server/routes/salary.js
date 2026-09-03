@@ -173,137 +173,254 @@ router.get('/attendance', async (req, res) => {
 });
 
 // POST /api/salary/attendance - Record punch in/out (staff only)
+// Supports multiple punch sessions per day.
 router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
   const { punch_type, time, date, breaks } = req.body;
   const client = await pool.connect();
-  
+
   try {
-    if (!punch_type || !date) return res.status(400).json({ error: 'Punch type and date required' });
-    if (!['in', 'out'].includes(punch_type)) return res.status(400).json({ error: 'Invalid punch type' });
+    // ------------------------------------------------------------
+    // 1. Basic validation BEFORE starting transaction
+    // ------------------------------------------------------------
+    if (!punch_type || !date) {
+      return res.status(400).json({
+        error: 'Punch type and date required'
+      });
+    }
+
+    if (!['in', 'out'].includes(punch_type)) {
+      return res.status(400).json({
+        error: 'Invalid punch type'
+      });
+    }
+
+    let punchTime = time;
+
+    // ------------------------------------------------------------
+    // 2. Validate punch-in time against server time
+    // ------------------------------------------------------------
+    if (punch_type === 'in') {
+      if (!time) {
+        return res.status(400).json({
+          error: 'Time required for punch-in'
+        });
+      }
+
+      const serverNow = new Date();
+
+      const serverHHmm = serverNow.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      });
+
+      const [pHT, pMT] = time.split(':').map(Number);
+      const [sHT, sMT] = serverHHmm.split(':').map(Number);
+
+      const punchMinutes = pHT * 60 + pMT;
+      const serverMinutes = sHT * 60 + sMT;
+
+      const diff = Math.abs(serverMinutes - punchMinutes);
+
+      if (diff > 30) {
+        return res.status(400).json({
+          error: `Validation Error: Punch time (${time}) differs too much from Server time (${serverHHmm}).`
+        });
+      }
+    } else {
+      // Punch-out always uses server time
+      const serverNow = new Date();
+
+      punchTime = serverNow.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      });
+    }
 
     await client.query('BEGIN');
 
-    // 1. Get Current Time in HH:mm format for server-side validation
-    const now = new Date();
-    const serverHHmm = now.toTimeString().split(' ')[0].substring(0, 5); 
-    
-    let punchTime = time;
-
-    // 2. Strict Validation for Punch In
-    if (punch_type === 'in') {
-        if (!time) return res.status(400).json({ error: 'Time required for punch-in' });
-    
-        const serverNow = new Date();
-        const serverHHmm = serverNow.toLocaleTimeString('en-GB', { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            hour12: false, 
-            timeZone: 'Asia/Kolkata' 
-        });
-    
-        const [pHT, pMT] = time.split(':').map(Number);
-        const [sHT, sMT] = serverHHmm.split(':').map(Number);
-        
-        const punchMinutes = pHT * 60 + pMT;
-        const serverMinutes = sHT * 60 + sMT;
-        const diff = Math.abs(serverMinutes - punchMinutes);
-    
-        if (diff > 30) {
-            return res.status(400).json({ 
-                error: `Validation Error: Punch time (${time}) differs too much from Server time (${serverHHmm}).` 
-            });
-        }
-    } else {
-        const serverNow = new Date();
-        punchTime = serverNow.toLocaleTimeString('en-GB', { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            hour12: false, 
-            timeZone: 'Asia/Kolkata' 
-        });
-    }
-
-    // 3. Check for ANY existing record for today
+    // ------------------------------------------------------------
+    // 3. Get today's attendance records
+    //
+    // FOR UPDATE prevents two simultaneous punch requests
+    // from creating conflicting open sessions.
+    // ------------------------------------------------------------
     const existingAll = await client.query(
-      `SELECT id, punch_in, punch_out, status FROM attendance 
-       WHERE staff_id = $1 AND date = $2`,
+      `SELECT id, punch_in, punch_out, status, breaks
+       FROM attendance
+       WHERE staff_id = $1
+         AND date = $2
+       ORDER BY punch_in ASC
+       FOR UPDATE`,
       [req.user.id, date]
     );
 
+    // ============================================================
+    // PUNCH IN
+    // ============================================================
     if (punch_type === 'in') {
-      if (existingAll.rows.length > 0) {
-        const record = existingAll.rows[0];
-        
-        // OVERRIDE: If previously marked absent/half-day from a leave, convert to present
-        if ((record.status === 'absent' || record.status === 'half-day') && record.punch_in === null) {
-          const result = await client.query(
-            `UPDATE attendance 
-             SET punch_in = $1, status = 'present', updated_at = NOW() 
-             WHERE id = $2 
-             RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
-            [punchTime, record.id]
-          );
-          await client.query('COMMIT');
-          return res.status(201).json(result.rows[0]);
-        } 
-        
-        // standard validation for duplicates
-        if (record.punch_out === null) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Already punched in. Please punch out first.' });
-        } else {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Attendance already completed for today.' });
-        }
+
+      // Find an ACTIVE / OPEN session
+      const openRecord = existingAll.rows.find(
+        r => r.punch_in !== null && r.punch_out === null
+      );
+
+      // If one is already open, do NOT allow another punch-in
+      if (openRecord) {
+        await client.query('ROLLBACK');
+
+        return res.status(400).json({
+          error: 'Already punched in. Please punch out first.'
+        });
       }
-      
-      // If no record exists at all, normal INSERT
+
+      // ----------------------------------------------------------
+      // If there is an attendance row created by approved leave
+      // (absent / half-day with no punch-in), convert that row
+      // into the first working session.
+      // ----------------------------------------------------------
+      const leaveRecord = existingAll.rows.find(
+        r =>
+          (r.status === 'absent' || r.status === 'half-day') &&
+          r.punch_in === null
+      );
+
+      if (leaveRecord) {
+        const result = await client.query(
+          `UPDATE attendance
+           SET punch_in = $1,
+               status = 'present',
+               updated_at = NOW()
+           WHERE id = $2
+           RETURNING *,
+                     TO_CHAR(date, 'YYYY-MM-DD') AS date`,
+          [punchTime, leaveRecord.id]
+        );
+
+        await recalculateDayDeviation(
+          client,
+          req.user.id,
+          date
+        );
+
+        await client.query('COMMIT');
+
+        return res.status(201).json(result.rows[0]);
+      }
+
+      // ----------------------------------------------------------
+      // IMPORTANT:
+      // If previous sessions are completed, CREATE A NEW ROW.
+      //
+      // Example:
+      // 09:00 - 13:00  -> row 1
+      // 14:00 - 18:00  -> row 2
+      // ----------------------------------------------------------
       const result = await client.query(
-        `INSERT INTO attendance (staff_id, date, punch_in, status, created_at)
-         VALUES ($1, $2, $3, 'present', NOW()) 
-         RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
+        `INSERT INTO attendance (
+           staff_id,
+           date,
+           punch_in,
+           status,
+           created_at
+         )
+         VALUES ($1, $2, $3, 'present', NOW())
+         RETURNING *,
+                   TO_CHAR(date, 'YYYY-MM-DD') AS date`,
         [req.user.id, date, punchTime]
       );
-      
+
       await client.query('COMMIT');
+
       return res.status(201).json(result.rows[0]);
-
-    } else {
-      // PUNCH OUT Logic
-      const openRecord = existingAll.rows.find(r => r.punch_out === null && r.punch_in !== null);
-      if (!openRecord) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'No active punch-in record found for today.' });
-      }
-
-      const { id, punch_in } = openRecord;
-      const newBreaks = breaks || null;
-      const hours = calculateHours(punch_in, punchTime, newBreaks);
-
-      const result = await client.query(
-        `UPDATE attendance 
-         SET punch_out = $1, breaks = $2, hours = $3, updated_at = NOW()
-         WHERE id = $4 
-         RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
-        [punchTime, newBreaks, hours, id]
-      );
-
-      // Recalculate late/extra deviation for the day
-      await recalculateDayDeviation(client, req.user.id, date);
-
-      await client.query('COMMIT');
-      
-      // Fetch fresh data to ensure all calculated fields are included
-      const final = await client.query(
-        `SELECT *, TO_CHAR(date, 'YYYY-MM-DD') AS date FROM attendance WHERE id = $1`, 
-        [id]
-      );
-      return res.json(final.rows[0]);
     }
+
+    // ============================================================
+    // PUNCH OUT
+    // ============================================================
+
+    // Find the latest open session
+    const openRecord = existingAll.rows
+      .filter(
+        r => r.punch_in !== null && r.punch_out === null
+      )
+      .sort((a, b) => {
+        return a.punch_in.localeCompare(b.punch_in);
+      })
+      .pop();
+
+    if (!openRecord) {
+      await client.query('ROLLBACK');
+
+      return res.status(404).json({
+        error: 'No active punch-in record found for today.'
+      });
+    }
+
+    const { id, punch_in } = openRecord;
+
+    const newBreaks = breaks || null;
+
+    const hours = calculateHours(
+      punch_in,
+      punchTime,
+      newBreaks
+    );
+
+    const result = await client.query(
+      `UPDATE attendance
+       SET punch_out = $1,
+           breaks = $2,
+           hours = $3,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING *,
+                 TO_CHAR(date, 'YYYY-MM-DD') AS date`,
+      [
+        punchTime,
+        newBreaks,
+        hours,
+        id
+      ]
+    );
+
+    // Recalculate the day's first-in / last-out deviation
+    await recalculateDayDeviation(
+      client,
+      req.user.id,
+      date
+    );
+
+    await client.query('COMMIT');
+
+    // Fetch final record
+    const final = await client.query(
+      `SELECT *,
+              TO_CHAR(date, 'YYYY-MM-DD') AS date
+       FROM attendance
+       WHERE id = $1`,
+      [id]
+    );
+
+    return res.json(final.rows[0]);
+
   } catch (err) {
-    if (client) await client.query('ROLLBACK');
+
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Rollback error:', rollbackError);
+    }
+
     console.error('Punch error details:', err);
-    res.status(500).json({ error: 'Internal server error while recording punch.' });
+
+    return res.status(500).json({
+      error: 'Internal server error while recording punch.'
+    });
+
   } finally {
     client.release();
   }
@@ -361,13 +478,46 @@ export const recalculateDayDeviation = async (client, staffId, date) => {
     const lateM = Math.max(0, inM - startM);
     const extraM = Math.max(0, outM - endM);
 
-    // 4. Update ALL attendance records of the day with same late/extra
+    // 4. Reset deviation values for all sessions of the day
     await client.query(
-      `UPDATE attendance 
-       SET late_minutes = $1, extra_minutes = $2, updated_at = NOW()
-       WHERE staff_id = $3 AND date = $4`,
-      [lateM, extraM, staffId, date]
+      `UPDATE attendance
+      SET late_minutes = 0,
+          extra_minutes = 0,
+          updated_at = NOW()
+      WHERE staff_id = $1
+        AND date = $2`,
+      [staffId, date]
     );
+
+    // 5. Store daily late/extra only on the FIRST attendance record.
+    //
+    // This prevents multiple sessions from double-counting
+    // late_minutes / extra_minutes during payroll calculation.
+    const firstRecord = await client.query(
+      `SELECT id
+      FROM attendance
+      WHERE staff_id = $1
+        AND date = $2
+        AND punch_in IS NOT NULL
+      ORDER BY punch_in ASC
+      LIMIT 1`,
+      [staffId, date]
+    );
+
+    if (firstRecord.rows.length > 0) {
+      await client.query(
+        `UPDATE attendance
+        SET late_minutes = $1,
+            extra_minutes = $2,
+            updated_at = NOW()
+        WHERE id = $3`,
+        [
+          lateM,
+          extraM,
+          firstRecord.rows[0].id
+        ]
+      );
+    }
   } catch (err) {
     console.error('Error in recalculateDayDeviation:', err);
   }
