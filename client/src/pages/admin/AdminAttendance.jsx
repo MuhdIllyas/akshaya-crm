@@ -342,7 +342,7 @@ const groupAttendance = (attendance, staffList) => {
 };
 
 /* -------------------------------------------------------------
-   COLLAPSIBLE ROW (unchanged UI – only uses the aggregated values)
+   COLLAPSIBLE ROW – DAILY SUMMARY WITH INDIVIDUAL SESSIONS
    ------------------------------------------------------------- */
 const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
   const [open, setOpen] = useState(false);
@@ -407,12 +407,12 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         <td className="py-4 px-4">
           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
             group.status === 'present' ? 'bg-emerald-50 text-emerald-700'
-              : group.status.includes('leave') ? 'bg-amber-50 text-amber-700'
+              : group.status?.includes('leave') ? 'bg-amber-50 text-amber-700'
               : group.status === 'absent' ? 'bg-red-50 text-red-700'
               : 'bg-gray-50 text-gray-700'
           }`}>
             {group.status === 'present' ? 'Present'
-              : group.status.includes('leave') ? 'Leave'
+              : group.status?.includes('leave') ? 'Leave'
               : group.status === 'absent' ? 'Absent' : 'Weekend'}
           </span>
          </td>
@@ -435,10 +435,16 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
          </td>
         <td className="py-4 px-4">
           <button
-            onClick={(e) => { e.stopPropagation(); onEdit(group); }}
-            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(!open);
+            }}
+            className="px-3 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            title="Show or hide individual punch sessions"
           >
-            <FiEdit className="h-4 w-4" />
+            {open
+              ? 'Hide Sessions'
+              : `${group.sessionCount} Session${group.sessionCount !== 1 ? 's' : ''}`}
           </button>
          </td>
        </tr>
@@ -456,22 +462,76 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
               <table className="w-full">
                 <thead className="bg-gray-100">
                    <tr>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Punch In</th>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Punch Out</th>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Late</th>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Extra</th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Punch In
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Punch Out
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Late
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Extra
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Hours
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Action
+                    </th>
                    </tr>
                 </thead>
                 <tbody>
-                  {group.raw.map((r, i) => {
-                    // we **don't** recalculate late/extra here – just show "-"
+                  {[...group.raw]
+                    .sort((a, b) => {
+                      const aTime = timeToMinutes(a.punch_in);
+                      const bTime = timeToMinutes(b.punch_in);
+                      if (aTime !== bTime) return aTime - bTime;
+                      return Number(a.id || 0) - Number(b.id || 0);
+                    })
+                    .map((r, i) => {
                     return (
-                      <tr key={i} className="border-b border-gray-200">
-                        <td className="py-2 px-4 text-sm">{r.punch_in || '-'}</td>
-                        <td className="py-2 px-4 text-sm">{r.punch_out || '-'}</td>
-                        <td className="py-2 px-4 text-sm">-</td>
-                        <td className="py-2 px-4 text-sm">-</td>
-                       </tr>
+                      <tr key={r.id || i} className="border-b border-gray-200">
+                        <td className="py-2 px-4 text-sm">
+                          {r.punch_in || '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {r.punch_out || '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {r.late_minutes
+                            ? `${Number(r.late_minutes)} min`
+                            : '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {r.extra_minutes
+                            ? `${Number(r.extra_minutes)} min`
+                            : '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {Number(r.hours) > 0
+                            ? `${Number(r.hours).toFixed(2)}h`
+                            : '-'}
+                        </td>
+
+                        <td className="py-2 px-4">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEdit(r);
+                            }}
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                            title="Edit this session"
+                          >
+                            <FiEdit className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -540,8 +600,13 @@ const AttendanceOverviewChart = ({ attendance }) => {
     todayAtt.filter(a => a.status === 'present').map(a => a.staff_id)
   ).size;
 
-  const leave = todayAtt.filter(a => a.status.includes('leave')).length;
-  const absent = todayAtt.filter(a => a.status === 'absent').length;
+  const leave = new Set(
+    todayAtt.filter(a => a.status?.includes('leave')).map(a => a.staff_id)
+  ).size;
+
+  const absent = new Set(
+    todayAtt.filter(a => a.status === 'absent').map(a => a.staff_id)
+  ).size;
 
   const data = {
     labels: ['Present', 'On Leave', 'Absent'],
@@ -579,29 +644,92 @@ const AttendanceOverviewChart = ({ attendance }) => {
 const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
   const formatTimeDisplay = (t) => t ? t.split(':').slice(0, 2).join(':') : '';
   const stats = useMemo(() => {
-    const att = attendance.filter(a => a.staff_id === staff.id && normalizeDate(a.date).startsWith(selectedMonth));
+    const att = attendance.filter(
+      a =>
+        a.staff_id === staff.id &&
+        normalizeDate(a.date).startsWith(selectedMonth)
+    );
+
     const present = att.filter(a => a.status === 'present');
-    if (!present.length) return { totalWorkingHours: 0, avgWorkingHours: 0, avgPunchIn: 'N/A', avgPunchOut: 'N/A', totalPresentDays: 0, lateCount: 0, totalLateHours: 0, totalExtraHours: 0, avgLateTime: '00:00', avgExtraTime: '00:00', daysWithSchedule: 0 };
-    const totalH = present.reduce((s, d) => s + (Number(d.hours) || 0), 0);
-    const avgH = totalH / present.length;
-    const inMins = present.filter(d => d.punch_in).map(d => timeToMinutes(d.punch_in));
-    const outMins = present.filter(d => d.punch_out).map(d => timeToMinutes(d.punch_out));
-    const avgIn = inMins.length ? minutesToTime(inMins.reduce((s, m) => s + m, 0) / inMins.length) : 'N/A';
-    const avgOut = outMins.length ? minutesToTime(outMins.reduce((s, m) => s + m, 0) / outMins.length) : 'N/A';
-    let lateM = 0, extraM = 0, lateDays = 0, schedDays = 0;
-    present.forEach(d => {
-      const dev = calculateScheduleDeviations(d, staff);
-      if (dev.hasSchedule) {
-        lateM += dev.lateMinutes; extraM += dev.extraMinutes; schedDays++;
+
+    if (!present.length) {
+      return {
+        totalWorkingHours: 0,
+        avgWorkingHours: 0,
+        avgPunchIn: 'N/A',
+        avgPunchOut: 'N/A',
+        totalPresentDays: 0,
+        lateCount: 0,
+        totalLateHours: 0,
+        totalExtraHours: 0,
+        avgLateTime: '00:00',
+        avgExtraTime: '00:00',
+        daysWithSchedule: 0
+      };
+    }
+
+    // Multiple punch sessions on the same date are ONE working day.
+    const dailyMap = new Map();
+
+    present.forEach(record => {
+      const day = normalizeDate(record.date);
+      if (!dailyMap.has(day)) dailyMap.set(day, []);
+      dailyMap.get(day).push(record);
+    });
+
+    let totalH = 0;
+    let lateM = 0;
+    let extraM = 0;
+    let lateDays = 0;
+    let schedDays = 0;
+    const dailyFirstIns = [];
+    const dailyLastOuts = [];
+
+    dailyMap.forEach(dayRecords => {
+      totalH += dayRecords.reduce(
+        (sum, record) => sum + (Number(record.hours) || 0),
+        0
+      );
+
+      const firstIn = dayRecords
+        .filter(r => r.punch_in)
+        .sort((a, b) => timeToMinutes(a.punch_in) - timeToMinutes(b.punch_in))[0]?.punch_in;
+
+      const lastOut = dayRecords
+        .filter(r => r.punch_out)
+        .sort((a, b) => timeToMinutes(b.punch_out) - timeToMinutes(a.punch_out))[0]?.punch_out;
+
+      if (firstIn) dailyFirstIns.push(timeToMinutes(firstIn));
+      if (lastOut) dailyLastOuts.push(timeToMinutes(lastOut));
+
+      const schedule = findEffectiveSchedule(staff, dayRecords[0].date);
+
+      if (schedule) {
+        schedDays++;
+        const dev = calculateDayDeviation(firstIn, lastOut, schedule);
+        lateM += dev.lateMinutes;
+        extraM += dev.extraMinutes;
         if (dev.lateMinutes > 0) lateDays++;
       }
     });
+
+    const avgIn = dailyFirstIns.length
+      ? minutesToTime(dailyFirstIns.reduce((sum, m) => sum + m, 0) / dailyFirstIns.length)
+      : 'N/A';
+
+    const avgOut = dailyLastOuts.length
+      ? minutesToTime(dailyLastOuts.reduce((sum, m) => sum + m, 0) / dailyLastOuts.length)
+      : 'N/A';
+
+    const totalPresentDays = dailyMap.size;
+    const avgH = totalPresentDays ? totalH / totalPresentDays : 0;
+
     return {
       totalWorkingHours: Number(totalH.toFixed(2)),
       avgWorkingHours: Number(avgH.toFixed(2)),
       avgPunchIn: avgIn,
       avgPunchOut: avgOut,
-      totalPresentDays: present.length,
+      totalPresentDays,
       lateCount: lateDays,
       totalLateHours: Number((lateM / 60).toFixed(2)),
       totalExtraHours: Number((extraM / 60).toFixed(2)),
@@ -611,7 +739,7 @@ const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
     };
   }, [staff, attendance, selectedMonth]);
 
-  const curSch = staff.schedules?.length ? staff.schedules.sort((a, b) => new Date(b.effective_from) - new Date(a.effective_from))[0] : null;
+  const curSch = staff.schedules?.length ? [...staff.schedules].sort((a, b) => new Date(b.effective_from) - new Date(a.effective_from))[0] : null;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
@@ -668,29 +796,89 @@ const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
 
 const MonthlyStats = ({ attendance, selectedMonth, staffList }) => {
   const stats = useMemo(() => {
-    const monthAtt = attendance.filter(a => normalizeDate(a.date).startsWith(selectedMonth));
+    const monthAtt = attendance.filter(
+      a => normalizeDate(a.date).startsWith(selectedMonth)
+    );
     const present = monthAtt.filter(a => a.status === 'present');
-    if (!present.length) return { totalWorkingHours: 0, avgWorkingHours: 0, avgPunchIn: 'N/A', avgPunchOut: 'N/A', totalPresentDays: 0, totalLateHours: 0, totalExtraHours: 0, totalLateDays: 0, daysWithSchedule: 0 };
-    const totalH = present.reduce((s, d) => s + (Number(d.hours) || 0), 0);
-    const avgH = totalH / present.length;
-    const inMins = present.filter(d => d.punch_in).map(d => timeToMinutes(d.punch_in));
-    const outMins = present.filter(d => d.punch_out).map(d => timeToMinutes(d.punch_out));
-    const avgIn = inMins.length ? minutesToTime(inMins.reduce((s, m) => s + m, 0) / inMins.length) : 'N/A';
-    const avgOut = outMins.length ? minutesToTime(outMins.reduce((s, m) => s + m, 0) / outMins.length) : 'N/A';
-    let lateM = 0, extraM = 0, lateDays = 0, schedDays = 0;
-    present.forEach(d => {
-      const staff = staffList.find(s => s.id === d.staff_id);
-      if (staff) {
-        const dev = calculateScheduleDeviations(d, staff);
-        if (dev.hasSchedule) { lateM += dev.lateMinutes; extraM += dev.extraMinutes; schedDays++; if (dev.lateMinutes > 0) lateDays++; }
+
+    if (!present.length) {
+      return {
+        totalWorkingHours: 0,
+        avgWorkingHours: 0,
+        avgPunchIn: 'N/A',
+        avgPunchOut: 'N/A',
+        totalPresentDays: 0,
+        totalLateHours: 0,
+        totalExtraHours: 0,
+        totalLateDays: 0,
+        daysWithSchedule: 0
+      };
+    }
+
+    // Group by staff + date so multiple sessions never become multiple days.
+    const dailyMap = new Map();
+
+    present.forEach(record => {
+      const day = normalizeDate(record.date);
+      const key = `${record.staff_id}-${day}`;
+      if (!dailyMap.has(key)) dailyMap.set(key, []);
+      dailyMap.get(key).push(record);
+    });
+
+    let totalH = 0;
+    let lateM = 0;
+    let extraM = 0;
+    let lateDays = 0;
+    let schedDays = 0;
+    const dailyFirstIns = [];
+    const dailyLastOuts = [];
+
+    dailyMap.forEach(dayRecords => {
+      totalH += dayRecords.reduce(
+        (sum, record) => sum + (Number(record.hours) || 0),
+        0
+      );
+
+      const firstIn = dayRecords
+        .filter(r => r.punch_in)
+        .sort((a, b) => timeToMinutes(a.punch_in) - timeToMinutes(b.punch_in))[0]?.punch_in;
+
+      const lastOut = dayRecords
+        .filter(r => r.punch_out)
+        .sort((a, b) => timeToMinutes(b.punch_out) - timeToMinutes(a.punch_out))[0]?.punch_out;
+
+      if (firstIn) dailyFirstIns.push(timeToMinutes(firstIn));
+      if (lastOut) dailyLastOuts.push(timeToMinutes(lastOut));
+
+      const staff = staffList.find(s => s.id === dayRecords[0].staff_id);
+      const schedule = findEffectiveSchedule(staff, dayRecords[0].date);
+
+      if (schedule) {
+        schedDays++;
+        const dev = calculateDayDeviation(firstIn, lastOut, schedule);
+        lateM += dev.lateMinutes;
+        extraM += dev.extraMinutes;
+        if (dev.lateMinutes > 0) lateDays++;
       }
     });
+
+    const totalPresentDays = dailyMap.size;
+    const avgH = totalPresentDays ? totalH / totalPresentDays : 0;
+
+    const avgIn = dailyFirstIns.length
+      ? minutesToTime(dailyFirstIns.reduce((sum, m) => sum + m, 0) / dailyFirstIns.length)
+      : 'N/A';
+
+    const avgOut = dailyLastOuts.length
+      ? minutesToTime(dailyLastOuts.reduce((sum, m) => sum + m, 0) / dailyLastOuts.length)
+      : 'N/A';
+
     return {
       totalWorkingHours: Number(totalH.toFixed(2)),
       avgWorkingHours: Number(avgH.toFixed(2)),
       avgPunchIn: avgIn,
       avgPunchOut: avgOut,
-      totalPresentDays: present.length,
+      totalPresentDays,
       totalLateHours: Number((lateM / 60).toFixed(2)),
       totalExtraHours: Number((extraM / 60).toFixed(2)),
       totalLateDays: lateDays,
@@ -905,19 +1093,47 @@ const AdminAttendance = () => {
     );
     const present = presentStaffIds.size;
 
-    const leave = todayAtt.filter(a => a.status.includes('leave')).length;
-    const absent = todayAtt.filter(a => a.status === 'absent').length;
+    const leave = new Set(
+      todayAtt.filter(a => a.status?.includes('leave')).map(a => a.staff_id)
+    ).size;
+
+    const absent = new Set(
+      todayAtt.filter(a => a.status === 'absent').map(a => a.staff_id)
+    ).size;
+
     const totalSal = staffList.reduce((s, st) => s + (Number(st.salary) || 0), 0);
     let lateH = 0, extraH = 0, recWithSch = 0;
-    
-    todayAtt.forEach(r => {
-      if (r.status === 'present') {
-        const st = staffList.find(s => s.id === r.staff_id);
-        if (st) {
-          const dev = calculateScheduleDeviations(r, st);
-          if (dev.hasSchedule) { lateH += dev.lateHours; extraH += dev.extraHours; recWithSch++; }
-        }
-      }
+
+    // Calculate schedule deviation once per staff/day, using the first IN
+    // and last OUT. This prevents multiple punch sessions from double-counting.
+    const todayPresent = new Map();
+
+    todayAtt
+      .filter(r => r.status === 'present')
+      .forEach(r => {
+        if (!todayPresent.has(r.staff_id)) todayPresent.set(r.staff_id, []);
+        todayPresent.get(r.staff_id).push(r);
+      });
+
+    todayPresent.forEach((records, staffId) => {
+      const st = staffList.find(s => s.id === staffId);
+      if (!st) return;
+
+      const firstIn = records
+        .filter(r => r.punch_in)
+        .sort((a, b) => timeToMinutes(a.punch_in) - timeToMinutes(b.punch_in))[0]?.punch_in;
+
+      const lastOut = records
+        .filter(r => r.punch_out)
+        .sort((a, b) => timeToMinutes(b.punch_out) - timeToMinutes(a.punch_out))[0]?.punch_out;
+
+      const schedule = findEffectiveSchedule(st, records[0].date);
+      if (!schedule) return;
+
+      const dev = calculateDayDeviation(firstIn, lastOut, schedule);
+      lateH += dev.lateMinutes / 60;
+      extraH += dev.extraMinutes / 60;
+      recWithSch++;
     });
     
     return {
