@@ -605,17 +605,37 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
 
     // ✅ Extract Attendance Data and calculate distribution
     const attendanceData = apiData.attendanceReport || [];
-    const attendanceSummary = { present: 0, absent: 0, late: 0, half_day: 0 };
-    
+    const presentStaff = new Set();
+    const absentStaff = new Set();
+    const halfDayStaff = new Set();
+    const lateStaff = new Set();
+
     attendanceData.forEach(record => {
-        if (attendanceSummary[record.status] !== undefined) {
-            attendanceSummary[record.status]++;
-        } else {
-            attendanceSummary[record.status] = 1; // Catch anything else
+        const staffId = record.staff_id;
+
+        if (record.status === 'present') {
+            presentStaff.add(staffId);
         }
-        // Also count as "Late" if they were present but late
-        if (record.late_minutes > 0) attendanceSummary.late++;
+
+        if (record.status === 'absent') {
+            absentStaff.add(staffId);
+        }
+
+        if (record.status === 'half_day') {
+            halfDayStaff.add(staffId);
+        }
+
+        if (Number(record.late_minutes) > 0) {
+            lateStaff.add(staffId);
+        }
     });
+
+    const attendanceSummary = {
+        present: presentStaff.size,
+        absent: absentStaff.size,
+        half_day: halfDayStaff.size,
+        late: lateStaff.size
+    };
 
     const attendancePieData = [
         { name: 'Present', value: attendanceSummary.present },
