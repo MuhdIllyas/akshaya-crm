@@ -242,6 +242,12 @@ router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
 
     await client.query('BEGIN');
 
+    //guarantees only one punch request for that staff member is processed at a time.
+    await client.query(
+    `SELECT id FROM staff WHERE id = $1 FOR UPDATE`,
+      [req.user.id]
+    );  
+
     // ------------------------------------------------------------
     // 3. Get today's attendance records
     //
@@ -868,13 +874,23 @@ const getPayrollAttendance = async (client, staffId, payrollMonthDate) => {
   const result = await client.query(`
       SELECT 
           COALESCE(SUM(hours), 0) AS worked_hours,
-          COUNT(*) FILTER (WHERE status = 'present') AS present_days,
+
+          COUNT(DISTINCT date) FILTER (
+              WHERE status = 'present'
+          ) AS present_days,
+
           COALESCE(SUM(late_minutes), 0) AS late_minutes,
-          COUNT(*) FILTER (WHERE status ILIKE '%leave%') AS leave_days
+
+          COUNT(DISTINCT date) FILTER (
+              WHERE status ILIKE '%leave%'
+          ) AS leave_days
+
       FROM attendance
       WHERE staff_id = $1 
-        AND DATE_TRUNC('month', date) = DATE_TRUNC('month', $2::DATE)
+        AND DATE_TRUNC('month', date) =
+            DATE_TRUNC('month', $2::DATE)
   `, [staffId, payrollMonthDate]);
+
   return result.rows[0];
 };
 
@@ -1632,12 +1648,13 @@ const getWorkingDaysCount = async (client, staffId, month) => {
 // ---- PRESENT DAYS ----
 const getPresentDaysCount = async (client, staffId, month) => {
   const res = await client.query(`
-    SELECT COUNT(*) as cnt
+    SELECT COUNT(DISTINCT date) as cnt
     FROM attendance
     WHERE staff_id = $1
       AND TO_CHAR(date,'YYYY-MM') = $2
       AND status = 'present'
   `, [staffId, month]);
+
   return parseInt(res.rows[0].cnt, 10);
 };
 
