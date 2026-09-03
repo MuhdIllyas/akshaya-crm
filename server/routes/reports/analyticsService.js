@@ -41,12 +41,12 @@ const fetchStaffAnalytics = async (client, centreId, dates) => {
     client.query(`
       SELECT 
         (SELECT COUNT(*) FROM staff WHERE centre_id = $1 AND status = 'Active') as total_staff,
-        (SELECT COUNT(*) FROM attendance a JOIN staff s ON a.staff_id = s.id WHERE s.centre_id = $1 AND a.date = $2 AND a.status = 'present') as present_today
+        (SELECT COUNT(DISTINCT a.staff_id) FROM attendance a JOIN staff s ON a.staff_id = s.id WHERE s.centre_id = $1 AND a.date = $2 AND a.status = 'present') as present_today
     `, [centreId, dates.today]),
     client.query(`
       SELECT TO_CHAR(a.date, 'Dy') as day, 
-             COUNT(*) FILTER (WHERE a.status = 'present') as present,
-             COUNT(*) FILTER (WHERE a.late_minutes > 0) as late
+             COUNT(DISTINCT a.staff_id) FILTER (WHERE a.status = 'present') as present,
+             COUNT(DISTINCT a.staff_id) FILTER (WHERE a.late_minutes > 0) as late
       FROM attendance a JOIN staff s ON a.staff_id = s.id 
       WHERE s.centre_id = $1 AND a.date >= $2
       GROUP BY a.date ORDER BY a.date ASC

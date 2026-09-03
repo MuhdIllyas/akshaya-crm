@@ -1083,14 +1083,21 @@ const AdminAttendance = () => {
 
   // ------------------- STATS -------------------
   const stats = useMemo(() => {
-    const total = staffList.length;
+    const activeStaff = staffList.filter(
+      staff => staff.status === 'Active'
+    );
+
+    const total = activeStaff.length;
     const active = staffList.filter(s => s.status === 'Active').length;
     const today = new Date().toISOString().split('T')[0];
     const todayAtt = allAttendance.filter(a => normalizeDate(a.date) === today);
 
     const presentStaffIds = new Set(
-      todayAtt.filter(a => a.status === 'present').map(a => a.staff_id)
+      todayAtt
+        .filter(a => a.status === 'present')
+        .map(a => a.staff_id)
     );
+
     const present = presentStaffIds.size;
 
     const leave = new Set(
