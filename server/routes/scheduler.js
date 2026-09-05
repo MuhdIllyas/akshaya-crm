@@ -251,152 +251,311 @@ cron.schedule('55 23 * * *', async () => {
   }
 });
 
-// Run every day at 23:59 (11:59 PM)
+// ==========================================
+// AUTO PUNCH-OUT AT END OF DAY
+// Runs every day at 23:59 IST
+// ==========================================
 cron.schedule('59 23 * * *', async () => {
   const client = await pool.connect();
 
   try {
-    // Get today's date according to IST
+    // --------------------------------------------------
+    // 1. Get today's date in IST directly from PostgreSQL
+    // --------------------------------------------------
     const dateRes = await client.query(`
-      SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS today
+      SELECT
+        (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS today
     `);
 
     const today = dateRes.rows[0].today;
 
-    // Find all open punches for today
+    console.log(
+      `[CRON] ========================================`
+    );
+    console.log(
+      `[CRON] Auto punch-out started`
+    );
+    console.log(
+      `[CRON] Date: ${today}`
+    );
+
+    // --------------------------------------------------
+    // 2. Find ALL open attendance sessions for today
+    // --------------------------------------------------
     const openPunches = await client.query(`
       SELECT
-        id,
-        staff_id,
-        punch_in,
-        breaks,
-        TO_CHAR(date, 'YYYY-MM-DD') AS date
-      FROM attendance
-      WHERE date = $1
-        AND punch_in IS NOT NULL
-        AND punch_out IS NULL
+        a.id,
+        a.staff_id,
+        a.punch_in,
+        a.punch_out,
+        a.breaks,
+        a.status,
+        a.date,
+        s.name AS staff_name,
+        s.centre_id
+      FROM attendance a
+      JOIN staff s
+        ON s.id = a.staff_id
+      WHERE a.date = $1
+        AND a.punch_in IS NOT NULL
+        AND a.punch_out IS NULL
+      ORDER BY a.staff_id, a.punch_in
     `, [today]);
+
+    console.log(
+      `[CRON] Open attendance sessions found: ${openPunches.rows.length}`
+    );
+
+    if (openPunches.rows.length === 0) {
+      console.log(
+        `[CRON] No open punches found. Nothing to auto punch-out.`
+      );
+      console.log(
+        `[CRON] ========================================`
+      );
+      return;
+    }
 
     let successCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
 
-    console.log(
-      `[CRON] Auto-punch-out started for ${today}. ` +
-      `Found ${openPunches.rows.length} open punches.`
-    );
-
+    // --------------------------------------------------
+    // 3. Process every open punch independently
+    // --------------------------------------------------
     for (const record of openPunches.rows) {
 
-      // --------------------------------------------------
-      // Each staff member gets their own transaction
-      // --------------------------------------------------
       try {
         await client.query('BEGIN');
 
-        // Get the schedule effective on this exact date
+        console.log(
+          `[CRON] Processing attendance ${record.id} ` +
+          `| Staff: ${record.staff_id} (${record.staff_name}) ` +
+          `| Punch-in: ${record.punch_in}`
+        );
+
+        // --------------------------------------------------
+        // 4. Get the staff member's effective schedule
+        // --------------------------------------------------
         const scheduleRes = await client.query(`
-          SELECT end_time
+          SELECT
+            start_time,
+            end_time,
+            standard_hours
           FROM staff_schedules
           WHERE staff_id = $1
-            AND effective_from <= $2
-            AND (effective_to IS NULL OR effective_to >= $2)
+            AND effective_from <= $2::date
+            AND (
+              effective_to IS NULL
+              OR effective_to >= $2::date
+            )
           ORDER BY effective_from DESC
           LIMIT 1
-        `, [record.staff_id, record.date]);
+        `, [
+          record.staff_id,
+          today
+        ]);
 
         let endTime;
 
         if (scheduleRes.rows.length > 0) {
           endTime = scheduleRes.rows[0].end_time;
+
+          console.log(
+            `[CRON] Schedule found for staff ${record.staff_id}: ` +
+            `start=${scheduleRes.rows[0].start_time}, ` +
+            `end=${endTime}`
+          );
         } else {
-          // Keep existing fallback
-          endTime = '18:00';
+          // Fallback if staff has no schedule
+          endTime = '18:00:00';
 
           console.warn(
-            `[CRON] ⚠️ No schedule found for staff ${record.staff_id} ` +
-            `on ${record.date}. Using fallback ${endTime}.`
+            `[CRON] ⚠️ No schedule found for staff ${record.staff_id}. ` +
+            `Using fallback end time ${endTime}`
           );
         }
 
-        // Calculate worked hours using the SAME function
-        // used by normal manual punch-out.
+        // --------------------------------------------------
+        // 5. Normalize end time
+        // PostgreSQL TIME normally comes back as HH:MM:SS
+        // calculateHours accepts HH:MM or HH:MM:SS.
+        // --------------------------------------------------
+        if (endTime instanceof Date) {
+          endTime = endTime.toTimeString().substring(0, 8);
+        } else {
+          endTime = String(endTime).trim();
+
+          // Remove timezone if somehow returned
+          if (endTime.includes('+')) {
+            endTime = endTime.split('+')[0];
+          }
+
+          // Ensure HH:MM:SS
+          if (/^\d{2}:\d{2}$/.test(endTime)) {
+            endTime = `${endTime}:00`;
+          }
+        }
+
+        // --------------------------------------------------
+        // 6. Normalize punch-in
+        // --------------------------------------------------
+        let punchIn = record.punch_in;
+
+        if (punchIn instanceof Date) {
+          punchIn = punchIn.toTimeString().substring(0, 8);
+        } else {
+          punchIn = String(punchIn).trim();
+
+          if (punchIn.includes('+')) {
+            punchIn = punchIn.split('+')[0];
+          }
+
+          if (/^\d{2}:\d{2}$/.test(punchIn)) {
+            punchIn = `${punchIn}:00`;
+          }
+        }
+
+        // --------------------------------------------------
+        // 7. Calculate total worked hours
+        // --------------------------------------------------
         const hours = calculateHours(
-          record.punch_in,
+          punchIn,
           endTime,
           record.breaks
         );
 
+        console.log(
+          `[CRON] Calculated hours for staff ${record.staff_id}: ` +
+          `${hours}`
+        );
+
         // --------------------------------------------------
+        // 8. AUTO PUNCH OUT
+        //
         // IMPORTANT:
-        // Only update if punch_out is STILL NULL.
-        // This prevents overwriting a manual punch-out.
+        // Only update the specific open record.
+        // If someone manually punched out meanwhile,
+        // rowCount will be 0 and we skip it.
         // --------------------------------------------------
         const updateRes = await client.query(`
           UPDATE attendance
           SET
-            punch_out = $1,
+            punch_out = $1::time,
             hours = $2,
             status = 'present',
             updated_at = NOW()
           WHERE id = $3
+            AND punch_in IS NOT NULL
             AND punch_out IS NULL
-          RETURNING id
+          RETURNING id, staff_id, punch_in, punch_out, hours
         `, [
           endTime,
           hours,
           record.id
         ]);
 
-        // Somebody may have punched out after our initial SELECT
+        // --------------------------------------------------
+        // 9. Check whether update actually happened
+        // --------------------------------------------------
         if (updateRes.rowCount === 0) {
           await client.query('ROLLBACK');
+
           skippedCount++;
+
           console.log(
-            `[CRON] Attendance ${record.id} was already punched out. ` +
-            `Skipping staff ${record.staff_id}.`
+            `[CRON] ⚠️ Attendance ${record.id} was already closed. ` +
+            `Skipping.`
           );
+
           continue;
         }
-        // Recalculate late/extra minutes using the SAME
-        // function used by salary.js.
+
+        // --------------------------------------------------
+        // 10. Recalculate daily late/extra
+        // --------------------------------------------------
         await recalculateDayDeviation(
           client,
           record.staff_id,
-          record.date
+          today
         );
+
+        // --------------------------------------------------
+        // 11. Commit this staff member
+        // --------------------------------------------------
         await client.query('COMMIT');
+
         successCount++;
+
         console.log(
-          `[CRON] ✅ Auto-punched out staff ${record.staff_id} ` +
-          `at ${endTime} (${hours} hrs)`
+          `[CRON] ✅ AUTO PUNCH-OUT SUCCESS`
         );
+        console.log(
+          `[CRON] Staff: ${record.staff_id} (${record.staff_name})`
+        );
+        console.log(
+          `[CRON] Attendance ID: ${record.id}`
+        );
+        console.log(
+          `[CRON] Punch-in: ${punchIn}`
+        );
+        console.log(
+          `[CRON] Punch-out: ${endTime}`
+        );
+        console.log(
+          `[CRON] Hours: ${hours}`
+        );
+
       } catch (staffError) {
-        // Roll back ONLY this staff member
+
+        // Roll back only this staff member
         try {
           await client.query('ROLLBACK');
         } catch (rollbackError) {
           console.error(
-            `[CRON] Rollback failed for staff ${record.staff_id}:`,
+            `[CRON] Rollback failed for attendance ${record.id}:`,
             rollbackError
           );
         }
+
         errorCount++;
+
         console.error(
-          `[CRON] ❌ Failed to auto-punch staff ${record.staff_id} ` +
-          `(attendance ${record.id}):`,
+          `[CRON] ❌ AUTO PUNCH-OUT FAILED`
+        );
+        console.error(
+          `[CRON] Attendance ID: ${record.id}`
+        );
+        console.error(
+          `[CRON] Staff ID: ${record.staff_id}`
+        );
+        console.error(
+          `[CRON] Staff name: ${record.staff_name}`
+        );
+        console.error(
+          `[CRON] Error:`,
           staffError
         );
-        // IMPORTANT:
-        // Continue processing the remaining staff.
+
+        // Continue with the next staff member
         continue;
       }
     }
+
+    // --------------------------------------------------
+    // 12. Final summary
+    // --------------------------------------------------
     console.log(
       `[CRON] ========================================`
     );
     console.log(
-      `[CRON] Auto-punch-out completed for ${today}`
+      `[CRON] Auto punch-out completed`
+    );
+    console.log(
+      `[CRON] Date       : ${today}`
+    );
+    console.log(
+      `[CRON] Found      : ${openPunches.rows.length}`
     );
     console.log(
       `[CRON] Successful : ${successCount}`
@@ -410,14 +569,18 @@ cron.schedule('59 23 * * *', async () => {
     console.log(
       `[CRON] ========================================`
     );
+
   } catch (err) {
+
     console.error(
-      '[CRON] ❌ Auto-punch-out job failed:',
+      '[CRON] ❌ AUTO PUNCH-OUT JOB FAILED:',
       err
     );
+
   } finally {
     client.release();
   }
+
 }, {
   timezone: 'Asia/Kolkata'
 });
