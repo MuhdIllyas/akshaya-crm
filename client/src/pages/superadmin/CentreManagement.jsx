@@ -20,6 +20,18 @@ const CentreManagement = () => {
   const [showCentreDetails, setShowCentreDetails] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return "";
+    // If it's already a full URL or a legacy base64 string, return as is
+    if (imagePath.startsWith("http") || imagePath.startsWith("data:image")) {
+      return imagePath;
+    }
+    // Otherwise, append the backend URL
+    const baseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
+    const path = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
+    return `${baseUrl}${path}`;
+  };
+
   useEffect(() => {
     fetchCentres();
     fetchCommAccounts();
@@ -700,9 +712,14 @@ const CentreManagement = () => {
                         <div className="flex items-center mb-4">
                           {staff.photo ? (
                             <img
-                              src={staff.photo}
+                              src={getImageUrl(staff.photo)}
                               alt={`${staff.name}'s photo`}
                               className="w-14 h-14 rounded-full object-cover mr-4"
+                              onError={(e) => {
+                                // Fallback if the image file is missing on the server
+                                e.target.onerror = null; 
+                                e.target.src = "https://ui-avatars.com/api/?name=" + encodeURIComponent(staff.name) + "&background=random";
+                              }}
                             />
                           ) : (
                             <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center mr-4">
