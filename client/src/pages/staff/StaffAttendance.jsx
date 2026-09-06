@@ -677,33 +677,44 @@ const StaffAttendance = () => {
       toast.info("Generating Payslip PDF...");
       const doc = new jsPDF('p', 'mm', 'a4');
       
-      // 1. Header Section
+      // ✅ Dynamically pull the Center Name & Address from the payload
+      // Defaults to Akshaya CRM if the center lacks a custom name
+      const centreName = salary.centre_name || 'AKSHAYA CRM';
+      const centreAddress = salary.centre_address || 'Official Payslip Statement';
+      
+      // 1. Header Section (Center Name)
       doc.setFontSize(22);
       doc.setTextColor(79, 70, 229); // Indigo-600
-      doc.text("AKSHAYA CRM", 105, 20, { align: "center" });
+      doc.setFont(undefined, 'bold');
+      doc.text(centreName.toUpperCase(), 105, 20, { align: "center" });
       
-      doc.setFontSize(11);
+      // Center Address (Auto-wraps if the address is very long)
+      doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
-      doc.text("Official Payslip Statement", 105, 28, { align: "center" });
+      doc.setFont(undefined, 'normal');
+      const splitAddress = doc.splitTextToSize(centreAddress, 160);
+      doc.text(splitAddress, 105, 28, { align: "center" });
       
-      // Divider Line
+      // Dynamic Divider Line (pushed down based on how long the address is)
+      const headerBottomY = 28 + (splitAddress.length * 5);
       doc.setDrawColor(79, 70, 229);
       doc.setLineWidth(0.5);
-      doc.line(14, 35, 196, 35);
+      doc.line(14, headerBottomY, 196, headerBottomY);
       
       // 2. Employee & Salary Info
+      const infoStartY = headerBottomY + 10;
       doc.setFontSize(10);
       doc.setTextColor(40, 40, 40);
       
       // Left Side
-      doc.text(`Employee Name: ${staff?.name || 'N/A'}`, 14, 45);
-      doc.text(`Employee ID: ${staff?.employeeId || staff?.employee_id || 'N/A'}`, 14, 52);
-      doc.text(`Department: ${staff?.department || 'N/A'}`, 14, 59);
+      doc.text(`Employee Name: ${staff?.name || 'N/A'}`, 14, infoStartY);
+      doc.text(`Employee ID: ${staff?.employeeId || staff?.employee_id || 'N/A'}`, 14, infoStartY + 7);
+      doc.text(`Department: ${staff?.department || 'N/A'}`, 14, infoStartY + 14);
       
       // Right Side
-      doc.text(`Salary Month: ${getMonthName(salary.month)}`, 196, 45, { align: "right" });
-      doc.text(`Target Hours: ${Number(salary.working_days * salary.snapshot_daily_hours).toFixed(1)}h`, 196, 52, { align: "right" });
-      doc.text(`Worked Hours: ${Number(salary.total_worked_hours).toFixed(1)}h`, 196, 59, { align: "right" });
+      doc.text(`Salary Month: ${getMonthName(salary.month)}`, 196, infoStartY, { align: "right" });
+      doc.text(`Target Hours: ${Number(salary.working_days * salary.snapshot_daily_hours).toFixed(1)}h`, 196, infoStartY + 7, { align: "right" });
+      doc.text(`Worked Hours: ${Number(salary.total_worked_hours).toFixed(1)}h`, 196, infoStartY + 14, { align: "right" });
       
       // 3. Earnings Table
       const tableBody = [
@@ -716,7 +727,7 @@ const StaffAttendance = () => {
       ];
 
       autoTable(doc, {
-        startY: 70,
+        startY: infoStartY + 25,
         head: [["Earnings & Deductions", "Amount"]],
         body: tableBody,
         theme: 'striped',
@@ -728,14 +739,9 @@ const StaffAttendance = () => {
           1: { halign: 'right', fontStyle: 'bold' }
         },
         willDrawCell: (data) => {
-          // Make Bonus Green
-          if (data.row.index === 4 && data.column.index === 1) {
-            data.cell.styles.textColor = [5, 150, 105]; 
-          }
-          // Make Deductions Red
-          if (data.row.index === 5) {
-            data.cell.styles.textColor = [220, 38, 38]; 
-          }
+          // Color-code the Bonus (Green) and Deductions (Red)
+          if (data.row.index === 4 && data.column.index === 1) data.cell.styles.textColor = [5, 150, 105]; 
+          if (data.row.index === 5) data.cell.styles.textColor = [220, 38, 38]; 
         }
       });
 
@@ -758,9 +764,10 @@ const StaffAttendance = () => {
       doc.setTextColor(150, 150, 150);
       doc.setFont(undefined, 'normal');
       doc.text("This is a system generated document and does not require a physical signature.", 105, finalY + 30, { align: "center" });
-      doc.text(`Generated on ${new Date().toLocaleDateString('en-IN')}`, 105, finalY + 36, { align: "center" });
+      
+      // ✅ Stamping the Centre Name at the bottom for official validation
+      doc.text(`${centreName} • Generated on ${new Date().toLocaleDateString('en-IN')}`, 105, finalY + 36, { align: "center" });
 
-      // Save natively!
       doc.save(`Payslip_${staff?.name?.replace(/\s+/g, '_')}_${salary.month}.pdf`);
       toast.success("Payslip downloaded successfully!");
       
