@@ -726,6 +726,160 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
   );
 };
 
+// -------------------------------------------------------------
+// NEW: GROUP ATTENDANCE BY DATE
+// -------------------------------------------------------------
+const groupAttendanceByDate = (attendance, staffList) => {
+  // First, group by Staff-Day to get normalized daily stats
+  const staffDaySummaries = groupAttendance(attendance, staffList);
+
+  // Next, group those summaries by Date
+  const dateMap = new Map();
+
+  staffDaySummaries.forEach(record => {
+    const d = normalizeDate(record.date);
+    if (!dateMap.has(d)) {
+      dateMap.set(d, {
+        date: d,
+        presentCount: 0,
+        absentCount: 0,
+        leaveCount: 0,
+        totalLateHours: 0,
+        totalExtraHours: 0,
+        records: []
+      });
+    }
+
+    const group = dateMap.get(d);
+    
+    if (record.status === 'present') group.presentCount++;
+    else if (record.status === 'absent') group.absentCount++;
+    else if (record.status?.includes('leave')) group.leaveCount++;
+
+    group.totalLateHours += Number(record.lateHours) || 0;
+    group.totalExtraHours += Number(record.extraHours) || 0;
+
+    group.records.push(record);
+  });
+
+  return Array.from(dateMap.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+};
+
+const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <tr className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setOpen(!open)}>
+        <td className="py-4 px-6">
+          <p className="text-sm font-bold text-gray-900">
+            {new Date(dateGroup.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+          </p>
+        </td>
+        <td className="py-4 px-6">
+          <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold shadow-sm">
+            {dateGroup.presentCount} Present
+          </span>
+        </td>
+        <td className="py-4 px-6">
+          <div className="flex space-x-2">
+            {dateGroup.absentCount > 0 && <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-bold">{dateGroup.absentCount} Absent</span>}
+            {dateGroup.leaveCount > 0 && <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-bold">{dateGroup.leaveCount} Leave</span>}
+            {dateGroup.absentCount === 0 && dateGroup.leaveCount === 0 && <span className="text-gray-400 text-sm">-</span>}
+          </div>
+        </td>
+        <td className="py-4 px-6">
+          <p className="text-sm font-bold text-amber-600">{dateGroup.totalLateHours > 0 ? `${dateGroup.totalLateHours.toFixed(2)}h` : '-'}</p>
+        </td>
+        <td className="py-4 px-6">
+          <p className="text-sm font-bold text-purple-600">{dateGroup.totalExtraHours > 0 ? `${dateGroup.totalExtraHours.toFixed(2)}h` : '-'}</p>
+        </td>
+        <td className="py-4 px-6 text-right">
+          <button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+            {open ? <FiChevronUp className="h-5 w-5" /> : <FiChevronDown className="h-5 w-5" />}
+          </button>
+        </td>
+      </tr>
+
+      <AnimatePresence>
+        {open && (
+          <tr>
+            <td colSpan={6} className="p-0">
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="bg-slate-50 border-b border-gray-200 overflow-hidden shadow-inner"
+              >
+                <div className="p-4 lg:px-8">
+                  <table className="w-full bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                    <thead className="bg-gray-100 border-b border-gray-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Staff</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Status</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Punch In</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Punch Out</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Hours</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Deviations</th>
+                        <th className="py-3 px-4 text-center text-xs font-bold text-gray-600 uppercase">Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {dateGroup.records.sort((a,b) => a.staff_name.localeCompare(b.staff_name)).map(record => (
+                        <tr key={record.staff_id} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-gray-900 text-sm">{record.staff_name}</div>
+                            {record.schedule && (
+                              <div className="text-[11px] text-gray-500 font-medium mt-0.5">
+                                Shift: {record.schedule.start_time.substring(0,5)} - {record.schedule.end_time.substring(0,5)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
+                              record.status === 'present' ? 'bg-emerald-100 text-emerald-800'
+                                : record.status?.includes('leave') ? 'bg-amber-100 text-amber-800'
+                                : record.status === 'absent' ? 'bg-red-100 text-red-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {record.status === 'present' ? 'Present'
+                                : record.status?.includes('leave') ? 'Leave'
+                                : record.status === 'absent' ? 'Absent' : 'Weekend'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-sm font-medium text-gray-700">{record.punch_in || '-'}</td>
+                          <td className="py-3 px-4 text-sm font-medium text-gray-700">{record.punch_out || '-'}</td>
+                          <td className="py-3 px-4 text-sm font-black text-gray-900">{Number(record.hours) > 0 ? `${Number(record.hours).toFixed(2)}h` : '-'}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col space-y-1">
+                              {record.lateHours > 0 && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold w-max">Late: {record.lateHours}h</span>}
+                              {record.extraHours > 0 && <span className="text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold w-max">Extra: {record.extraHours}h</span>}
+                              {record.lateHours === 0 && record.extraHours === 0 && <span className="text-gray-400 text-sm">-</span>}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onEdit(record.raw[0]); }}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
+                              title="Edit Attendance"
+                            >
+                              <FiEdit className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            </td>
+          </tr>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
   // ------------------- LOAD DATA -------------------
   useEffect(() => {
     const loadCenters = async () => {
@@ -1452,34 +1606,31 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
                   </div>
                 </div>
 
+                {/* GROUPED BY DATE TABLE */}
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Staff</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Punch In</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Punch Out</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Breaks</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Schedule Deviations</th>
-                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                      </tr>
+                        <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Present</th>
+                        <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Absent / Leave</th>
+                        <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Total Late</th>
+                        <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Total Extra</th>
+                        <th className="py-3 px-6 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
+                       </tr>
                     </thead>
                     <tbody>
-                        {groupAttendance(
-                          centerAttendance[selectedCenter.id] || [],
-                          centerStaff[selectedCenter.id] || []
-                        ).map(group => (
-                          <CollapsibleAttendanceRow
-                            key={`${group.staff_id}-${group.date}`}
-                            group={group}
-                            staffList={centerStaff[selectedCenter.id] || []}
-                            onEdit={handleEditAttendance}
-                          />
-                        ))}
-                      </tbody>
+                      {groupAttendanceByDate(
+                        centerAttendance[selectedCenter.id] || [],
+                        centerStaff[selectedCenter.id] || []
+                      ).map(dateGroup => (
+                        <DailyAttendanceRow 
+                          key={dateGroup.date} 
+                          dateGroup={dateGroup} 
+                          onEdit={handleEditAttendance} 
+                        />
+                      ))}
+                    </tbody>
                   </table>
 
                   {(centerAttendance[selectedCenter.id] || []).length === 0 && (
