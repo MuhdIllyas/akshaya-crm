@@ -1227,8 +1227,7 @@ router.delete('/runs/:id', authMiddleware(['admin', 'superadmin']), async (req, 
 // 🔥 PAYROLL LIFECYCLE API ROUTES
 // =====================================================================
 
-// 0. Get staff's own salary records (NEW ENGINE)
-// 0. Get staff's own salary records (NEW ENGINE)
+// 0. Get staff's own salary records (NEW ENGINE + CENTRE BRANDING)
 router.get('/salaries', authMiddleware(['staff']), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -1244,6 +1243,7 @@ router.get('/salaries', authMiddleware(['staff']), async (req, res) => {
         sr.bonus as bonus,
         sr.deductions,
         sr.net_pay as net_salary,
+        -- Maps internal status back to 'sent'/'pending' so the staff UI doesn't crash
         CASE WHEN sr.payment_status = 'paid' THEN 'sent' ELSE 'pending' END as status,
         sr.monthly_work_days as working_days,
         sr.total_worked_hours,
@@ -1251,8 +1251,9 @@ router.get('/salaries', authMiddleware(['staff']), async (req, res) => {
         s.name as staff_name,
         s.department,
         s.employee_id,
-        c.name as centre_name,     -- 🔥 PULLS THE ACTUAL CENTRE NAME
-        c.address as centre_address -- 🔥 PULLS THE ACTUAL CENTRE ADDRESS
+        c.name as centre_name,     -- 🔥 Pulls actual centre name
+        c.address as centre_address, -- 🔥 Pulls actual address
+        c.logo as centre_logo      -- 🔥 Pulls actual logo
       FROM salary_records sr
       JOIN salary_runs r ON sr.salary_run_id = r.id
       JOIN staff s ON sr.staff_id = s.id

@@ -672,53 +672,78 @@ const StaffAttendance = () => {
     }
   };
 
-  const handleDownloadPayslip = (salary) => {
+  const handleDownloadPayslip = async (salary) => {
     try {
-      toast.info("Generating Payslip PDF...");
+      toast.info("Generating Professional Payslip...");
       const doc = new jsPDF('p', 'mm', 'a4');
       
-      // ✅ Dynamically pull the Center Name & Address from the payload
-      // Defaults to Akshaya CRM if the center lacks a custom name
       const centreName = salary.centre_name || 'AKSHAYA CRM';
       const centreAddress = salary.centre_address || 'Official Payslip Statement';
       
-      // 1. Header Section (Center Name)
+      // ==========================================
+      // 1. DYNAMIC LOGO LOADER
+      // ==========================================
+      if (salary.centre_logo) {
+        try {
+          const logoUrl = salary.centre_logo.startsWith('http') 
+            ? salary.centre_logo 
+            : `${import.meta.env.VITE_API_URL}${salary.centre_logo}`;
+            
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.src = logoUrl;
+          
+          await new Promise((resolve) => {
+            img.onload = () => {
+              doc.addImage(img, 'PNG', 14, 12, 22, 22); 
+              resolve();
+            };
+            img.onerror = () => resolve(); 
+          });
+        } catch (e) {
+          console.warn("Could not load logo into PDF");
+        }
+      }
+
+      // ==========================================
+      // 2. OFFICIAL LETTERHEAD
+      // ==========================================
       doc.setFontSize(22);
       doc.setTextColor(79, 70, 229); // Indigo-600
       doc.setFont(undefined, 'bold');
-      doc.text(centreName.toUpperCase(), 105, 20, { align: "center" });
+      doc.text(centreName.toUpperCase(), 105, 22, { align: "center" });
       
-      // Center Address (Auto-wraps if the address is very long)
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.setFont(undefined, 'normal');
-      const splitAddress = doc.splitTextToSize(centreAddress, 160);
-      doc.text(splitAddress, 105, 28, { align: "center" });
+      const splitAddress = doc.splitTextToSize(centreAddress, 140);
+      doc.text(splitAddress, 105, 29, { align: "center" });
       
-      // Dynamic Divider Line (pushed down based on how long the address is)
-      const headerBottomY = 28 + (splitAddress.length * 5);
+      const headerBottomY = 32 + (splitAddress.length * 4);
       doc.setDrawColor(79, 70, 229);
       doc.setLineWidth(0.5);
       doc.line(14, headerBottomY, 196, headerBottomY);
       
-      // 2. Employee & Salary Info
-      const infoStartY = headerBottomY + 10;
+      // ==========================================
+      // 3. EMPLOYEE & NEW ENGINE HOURS DATA
+      // ==========================================
+      const infoStartY = headerBottomY + 8;
       doc.setFontSize(10);
       doc.setTextColor(40, 40, 40);
       
-      // Left Side
-      doc.text(`Employee Name: ${staff?.name || 'N/A'}`, 14, infoStartY);
-      doc.text(`Employee ID: ${staff?.employeeId || staff?.employee_id || 'N/A'}`, 14, infoStartY + 7);
-      doc.text(`Department: ${staff?.department || 'N/A'}`, 14, infoStartY + 14);
+      doc.text(`Employee Name: ${salary.staff_name || 'N/A'}`, 14, infoStartY);
+      doc.text(`Employee ID: ${salary.employee_id || 'N/A'}`, 14, infoStartY + 7);
+      doc.text(`Department: ${salary.department || 'N/A'}`, 14, infoStartY + 14);
       
-      // Right Side
       doc.text(`Salary Month: ${getMonthName(salary.month)}`, 196, infoStartY, { align: "right" });
       doc.text(`Target Hours: ${Number(salary.working_days * salary.snapshot_daily_hours).toFixed(1)}h`, 196, infoStartY + 7, { align: "right" });
       doc.text(`Worked Hours: ${Number(salary.total_worked_hours).toFixed(1)}h`, 196, infoStartY + 14, { align: "right" });
       
-      // 3. Earnings Table
+      // ==========================================
+      // 4. NEW ENGINE EARNINGS TABLE
+      // ==========================================
       const tableBody = [
-        ["Basic Pay (Hours Worked)", `Rs ${Number(salary.basic).toLocaleString('en-IN')}`],
+        ["Basic Pay (Hours Worked)", `Rs ${Number(salary.basic || 0).toLocaleString('en-IN')}`],
         ["Offday Pay (Prorated)", `Rs ${Number(salary.offday_pay || 0).toLocaleString('en-IN')}`],
         ["Travel Allowance (TA)", `Rs ${Number(salary.ta || 0).toLocaleString('en-IN')}`],
         ["Food Allowance (FA)", `Rs ${Number(salary.fa || 0).toLocaleString('en-IN')}`],
@@ -727,7 +752,7 @@ const StaffAttendance = () => {
       ];
 
       autoTable(doc, {
-        startY: infoStartY + 25,
+        startY: infoStartY + 22,
         head: [["Earnings & Deductions", "Amount"]],
         body: tableBody,
         theme: 'striped',
@@ -739,15 +764,16 @@ const StaffAttendance = () => {
           1: { halign: 'right', fontStyle: 'bold' }
         },
         willDrawCell: (data) => {
-          // Color-code the Bonus (Green) and Deductions (Red)
           if (data.row.index === 4 && data.column.index === 1) data.cell.styles.textColor = [5, 150, 105]; 
           if (data.row.index === 5) data.cell.styles.textColor = [220, 38, 38]; 
         }
       });
 
-      // 4. Net Salary Highlight Box
+      // ==========================================
+      // 5. NET SALARY BOX & FOOTER
+      // ==========================================
       const finalY = doc.lastAutoTable.finalY + 10;
-      doc.setFillColor(243, 244, 246); // Gray-100 background
+      doc.setFillColor(243, 244, 246);
       doc.rect(14, finalY, 182, 12, 'F');
       
       doc.setFontSize(12);
@@ -756,20 +782,17 @@ const StaffAttendance = () => {
       doc.text("Net Salary Payable", 18, finalY + 8);
       
       doc.setFontSize(14);
-      doc.setTextColor(5, 150, 105); // Emerald-600
+      doc.setTextColor(5, 150, 105);
       doc.text(`Rs ${Number(salary.net_salary).toLocaleString('en-IN')}`, 192, finalY + 8, { align: "right" });
 
-      // 5. Footer
       doc.setFontSize(9);
       doc.setTextColor(150, 150, 150);
       doc.setFont(undefined, 'normal');
       doc.text("This is a system generated document and does not require a physical signature.", 105, finalY + 30, { align: "center" });
-      
-      // ✅ Stamping the Centre Name at the bottom for official validation
       doc.text(`${centreName} • Generated on ${new Date().toLocaleDateString('en-IN')}`, 105, finalY + 36, { align: "center" });
 
-      doc.save(`Payslip_${staff?.name?.replace(/\s+/g, '_')}_${salary.month}.pdf`);
-      toast.success("Payslip downloaded successfully!");
+      doc.save(`Payslip_${(salary.staff_name || 'Staff').replace(/\s+/g, '_')}_${salary.month}.pdf`);
+      toast.success("Professional Payslip Downloaded!");
       
     } catch (error) {
       console.error("Error generating native PDF:", error);
