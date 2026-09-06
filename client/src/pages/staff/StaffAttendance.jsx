@@ -718,23 +718,23 @@ const StaffAttendance = () => {
             </tr>
             <tr>
               <td style="padding: 12px; border: 1px solid #d1d5db;">Offday Pay (Prorated)</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.offday_pay).toLocaleString('en-IN')}</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.offday_pay || 0).toLocaleString('en-IN')}</td>
             </tr>
             <tr>
               <td style="padding: 12px; border: 1px solid #d1d5db;">Travel Allowance (TA)</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.ta).toLocaleString('en-IN')}</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.ta || 0).toLocaleString('en-IN')}</td>
             </tr>
             <tr>
               <td style="padding: 12px; border: 1px solid #d1d5db;">Food Allowance (FA)</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.fa).toLocaleString('en-IN')}</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.fa || 0).toLocaleString('en-IN')}</td>
             </tr>
             <tr>
               <td style="padding: 12px; border: 1px solid #d1d5db;">Service Charge Bonus</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #059669;">+${Number(salary.bonus).toLocaleString('en-IN')}</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #059669;">+${Number(salary.bonus || 0).toLocaleString('en-IN')}</td>
             </tr>
             <tr>
               <td style="padding: 12px; border: 1px solid #d1d5db; color: #dc2626;"><strong>Deductions / Advances</strong></td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #dc2626;">-${Number(salary.deductions).toLocaleString('en-IN')}</td>
+              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #dc2626;">-${Number(salary.deductions || 0).toLocaleString('en-IN')}</td>
             </tr>
             <tr style="background-color: #f3f4f6; font-weight: bold;">
               <td style="padding: 12px; border: 1px solid #d1d5db; font-size: 16px;">Net Salary Payable</td>
@@ -1120,7 +1120,6 @@ const StaffAttendance = () => {
                           <div>
                             <p className="text-sm font-medium text-gray-900">{getMonthName(salary.month)}</p>
                             <p className="text-xs text-gray-500">
-                              {/* 👇 Update this line */}
                               {Number(salary.total_worked_hours).toFixed(1)}h / {salary.working_days * salary.snapshot_daily_hours}h
                             </p>
                           </div>
