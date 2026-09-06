@@ -1798,7 +1798,10 @@ const checkCenterExists = async (client, centerId) => {
 
 // GET /api/salary/centers - Get all centers (superadmin only)
 router.get('/centers', authMiddleware(['superadmin']), async (req, res) => {
+  const { month } = req.query;
+  const targetMonth = month || new Date().toISOString().slice(0, 7);
   const client = await pool.connect();
+
   try {
     const result = await client.query(
       `SELECT 
@@ -1812,10 +1815,11 @@ router.get('/centers', authMiddleware(['superadmin']), async (req, res) => {
          SELECT sr.staff_id, sr.net_pay 
          FROM salary_records sr
          JOIN salary_runs r ON sr.salary_run_id = r.id
-         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = $1
        ) sal ON s.id = sal.staff_id
        GROUP BY c.id, c.name, c.created_by, c.admin_id, c.created_at
-       ORDER BY c.name`
+       ORDER BY c.name`,
+      [targetMonth]
     );
     res.json(result.rows);
   } catch (err) {
@@ -2031,11 +2035,12 @@ router.get('/centers/:centerId/calendar', authMiddleware(['superadmin']), async 
 
 // GET /api/salary/super-admin/stats - Get overall statistics (superadmin only)
 router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res) => {
+  const { month } = req.query;
+  const targetMonth = month || new Date().toISOString().slice(0, 7);
   const client = await pool.connect();
+
   try {
-    const centersResult = await client.query(
-      `SELECT COUNT(*) as total_centers FROM centres`
-    );
+    const centersResult = await client.query(`SELECT COUNT(*) as total_centers FROM centres`);
     
     const staffResult = await client.query(
       `SELECT 
@@ -2044,13 +2049,12 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
        FROM staff`
     );
     
-    const currentMonth = new Date().toISOString().slice(0, 7);
     const salaryResult = await client.query(
       `SELECT COALESCE(SUM(sr.net_pay), 0) as total_salary
        FROM salary_records sr
        JOIN salary_runs r ON sr.salary_run_id = r.id
        WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = $1`,
-      [currentMonth]
+      [targetMonth]
     );
     
     const today = new Date().toISOString().split('T')[0];
@@ -2093,7 +2097,10 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
 
 // GET /api/salary/super-admin/centers-summary - Get center-wise summary (superadmin only)
 router.get('/super-admin/centers-summary', authMiddleware(['superadmin']), async (req, res) => {
+  const { month } = req.query;
+  const targetMonth = month || new Date().toISOString().slice(0, 7);
   const client = await pool.connect();
+
   try {
     const result = await client.query(
       `SELECT 
@@ -2111,11 +2118,12 @@ router.get('/super-admin/centers-summary', authMiddleware(['superadmin']), async
          SELECT sr.staff_id, sr.net_pay 
          FROM salary_records sr
          JOIN salary_runs r ON sr.salary_run_id = r.id
-         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = $1
        ) sal ON s.id = sal.staff_id
        LEFT JOIN attendance a ON s.id = a.staff_id
        GROUP BY c.id, c.name
-       ORDER BY c.name`
+       ORDER BY c.name`,
+      [targetMonth]
     );
     
     res.json(result.rows);

@@ -731,16 +731,19 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
     const loadCenters = async () => {
       try {
         setLoading(true);
-        // Get all centers
+        // Get all centers, passing the dynamically selected month
         const response = await axios.get(
           `${import.meta.env.VITE_API_URL}/api/salary/centers`,
-          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+          { 
+            params: { month: selectedMonth }, // 🔥 Pass the month payload
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
+          }
         );
         
         const centersData = response.data;
         setCenters(centersData);
         
-        // Select first center by default
+        // Select first center by default (will safely ignore if one is already selected)
         if (centersData.length > 0 && !selectedCenter) {
           setSelectedCenter(centersData[0]);
         }
@@ -753,7 +756,7 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
     };
     
     loadCenters();
-  }, []);
+  }, [selectedMonth]); // 🔥 Re-trigger whenever the global month dropdown changes
 
   // Load center-specific data
   useEffect(() => {
