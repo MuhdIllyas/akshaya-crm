@@ -2,6 +2,7 @@ import express from 'express';
 import pool from '../db.js';
 import { authMiddleware } from './staff.js';
 import { logActivity } from "../utils/activityLogger.js";
+import { notificationTemplates } from '../utils/notificationTemplates.js';
 
 const router = express.Router();
 
@@ -1325,7 +1326,6 @@ router.post('/runs/:id/finalize', authMiddleware(['admin', 'superadmin']), async
   }
 });
 
-// 7. Pay Record (Debit Wallet, Log Expense & Transaction)
 // 7. Pay Record (Debit Wallet, Log Expense & Transaction with TEAM ATTRIBUTION)
 router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const recordId = req.params.id;
@@ -1416,7 +1416,31 @@ router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (
           performed_by_role: req.user.role
       });
 
+      // 🔥 COMMIT THE FINANCIAL TRANSACTION FIRST
       await client.query('COMMIT');
+
+      // ==========================================
+      // 10. FIRE APP NOTIFICATION (Non-Blocking)
+      // ==========================================
+      (async () => {
+          try {
+              const notifData = notificationTemplates.salaryPaid({
+                  month: monthString,
+                  amount: `₹${amount.toLocaleString('en-IN')}`,
+                  disbursedBy: req.user.role === 'superadmin' ? 'Superadmin' : 'Admin'
+              });
+              
+              await pool.query(`
+                  INSERT INTO notifications (staff_id, title, message, type, category, priority, metadata, created_at)
+                  VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+              `, [record.staff_id, notifData.title, notifData.message, notifData.type, notifData.category, notifData.priority, notifData.metadata]);
+
+          } catch (notifErr) {
+              console.error("[Notification Engine] Failed to dispatch internal salary notification:", notifErr.message);
+          }
+      })();
+
+      // Send the successful response to the frontend
       res.json(updateRes.rows[0]);
       
   } catch (err) {
