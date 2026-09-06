@@ -1150,7 +1150,10 @@ router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async
       const structures = (await client.query(`
           SELECT ss.* FROM salary_structures ss
           JOIN staff s ON ss.staff_id = s.id
-          WHERE s.centre_id = $1 AND ss.status = 'active'
+          WHERE s.centre_id = $1 
+            AND ss.status = 'active'
+            AND s.status = 'Active'   -- 🔥 NEVER GENERATE FOR INACTIVE STAFF
+            AND s.role = 'staff'      -- 🔥 NEVER GENERATE FOR ADMINS
       `, [run.centre_id])).rows;
 
       await client.query(`DELETE FROM salary_records WHERE salary_run_id = $1`, [run.id]);
@@ -1282,6 +1285,8 @@ router.get('/runs/:id/records', authMiddleware(['admin', 'superadmin']), async (
           FROM salary_records sr
           JOIN staff s ON sr.staff_id = s.id
           WHERE sr.salary_run_id = $1
+            AND s.status = 'Active'   -- 🔥 ONLY SHOW ACTIVE STAFF
+            AND s.role = 'staff'      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
           ORDER BY s.name ASC
       `, [req.params.id]);
       res.json(result.rows);
@@ -2310,7 +2315,10 @@ router.get('/structures', authMiddleware(['admin', 'superadmin']), async (req, r
           SELECT ss.id, ss.staff_id, ss.basic_salary, ss.hourly_service_revenue_target, ss.ta, ss.fa, s.name as staff_name 
           FROM salary_structures ss
           JOIN staff s ON ss.staff_id = s.id
-          WHERE s.centre_id = $1 AND ss.status = 'active'
+          WHERE s.centre_id = $1 
+            AND ss.status = 'active'
+            AND s.status = 'Active'   -- 🔥 ONLY SHOW ACTIVE STAFF
+            AND s.role = 'staff'      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
           ORDER BY s.name ASC
       `, [centreId]);
       res.json(result.rows);
