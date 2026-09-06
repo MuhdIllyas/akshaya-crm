@@ -11,7 +11,7 @@ import {
   FiEye, FiCheck, FiXCircle, FiMenu, FiBell, FiMail, FiBarChart,
   FiPercent, FiDivide, FiX as FiMultiply, FiMinus, FiPlus as FiAdd,
   FiChevronLeft, FiChevronRight, FiMapPin, FiMove,
-  FiGlobe, FiTarget, FiLayers, FiGrid, FiZap
+  FiGlobe, FiTarget, FiLayers, FiGrid, FiZap, FiInfo
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
