@@ -3,6 +3,7 @@ import pool from '../db.js';
 import { authMiddleware } from './staff.js';
 import { logActivity } from "../utils/activityLogger.js";
 import { notificationTemplates } from '../utils/notificationTemplates.js';
+import notificationService from '../utils/notificationService.js'; 
 
 const router = express.Router();
 
@@ -1430,13 +1431,21 @@ router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (
                   disbursedBy: req.user.role === 'superadmin' ? 'Superadmin' : 'Admin'
               });
               
-              await pool.query(`
-                  INSERT INTO notifications (staff_id, title, message, type, category, priority, metadata, created_at)
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-              `, [record.staff_id, notifData.title, notifData.message, notifData.type, notifData.category, notifData.priority, notifData.metadata]);
+              // 🔥 Use your official service so it perfectly triggers the Socket.io events!
+              await notificationService.createNotification({
+                  recipientStaffId: record.staff_id,
+                  senderStaffId: req.user.id,
+                  centreId: record.centre_id,
+                  type: notifData.type,
+                  category: notifData.category,
+                  title: notifData.title,
+                  message: notifData.message,
+                  priority: notifData.priority,
+                  metadata: notifData.metadata
+              });
 
           } catch (notifErr) {
-              console.error("[Notification Engine] Failed to dispatch internal salary notification:", notifErr.message);
+              console.error("[Notification Engine] Failed to dispatch internal salary notification:", notifErr);
           }
       })();
 

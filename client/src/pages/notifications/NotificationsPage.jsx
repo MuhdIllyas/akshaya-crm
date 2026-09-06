@@ -638,6 +638,13 @@ const NotificationsPage = () => {
       return;
     }
 
+    // 🔥 Handle "View Details" for Salary Paid
+    if (action === 'view' && notification.type === 'salary_paid') {
+      handleMarkRead(id);
+      navigate(`/dashboard/${role}/attendance?tab=payslips`);
+      return;
+    }
+
     // Handle Messenger
     if (
       (action === 'reply' || action === 'view') && 
