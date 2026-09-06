@@ -54,7 +54,7 @@ export const NotificationProvider = ({ children }) => {
       // 🔥 EXPLICIT WHITELIST: Always show toasts for these specific types, plus anything 'high' priority
       const allowedToastTypes = [
         'whatsapp_message', 'mention', 'review', 'conversation_assigned',
-        'knowledge_mention', 'knowledge_reply', 'knowledge_solved' 
+        'knowledge_mention', 'knowledge_reply', 'knowledge_solved', 'salary_paid'
       ];
 
       if (
