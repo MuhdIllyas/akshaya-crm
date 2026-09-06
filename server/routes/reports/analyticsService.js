@@ -41,12 +41,12 @@ const fetchStaffAnalytics = async (client, centreId, dates) => {
     client.query(`
       SELECT 
         (SELECT COUNT(*) FROM staff WHERE centre_id = $1 AND status = 'Active') as total_staff,
-        (SELECT COUNT(*) FROM attendance a JOIN staff s ON a.staff_id = s.id WHERE s.centre_id = $1 AND a.date = $2 AND a.status = 'present') as present_today
+        (SELECT COUNT(DISTINCT a.staff_id) FROM attendance a JOIN staff s ON a.staff_id = s.id WHERE s.centre_id = $1 AND a.date = $2 AND a.status = 'present') as present_today
     `, [centreId, dates.today]),
     client.query(`
       SELECT TO_CHAR(a.date, 'Dy') as day, 
-             COUNT(*) FILTER (WHERE a.status = 'present') as present,
-             COUNT(*) FILTER (WHERE a.late_minutes > 0) as late
+             COUNT(DISTINCT a.staff_id) FILTER (WHERE a.status = 'present') as present,
+             COUNT(DISTINCT a.staff_id) FILTER (WHERE a.late_minutes > 0) as late
       FROM attendance a JOIN staff s ON a.staff_id = s.id 
       WHERE s.centre_id = $1 AND a.date >= $2
       GROUP BY a.date ORDER BY a.date ASC
@@ -657,33 +657,39 @@ const fetchPerformanceAnalytics = async (client, centreId, dates) => {
   }
 };
 
-// ✅ Salary Report Fetcher (Payroll Calculations)
+// ✅ Salary Report Fetcher (New Payroll Engine)
 const fetchSalaryAnalytics = async (client, centreId, dates) => {
   try {
     console.log(`[API] Fetching Salaries for Centre ${centreId} from ${dates.fromDate} to ${dates.toDate}`);
     
     const res = await client.query(`
       SELECT 
-        s.id,
+        sr.id,
         st.name as staff_name,
         COALESCE(st.role, 'staff') as role,
-        s.month,
-        s.basic,
-        s.hra,
-        s.ta,
-        s.other_allowances,
-        s.deductions,
-        s.net_salary,
-        s.status,
-        s.working_days,
-        s.present_days
-      FROM salaries s
-      JOIN staff st ON s.staff_id = st.id
-      WHERE st.centre_id = $1 
-        -- 👇 Smartly match the YYYY-MM strings based on the selected date range
-        AND s.month >= TO_CHAR($2::date, 'YYYY-MM')
-        AND s.month <= TO_CHAR($3::date, 'YYYY-MM')
-      ORDER BY s.month DESC, s.net_salary DESC
+        TO_CHAR(r.payroll_month, 'YYYY-MM') as month,
+        sr.basic_pay as basic,
+        
+        -- 👇 Bundle all the new dynamic allowances together
+        (COALESCE(sr.ta_pay, 0) + COALESCE(sr.fa_pay, 0) + COALESCE(sr.paid_offdays, 0) + COALESCE(sr.bonus, 0)) as total_allowances,
+        
+        sr.deductions,
+        sr.net_pay as net_salary,
+        COALESCE(sr.payment_status, 'pending') as status,
+        
+        sr.monthly_work_days as working_days,
+        -- 👇 Convert the exact worked hours back into 'Days' for the old frontend UI
+        (sr.total_worked_hours / NULLIF(sr.snapshot_daily_hours, 1)) as present_days
+        
+      FROM salary_records sr
+      JOIN salary_runs r ON sr.salary_run_id = r.id
+      JOIN staff st ON sr.staff_id = st.id
+      WHERE r.centre_id = $1 
+        AND TO_CHAR(r.payroll_month, 'YYYY-MM') >= TO_CHAR($2::date, 'YYYY-MM')
+        AND TO_CHAR(r.payroll_month, 'YYYY-MM') <= TO_CHAR($3::date, 'YYYY-MM')
+        -- Only show data from runs that are finalized or at least generated
+        AND r.status IN ('generated', 'finalized')
+      ORDER BY r.payroll_month DESC, sr.net_pay DESC
     `, [centreId, dates.fromDate, dates.toDate]);
 
     return res.rows.map(row => ({
@@ -691,13 +697,15 @@ const fetchSalaryAnalytics = async (client, centreId, dates) => {
       role: row.role,
       month: row.month,
       basic: Number(row.basic || 0),
-      // Group all allowances together for cleaner reporting
-      total_allowances: Number(row.hra || 0) + Number(row.ta || 0) + Number(row.other_allowances || 0),
+      total_allowances: Number(row.total_allowances || 0),
       deductions: Number(row.deductions || 0),
       net_salary: Number(row.net_salary || 0),
-      status: row.status.toLowerCase(), // 'pending' or 'sent'
+      
+      // Map the new 'paid' status back to 'sent' if the frontend UI relies on that exact word
+      status: row.status.toLowerCase() === 'paid' ? 'sent' : 'pending', 
+      
       working_days: Number(row.working_days || 0),
-      present_days: Number(row.present_days || 0)
+      present_days: Number(Number(row.present_days || 0).toFixed(1)) // e.g., 24.5 days
     }));
   } catch (error) {
     console.error("SQL Error in fetchSalaryAnalytics:", error.message);
@@ -2259,45 +2267,107 @@ export const getReportData = async (params) => {
 export const getQuickMetrics = async (targetCentreId) => {
   const dates = getDateContext();
   const client = await pool.connect();
-  
+
   // Smart filters for Superadmin "All Centres" vs "Specific Centre"
   const isAll = !targetCentreId || targetCentreId === 'all';
-  const params1 = [dates.today]; 
-  const params2 = [dates.today, targetCentreId]; 
-  const paramsC = [targetCentreId]; 
+
+  const params1 = [dates.today];
+  const params2 = [dates.today, targetCentreId];
+  const paramsC = [targetCentreId];
 
   try {
-    const [finRes, staffTotRes, staffPresRes, srvRes, pendRes] = await Promise.all([
-      // 1 & 2. Collection & Expenses
-      client.query(`
-        SELECT 
-          (SELECT COALESCE(SUM(se.total_charges), 0) FROM service_entries se JOIN staff s ON se.staff_id = s.id WHERE se.created_at::date = $1 ${!isAll ? 'AND s.centre_id = $2' : ''}) as collection,
-          (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE expense_date = $1 AND status IN ('approved', 'auto_approved') AND (is_reversal IS NULL OR is_reversal = FALSE) ${!isAll ? 'AND centre_id = $2' : ''}) as expenses
-      `, isAll ? params1 : params2),
-      
-      // 3. Total Active Staff
-      client.query(`SELECT COUNT(*) as total FROM staff s WHERE s.status = 'Active' ${!isAll ? 'AND s.centre_id = $1' : ''}`, isAll ? [] : paramsC),
-      
-      // 4. Present Staff Today
-      client.query(`SELECT COUNT(*) as present FROM attendance a JOIN staff s ON a.staff_id = s.id WHERE a.date = $1 AND a.status IN ('present', 'half_day') ${!isAll ? 'AND s.centre_id = $2' : ''}`, isAll ? params1 : params2),
-      
-      // 5. Services Created Today
-      client.query(`SELECT COUNT(*) as count FROM service_entries se JOIN staff s ON se.staff_id = s.id WHERE se.created_at::date = $1 ${!isAll ? 'AND s.centre_id = $2' : ''}`, isAll ? params1 : params2),
-      
-      // 6. Overall Pending Collection
-      client.query(`
-        SELECT COALESCE(SUM(se.total_charges - COALESCE(p.paid_amount, 0)), 0) as total_pending
-        FROM service_entries se
-        JOIN staff s ON se.staff_id = s.id
-        LEFT JOIN (
-          SELECT service_entry_id, SUM(amount) as paid_amount 
-          FROM payments 
-          WHERE status = 'received' AND (is_reversal IS NULL OR is_reversal = FALSE)
-          GROUP BY service_entry_id
-        ) p ON p.service_entry_id = se.id
-        WHERE se.status != 'completed' ${!isAll ? 'AND s.centre_id = $1' : ''}
-      `, isAll ? [] : paramsC)
-    ]);
+    const [finRes, staffTotRes, staffPresRes, srvRes, pendRes] =
+      await Promise.all([
+        // 1 & 2. Collection & Expenses
+        client.query(
+          `
+          SELECT 
+            (
+              SELECT COALESCE(SUM(se.total_charges), 0)
+              FROM service_entries se
+              JOIN staff s ON se.staff_id = s.id
+              WHERE se.created_at::date = $1
+              ${!isAll ? 'AND s.centre_id = $2' : ''}
+            ) AS collection,
+            (
+              SELECT COALESCE(SUM(amount), 0)
+              FROM expenses
+              WHERE expense_date = $1
+                AND status IN ('approved', 'auto_approved')
+                AND (is_reversal IS NULL OR is_reversal = FALSE)
+                ${!isAll ? 'AND centre_id = $2' : ''}
+            ) AS expenses
+        `,
+          isAll ? params1 : params2
+        ),
+        // 3. Total Active Staff
+        client.query(
+          `
+          SELECT COUNT(*) AS total
+          FROM staff s
+          WHERE s.status = 'Active'
+          ${!isAll ? 'AND s.centre_id = $1' : ''}
+        `,
+          isAll ? [] : paramsC
+        ),
+
+        // 4. Present Staff Today
+        // IMPORTANT:
+        // Count each staff member only once, even if they have
+        // multiple punch-in / punch-out sessions today.
+        client.query(
+          `
+          SELECT COUNT(DISTINCT a.staff_id) AS present
+          FROM attendance a
+          JOIN staff s ON a.staff_id = s.id
+          WHERE a.date = $1
+            AND a.status IN ('present', 'half_day')
+            ${!isAll ? 'AND s.centre_id = $2' : ''}
+        `,
+          isAll ? params1 : params2
+        ),
+
+        // 5. Services Created Today
+        client.query(
+          `
+          SELECT COUNT(*) AS count
+          FROM service_entries se
+          JOIN staff s ON se.staff_id = s.id
+          WHERE se.created_at::date = $1
+          ${!isAll ? 'AND s.centre_id = $2' : ''}
+        `,
+          isAll ? params1 : params2
+        ),
+
+        // 6. Overall Pending Collection
+        client.query(
+          `
+          SELECT COALESCE(
+            SUM(
+              se.total_charges - COALESCE(p.paid_amount, 0)
+            ),
+            0
+          ) AS total_pending
+          FROM service_entries se
+          JOIN staff s
+            ON se.staff_id = s.id
+          LEFT JOIN (
+            SELECT
+              service_entry_id,
+              SUM(amount) AS paid_amount
+            FROM payments
+            WHERE status = 'received'
+              AND (is_reversal IS NULL OR is_reversal = FALSE)
+            GROUP BY service_entry_id
+          ) p
+            ON p.service_entry_id = se.id
+
+          WHERE se.status != 'completed'
+          ${!isAll ? 'AND s.centre_id = $1' : ''}
+        `,
+          isAll ? [] : paramsC
+        ),
+      ]);
 
     const collection = Number(finRes.rows[0].collection);
     const expenses = Number(finRes.rows[0].expenses);
@@ -2306,13 +2376,16 @@ export const getQuickMetrics = async (targetCentreId) => {
       collection,
       expenses,
       profit: collection - expenses,
+
+      // One staff = one attendance count,
+      // regardless of how many sessions they have today.
       attendancePresent: Number(staffPresRes.rows[0].present),
       attendanceTotal: Number(staffTotRes.rows[0].total),
       servicesCount: Number(srvRes.rows[0].count),
-      pendingAmount: Number(pendRes.rows[0].total_pending)
+      pendingAmount: Number(pendRes.rows[0].total_pending),
     };
   } catch (error) {
-    console.error("Quick Metrics DB Error:", error);
+    console.error('Quick Metrics DB Error:', error);
     throw error;
   } finally {
     client.release();

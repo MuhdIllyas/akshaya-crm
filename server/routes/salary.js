@@ -2,6 +2,8 @@ import express from 'express';
 import pool from '../db.js';
 import { authMiddleware } from './staff.js';
 import { logActivity } from "../utils/activityLogger.js";
+import { notificationTemplates } from '../utils/notificationTemplates.js';
+import notificationService from '../utils/notificationService.js'; 
 
 const router = express.Router();
 
@@ -173,144 +175,267 @@ router.get('/attendance', async (req, res) => {
 });
 
 // POST /api/salary/attendance - Record punch in/out (staff only)
+// Supports multiple punch sessions per day.
 router.post('/attendance', authMiddleware(['staff']), async (req, res) => {
   const { punch_type, time, date, breaks } = req.body;
   const client = await pool.connect();
-  
+
   try {
-    if (!punch_type || !date) return res.status(400).json({ error: 'Punch type and date required' });
-    if (!['in', 'out'].includes(punch_type)) return res.status(400).json({ error: 'Invalid punch type' });
+    // ------------------------------------------------------------
+    // 1. Basic validation BEFORE starting transaction
+    // ------------------------------------------------------------
+    if (!punch_type || !date) {
+      return res.status(400).json({
+        error: 'Punch type and date required'
+      });
+    }
+
+    if (!['in', 'out'].includes(punch_type)) {
+      return res.status(400).json({
+        error: 'Invalid punch type'
+      });
+    }
+
+    let punchTime = time;
+
+    // ------------------------------------------------------------
+    // 2. Validate punch-in time against server time
+    // ------------------------------------------------------------
+    if (punch_type === 'in') {
+      if (!time) {
+        return res.status(400).json({
+          error: 'Time required for punch-in'
+        });
+      }
+
+      const serverNow = new Date();
+
+      const serverHHmm = serverNow.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      });
+
+      const [pHT, pMT] = time.split(':').map(Number);
+      const [sHT, sMT] = serverHHmm.split(':').map(Number);
+
+      const punchMinutes = pHT * 60 + pMT;
+      const serverMinutes = sHT * 60 + sMT;
+
+      const diff = Math.abs(serverMinutes - punchMinutes);
+
+      if (diff > 30) {
+        return res.status(400).json({
+          error: `Validation Error: Punch time (${time}) differs too much from Server time (${serverHHmm}).`
+        });
+      }
+    } else {
+      // Punch-out always uses server time
+      const serverNow = new Date();
+
+      punchTime = serverNow.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Kolkata'
+      });
+    }
 
     await client.query('BEGIN');
 
-    // 1. Get Current Time in HH:mm format for server-side validation
-    const now = new Date();
-    const serverHHmm = now.toTimeString().split(' ')[0].substring(0, 5); 
-    
-    let punchTime = time;
+    //guarantees only one punch request for that staff member is processed at a time.
+    await client.query(
+    `SELECT id FROM staff WHERE id = $1 FOR UPDATE`,
+      [req.user.id]
+    );  
 
-    // 2. Strict Validation for Punch In
-    if (punch_type === 'in') {
-        if (!time) return res.status(400).json({ error: 'Time required for punch-in' });
-    
-        const serverNow = new Date();
-        const serverHHmm = serverNow.toLocaleTimeString('en-GB', { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            hour12: false, 
-            timeZone: 'Asia/Kolkata' 
-        });
-    
-        const [pHT, pMT] = time.split(':').map(Number);
-        const [sHT, sMT] = serverHHmm.split(':').map(Number);
-        
-        const punchMinutes = pHT * 60 + pMT;
-        const serverMinutes = sHT * 60 + sMT;
-        const diff = Math.abs(serverMinutes - punchMinutes);
-    
-        if (diff > 30) {
-            return res.status(400).json({ 
-                error: `Validation Error: Punch time (${time}) differs too much from Server time (${serverHHmm}).` 
-            });
-        }
-    } else {
-        const serverNow = new Date();
-        punchTime = serverNow.toLocaleTimeString('en-GB', { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            hour12: false, 
-            timeZone: 'Asia/Kolkata' 
-        });
-    }
-
-    // 3. Check for ANY existing record for today
+    // ------------------------------------------------------------
+    // 3. Get today's attendance records
+    //
+    // FOR UPDATE prevents two simultaneous punch requests
+    // from creating conflicting open sessions.
+    // ------------------------------------------------------------
     const existingAll = await client.query(
-      `SELECT id, punch_in, punch_out, status FROM attendance 
-       WHERE staff_id = $1 AND date = $2`,
+      `SELECT id, punch_in, punch_out, status, breaks
+       FROM attendance
+       WHERE staff_id = $1
+         AND date = $2
+       ORDER BY punch_in ASC
+       FOR UPDATE`,
       [req.user.id, date]
     );
 
+    // ============================================================
+    // PUNCH IN
+    // ============================================================
     if (punch_type === 'in') {
-      if (existingAll.rows.length > 0) {
-        const record = existingAll.rows[0];
-        
-        // OVERRIDE: If previously marked absent/half-day from a leave, convert to present
-        if ((record.status === 'absent' || record.status === 'half-day') && record.punch_in === null) {
-          const result = await client.query(
-            `UPDATE attendance 
-             SET punch_in = $1, status = 'present', updated_at = NOW() 
-             WHERE id = $2 
-             RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
-            [punchTime, record.id]
-          );
-          await client.query('COMMIT');
-          return res.status(201).json(result.rows[0]);
-        } 
-        
-        // standard validation for duplicates
-        if (record.punch_out === null) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Already punched in. Please punch out first.' });
-        } else {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Attendance already completed for today.' });
-        }
+
+      // Find an ACTIVE / OPEN session
+      const openRecord = existingAll.rows.find(
+        r => r.punch_in !== null && r.punch_out === null
+      );
+
+      // If one is already open, do NOT allow another punch-in
+      if (openRecord) {
+        await client.query('ROLLBACK');
+
+        return res.status(400).json({
+          error: 'Already punched in. Please punch out first.'
+        });
       }
-      
-      // If no record exists at all, normal INSERT
+
+      // ----------------------------------------------------------
+      // If there is an attendance row created by approved leave
+      // (absent / half-day with no punch-in), convert that row
+      // into the first working session.
+      // ----------------------------------------------------------
+      const leaveRecord = existingAll.rows.find(
+        r =>
+          (r.status === 'absent' || r.status === 'half-day') &&
+          r.punch_in === null
+      );
+
+      if (leaveRecord) {
+        const result = await client.query(
+          `UPDATE attendance
+           SET punch_in = $1,
+               status = 'present',
+               updated_at = NOW()
+           WHERE id = $2
+           RETURNING *,
+                     TO_CHAR(date, 'YYYY-MM-DD') AS date`,
+          [punchTime, leaveRecord.id]
+        );
+
+        await recalculateDayDeviation(
+          client,
+          req.user.id,
+          date
+        );
+
+        await client.query('COMMIT');
+
+        return res.status(201).json(result.rows[0]);
+      }
+
+      // ----------------------------------------------------------
+      // IMPORTANT:
+      // If previous sessions are completed, CREATE A NEW ROW.
+      //
+      // Example:
+      // 09:00 - 13:00  -> row 1
+      // 14:00 - 18:00  -> row 2
+      // ----------------------------------------------------------
       const result = await client.query(
-        `INSERT INTO attendance (staff_id, date, punch_in, status, created_at)
-         VALUES ($1, $2, $3, 'present', NOW()) 
-         RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
+        `INSERT INTO attendance (
+           staff_id,
+           date,
+           punch_in,
+           status,
+           created_at
+         )
+         VALUES ($1, $2, $3, 'present', NOW())
+         RETURNING *,
+                   TO_CHAR(date, 'YYYY-MM-DD') AS date`,
         [req.user.id, date, punchTime]
       );
-      
+
       await client.query('COMMIT');
+
       return res.status(201).json(result.rows[0]);
-
-    } else {
-      // PUNCH OUT Logic
-      const openRecord = existingAll.rows.find(r => r.punch_out === null && r.punch_in !== null);
-      if (!openRecord) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'No active punch-in record found for today.' });
-      }
-
-      const { id, punch_in } = openRecord;
-      const newBreaks = breaks || null;
-      const hours = calculateHours(punch_in, punchTime, newBreaks);
-
-      const result = await client.query(
-        `UPDATE attendance 
-         SET punch_out = $1, breaks = $2, hours = $3, updated_at = NOW()
-         WHERE id = $4 
-         RETURNING *, TO_CHAR(date, 'YYYY-MM-DD') AS date`,
-        [punchTime, newBreaks, hours, id]
-      );
-
-      // Recalculate late/extra deviation for the day
-      await recalculateDayDeviation(client, req.user.id, date);
-
-      await client.query('COMMIT');
-      
-      // Fetch fresh data to ensure all calculated fields are included
-      const final = await client.query(
-        `SELECT *, TO_CHAR(date, 'YYYY-MM-DD') AS date FROM attendance WHERE id = $1`, 
-        [id]
-      );
-      return res.json(final.rows[0]);
     }
+
+    // ============================================================
+    // PUNCH OUT
+    // ============================================================
+
+    // Find the latest open session
+    const openRecord = existingAll.rows
+      .filter(
+        r => r.punch_in !== null && r.punch_out === null
+      )
+      .sort((a, b) => {
+        return a.punch_in.localeCompare(b.punch_in);
+      })
+      .pop();
+
+    if (!openRecord) {
+      await client.query('ROLLBACK');
+
+      return res.status(404).json({
+        error: 'No active punch-in record found for today.'
+      });
+    }
+
+    const { id, punch_in } = openRecord;
+
+    const newBreaks = breaks || null;
+
+    const hours = calculateHours(
+      punch_in,
+      punchTime,
+      newBreaks
+    );
+
+    const result = await client.query(
+      `UPDATE attendance
+       SET punch_out = $1,
+           breaks = $2,
+           hours = $3,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING *,
+                 TO_CHAR(date, 'YYYY-MM-DD') AS date`,
+      [
+        punchTime,
+        newBreaks,
+        hours,
+        id
+      ]
+    );
+
+    // Recalculate the day's first-in / last-out deviation
+    await recalculateDayDeviation(
+      client,
+      req.user.id,
+      date
+    );
+
+    await client.query('COMMIT');
+
+    // Fetch final record
+    const final = await client.query(
+      `SELECT *,
+              TO_CHAR(date, 'YYYY-MM-DD') AS date
+       FROM attendance
+       WHERE id = $1`,
+      [id]
+    );
+
+    return res.json(final.rows[0]);
+
   } catch (err) {
-    if (client) await client.query('ROLLBACK');
+
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Rollback error:', rollbackError);
+    }
+
     console.error('Punch error details:', err);
-    res.status(500).json({ error: 'Internal server error while recording punch.' });
+
+    return res.status(500).json({
+      error: 'Internal server error while recording punch.'
+    });
+
   } finally {
     client.release();
   }
 });
 
 // Recalculate late/extra for the ENTIRE DAY (first in, last out)
-const recalculateDayDeviation = async (client, staffId, date) => {
+export const recalculateDayDeviation = async (client, staffId, date) => {
   try {
     // 1. Get ALL punches for this staff on this date
     const dayPunches = await client.query(
@@ -361,27 +486,60 @@ const recalculateDayDeviation = async (client, staffId, date) => {
     const lateM = Math.max(0, inM - startM);
     const extraM = Math.max(0, outM - endM);
 
-    // 4. Update ALL attendance records of the day with same late/extra
+    // 4. Reset deviation values for all sessions of the day
     await client.query(
-      `UPDATE attendance 
-       SET late_minutes = $1, extra_minutes = $2, updated_at = NOW()
-       WHERE staff_id = $3 AND date = $4`,
-      [lateM, extraM, staffId, date]
+      `UPDATE attendance
+      SET late_minutes = 0,
+          extra_minutes = 0,
+          updated_at = NOW()
+      WHERE staff_id = $1
+        AND date = $2`,
+      [staffId, date]
     );
+
+    // 5. Store daily late/extra only on the FIRST attendance record.
+    //
+    // This prevents multiple sessions from double-counting
+    // late_minutes / extra_minutes during payroll calculation.
+    const firstRecord = await client.query(
+      `SELECT id
+      FROM attendance
+      WHERE staff_id = $1
+        AND date = $2
+        AND punch_in IS NOT NULL
+      ORDER BY punch_in ASC
+      LIMIT 1`,
+      [staffId, date]
+    );
+
+    if (firstRecord.rows.length > 0) {
+      await client.query(
+        `UPDATE attendance
+        SET late_minutes = $1,
+            extra_minutes = $2,
+            updated_at = NOW()
+        WHERE id = $3`,
+        [
+          lateM,
+          extraM,
+          firstRecord.rows[0].id
+        ]
+      );
+    }
   } catch (err) {
     console.error('Error in recalculateDayDeviation:', err);
   }
 };
 
 // Helper function: time to minutes
-const timeToMinutes = (timeStr) => {
+export const timeToMinutes = (timeStr) => {
   if (!timeStr) return 0;
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 };
 
 // Calculate hours, accounting for breaks
-const calculateHours = (punchIn, punchOut, breaks) => {
+export const calculateHours = (punchIn, punchOut, breaks) => {
   if (!punchIn || !punchOut) return 0;
   const [inHour, inMinute] = punchIn.split(':').map(Number);
   const [outHour, outMinute] = punchOut.split(':').map(Number);
@@ -594,7 +752,6 @@ router.get('/leaves', async (req, res) => {
 
 // POST /api/salary/leaves - Submit a leave application (staff only)
 router.post('/leaves', authMiddleware(['staff']), async (req, res) => {
-  // Extract the new variables
   const { type, from_date, to_date, reason, leave_duration = 'full', leave_time = null } = req.body;
   const client = await pool.connect();
   try {
@@ -630,7 +787,6 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
   try {
     await client.query('BEGIN');
     
-    // Get leave details before update for logging
     const leaveDetails = await client.query(
       `SELECT l.*, s.name AS staff_name, s.centre_id 
        FROM leaves l 
@@ -657,13 +813,11 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
       const startDate = new Date(leave.from_date);
       const endDate = new Date(leave.to_date);
       
-      // Determine the overriding status
       const attStatus = leave.leave_duration === 'half' ? 'half-day' : 'absent';
 
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0];
         
-        // Check if an attendance record already exists for this date
         const existingAtt = await client.query(
           `SELECT id FROM attendance WHERE staff_id = $1 AND date = $2`,
           [leave.staff_id, dateStr]
@@ -686,8 +840,6 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
 
     await client.query('COMMIT');
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log leave approval/rejection activity
     if (leaveDetails.rows.length > 0) {
       const leave = leaveDetails.rows[0];
       await logActivity({
@@ -700,7 +852,6 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
         performed_by_role: req.user.role
       });
     }
-    // ======================================
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -717,373 +868,601 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
   }
 });
 
-// GET /api/salary/salaries - Get salaries for month or all salaries (staff sees only their own)
-router.get('/salaries', async (req, res) => {
-  const { month } = req.query;
-  const client = await pool.connect();
-  try {
-    if (req.user.role === 'staff') {
-      let query = `
-        SELECT s.*, st.name AS staff_name
-        FROM salaries s
-        JOIN staff st ON s.staff_id = st.id
-        WHERE s.staff_id = $1
-      `;
-      const params = [req.user.id];
-      if (month) {
-        query += ` AND s.month = $2`;
-        params.push(month);
-      }
-      query += ` ORDER BY s.created_at DESC`;
-      const result = await client.query(query, params);
-      res.json(result.rows);
-    } else {
-      const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
-      if (!centreId) {
-        return res.status(400).json({ error: 'Centre ID is required' });
-      }
-      const centreCheck = await client.query('SELECT id FROM centres WHERE id = $1', [centreId]);
-      if (centreCheck.rows.length === 0) {
-        return res.status(400).json({ error: `Centre ID ${centreId} does not exist` });
-      }
-      let query = `
-        SELECT s.*, st.name AS staff_name
-        FROM salaries s
-        JOIN staff st ON s.staff_id = st.id
-        WHERE st.centre_id = $1
-      `;
-      const params = [centreId];
-      if (month) {
-        query += ` AND s.month = $2`;
-        params.push(month);
-      }
-      query += ` ORDER BY s.created_at DESC`;
-      const result = await client.query(query, params);
-      res.json(result.rows);
-    }
-  } catch (err) {
-    console.error('Error fetching salaries:', {
-      message: err.message,
-      stack: err.stack,
-      query: req.user.role === 'staff' ? 'SELECT s.*, st.name AS staff_name FROM salaries s JOIN staff st ON s.staff_id = st.id WHERE s.staff_id = $1 ...' : 'SELECT s.*, st.name AS staff_name FROM salaries s JOIN staff st ON s.staff_id = st.id WHERE st.centre_id = $1 ...',
-      params: req.user.role === 'staff' ? { staffId: req.user.id, month } : { centreId: req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id, month },
-    });
-    res.status(500).json({ error: 'Failed to fetch salaries', details: err.message });
-  } finally {
-    client.release();
-  }
-});
+// =====================================================================
+// 🔥 PAYROLL ENGINE & DATA AGGREGATORS
+// =====================================================================
+// Helper: Exact Month Attendance
+const getPayrollAttendance = async (client, staffId, payrollMonthDate) => {
+  const result = await client.query(`
+      SELECT 
+          COALESCE(SUM(hours), 0) AS worked_hours,
 
-const calculateWithOperations = (base, components = []) => {
-  let result = Number(base) || 0;
-  components.forEach(comp => {
-    const amt = Number(comp.amount) || 0;
-    const baseVal = comp.base === 'basic' ? Number(comp.basic || base) : result;
-    switch (comp.operation) {
-      case 'addition': result += amt; break;
-      case 'subtraction': result -= amt; break;
-      case 'multiplication': result = baseVal * amt; break;
-      case 'division': result = amt !== 0 ? baseVal / amt : result; break;
-      case 'percentage': result += (baseVal * amt) / 100; break;
-    }
-  });
-  return Number(result.toFixed(2));
+          COUNT(DISTINCT date) FILTER (
+              WHERE status = 'present'
+          ) AS present_days,
+
+          COALESCE(SUM(late_minutes), 0) AS late_minutes,
+
+          COUNT(DISTINCT date) FILTER (
+              WHERE status ILIKE '%leave%'
+          ) AS leave_days
+
+      FROM attendance
+      WHERE staff_id = $1 
+        AND DATE_TRUNC('month', date) =
+            DATE_TRUNC('month', $2::DATE)
+  `, [staffId, payrollMonthDate]);
+
+  return result.rows[0];
 };
 
-// POST /api/salary/salaries - Create a new salary record (admin/superadmin only)
-router.post('/salaries', authMiddleware(['admin', 'superadmin']), async (req, res) => {
-  const {
-    staff_id,
-    month,
-    basic,
-    hra = 0,
-    ta = 0,
-    other_allowances = 0,
-    deductions = 0,
-    additional_components = []  // optional array
-  } = req.body;
+// Helper: Exact Month Service Charges (NO OFFSETS)
+const getPayrollCollection = async (client, staffId, payrollMonthDate) => {
+  const result = await client.query(`
+      WITH target_month AS (
+          SELECT DATE_TRUNC('month', $2::DATE)::date as start_date,
+                 (DATE_TRUNC('month', $2::DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date as end_date
+      )
+      SELECT COALESCE(SUM(se.service_charges), 0) AS achieved_revenue
+      FROM service_entries se
+      CROSS JOIN target_month tm
+      WHERE se.staff_id = $1
+        -- Matches exactly July 1st to July 31st if July is selected
+        AND se.created_at::date BETWEEN tm.start_date AND tm.end_date
+  `, [staffId, payrollMonthDate]);
+  
+  return result.rows[0];
+};
 
-  const client = await pool.connect();
+// Helper: Exact Month Deductions (Salary Advances from Expenses)
+const getPayrollDeductions = async (client, staffId, payrollMonthDate) => {
+  const result = await client.query(`
+      WITH target_month AS (
+          SELECT DATE_TRUNC('month', $2::DATE)::date as start_date,
+                 (DATE_TRUNC('month', $2::DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date as end_date
+      )
+      SELECT COALESCE(SUM(amount), 0) AS total_advance
+      FROM expenses
+      CROSS JOIN target_month tm
+      WHERE category_id = 2 
+        AND staff_id = $1
+        AND expense_date BETWEEN tm.start_date AND tm.end_date
+        AND COALESCE(is_reversal, FALSE) = FALSE 
+        -- 🔥 STRICT STATUS CHECK: Only deduct advances that were explicitly approved
+        AND status IN ('approved', 'auto_approved')
+  `, [staffId, payrollMonthDate]);
+  
+  return result.rows[0] ? parseFloat(result.rows[0].total_advance) : 0;
+};
 
-  try {
-    // Validation
-    if (!staff_id || !month || basic === undefined) {
-      return res.status(400).json({ error: 'staff_id, month, and basic are required' });
-    }
+// Helper: Schedule active during the exact month
+const getPayrollSchedule = async (client, staffId, payrollMonthDate) => {
+  const result = await client.query(`
+      SELECT standard_hours 
+      FROM staff_schedules 
+      WHERE staff_id = $1 
+        AND effective_from <= (DATE_TRUNC('month', $2::DATE) + INTERVAL '1 month' - INTERVAL '1 day')
+        AND (effective_to IS NULL OR effective_to >= DATE_TRUNC('month', $2::DATE))
+      ORDER BY effective_from DESC 
+      LIMIT 1
+  `, [staffId, payrollMonthDate]);
+  return result.rows[0] ? parseFloat(result.rows[0].standard_hours) : 9.0;
+};
 
-    await client.query('BEGIN');
-
-    // Get centre_id from staff
-    const staffRes = await client.query(
-      'SELECT centre_id, name FROM staff WHERE id = $1',
-      [staff_id]
-    );
-    if (staffRes.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid staff_id' });
-    }
-
-    const centreId = req.user.role === 'admin' ? req.user.centre_id : staffRes.rows[0].centre_id;
-
-    // Admin can only manage their centre
-    if (req.user.role === 'admin' && centreId !== req.user.centre_id) {
-      return res.status(403).json({ error: 'Unauthorized: Not your centre' });
-    }
-
-    // Prevent duplicate salary for same staff + month
-    const exists = await client.query(
-      'SELECT id FROM salaries WHERE staff_id = $1 AND month = $2',
-      [staff_id, month]
-    );
-    if (exists.rows.length > 0) {
-      return res.status(400).json({ error: `Salary already exists for ${month}` });
-    }
-
-    // Auto-calculate from attendance
-    const autoCalc = await client.query(
-      `SELECT 
-         COUNT(*) FILTER (WHERE status = 'present') AS present_days,
-         COALESCE(SUM(hours), 0) AS total_hours
-       FROM attendance 
-       WHERE staff_id = $1 
-         AND TO_CHAR(date, 'YYYY-MM') = $2`,
-      [staff_id, month]
-    );
-
-    const { present_days, total_hours } = autoCalc.rows[0];
-    const working_days = await client.query(
-      `SELECT COUNT(*) AS cnt
-       FROM calendar_events 
-       WHERE centre_id = $1 
-         AND TO_CHAR(date, 'YYYY-MM') = $2 
-         AND type = 'working'`,
-      [centreId, month]
-    );
-
-    const workingDaysCount = parseInt(working_days.rows[0].cnt || 0);
-
-    // Calculate net salary in backend (trusted source)
-    const baseSalary = Number(basic) + Number(hra) + Number(ta) + Number(other_allowances);
-    let netSalary = baseSalary;
-
-    // Apply additional components
-    additional_components.forEach(comp => {
-      const amt = Number(comp.amount) || 0;
-      const baseVal = comp.base === 'basic' ? Number(basic) : netSalary;
-      switch (comp.operation) {
-        case 'addition': netSalary += amt; break;
-        case 'subtraction': netSalary -= amt; break;
-        case 'multiplication': netSalary = baseVal * amt; break;
-        case 'division': netSalary = amt !== 0 ? baseVal / amt : netSalary; break;
-        case 'percentage': netSalary += (baseVal * amt) / 100; break;
+const calculateSalaryRecord = (structure, run, workedHoursRaw, achievedRevenueRaw, bonusSlabs, standardHoursRaw, advanceDeductionRaw) => {
+  const workedHours = Number(workedHoursRaw) || 0;
+  const achievedRevenue = Number(achievedRevenueRaw) || 0;
+  const standardHours = Number(standardHoursRaw) || 9.0;
+  const advanceDeduction = Number(advanceDeductionRaw) || 0; // 🔥 NEW: Advance Deductions
+  
+  const calendarDays = Number(run.calendar_days) || 30;
+  const offdays = Number(run.sundays) + Number(run.dl_days) + Number(run.other_offdays);
+  const daysTargeted = calendarDays - offdays;
+  
+  const targetHours = daysTargeted * standardHours;
+  const targetRevenue = targetHours * Number(structure.hourly_service_revenue_target || 0); 
+  
+  const workingHoursPercent = targetHours > 0 ? (workedHours / targetHours) * 100 : 0;
+  const revenuePercent = targetRevenue > 0 ? (achievedRevenue / targetRevenue) * 100 : 0;
+  
+  let bonusPercent = 0;
+  for (const slab of bonusSlabs) {
+      if (
+          workingHoursPercent >= Number(slab.min_working_hours_pct) &&
+          (slab.max_working_hours_pct === null || workingHoursPercent < Number(slab.max_working_hours_pct)) &&
+          revenuePercent >= Number(slab.min_collection_pct) &&
+          (slab.max_collection_pct === null || revenuePercent < Number(slab.max_collection_pct))
+      ) {
+          bonusPercent = Number(slab.bonus_pct);
+          break;
       }
-    });
-
-    netSalary = Number((netSalary - Number(deductions || 0)).toFixed(2));
-
-    // Insert salary
-    const result = await client.query(
-      `INSERT INTO salaries (
-        staff_id, month, basic, hra, ta, other_allowances, deductions,
-        net_salary, working_days, present_days, total_hours,
-        additional_components, status, created_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-        $12::jsonb, 'pending', NOW()
-      ) RETURNING *,
-        (SELECT name FROM staff WHERE id = $1) AS staff_name`,
-      [
-        staff_id,
-        month,
-        Number(basic),
-        Number(hra),
-        Number(ta),
-        Number(other_allowances),
-        Number(deductions),
-        netSalary,
-        workingDaysCount,
-        Number(present_days || 0),
-        Number(total_hours || 0),
-        JSON.stringify(additional_components)
-      ]
-    );
-
-    await client.query('COMMIT');
-
-    // ========== ACTIVITY LOGGING ==========
-    // Log salary creation
-    await logActivity({
-      centre_id: centreId,
-      related_type: 'salary',
-      related_id: result.rows[0].id,
-      action: 'Salary Created',
-      description: `Created salary for ${staffRes.rows[0].name} for month ${month} - Net: ₹${netSalary}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
-
-    res.status(201).json(result.rows[0]);
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Create salary error:', err);
-    res.status(500).json({
-      error: 'Failed to create salary',
-      details: err.message,
-      code: err.code
-    });
-  } finally {
-    client.release();
   }
-});
 
-// PUT /api/salary/salaries/:id - Update salary (admin/superadmin only)
-router.put('/salaries/:id', authMiddleware(['admin', 'superadmin']), async (req, res) => {
-  const { id } = req.params;
-  const { basic, hra, ta, other_allowances, deductions, net_salary, working_days, present_days, total_hours, additional_components } = req.body;
+  // --- EXCEL MATCHING MATH ---
+  const dailyRate = Number(structure.basic_salary) / calendarDays;
+  const basicPayPerHour = standardHours > 0 ? dailyRate / standardHours : 0;
+  const basicPay = workedHours * basicPayPerHour;
+
+  const offdayPay = workingHoursPercent >= 100 
+      ? offdays * dailyRate 
+      : offdays * (workingHoursPercent / 100) * dailyRate;
+
+  const taPay = workingHoursPercent >= 100 
+      ? Number(structure.ta || 0) 
+      : Number(structure.ta || 0) * (workingHoursPercent / 100);
+      
+  const faPay = workingHoursPercent >= 100 
+      ? Number(structure.fa || 0) 
+      : Number(structure.fa || 0) * (workingHoursPercent / 100);
+  
+  const surplusRevenue = Math.max(0, achievedRevenue - targetRevenue);
+  const bonus = (bonusPercent / 100) * surplusRevenue;
+  
+  const fullPay = basicPay + bonus + offdayPay + taPay + faPay;
+
+  // 🔥 NEW: Subtract the advance deduction to calculate the true Net Pay
+  const netPay = fullPay - advanceDeduction;
+
+  return {
+      calculation_version: 'v4_excel_matched',
+      snapshot_basic_salary: Number(structure.basic_salary),
+      snapshot_daily_hours: standardHours,
+      snapshot_hourly_target: Number(structure.hourly_service_revenue_target || 0),
+      monthly_work_days: daysTargeted,
+      total_targeted_hours: targetHours,
+      total_monthly_target: targetRevenue,
+      total_worked_hours: workedHours,
+      working_hours_percent: workingHoursPercent,
+      achieved_service_revenue: achievedRevenue,
+      revenue_percent: revenuePercent,
+      bonus_percent: bonusPercent,
+      basic_pay: basicPay,
+      bonus: bonus,
+      paid_offdays: offdayPay,
+      ta_pay: taPay,
+      fa_pay: faPay,
+      full_pay: fullPay,
+      deductions: advanceDeduction, // 🔥 Passes the advance into the grid
+      net_pay: netPay               // 🔥 Pre-calculates the net pay
+  };
+};
+
+// =====================================================================
+// 🔥 PAYROLL LIFECYCLE API ROUTES
+// =====================================================================
+
+// 1. Get Runs for a Centre 
+router.get('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries SET basic = $1, hra = $2, ta = $3, other_allowances = $4, deductions = $5, net_salary = $6,
-       working_days = $7, present_days = $8, total_hours = $9, additional_components = $10, updated_at = NOW()
-       WHERE id = $11 AND EXISTS (
-         SELECT 1 FROM staff s WHERE s.id = salaries.staff_id AND s.centre_id = $12
-       ) RETURNING *, (SELECT name FROM staff WHERE id = salaries.staff_id) AS staff_name`,
-      [basic, hra, ta, other_allowances, deductions, net_salary, working_days, present_days, total_hours, additional_components ? JSON.stringify(additional_components) : '[]', id, req.user.centre_id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Salary not found or unauthorized' });
-    }
-    await client.query('COMMIT');
-
-    // ========== ACTIVITY LOGGING ==========
-    // Log salary update
-    await logActivity({
-      centre_id: req.user.centre_id,
-      related_type: 'salary',
-      related_id: id,
-      action: 'Salary Updated',
-      description: `Updated salary record for ${result.rows[0].staff_name}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
-
-    res.json(result.rows[0]);
+      let query = `SELECT * FROM salary_runs`;
+      let params = [];
+      
+      // Only filter by centre if a centreId is actually provided
+      if (centreId) {
+          query += ` WHERE centre_id = $1`;
+          params.push(centreId);
+      }
+      
+      query += ` ORDER BY payroll_month DESC`;
+      
+      const result = await client.query(query, params);
+      res.json(result.rows);
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error updating salary:', {
-      message: err.message,
-      stack: err.stack,
-      query: 'UPDATE salaries SET ... WHERE id = $11 AND EXISTS ...',
-      params: { id, basic, hra, ta, other_allowances, deductions, net_salary, working_days, present_days, total_hours, additional_components, centreId: req.user.centre_id },
-    });
-    res.status(500).json({ error: 'Failed to update salary', details: err.message });
+      console.error("GET /runs error:", err.message);
+      res.status(500).json({ error: err.message });
   } finally {
-    client.release();
+      client.release();
   }
-});
+});;
 
-// POST /api/salary/salaries/:id/send - Send individual salary (admin/superadmin only)
-router.post('/salaries/:id/send', authMiddleware(['admin', 'superadmin']), async (req, res) => {
-  const { id } = req.params;
+// 1.a Fetch Calendar Preview for an EXACT Payroll Month
+router.get('/run-preview', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const { month } = req.query; // YYYY-MM format
+  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
+  
+  if (!centreId || !month) return res.status(400).json({ error: "Centre ID and month required" });
+
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries SET status = 'sent', sent_date = NOW()
-       WHERE id = $1 AND EXISTS (
-         SELECT 1 FROM staff s WHERE s.id = salaries.staff_id AND s.centre_id = $2
-       ) RETURNING *, (SELECT name FROM staff WHERE id = salaries.staff_id) AS staff_name`,
-      [id, req.user.centre_id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Salary not found or unauthorized' });
-    }
-    // TODO: Integrate WhatsApp/email notification (e.g., using Libromi API from servicetracking.js)
-    await client.query('COMMIT');
+      // 1. Total Calendar Days for the Exact Selected Month
+      const [year, monthNum] = month.split('-');
+      const calendar_days = new Date(year, monthNum, 0).getDate();
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log salary sent
-    await logActivity({
-      centre_id: req.user.centre_id,
-      related_type: 'salary',
-      related_id: id,
-      action: 'Salary Sent',
-      description: `Sent salary to ${result.rows[0].staff_name} for month ${result.rows[0].month}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
+      // 2. Mathematically Calculate Exact Sundays
+      let sundays = 0;
+      for (let i = 1; i <= calendar_days; i++) {
+          const date = new Date(year, parseInt(monthNum) - 1, i);
+          if (date.getDay() === 0) sundays++; // 0 represents Sunday
+      }
 
-    res.json(result.rows[0]);
+      // 3. Fixed Duty Leave
+      const dl_days = 1;
+
+      // 4. Fetch EXPLICIT Holidays from the Calendar
+      const holidaysRes = await client.query(`
+          SELECT COUNT(*) as count 
+          FROM calendar_events 
+          WHERE centre_id = $1 AND TO_CHAR(date, 'YYYY-MM') = $2 AND type = 'holiday'
+      `, [centreId, month]);
+      
+      const other_offdays = parseInt(holidaysRes.rows[0].count);
+
+      // 5. Calculate Expected Target Working Days
+      const working_days = calendar_days - (sundays + dl_days + other_offdays);
+
+      res.json({
+          calendar_days,
+          working_days,
+          sundays,
+          dl_days,
+          other_offdays
+      });
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error sending salary:', {
-      message: err.message,
-      stack: err.stack,
-      query: 'UPDATE salaries SET ... WHERE id = $1 AND EXISTS ...',
-      params: { id, centreId: req.user.centre_id },
-    });
-    res.status(500).json({ error: 'Failed to send salary', details: err.message });
+      res.status(500).json({ error: err.message });
   } finally {
-    client.release();
+      client.release();
   }
 });
 
-// POST /api/salary/salaries/bulk-send - Bulk send for month (admin/superadmin only)
-router.post('/salaries/bulk-send', authMiddleware(['admin', 'superadmin']), async (req, res) => {
-  const { month } = req.body;
+// 2. Create a Draft Run (Accepts User Overrides)
+router.post('/runs', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const { payroll_month, calendar_days, sundays, dl_days, other_offdays } = req.body;
   const centreId = req.user.role === 'admin' ? req.user.centre_id : req.body.centre_id;
+  
+  if (!centreId) return res.status(400).json({ error: "Centre ID is required." });
+
+  const days_targeted = Number(calendar_days) - (Number(sundays) + Number(dl_days) + Number(other_offdays));
+  const client = await pool.connect();
+  
+  try {
+      const result = await client.query(`
+          INSERT INTO salary_runs (
+              centre_id, payroll_month, calendar_days, sundays, dl_days, 
+              other_offdays, days_targeted, status, created_by, created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, NOW()) RETURNING *
+      `, [centreId, `${payroll_month}-01`, calendar_days, sundays, dl_days, other_offdays, days_targeted, req.user.id]);
+      
+      res.status(201).json(result.rows[0]);
+  } catch (err) {
+      if (err.code === '23505') res.status(400).json({ error: 'A payroll run already exists for this month.' });
+      else res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 3. Generate/Regenerate Records for a Run
+router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async (req, res) => {
   const client = await pool.connect();
   try {
-    if (!month) {
-      return res.status(400).json({ error: 'Month is required' });
-    }
-    if (!centreId) {
-      return res.status(400).json({ error: 'Centre ID is required' });
-    }
-    await client.query('BEGIN');
-    const centreCheck = await client.query('SELECT id FROM centres WHERE id = $1', [centreId]);
-    if (centreCheck.rows.length === 0) {
-      return res.status(400).json({ error: `Centre ID ${centreId} does not exist` });
-    }
-    const result = await client.query(
-      `UPDATE salaries s SET status = 'sent', sent_date = NOW()
-       FROM staff st
-       WHERE s.staff_id = st.id AND st.centre_id = $1 AND s.month = $2 AND s.status = 'pending'
-       RETURNING s.*, (SELECT name FROM staff WHERE id = s.staff_id) AS staff_name`,
-      [centreId, month]
-    );
-    // TODO: Bulk notifications
-    await client.query('COMMIT');
+      await client.query('BEGIN');
+      const runRes = await client.query(`SELECT * FROM salary_runs WHERE id = $1`, [req.params.id]);
+      if (runRes.rows.length === 0) throw new Error('Run not found');
+      const run = runRes.rows[0];
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log bulk salary send
-    await logActivity({
-      centre_id: centreId,
-      related_type: 'salary',
-      related_id: null,
-      action: 'Bulk Salaries Sent',
-      description: `Sent ${result.rows.length} salaries for month ${month}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
+      if (run.status === 'finalized') throw new Error('Cannot regenerate a finalized payroll run.');
 
+      const slabs = (await client.query(`SELECT * FROM bonus_slabs WHERE active = true`)).rows;
+      
+      const structures = (await client.query(`
+          SELECT ss.* FROM salary_structures ss
+          JOIN staff s ON ss.staff_id = s.id
+          WHERE s.centre_id = $1 
+            AND ss.status = 'active'
+            AND s.status = 'Active'   -- 🔥 NEVER GENERATE FOR INACTIVE STAFF
+            AND s.role = 'staff'      -- 🔥 NEVER GENERATE FOR ADMINS
+      `, [run.centre_id])).rows;
+
+      await client.query(`DELETE FROM salary_records WHERE salary_run_id = $1`, [run.id]);
+
+      for (const struct of structures) {
+          const att = await getPayrollAttendance(client, struct.staff_id, run.payroll_month);
+          const coll = await getPayrollCollection(client, struct.staff_id, run.payroll_month);
+          const standardHours = await getPayrollSchedule(client, struct.staff_id, run.payroll_month);
+          
+          // 🔥 Fetch the deductions
+          const deductions = await getPayrollDeductions(client, struct.staff_id, run.payroll_month);
+          
+          // 🔥 Pass deductions as the 7th argument
+          const calc = calculateSalaryRecord(struct, run, att.worked_hours, coll.achieved_revenue, slabs, standardHours, deductions);
+          
+          await client.query(`
+              INSERT INTO salary_records (
+                  salary_run_id, staff_id, calculation_version, snapshot_basic_salary, snapshot_daily_hours, snapshot_hourly_target,
+                  monthly_work_days, total_targeted_hours, total_monthly_target, total_worked_hours, working_hours_percent,
+                  achieved_service_revenue, revenue_percent, bonus_percent, basic_pay, bonus, paid_offdays, ta_pay, fa_pay,
+                  full_pay, deductions, net_pay
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          `, [
+              run.id, struct.staff_id, calc.calculation_version, calc.snapshot_basic_salary, calc.snapshot_daily_hours, calc.snapshot_hourly_target,
+              calc.monthly_work_days, calc.total_targeted_hours, calc.total_monthly_target, calc.total_worked_hours, calc.working_hours_percent,
+              calc.achieved_service_revenue, calc.revenue_percent, calc.bonus_percent, calc.basic_pay, calc.bonus, calc.paid_offdays, calc.ta_pay, calc.fa_pay,
+              calc.full_pay, calc.deductions, calc.net_pay
+          ]);
+      }
+      
+      await client.query(`UPDATE salary_runs SET status = 'generated' WHERE id = $1`, [run.id]);
+      await client.query('COMMIT');
+      res.json({ message: 'Payroll generated successfully' });
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 3.a Delete a Draft or Generated Run
+router.delete('/runs/:id', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+      await client.query('BEGIN');
+      
+      const runRes = await client.query(`SELECT * FROM salary_runs WHERE id = $1`, [req.params.id]);
+      if (runRes.rows.length === 0) throw new Error('Run not found');
+      
+      const run = runRes.rows[0];
+      
+      // Security Check: Only admins from that centre can delete, and they cannot delete finalized runs
+      if (req.user.role === 'admin' && run.centre_id !== req.user.centre_id) {
+          throw new Error('Unauthorized');
+      }
+      if (run.status === 'finalized') {
+          throw new Error('Cannot delete a finalized payroll run. It must be retained for auditing.');
+      }
+
+      // Delete the generated records first, then the run itself
+      await client.query(`DELETE FROM salary_records WHERE salary_run_id = $1`, [run.id]);
+      await client.query(`DELETE FROM salary_runs WHERE id = $1`, [run.id]);
+
+      await client.query('COMMIT');
+      res.json({ message: 'Payroll run deleted successfully' });
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(400).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// =====================================================================
+// 🔥 PAYROLL LIFECYCLE API ROUTES
+// =====================================================================
+
+// 0. Get staff's own salary records (NEW ENGINE + CENTRE BRANDING)
+router.get('/salaries', authMiddleware(['staff']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(`
+      SELECT 
+        sr.id,
+        sr.staff_id,
+        TO_CHAR(r.payroll_month, 'YYYY-MM') as month,
+        sr.basic_pay as basic,
+        sr.ta_pay as ta,
+        sr.fa_pay as fa,
+        sr.paid_offdays as offday_pay,
+        sr.bonus as bonus,
+        sr.deductions,
+        sr.net_pay as net_salary,
+        -- Maps internal status back to 'sent'/'pending' so the staff UI doesn't crash
+        CASE WHEN sr.payment_status = 'paid' THEN 'sent' ELSE 'pending' END as status,
+        sr.monthly_work_days as working_days,
+        sr.total_worked_hours,
+        sr.snapshot_daily_hours,
+        s.name as staff_name,
+        s.department,
+        s.employee_id,
+        c.name as centre_name,     -- 🔥 Pulls actual centre name
+        c.address as centre_address, -- 🔥 Pulls actual address
+        c.logo as centre_logo      -- 🔥 Pulls actual logo
+      FROM salary_records sr
+      JOIN salary_runs r ON sr.salary_run_id = r.id
+      JOIN staff s ON sr.staff_id = s.id
+      JOIN centres c ON s.centre_id = c.id
+      WHERE sr.staff_id = $1 
+        AND r.status IN ('generated', 'finalized')
+      ORDER BY r.payroll_month DESC
+    `, [req.user.id]);
+    
     res.json(result.rows);
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error bulk sending salaries:', {
-      message: err.message,
-      stack: err.stack,
-      query: 'UPDATE salaries s SET ... FROM staff st WHERE ...',
-      params: { centreId: centreId || 'undefined', month },
-    });
-    res.status(500).json({ error: 'Failed to bulk send salaries', details: err.message });
+    console.error('Error fetching staff salaries:', err);
+    res.status(500).json({ error: 'Failed to fetch salaries' });
   } finally {
     client.release();
+  }
+});
+
+// 4. Get Records for Admin Review
+router.get('/runs/:id/records', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  try {
+      const result = await pool.query(`
+          SELECT sr.*, s.name as staff_name, s.employee_id 
+          FROM salary_records sr
+          JOIN staff s ON sr.staff_id = s.id
+          WHERE sr.salary_run_id = $1
+            AND s.status = 'Active'   -- 🔥 ONLY SHOW ACTIVE STAFF
+            AND s.role = 'staff'      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
+          ORDER BY s.name ASC
+      `, [req.params.id]);
+      res.json(result.rows);
+  } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch records' });
+  }
+});
+
+// 5. Manual Deduction Update (Before Finalizing)
+router.put('/records/:id', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+      await client.query('BEGIN');
+      const record = (await client.query(`SELECT full_pay, salary_run_id FROM salary_records WHERE id = $1`, [req.params.id])).rows[0];
+      
+      const runCheck = await client.query(`SELECT status FROM salary_runs WHERE id = $1`, [record.salary_run_id]);
+      if (runCheck.rows[0].status === 'finalized') throw new Error('Cannot edit finalized records.');
+
+      const newNetPay = Number(record.full_pay) - Number(req.body.deductions);
+      const result = await client.query(`
+          UPDATE salary_records 
+          SET deductions = $1, net_pay = $2
+          WHERE id = $3 RETURNING *
+      `, [req.body.deductions, newNetPay, req.params.id]);
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 6. Finalize Run
+router.post('/runs/:id/finalize', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  try {
+      await pool.query(`UPDATE salary_runs SET status = 'finalized', finalized_at = NOW() WHERE id = $1`, [req.params.id]);
+      res.json({ message: 'Payroll Run Finalized' });
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Pay Record (Debit Wallet, Log Expense & Transaction with TEAM ATTRIBUTION)
+router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const recordId = req.params.id;
+  const { wallet_id } = req.body;
+  const client = await pool.connect();
+
+  try {
+      if (!wallet_id) throw new Error('Wallet ID is required to process payment');
+
+      await client.query('BEGIN'); // Start strict financial transaction
+
+      // 1. Fetch Salary Record, Run context, and Staff context
+      const recRes = await client.query(`
+          SELECT sr.*, r.payroll_month, s.name as staff_name, s.centre_id
+          FROM salary_records sr
+          JOIN salary_runs r ON sr.salary_run_id = r.id
+          JOIN staff s ON sr.staff_id = s.id
+          WHERE sr.id = $1
+      `, [recordId]);
+
+      if (!recRes.rows.length) throw new Error('Salary record not found');
+      const record = recRes.rows[0];
+
+      // 2. Auth Check for Admin
+      if (req.user.role === 'admin' && record.centre_id !== req.user.centre_id) {
+          throw new Error('Unauthorized: Staff belongs to a different centre');
+      }
+
+      if (record.payment_status === 'paid') throw new Error('This salary has already been paid');
+
+      const amount = Number(record.net_pay);
+      if (amount <= 0) throw new Error('Cannot process a payment of ₹0 or less');
+
+      // 3. Check and Deduct Wallet Balance
+      const walletRes = await client.query('SELECT balance FROM wallets WHERE id = $1 AND centre_id = $2', [wallet_id, record.centre_id]);
+      if (!walletRes.rows.length) throw new Error('Wallet not found or does not belong to this centre');
+      if (Number(walletRes.rows[0].balance) < amount) throw new Error('Insufficient wallet balance to clear this payslip');
+
+      await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [amount, wallet_id]);
+
+      // 4. Fetch the Staff Member's Primary Team
+      const teamRes = await client.query(`
+          SELECT team_id FROM team_members 
+          WHERE staff_id = $1 AND is_active = true 
+          ORDER BY is_primary DESC LIMIT 1
+      `, [record.staff_id]);
+      
+      const teamId = teamRes.rows.length > 0 ? teamRes.rows[0].team_id : null;
+
+      // 5. Format dynamic description
+      const dateObj = new Date(record.payroll_month);
+      const monthString = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const description = `Salary Payout: ${record.staff_name} (${monthString})`;
+
+      // 6. Log into Expenses Table (NOW INCLUDES team_id)
+      const expRes = await client.query(`
+          INSERT INTO expenses (
+              centre_id, wallet_id, category_id, category, amount, expense_date, staff_id,
+              description, payment_method, status, created_at, approved_at, approved_by, team_id
+          ) VALUES ($1, $2, 1, 'Salary', $3, CURRENT_DATE, $4, $5, 'Wallet Transfer', 'approved', NOW(), NOW(), $6, $7)
+          RETURNING id
+      `, [record.centre_id, wallet_id, amount, record.staff_id, description, req.user.id, teamId]);
+
+      const newExpenseId = expRes.rows[0].id;
+
+      // 7. Log into Wallet Transactions Table
+      await client.query(`
+          INSERT INTO wallet_transactions (
+              wallet_id, amount, type, description, reference_type, reference_id, staff_id, category, created_at
+          ) VALUES ($1, $2, 'debit', $3, 'expense', $4, $5, 'Expense', NOW())
+      `, [wallet_id, amount, description, newExpenseId, req.user.id]);
+
+      // 8. Lock the Salary Record as Paid
+      const updateRes = await client.query(`
+          UPDATE salary_records
+          SET payment_status = 'paid', paid_amount = $1, total_paid_amount = $1
+          WHERE id = $2 RETURNING *
+      `, [amount, recordId]);
+
+      // 9. Activity Log
+      await logActivity({
+          centre_id: record.centre_id,
+          related_type: 'salary',
+          related_id: recordId,
+          action: 'Salary Sent',
+          description: `${req.user.role === 'superadmin' ? 'Superadmin' : 'Admin'} sent salary to ${record.staff_name} for ${monthString} via Wallet`,
+          performed_by: req.user.id,
+          performed_by_role: req.user.role
+      });
+
+      // 🔥 COMMIT THE FINANCIAL TRANSACTION FIRST
+      await client.query('COMMIT');
+
+      // ==========================================
+      // 10. FIRE APP NOTIFICATION (Non-Blocking)
+      // ==========================================
+      (async () => {
+          try {
+              const notifData = notificationTemplates.salaryPaid({
+                  month: monthString,
+                  amount: `₹${amount.toLocaleString('en-IN')}`,
+                  disbursedBy: req.user.role === 'superadmin' ? 'Superadmin' : 'Admin'
+              });
+              
+              // 🔥 Use your official service so it perfectly triggers the Socket.io events!
+              await notificationService.createNotification({
+                  recipientStaffId: record.staff_id,
+                  senderStaffId: req.user.id,
+                  centreId: record.centre_id,
+                  type: notifData.type,
+                  category: notifData.category,
+                  title: notifData.title,
+                  message: notifData.message,
+                  priority: notifData.priority,
+                  metadata: notifData.metadata
+              });
+
+          } catch (notifErr) {
+              console.error("[Notification Engine] Failed to dispatch internal salary notification:", notifErr);
+          }
+      })();
+
+      // Send the successful response to the frontend
+      res.json(updateRes.rows[0]);
+      
+  } catch (err) {
+      await client.query('ROLLBACK');
+      console.error("Payment Error: ", err);
+      res.status(400).json({ error: err.message });
+  } finally {
+      client.release();
   }
 });
 
@@ -1141,8 +1520,6 @@ router.post('/calendar', authMiddleware(['admin', 'superadmin']), async (req, re
     );
     await client.query('COMMIT');
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log calendar event creation
     await logActivity({
       centre_id: centreId,
       related_type: 'calendar',
@@ -1152,7 +1529,6 @@ router.post('/calendar', authMiddleware(['admin', 'superadmin']), async (req, re
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -1198,8 +1574,6 @@ router.put('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (req,
     }
     await client.query('COMMIT');
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log calendar event update
     await logActivity({
       centre_id: centreId,
       related_type: 'calendar',
@@ -1209,7 +1583,6 @@ router.put('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (req,
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
     res.json(result.rows[0]);
   } catch (err) {
@@ -1241,7 +1614,6 @@ router.delete('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (r
       return res.status(400).json({ error: `Centre ID ${centreId} does not exist` });
     }
     
-    // Get event details before deletion for logging
     const eventDetails = await client.query(
       'SELECT date, type, description FROM calendar_events WHERE id = $1 AND centre_id = $2',
       [id, centreId]
@@ -1256,8 +1628,6 @@ router.delete('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (r
     }
     await client.query('COMMIT');
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log calendar event deletion
     if (eventDetails.rows.length > 0) {
       const event = eventDetails.rows[0];
       await logActivity({
@@ -1270,7 +1640,6 @@ router.delete('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (r
         performed_by_role: req.user.role
       });
     }
-    // ======================================
 
     res.json({ message: 'Calendar event deleted successfully' });
   } catch (err) {
@@ -1295,7 +1664,6 @@ router.get("/schedule/:id", authMiddleware(["admin", "superadmin", "staff"]), as
 
   const client = await pool.connect();
   try {
-    // Authorization check
     if (req.user.role === 'staff' && req.user.id != id) {
       return res.status(403).json({ error: 'Unauthorized to access this staff member' });
     }
@@ -1367,12 +1735,13 @@ const getWorkingDaysCount = async (client, staffId, month) => {
 // ---- PRESENT DAYS ----
 const getPresentDaysCount = async (client, staffId, month) => {
   const res = await client.query(`
-    SELECT COUNT(*) as cnt
+    SELECT COUNT(DISTINCT date) as cnt
     FROM attendance
     WHERE staff_id = $1
       AND TO_CHAR(date,'YYYY-MM') = $2
       AND status = 'present'
   `, [staffId, month]);
+
   return parseInt(res.rows[0].cnt, 10);
 };
 
@@ -1434,27 +1803,28 @@ const checkCenterExists = async (client, centerId) => {
 
 // GET /api/salary/centers - Get all centers (superadmin only)
 router.get('/centers', authMiddleware(['superadmin']), async (req, res) => {
+  const { month } = req.query;
+  const targetMonth = month || new Date().toISOString().slice(0, 7);
   const client = await pool.connect();
+
   try {
     const result = await client.query(
       `SELECT 
-        c.id,
-        c.name,
-        c.created_by AS "createdBy",
-        c.admin_id AS "adminId",
-        c.created_at AS "createdAt",
+        c.id, c.name, c.created_by AS "createdBy", c.admin_id AS "adminId", c.created_at AS "createdAt",
         COUNT(DISTINCT s.id) AS "staffCount",
         COUNT(DISTINCT CASE WHEN s.status = 'Active' THEN s.id END) AS "activeStaff",
-        COALESCE(SUM(sal.net_salary), 0) AS "totalSalary"
+        COALESCE(SUM(sal.net_pay), 0) AS "totalSalary"
        FROM centres c
        LEFT JOIN staff s ON c.id = s.centre_id
        LEFT JOIN (
-         SELECT staff_id, net_salary 
-         FROM salaries 
-         WHERE month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+         SELECT sr.staff_id, sr.net_pay 
+         FROM salary_records sr
+         JOIN salary_runs r ON sr.salary_run_id = r.id
+         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = $1
        ) sal ON s.id = sal.staff_id
        GROUP BY c.id, c.name, c.created_by, c.admin_id, c.created_at
-       ORDER BY c.name`
+       ORDER BY c.name`,
+      [targetMonth]
     );
     res.json(result.rows);
   } catch (err) {
@@ -1470,13 +1840,11 @@ router.get('/centers/:centerId/staff', authMiddleware(['superadmin']), async (re
   const { centerId } = req.params;
   const client = await pool.connect();
   try {
-    // Check if center exists
     const center = await checkCenterExists(client, centerId);
     if (!center) {
       return res.status(404).json({ error: 'Center not found' });
     }
 
-    // Get staff
     const result = await client.query(
       `SELECT 
         s.id,
@@ -1526,7 +1894,6 @@ router.get('/centers/:centerId/attendance', authMiddleware(['superadmin']), asyn
       return res.status(400).json({ error: 'Month parameter is required' });
     }
 
-    // Check if center exists
     const center = await checkCenterExists(client, centerId);
     if (!center) {
       return res.status(404).json({ error: 'Center not found' });
@@ -1569,7 +1936,6 @@ router.get('/centers/:centerId/leaves', authMiddleware(['superadmin']), async (r
   const client = await pool.connect();
   
   try {
-    // Check if center exists
     const center = await checkCenterExists(client, centerId);
     if (!center) {
       return res.status(404).json({ error: 'Center not found' });
@@ -1589,7 +1955,6 @@ router.get('/centers/:centerId/leaves', authMiddleware(['superadmin']), async (r
     const params = [centerId];
     let paramIndex = 2;
 
-    // Add month filter if provided
     if (month) {
       const monthStart = `${month}-01`;
       query += ` 
@@ -1617,7 +1982,6 @@ router.get('/centers/:centerId/leaves/pending', authMiddleware(['superadmin']), 
   const client = await pool.connect();
   
   try {
-    // Check if center exists
     const center = await checkCenterExists(client, centerId);
     if (!center) {
       return res.status(404).json({ error: 'Center not found' });
@@ -1645,53 +2009,11 @@ router.get('/centers/:centerId/leaves/pending', authMiddleware(['superadmin']), 
   }
 });
 
-// GET /api/salary/centers/:centerId/salaries - Get salaries by center (superadmin only)
-router.get('/centers/:centerId/salaries', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId } = req.params;
-  const { month } = req.query;
-  const client = await pool.connect();
-  try {
-    // Check if center exists
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    let query = `
-      SELECT 
-        s.*,
-        st.name AS staff_name,
-        st.employee_id AS "employeeId",
-        TO_CHAR(s.sent_date, 'YYYY-MM-DD') AS sent_date
-      FROM salaries s
-      JOIN staff st ON s.staff_id = st.id
-      WHERE st.centre_id = $1
-    `;
-    const params = [centerId];
-    
-    if (month) {
-      query += ` AND s.month = $2`;
-      params.push(month);
-    }
-    
-    query += ` ORDER BY s.month DESC, st.name`;
-    
-    const result = await client.query(query, params);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching salaries by center:', err);
-    res.status(500).json({ error: 'Failed to fetch salaries', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
 // GET /api/salary/centers/:centerId/calendar - Get calendar by center (superadmin only)
 router.get('/centers/:centerId/calendar', authMiddleware(['superadmin']), async (req, res) => {
   const { centerId } = req.params;
   const client = await pool.connect();
   try {
-    // Check if center exists
     const center = await checkCenterExists(client, centerId);
     if (!center) {
       return res.status(404).json({ error: 'Center not found' });
@@ -1718,14 +2040,13 @@ router.get('/centers/:centerId/calendar', authMiddleware(['superadmin']), async 
 
 // GET /api/salary/super-admin/stats - Get overall statistics (superadmin only)
 router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res) => {
+  const { month } = req.query;
+  const targetMonth = month || new Date().toISOString().slice(0, 7);
   const client = await pool.connect();
+
   try {
-    // Get total centers
-    const centersResult = await client.query(
-      `SELECT COUNT(*) as total_centers FROM centres`
-    );
+    const centersResult = await client.query(`SELECT COUNT(*) as total_centers FROM centres`);
     
-    // Get total staff
     const staffResult = await client.query(
       `SELECT 
         COUNT(*) as total_staff,
@@ -1733,16 +2054,14 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
        FROM staff`
     );
     
-    // Get total payroll for current month
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
     const salaryResult = await client.query(
-      `SELECT COALESCE(SUM(net_salary), 0) as total_salary
-       FROM salaries 
-       WHERE month = $1`,
-      [currentMonth]
+      `SELECT COALESCE(SUM(sr.net_pay), 0) as total_salary
+       FROM salary_records sr
+       JOIN salary_runs r ON sr.salary_run_id = r.id
+       WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = $1`,
+      [targetMonth]
     );
     
-    // Get today's attendance rate
     const today = new Date().toISOString().split('T')[0];
     const todayAttendanceResult = await client.query(
       `SELECT 
@@ -1754,7 +2073,6 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
       [today]
     );
     
-    // Get pending leaves
     const pendingLeavesResult = await client.query(
       `SELECT COUNT(*) as pending_leaves
        FROM leaves l
@@ -1784,15 +2102,17 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
 
 // GET /api/salary/super-admin/centers-summary - Get center-wise summary (superadmin only)
 router.get('/super-admin/centers-summary', authMiddleware(['superadmin']), async (req, res) => {
+  const { month } = req.query;
+  const targetMonth = month || new Date().toISOString().slice(0, 7);
   const client = await pool.connect();
+
   try {
     const result = await client.query(
       `SELECT 
-        c.id AS "centerId",
-        c.name AS "centerName",
+        c.id AS "centerId", c.name AS "centerName",
         COUNT(DISTINCT s.id) AS "staffCount",
         COUNT(DISTINCT CASE WHEN s.status = 'Active' THEN s.id END) AS "activeStaff",
-        COALESCE(SUM(sal.net_salary), 0) AS "totalSalary",
+        COALESCE(SUM(sal.net_pay), 0) AS "totalSalary",
         COALESCE(ROUND(AVG(CASE 
           WHEN a.status = 'present' AND a.date = CURRENT_DATE THEN 1 
           ELSE 0 
@@ -1800,13 +2120,15 @@ router.get('/super-admin/centers-summary', authMiddleware(['superadmin']), async
        FROM centres c
        LEFT JOIN staff s ON c.id = s.centre_id
        LEFT JOIN (
-         SELECT staff_id, month, net_salary 
-         FROM salaries 
-         WHERE month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+         SELECT sr.staff_id, sr.net_pay 
+         FROM salary_records sr
+         JOIN salary_runs r ON sr.salary_run_id = r.id
+         WHERE TO_CHAR(r.payroll_month, 'YYYY-MM') = $1
        ) sal ON s.id = sal.staff_id
        LEFT JOIN attendance a ON s.id = a.staff_id
        GROUP BY c.id, c.name
-       ORDER BY c.name`
+       ORDER BY c.name`,
+      [targetMonth]
     );
     
     res.json(result.rows);
@@ -1824,7 +2146,6 @@ router.put('/centers/:centerId/attendance/:id', authMiddleware(['superadmin']), 
   const { punch_in, punch_out, breaks, status, hours } = req.body;
   const client = await pool.connect();
   try {
-    // Check if center exists
     const center = await checkCenterExists(client, centerId);
     if (!center) {
       return res.status(404).json({ error: 'Center not found' });
@@ -1873,14 +2194,12 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
   try {
     await client.query('BEGIN');
 
-    // Check if center exists
     const center = await checkCenterExists(client, centerId);
     if (!center) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Center not found' });
     }
 
-    // Get leave details before update for logging
     const leaveDetails = await client.query(
       `SELECT l.*, s.name AS staff_name, s.centre_id 
        FROM leaves l 
@@ -1889,7 +2208,6 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
       [id]
     );
 
-    // Update leave status
     const result = await client.query(
       `UPDATE leaves SET status = $1, updated_at = NOW()
        WHERE id = $2 AND EXISTS (
@@ -1903,7 +2221,6 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
       return res.status(404).json({ error: 'Leave not found or unauthorized' });
     }
 
-    // NEW BLOCK: Automatically mark attendance based on the approved leave (same as admin route)
     if (status === 'approved') {
       const leave = result.rows[0];
       const startDate = new Date(leave.from_date);
@@ -1936,8 +2253,6 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
 
     await client.query('COMMIT');
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log leave approval/rejection for superadmin
     if (leaveDetails.rows.length > 0) {
       const leave = leaveDetails.rows[0];
       await logActivity({
@@ -1950,317 +2265,12 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
         performed_by_role: req.user.role
       });
     }
-    // ======================================
 
     res.json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error updating leave for center:', err);
     res.status(500).json({ error: 'Failed to update leave', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /api/salary/centers/:centerId/salaries - Create salary for specific center (superadmin only)
-router.post('/centers/:centerId/salaries', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId } = req.params;
-  const {
-    staff_id,
-    month,
-    basic,
-    hra = 0,
-    ta = 0,
-    other_allowances = 0,
-    deductions = 0,
-    additional_components = []
-  } = req.body;
-
-  const client = await pool.connect();
-
-  try {
-    // Validation
-    if (!staff_id || !month || basic === undefined) {
-      return res.status(400).json({ error: 'staff_id, month, and basic are required' });
-    }
-
-    // Check if center exists
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-
-    // Get staff info
-    const staffRes = await client.query(
-      'SELECT centre_id, name FROM staff WHERE id = $1',
-      [staff_id]
-    );
-    if (staffRes.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid staff_id' });
-    }
-
-    // Check if staff belongs to the specified center
-    if (staffRes.rows[0].centre_id !== parseInt(centerId)) {
-      return res.status(400).json({ error: 'Staff does not belong to this center' });
-    }
-
-    // Prevent duplicate salary for same staff + month
-    const exists = await client.query(
-      'SELECT id FROM salaries WHERE staff_id = $1 AND month = $2',
-      [staff_id, month]
-    );
-    if (exists.rows.length > 0) {
-      return res.status(400).json({ error: `Salary already exists for ${month}` });
-    }
-
-    // Auto-calculate from attendance
-    const autoCalc = await client.query(
-      `SELECT 
-         COUNT(*) FILTER (WHERE status = 'present') AS present_days,
-         COALESCE(SUM(hours), 0) AS total_hours
-       FROM attendance 
-       WHERE staff_id = $1 
-         AND TO_CHAR(date, 'YYYY-MM') = $2`,
-      [staff_id, month]
-    );
-
-    const { present_days, total_hours } = autoCalc.rows[0];
-    const working_days = await client.query(
-      `SELECT COUNT(*) AS cnt
-       FROM calendar_events 
-       WHERE centre_id = $1 
-         AND TO_CHAR(date, 'YYYY-MM') = $2 
-         AND type = 'working'`,
-      [centerId, month]
-    );
-
-    const workingDaysCount = parseInt(working_days.rows[0].cnt || 0);
-
-    // Calculate net salary in backend (trusted source)
-    const baseSalary = Number(basic) + Number(hra) + Number(ta) + Number(other_allowances);
-    let netSalary = baseSalary;
-
-    // Apply additional components
-    additional_components.forEach(comp => {
-      const amt = Number(comp.amount) || 0;
-      const baseVal = comp.base === 'basic' ? Number(basic) : netSalary;
-      switch (comp.operation) {
-        case 'addition': netSalary += amt; break;
-        case 'subtraction': netSalary -= amt; break;
-        case 'multiplication': netSalary = baseVal * amt; break;
-        case 'division': netSalary = amt !== 0 ? baseVal / amt : netSalary; break;
-        case 'percentage': netSalary += (baseVal * amt) / 100; break;
-      }
-    });
-
-    netSalary = Number((netSalary - Number(deductions || 0)).toFixed(2));
-
-    // Insert salary
-    const result = await client.query(
-      `INSERT INTO salaries (
-        staff_id, month, basic, hra, ta, other_allowances, deductions,
-        net_salary, working_days, present_days, total_hours,
-        additional_components, status, created_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-        $12::jsonb, 'pending', NOW()
-      ) RETURNING *,
-        (SELECT name FROM staff WHERE id = $1) AS staff_name`,
-      [
-        staff_id,
-        month,
-        Number(basic),
-        Number(hra),
-        Number(ta),
-        Number(other_allowances),
-        Number(deductions),
-        netSalary,
-        workingDaysCount,
-        Number(present_days || 0),
-        Number(total_hours || 0),
-        JSON.stringify(additional_components)
-      ]
-    );
-
-    await client.query('COMMIT');
-
-    // ========== ACTIVITY LOGGING ==========
-    // Log salary creation for superadmin
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: result.rows[0].id,
-      action: 'Salary Created',
-      description: `Superadmin created salary for ${staffRes.rows[0].name} for month ${month} - Net: ₹${netSalary}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
-
-    res.status(201).json(result.rows[0]);
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Create salary error for center:', err);
-    res.status(500).json({
-      error: 'Failed to create salary',
-      details: err.message,
-      code: err.code
-    });
-  } finally {
-    client.release();
-  }
-});
-
-// PUT /api/salary/centers/:centerId/salaries/:id - Update salary for specific center (superadmin only)
-router.put('/centers/:centerId/salaries/:id', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId, id } = req.params;
-  const { basic, hra, ta, other_allowances, deductions, net_salary, working_days, present_days, total_hours, additional_components } = req.body;
-  const client = await pool.connect();
-  try {
-    // Check if center exists
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries SET basic = $1, hra = $2, ta = $3, other_allowances = $4, deductions = $5, net_salary = $6,
-       working_days = $7, present_days = $8, total_hours = $9, additional_components = $10, updated_at = NOW()
-       WHERE id = $11 AND EXISTS (
-         SELECT 1 FROM staff s WHERE s.id = salaries.staff_id AND s.centre_id = $12
-       )
-       RETURNING *, (SELECT name FROM staff WHERE id = salaries.staff_id) AS staff_name`,
-      [basic, hra, ta, other_allowances, deductions, net_salary, working_days, present_days, total_hours, additional_components ? JSON.stringify(additional_components) : '[]', id, centerId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Salary not found or unauthorized' });
-    }
-    
-    await client.query('COMMIT');
-
-    // ========== ACTIVITY LOGGING ==========
-    // Log salary update for superadmin
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: id,
-      action: 'Salary Updated',
-      description: `Superadmin updated salary record for ${result.rows[0].staff_name}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error updating salary for center:', err);
-    res.status(500).json({ error: 'Failed to update salary', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /api/salary/centers/:centerId/salaries/:id/send - Send salary for specific center (superadmin only)
-router.post('/centers/:centerId/salaries/:id/send', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId, id } = req.params;
-  const client = await pool.connect();
-  try {
-    // Check if center exists
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries SET status = 'sent', sent_date = NOW()
-       WHERE id = $1 AND EXISTS (
-         SELECT 1 FROM staff s WHERE s.id = salaries.staff_id AND s.centre_id = $2
-       )
-       RETURNING *, (SELECT name FROM staff WHERE id = salaries.staff_id) AS staff_name`,
-      [id, centerId]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Salary not found or unauthorized' });
-    }
-    
-    await client.query('COMMIT');
-
-    // ========== ACTIVITY LOGGING ==========
-    // Log salary sent for superadmin
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: id,
-      action: 'Salary Sent',
-      description: `Superadmin sent salary to ${result.rows[0].staff_name} for month ${result.rows[0].month}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error sending salary for center:', err);
-    res.status(500).json({ error: 'Failed to send salary', details: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// POST /api/salary/centers/:centerId/salaries/bulk-send - Bulk send salaries for specific center (superadmin only)
-router.post('/centers/:centerId/salaries/bulk-send', authMiddleware(['superadmin']), async (req, res) => {
-  const { centerId } = req.params;
-  const { month } = req.body;
-  const client = await pool.connect();
-  try {
-    if (!month) {
-      return res.status(400).json({ error: 'Month is required' });
-    }
-
-    // Check if center exists
-    const center = await checkCenterExists(client, centerId);
-    if (!center) {
-      return res.status(404).json({ error: 'Center not found' });
-    }
-
-    await client.query('BEGIN');
-    const result = await client.query(
-      `UPDATE salaries s SET status = 'sent', sent_date = NOW()
-       FROM staff st
-       WHERE s.staff_id = st.id AND st.centre_id = $1 AND s.month = $2 AND s.status = 'pending'
-       RETURNING s.*, (SELECT name FROM staff WHERE id = s.staff_id) AS staff_name`,
-      [centerId, month]
-    );
-    
-    await client.query('COMMIT');
-
-    // ========== ACTIVITY LOGGING ==========
-    // Log bulk salary send for superadmin
-    await logActivity({
-      centre_id: parseInt(centerId),
-      related_type: 'salary',
-      related_id: null,
-      action: 'Bulk Salaries Sent',
-      description: `Superadmin sent ${result.rows.length} salaries for month ${month}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
-    });
-    // ======================================
-
-    res.json(result.rows);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Error bulk sending salaries for center:', err);
-    res.status(500).json({ error: 'Failed to bulk send salaries', details: err.message });
   } finally {
     client.release();
   }
@@ -2279,8 +2289,6 @@ router.delete('/centers/:centerId/calendar/:id', authMiddleware(['superadmin']),
     return res.status(404).json({ error: 'Calendar event not found' });
   }
 
-  // ========== ACTIVITY LOGGING ==========
-  // Log calendar event deletion for superadmin
   await logActivity({
     centre_id: result.rows[0].centre_id,
     related_type: 'calendar',
@@ -2290,9 +2298,169 @@ router.delete('/centers/:centerId/calendar/:id', authMiddleware(['superadmin']),
     performed_by: req.user.id,
     performed_by_role: req.user.role
   });
-  // ======================================
 
   res.json({ success: true });
+});
+
+// =====================================================================
+// 🔥 STAFF PAYROLL CONFIGURATION (SALARY STRUCTURES)
+// =====================================================================
+
+// 8. Get all active salary structures for the centre
+router.get('/structures', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const centreId = req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id;
+  const client = await pool.connect();
+  try {
+      const result = await client.query(`
+          SELECT ss.id, ss.staff_id, ss.basic_salary, ss.hourly_service_revenue_target, ss.ta, ss.fa, s.name as staff_name 
+          FROM salary_structures ss
+          JOIN staff s ON ss.staff_id = s.id
+          WHERE s.centre_id = $1 
+            AND ss.status = 'active'
+            AND s.status = 'Active'   -- 🔥 ONLY SHOW ACTIVE STAFF
+            AND s.role = 'staff'      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
+          ORDER BY s.name ASC
+      `, [centreId]);
+      res.json(result.rows);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// 9. Update a staff member's salary structure
+router.put('/structures/:staff_id', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const staffId = req.params.staff_id;
+  const { basic_salary, hourly_service_revenue_target, ta, fa } = req.body;
+  const client = await pool.connect();
+  
+  try {
+      await client.query('BEGIN');
+      
+      // 1. Archive the old structure
+      await client.query(`
+          UPDATE salary_structures 
+          SET effective_to = CURRENT_DATE - INTERVAL '1 day', status = 'archived'
+          WHERE staff_id = $1 AND status = 'active'
+      `, [staffId]);
+      
+      // 2. Create the new effective structure
+      const result = await client.query(`
+          INSERT INTO salary_structures (
+              staff_id, basic_salary, hourly_service_revenue_target, ta, fa, effective_from, created_by
+          ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6) RETURNING *
+      `, [staffId, basic_salary || 0, hourly_service_revenue_target || 0, ta || 0, fa || 0, req.user.id]);
+      
+      // 3. Sync the 'salary' column back to the generic staff profile table
+      await client.query(`UPDATE staff SET salary = $1 WHERE id = $2`, [basic_salary || 0, staffId]);
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// =====================================================================
+// 🔥 MANUAL HOURS OVERRIDE & RECALCULATION
+// =====================================================================
+router.put('/records/:id/override-hours', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const recordId = req.params.id;
+  const { override_hours } = req.body;
+  const client = await pool.connect();
+  
+  try {
+      await client.query('BEGIN');
+      
+      // 1. Fetch the necessary context (Record, Run, Structure, Slabs)
+      const recRes = await client.query('SELECT * FROM salary_records WHERE id = $1', [recordId]);
+      if (!recRes.rows.length) throw new Error('Record not found');
+      const record = recRes.rows[0];
+      
+      const runRes = await client.query('SELECT * FROM salary_runs WHERE id = $1', [record.salary_run_id]);
+      const run = runRes.rows[0];
+      if (run.status === 'finalized') throw new Error('Cannot edit a finalized run');
+      
+      const structRes = await client.query(`SELECT * FROM salary_structures WHERE staff_id = $1 AND status = 'active'`, [record.staff_id]);
+      if (!structRes.rows.length) throw new Error('No active salary structure found');
+      const structure = structRes.rows[0];
+      
+      const slabsRes = await client.query('SELECT * FROM bonus_slabs ORDER BY min_working_hours_pct ASC');
+      
+      // 2. Re-run the exact same math engine using the new manual hours
+      const calc = calculateSalaryRecord(
+          structure, 
+          run, 
+          override_hours, 
+          record.achieved_service_revenue, 
+          slabsRes.rows, 
+          record.snapshot_daily_hours, 
+          record.deductions
+      );
+      
+      // 3. Update the record
+      const updateRes = await client.query(`
+          UPDATE salary_records SET
+              total_worked_hours = $1,
+              working_hours_percent = $2,
+              bonus_percent = $3,
+              basic_pay = $4,
+              bonus = $5,
+              paid_offdays = $6,
+              ta_pay = $7,
+              fa_pay = $8,
+              full_pay = $9,
+              net_pay = $10
+          WHERE id = $11 RETURNING *
+      `, [
+          calc.total_worked_hours, calc.working_hours_percent, calc.bonus_percent, 
+          calc.basic_pay, calc.bonus, calc.paid_offdays, calc.ta_pay, calc.fa_pay, 
+          calc.full_pay, calc.net_pay, recordId
+      ]);
+      
+      await client.query('COMMIT');
+      res.json(updateRes.rows[0]);
+  } catch (err) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
+});
+
+// =====================================================================
+// 🔥 MANUAL NET PAY OVERRIDE (FINAL ROUNDING/ADJUSTMENTS)
+// =====================================================================
+router.put('/records/:id/override-net-pay', authMiddleware(['admin', 'superadmin']), async (req, res) => {
+  const recordId = req.params.id;
+  const { net_pay } = req.body;
+  const client = await pool.connect();
+  
+  try {
+      // 1. Ensure the run is not finalized
+      const recRes = await client.query('SELECT salary_run_id FROM salary_records WHERE id = $1', [recordId]);
+      if (!recRes.rows.length) throw new Error('Record not found');
+      
+      const runRes = await client.query('SELECT status FROM salary_runs WHERE id = $1', [recRes.rows[0].salary_run_id]);
+      if (runRes.rows[0].status === 'finalized') throw new Error('Cannot edit a finalized run');
+
+      // 2. Forcefully override the final net pay column
+      const updateRes = await client.query(`
+          UPDATE salary_records 
+          SET net_pay = $1 
+          WHERE id = $2 RETURNING *
+      `, [net_pay, recordId]);
+      
+      res.json(updateRes.rows[0]);
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  } finally {
+      client.release();
+  }
 });
 
 export default router;

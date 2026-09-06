@@ -213,6 +213,25 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
 
     const newStaff = staffResult.rows[0];
 
+    // ==========================================
+    // 🔥 NEW: Automatically generate their first effective-dated salary structure
+    // ==========================================
+    await client.query(`
+      INSERT INTO salary_structures (
+          staff_id, basic_salary, hourly_service_revenue_target, 
+          ta, fa, effective_from, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      newStaff.id, 
+      salary || 0, // Pulled from the request body
+      0,           // Default revenue target (Admin can adjust later)
+      0,           // Default TA
+      0,           // Default FA
+      joinDate || new Date().toISOString().split('T')[0], // Starts on their join date
+      req.user.id  // The admin creating the user
+    ]);
+    // ==========================================
+
     if (start_time && end_time && effective_from && role !== "superadmin") {
       const [startHour, startMinute] = start_time.split(':').map(Number);
       const [endHour, endMinute] = end_time.split(':').map(Number);
@@ -461,7 +480,8 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const staffCheck = await client.query("SELECT id, centre_id, role FROM staff WHERE id = $1", [id]);
+    // MODIFIED: include salary in the SELECT
+    const staffCheck = await client.query("SELECT id, centre_id, role, salary FROM staff WHERE id = $1", [id]);
     if (staffCheck.rows.length === 0) return res.status(404).json({ error: "Staff not found" });
     const existingStaff = staffCheck.rows[0];
 
@@ -508,6 +528,42 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
     );
 
     const updatedStaff = result.rows[0];
+
+    // ==========================================
+    // 🔥 NEW: Version the Salary Structure if Basic Salary changed
+    // ==========================================
+    const oldSalary = Number(existingStaff.salary) || 0;
+    const newSalary = Number(salary) || 0;
+
+    if (oldSalary !== newSalary) {
+      // 1. Close the old structure (Set effective_to to yesterday)
+      await client.query(`
+          UPDATE salary_structures 
+          SET effective_to = CURRENT_DATE - INTERVAL '1 day', status = 'archived'
+          WHERE staff_id = $1 AND effective_to IS NULL
+      `, [id]);
+
+      // 2. Fetch their existing targets/TA/FA so they don't get lost
+      const previousStructure = await client.query(`
+          SELECT hourly_service_revenue_target, ta, fa 
+          FROM salary_structures 
+          WHERE staff_id = $1 
+          ORDER BY id DESC LIMIT 1
+      `, [id]);
+
+      const hourlyTarget = previousStructure.rows.length > 0 ? previousStructure.rows[0].hourly_service_revenue_target : 0;
+      const ta = previousStructure.rows.length > 0 ? previousStructure.rows[0].ta : 0;
+      const fa = previousStructure.rows.length > 0 ? previousStructure.rows[0].fa : 0;
+
+      // 3. Create the new structure (Effective from today)
+      await client.query(`
+          INSERT INTO salary_structures (
+              staff_id, basic_salary, hourly_service_revenue_target,
+              ta, fa, effective_from, created_by
+          ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)
+      `, [id, newSalary, hourlyTarget, ta, fa, req.user.id]);
+    }
+    // ==========================================
 
     if (start_time && end_time && effective_from && role !== "superadmin") {
       const [startHour, startMinute] = start_time.split(':').map(Number);

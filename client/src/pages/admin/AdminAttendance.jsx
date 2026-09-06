@@ -10,7 +10,7 @@ import {
   FiClock as FiTime, FiUserCheck, FiUserX, FiWatch, FiUsers,
   FiEye, FiCheck, FiXCircle, FiMenu, FiBell, FiMail, FiBarChart,
   FiPercent, FiDivide, FiX as FiMultiply, FiMinus, FiPlus as FiAdd,
-  FiChevronLeft, FiChevronRight, FiMapPin, FiMove
+  FiChevronLeft, FiChevronRight, FiMapPin, FiMove, FiInfo
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -228,24 +228,33 @@ const calculateDayDeviation = (firstIn, lastOut, schedule) => {
    GROUP ATTENDANCE – ONE ROW PER STAFF PER DAY
    ------------------------------------------------------------- */
 const groupAttendance = (attendance, staffList) => {
-  const map = new Map(); // key = staff_id + date
+  const map = new Map();
 
   attendance.forEach((rec) => {
-    const key = `${rec.staff_id}-${normalizeDate(rec.date)}`;
+    const normalizedDate = normalizeDate(rec.date);
+    const key = `${rec.staff_id}-${normalizedDate}`;
+
     if (!map.has(key)) {
       const staff = staffList.find(s => s.id === rec.staff_id);
       const schedule = findEffectiveSchedule(staff, rec.date);
+
       map.set(key, {
         staff_id: rec.staff_id,
         staff_name: rec.staff_name,
         date: rec.date,
-        punch_in: rec.punch_in,
-        punch_out: rec.punch_out,
-        breaks: rec.breaks,
+
+        // These will be calculated from all sessions below
+        punch_in: null,
+        punch_out: null,
+
         status: rec.status,
-        hours: rec.hours,
         schedule,
-        raw: [],               // keep every punch for dropdown
+
+        // Keep every individual session
+        raw: [],
+
+        // Daily totals
+        hours: 0,
         lateMinutes: 0,
         extraMinutes: 0,
       });
@@ -253,36 +262,87 @@ const groupAttendance = (attendance, staffList) => {
 
     const entry = map.get(key);
 
-    // first punch-in of the day
-    if (!entry.punch_in || rec.punch_in < entry.punch_in) entry.punch_in = rec.punch_in;
-    // last punch-out of the day
-    if (rec.punch_out && (!entry.punch_out || rec.punch_out > entry.punch_out))
-      entry.punch_out = rec.punch_out;
-
+    // Add this session
     entry.raw.push(rec);
+
+    // ------------------------------------------------------------
+    // TOTAL HOURS
+    // ------------------------------------------------------------
+    entry.hours += Number(rec.hours) || 0;
+
+    // ------------------------------------------------------------
+    // FIRST PUNCH IN OF THE DAY
+    // ------------------------------------------------------------
+    if (
+      rec.punch_in &&
+      (!entry.punch_in || rec.punch_in < entry.punch_in)
+    ) {
+      entry.punch_in = rec.punch_in;
+    }
+
+    // ------------------------------------------------------------
+    // LAST PUNCH OUT OF THE DAY
+    // ------------------------------------------------------------
+    if (
+      rec.punch_out &&
+      (!entry.punch_out || rec.punch_out > entry.punch_out)
+    ) {
+      entry.punch_out = rec.punch_out;
+    }
   });
 
-  // ---- ONE-TIME LATE/EXTRA CALCULATION ----
+  // ------------------------------------------------------------
+  // DAILY CALCULATIONS
+  // ------------------------------------------------------------
   return Array.from(map.values()).map(g => {
-    const { lateMinutes, extraMinutes } = calculateDayDeviation(
+
+    // Always show sessions chronologically
+    g.raw.sort((a, b) => {
+      const aTime = timeToMinutes(a.punch_in);
+      const bTime = timeToMinutes(b.punch_in);
+      return aTime - bTime;
+    });
+
+    // Use FIRST IN + LAST OUT for daily schedule deviation
+    const {
+      lateMinutes,
+      extraMinutes
+    } = calculateDayDeviation(
       g.punch_in,
       g.punch_out,
       g.schedule
     );
+
     return {
       ...g,
+
+      // Round total daily hours
+      hours: Number(g.hours.toFixed(2)),
+
+      // Daily deviation — only once
       lateMinutes,
       extraMinutes,
+
       lateHours: Number((lateMinutes / 60).toFixed(2)),
       extraHours: Number((extraMinutes / 60).toFixed(2)),
+
       lateTime: minutesToTime(lateMinutes),
       extraTime: minutesToTime(extraMinutes),
+
+      // Useful for UI
+      sessionCount: g.raw.length,
+
+      // Display all break values from all sessions
+      breaks: g.raw
+        .map(r => r.breaks)
+        .filter(Boolean)
+        .join(', ') || null,
     };
   });
 };
 
 /* -------------------------------------------------------------
-   COLLAPSIBLE ROW (unchanged UI – only uses the aggregated values)
+   COLLAPSIBLE ROW – DAILY SUMMARY WITH INDIVIDUAL SESSIONS
    ------------------------------------------------------------- */
 const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
   const [open, setOpen] = useState(false);
@@ -347,12 +407,12 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         <td className="py-4 px-4">
           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
             group.status === 'present' ? 'bg-emerald-50 text-emerald-700'
-              : group.status.includes('leave') ? 'bg-amber-50 text-amber-700'
+              : group.status?.includes('leave') ? 'bg-amber-50 text-amber-700'
               : group.status === 'absent' ? 'bg-red-50 text-red-700'
               : 'bg-gray-50 text-gray-700'
           }`}>
             {group.status === 'present' ? 'Present'
-              : group.status.includes('leave') ? 'Leave'
+              : group.status?.includes('leave') ? 'Leave'
               : group.status === 'absent' ? 'Absent' : 'Weekend'}
           </span>
          </td>
@@ -375,10 +435,16 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
          </td>
         <td className="py-4 px-4">
           <button
-            onClick={(e) => { e.stopPropagation(); onEdit(group); }}
-            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(!open);
+            }}
+            className="px-3 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50 rounded-lg"
+            title="Show or hide individual punch sessions"
           >
-            <FiEdit className="h-4 w-4" />
+            {open
+              ? 'Hide Sessions'
+              : `${group.sessionCount} Session${group.sessionCount !== 1 ? 's' : ''}`}
           </button>
          </td>
        </tr>
@@ -396,22 +462,76 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
               <table className="w-full">
                 <thead className="bg-gray-100">
                    <tr>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Punch In</th>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Punch Out</th>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Late</th>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">Extra</th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Punch In
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Punch Out
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Late
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Extra
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Hours
+                    </th>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-600">
+                      Action
+                    </th>
                    </tr>
                 </thead>
                 <tbody>
-                  {group.raw.map((r, i) => {
-                    // we **don't** recalculate late/extra here – just show "-"
+                  {[...group.raw]
+                    .sort((a, b) => {
+                      const aTime = timeToMinutes(a.punch_in);
+                      const bTime = timeToMinutes(b.punch_in);
+                      if (aTime !== bTime) return aTime - bTime;
+                      return Number(a.id || 0) - Number(b.id || 0);
+                    })
+                    .map((r, i) => {
                     return (
-                      <tr key={i} className="border-b border-gray-200">
-                        <td className="py-2 px-4 text-sm">{r.punch_in || '-'}</td>
-                        <td className="py-2 px-4 text-sm">{r.punch_out || '-'}</td>
-                        <td className="py-2 px-4 text-sm">-</td>
-                        <td className="py-2 px-4 text-sm">-</td>
-                       </tr>
+                      <tr key={r.id || i} className="border-b border-gray-200">
+                        <td className="py-2 px-4 text-sm">
+                          {r.punch_in || '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {r.punch_out || '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {r.late_minutes
+                            ? `${Number(r.late_minutes)} min`
+                            : '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {r.extra_minutes
+                            ? `${Number(r.extra_minutes)} min`
+                            : '-'}
+                        </td>
+
+                        <td className="py-2 px-4 text-sm">
+                          {Number(r.hours) > 0
+                            ? `${Number(r.hours).toFixed(2)}h`
+                            : '-'}
+                        </td>
+
+                        <td className="py-2 px-4">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEdit(r);
+                            }}
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                            title="Edit this session"
+                          >
+                            <FiEdit className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -420,6 +540,160 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
            </td>
          </tr>
       )}
+    </>
+  );
+};
+
+// -------------------------------------------------------------
+// NEW: GROUP ATTENDANCE BY DATE
+// -------------------------------------------------------------
+const groupAttendanceByDate = (attendance, staffList) => {
+  // First, group by Staff-Day to get normalized daily stats
+  const staffDaySummaries = groupAttendance(attendance, staffList);
+
+  // Next, group those summaries by Date
+  const dateMap = new Map();
+
+  staffDaySummaries.forEach(record => {
+    const d = normalizeDate(record.date);
+    if (!dateMap.has(d)) {
+      dateMap.set(d, {
+        date: d,
+        presentCount: 0,
+        absentCount: 0,
+        leaveCount: 0,
+        totalLateHours: 0,
+        totalExtraHours: 0,
+        records: []
+      });
+    }
+
+    const group = dateMap.get(d);
+    
+    if (record.status === 'present') group.presentCount++;
+    else if (record.status === 'absent') group.absentCount++;
+    else if (record.status?.includes('leave')) group.leaveCount++;
+
+    group.totalLateHours += Number(record.lateHours) || 0;
+    group.totalExtraHours += Number(record.extraHours) || 0;
+
+    group.records.push(record);
+  });
+
+  return Array.from(dateMap.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+};
+
+const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <tr className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setOpen(!open)}>
+        <td className="py-4 px-6">
+          <p className="text-sm font-bold text-gray-900">
+            {new Date(dateGroup.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+          </p>
+        </td>
+        <td className="py-4 px-6">
+          <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold shadow-sm">
+            {dateGroup.presentCount} Present
+          </span>
+        </td>
+        <td className="py-4 px-6">
+          <div className="flex space-x-2">
+            {dateGroup.absentCount > 0 && <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-bold">{dateGroup.absentCount} Absent</span>}
+            {dateGroup.leaveCount > 0 && <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-bold">{dateGroup.leaveCount} Leave</span>}
+            {dateGroup.absentCount === 0 && dateGroup.leaveCount === 0 && <span className="text-gray-400 text-sm">-</span>}
+          </div>
+        </td>
+        <td className="py-4 px-6">
+          <p className="text-sm font-bold text-amber-600">{dateGroup.totalLateHours > 0 ? `${dateGroup.totalLateHours.toFixed(2)}h` : '-'}</p>
+        </td>
+        <td className="py-4 px-6">
+          <p className="text-sm font-bold text-purple-600">{dateGroup.totalExtraHours > 0 ? `${dateGroup.totalExtraHours.toFixed(2)}h` : '-'}</p>
+        </td>
+        <td className="py-4 px-6 text-right">
+          <button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+            {open ? <FiChevronUp className="h-5 w-5" /> : <FiChevronDown className="h-5 w-5" />}
+          </button>
+        </td>
+      </tr>
+
+      <AnimatePresence>
+        {open && (
+          <tr>
+            <td colSpan={6} className="p-0">
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="bg-slate-50 border-b border-gray-200 overflow-hidden shadow-inner"
+              >
+                <div className="p-4 lg:px-8">
+                  <table className="w-full bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                    <thead className="bg-gray-100 border-b border-gray-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Staff</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Status</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Punch In</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Punch Out</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Hours</th>
+                        <th className="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase">Deviations</th>
+                        <th className="py-3 px-4 text-center text-xs font-bold text-gray-600 uppercase">Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {dateGroup.records.sort((a,b) => a.staff_name.localeCompare(b.staff_name)).map(record => (
+                        <tr key={record.staff_id} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-gray-900 text-sm">{record.staff_name}</div>
+                            {record.schedule && (
+                              <div className="text-[11px] text-gray-500 font-medium mt-0.5">
+                                Shift: {record.schedule.start_time.substring(0,5)} - {record.schedule.end_time.substring(0,5)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
+                              record.status === 'present' ? 'bg-emerald-100 text-emerald-800'
+                                : record.status?.includes('leave') ? 'bg-amber-100 text-amber-800'
+                                : record.status === 'absent' ? 'bg-red-100 text-red-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {record.status === 'present' ? 'Present'
+                                : record.status?.includes('leave') ? 'Leave'
+                                : record.status === 'absent' ? 'Absent' : 'Weekend'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-sm font-medium text-gray-700">{record.punch_in || '-'}</td>
+                          <td className="py-3 px-4 text-sm font-medium text-gray-700">{record.punch_out || '-'}</td>
+                          <td className="py-3 px-4 text-sm font-black text-gray-900">{Number(record.hours) > 0 ? `${Number(record.hours).toFixed(2)}h` : '-'}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col space-y-1">
+                              {record.lateHours > 0 && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold w-max">Late: {record.lateHours}h</span>}
+                              {record.extraHours > 0 && <span className="text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold w-max">Extra: {record.extraHours}h</span>}
+                              {record.lateHours === 0 && record.extraHours === 0 && <span className="text-gray-400 text-sm">-</span>}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onEdit(record.raw[0]); }}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
+                              title="Edit Attendance"
+                            >
+                              <FiEdit className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            </td>
+          </tr>
+        )}
+      </AnimatePresence>
     </>
   );
 };
@@ -480,8 +754,13 @@ const AttendanceOverviewChart = ({ attendance }) => {
     todayAtt.filter(a => a.status === 'present').map(a => a.staff_id)
   ).size;
 
-  const leave = todayAtt.filter(a => a.status.includes('leave')).length;
-  const absent = todayAtt.filter(a => a.status === 'absent').length;
+  const leave = new Set(
+    todayAtt.filter(a => a.status?.includes('leave')).map(a => a.staff_id)
+  ).size;
+
+  const absent = new Set(
+    todayAtt.filter(a => a.status === 'absent').map(a => a.staff_id)
+  ).size;
 
   const data = {
     labels: ['Present', 'On Leave', 'Absent'],
@@ -519,29 +798,92 @@ const AttendanceOverviewChart = ({ attendance }) => {
 const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
   const formatTimeDisplay = (t) => t ? t.split(':').slice(0, 2).join(':') : '';
   const stats = useMemo(() => {
-    const att = attendance.filter(a => a.staff_id === staff.id && normalizeDate(a.date).startsWith(selectedMonth));
+    const att = attendance.filter(
+      a =>
+        a.staff_id === staff.id &&
+        normalizeDate(a.date).startsWith(selectedMonth)
+    );
+
     const present = att.filter(a => a.status === 'present');
-    if (!present.length) return { totalWorkingHours: 0, avgWorkingHours: 0, avgPunchIn: 'N/A', avgPunchOut: 'N/A', totalPresentDays: 0, lateCount: 0, totalLateHours: 0, totalExtraHours: 0, avgLateTime: '00:00', avgExtraTime: '00:00', daysWithSchedule: 0 };
-    const totalH = present.reduce((s, d) => s + (Number(d.hours) || 0), 0);
-    const avgH = totalH / present.length;
-    const inMins = present.filter(d => d.punch_in).map(d => timeToMinutes(d.punch_in));
-    const outMins = present.filter(d => d.punch_out).map(d => timeToMinutes(d.punch_out));
-    const avgIn = inMins.length ? minutesToTime(inMins.reduce((s, m) => s + m, 0) / inMins.length) : 'N/A';
-    const avgOut = outMins.length ? minutesToTime(outMins.reduce((s, m) => s + m, 0) / outMins.length) : 'N/A';
-    let lateM = 0, extraM = 0, lateDays = 0, schedDays = 0;
-    present.forEach(d => {
-      const dev = calculateScheduleDeviations(d, staff);
-      if (dev.hasSchedule) {
-        lateM += dev.lateMinutes; extraM += dev.extraMinutes; schedDays++;
+
+    if (!present.length) {
+      return {
+        totalWorkingHours: 0,
+        avgWorkingHours: 0,
+        avgPunchIn: 'N/A',
+        avgPunchOut: 'N/A',
+        totalPresentDays: 0,
+        lateCount: 0,
+        totalLateHours: 0,
+        totalExtraHours: 0,
+        avgLateTime: '00:00',
+        avgExtraTime: '00:00',
+        daysWithSchedule: 0
+      };
+    }
+
+    // Multiple punch sessions on the same date are ONE working day.
+    const dailyMap = new Map();
+
+    present.forEach(record => {
+      const day = normalizeDate(record.date);
+      if (!dailyMap.has(day)) dailyMap.set(day, []);
+      dailyMap.get(day).push(record);
+    });
+
+    let totalH = 0;
+    let lateM = 0;
+    let extraM = 0;
+    let lateDays = 0;
+    let schedDays = 0;
+    const dailyFirstIns = [];
+    const dailyLastOuts = [];
+
+    dailyMap.forEach(dayRecords => {
+      totalH += dayRecords.reduce(
+        (sum, record) => sum + (Number(record.hours) || 0),
+        0
+      );
+
+      const firstIn = dayRecords
+        .filter(r => r.punch_in)
+        .sort((a, b) => timeToMinutes(a.punch_in) - timeToMinutes(b.punch_in))[0]?.punch_in;
+
+      const lastOut = dayRecords
+        .filter(r => r.punch_out)
+        .sort((a, b) => timeToMinutes(b.punch_out) - timeToMinutes(a.punch_out))[0]?.punch_out;
+
+      if (firstIn) dailyFirstIns.push(timeToMinutes(firstIn));
+      if (lastOut) dailyLastOuts.push(timeToMinutes(lastOut));
+
+      const schedule = findEffectiveSchedule(staff, dayRecords[0].date);
+
+      if (schedule) {
+        schedDays++;
+        const dev = calculateDayDeviation(firstIn, lastOut, schedule);
+        lateM += dev.lateMinutes;
+        extraM += dev.extraMinutes;
         if (dev.lateMinutes > 0) lateDays++;
       }
     });
+
+    const avgIn = dailyFirstIns.length
+      ? minutesToTime(dailyFirstIns.reduce((sum, m) => sum + m, 0) / dailyFirstIns.length)
+      : 'N/A';
+
+    const avgOut = dailyLastOuts.length
+      ? minutesToTime(dailyLastOuts.reduce((sum, m) => sum + m, 0) / dailyLastOuts.length)
+      : 'N/A';
+
+    const totalPresentDays = dailyMap.size;
+    const avgH = totalPresentDays ? totalH / totalPresentDays : 0;
+
     return {
       totalWorkingHours: Number(totalH.toFixed(2)),
       avgWorkingHours: Number(avgH.toFixed(2)),
       avgPunchIn: avgIn,
       avgPunchOut: avgOut,
-      totalPresentDays: present.length,
+      totalPresentDays,
       lateCount: lateDays,
       totalLateHours: Number((lateM / 60).toFixed(2)),
       totalExtraHours: Number((extraM / 60).toFixed(2)),
@@ -551,7 +893,7 @@ const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
     };
   }, [staff, attendance, selectedMonth]);
 
-  const curSch = staff.schedules?.length ? staff.schedules.sort((a, b) => new Date(b.effective_from) - new Date(a.effective_from))[0] : null;
+  const curSch = staff.schedules?.length ? [...staff.schedules].sort((a, b) => new Date(b.effective_from) - new Date(a.effective_from))[0] : null;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
@@ -608,29 +950,89 @@ const StaffMonthlyStats = ({ staff, attendance, selectedMonth }) => {
 
 const MonthlyStats = ({ attendance, selectedMonth, staffList }) => {
   const stats = useMemo(() => {
-    const monthAtt = attendance.filter(a => normalizeDate(a.date).startsWith(selectedMonth));
+    const monthAtt = attendance.filter(
+      a => normalizeDate(a.date).startsWith(selectedMonth)
+    );
     const present = monthAtt.filter(a => a.status === 'present');
-    if (!present.length) return { totalWorkingHours: 0, avgWorkingHours: 0, avgPunchIn: 'N/A', avgPunchOut: 'N/A', totalPresentDays: 0, totalLateHours: 0, totalExtraHours: 0, totalLateDays: 0, daysWithSchedule: 0 };
-    const totalH = present.reduce((s, d) => s + (Number(d.hours) || 0), 0);
-    const avgH = totalH / present.length;
-    const inMins = present.filter(d => d.punch_in).map(d => timeToMinutes(d.punch_in));
-    const outMins = present.filter(d => d.punch_out).map(d => timeToMinutes(d.punch_out));
-    const avgIn = inMins.length ? minutesToTime(inMins.reduce((s, m) => s + m, 0) / inMins.length) : 'N/A';
-    const avgOut = outMins.length ? minutesToTime(outMins.reduce((s, m) => s + m, 0) / outMins.length) : 'N/A';
-    let lateM = 0, extraM = 0, lateDays = 0, schedDays = 0;
-    present.forEach(d => {
-      const staff = staffList.find(s => s.id === d.staff_id);
-      if (staff) {
-        const dev = calculateScheduleDeviations(d, staff);
-        if (dev.hasSchedule) { lateM += dev.lateMinutes; extraM += dev.extraMinutes; schedDays++; if (dev.lateMinutes > 0) lateDays++; }
+
+    if (!present.length) {
+      return {
+        totalWorkingHours: 0,
+        avgWorkingHours: 0,
+        avgPunchIn: 'N/A',
+        avgPunchOut: 'N/A',
+        totalPresentDays: 0,
+        totalLateHours: 0,
+        totalExtraHours: 0,
+        totalLateDays: 0,
+        daysWithSchedule: 0
+      };
+    }
+
+    // Group by staff + date so multiple sessions never become multiple days.
+    const dailyMap = new Map();
+
+    present.forEach(record => {
+      const day = normalizeDate(record.date);
+      const key = `${record.staff_id}-${day}`;
+      if (!dailyMap.has(key)) dailyMap.set(key, []);
+      dailyMap.get(key).push(record);
+    });
+
+    let totalH = 0;
+    let lateM = 0;
+    let extraM = 0;
+    let lateDays = 0;
+    let schedDays = 0;
+    const dailyFirstIns = [];
+    const dailyLastOuts = [];
+
+    dailyMap.forEach(dayRecords => {
+      totalH += dayRecords.reduce(
+        (sum, record) => sum + (Number(record.hours) || 0),
+        0
+      );
+
+      const firstIn = dayRecords
+        .filter(r => r.punch_in)
+        .sort((a, b) => timeToMinutes(a.punch_in) - timeToMinutes(b.punch_in))[0]?.punch_in;
+
+      const lastOut = dayRecords
+        .filter(r => r.punch_out)
+        .sort((a, b) => timeToMinutes(b.punch_out) - timeToMinutes(a.punch_out))[0]?.punch_out;
+
+      if (firstIn) dailyFirstIns.push(timeToMinutes(firstIn));
+      if (lastOut) dailyLastOuts.push(timeToMinutes(lastOut));
+
+      const staff = staffList.find(s => s.id === dayRecords[0].staff_id);
+      const schedule = findEffectiveSchedule(staff, dayRecords[0].date);
+
+      if (schedule) {
+        schedDays++;
+        const dev = calculateDayDeviation(firstIn, lastOut, schedule);
+        lateM += dev.lateMinutes;
+        extraM += dev.extraMinutes;
+        if (dev.lateMinutes > 0) lateDays++;
       }
     });
+
+    const totalPresentDays = dailyMap.size;
+    const avgH = totalPresentDays ? totalH / totalPresentDays : 0;
+
+    const avgIn = dailyFirstIns.length
+      ? minutesToTime(dailyFirstIns.reduce((sum, m) => sum + m, 0) / dailyFirstIns.length)
+      : 'N/A';
+
+    const avgOut = dailyLastOuts.length
+      ? minutesToTime(dailyLastOuts.reduce((sum, m) => sum + m, 0) / dailyLastOuts.length)
+      : 'N/A';
+
     return {
       totalWorkingHours: Number(totalH.toFixed(2)),
       avgWorkingHours: Number(avgH.toFixed(2)),
       avgPunchIn: avgIn,
       avgPunchOut: avgOut,
-      totalPresentDays: present.length,
+      totalPresentDays,
       totalLateHours: Number((lateM / 60).toFixed(2)),
       totalExtraHours: Number((extraM / 60).toFixed(2)),
       totalLateDays: lateDays,
@@ -742,78 +1144,6 @@ const LeaveApplicationRow = ({ application, handleLeaveAction }) => {
   );
 };
 
-const SalaryRow = ({ salary, onSendToStaff, handleEditSalary }) => {
-  // Map fields gracefully to support both the old and new backend schema
-  const targetHrs = salary.total_targeted_hours || 0;
-  const workedHrs = salary.total_worked_hours || salary.total_hours || 0;
-  const hrsPct = salary.working_hours_percent || 0;
-
-  const targetRev = salary.total_monthly_target || 0;
-  const actualRev = salary.achieved_service_revenue || salary.collection || 0;
-  const revPct = salary.revenue_percent || salary.collection_percent || 0;
-
-  const bonusPct = salary.bonus_percent || 0;
-  const basicPay = salary.basic_pay || salary.basic || 0;
-  const bonusPay = salary.bonus || 0;
-  const allowances = Number(salary.ta_pay || salary.ta || 0) + Number(salary.fa_pay || salary.fa || 0) + Number(salary.paid_offdays || 0) + Number(salary.other_allowances || 0);
-  const ded = salary.deductions || 0;
-  const netPay = salary.net_salary || salary.net_pay || 0;
-
-  return (
-    <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors bg-white group">
-      {/* Sticky Staff Column */}
-      <td className="py-3 px-4 font-medium text-gray-900 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10">
-        {salary.staff_name}
-      </td>
-      
-      {/* Hours Group */}
-      <td className="py-3 px-3 text-gray-600 border-l border-gray-200">{Number(targetHrs).toFixed(1)}h</td>
-      <td className="py-3 px-3 text-gray-900 font-medium">{Number(workedHrs).toFixed(1)}h</td>
-      <td className="py-3 px-3 border-r border-gray-200">
-        <span className={`font-semibold ${hrsPct >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
-          {Number(hrsPct).toFixed(1)}%
-        </span>
-      </td>
-
-      {/* Revenue Group */}
-      <td className="py-3 px-3 text-gray-600">₹{Number(targetRev).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-gray-900 font-medium">₹{Number(actualRev).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 border-r border-gray-200">
-        <span className={`font-semibold ${revPct >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
-          {Number(revPct).toFixed(1)}%
-        </span>
-      </td>
-
-      {/* Earnings Group */}
-      <td className="py-3 px-3 text-indigo-600 font-medium">{Number(bonusPct).toFixed(1)}%</td>
-      <td className="py-3 px-3 text-gray-600">₹{Number(basicPay).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-emerald-600 font-medium">₹{Number(bonusPay).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-gray-600">₹{Number(allowances).toLocaleString('en-IN')}</td>
-      <td className="py-3 px-3 text-rose-600 border-r border-gray-200">-₹{Number(ded).toLocaleString('en-IN')}</td>
-
-      {/* Final Group */}
-      <td className="py-3 px-4 text-right font-bold text-gray-900 bg-gray-50">
-        ₹{Number(netPay).toLocaleString('en-IN')}
-      </td>
-      <td className="py-3 px-4 text-center">
-        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${salary.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : salary.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-          {salary.status === 'sent' ? 'Sent' : salary.status === 'viewed' ? 'Viewed' : 'Draft'}
-        </span>
-      </td>
-      <td className="py-3 px-4 text-center">
-        <div className="flex items-center justify-center space-x-2">
-          <button onClick={() => handleEditSalary(salary)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition" title="View Breakdown">
-            <FiEye className="h-4 w-4" />
-          </button>
-          <button onClick={() => onSendToStaff(salary)} disabled={salary.status === 'sent'} className={`p-1.5 rounded-lg transition ${salary.status === 'sent' ? 'text-gray-400 cursor-not-allowed' : 'text-emerald-600 hover:bg-emerald-50'}`} title="Send to Staff">
-            <FiSend className="h-4 w-4" />
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
-};
-
 // ---------------------------------------------------------------------
 // MAIN COMPONENT
 // ---------------------------------------------------------------------
@@ -835,16 +1165,61 @@ const AdminAttendance = () => {
   const [allAttendance, setAllAttendance] = useState([]);
   const [pendingLeaves, setPendingLeaves] = useState([]);
   const [allLeaves, setAllLeaves] = useState([]); // Added state for all leaves
-  const [salaryData, setSalaryData] = useState([]);
+  
   const [calendarData, setCalendarData] = useState([]);
   const [showAttendanceEditModal, setShowAttendanceEditModal] = useState(false);
   const [showLeaveActionModal, setShowLeaveActionModal] = useState(false);
-  const [showSalaryEditModal, setShowSalaryEditModal] = useState(false);
-  const [showCreateSalaryModal, setShowCreateSalaryModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [selectedAttendance, setSelectedAttendance] = useState(null);
   const [selectedLeave, setSelectedLeave] = useState(null);
-  const [selectedSalary, setSelectedSalary] = useState(null);
+
+  // --- NEW PAYROLL ENGINE STATES ---
+  const [salaryRuns, setSalaryRuns] = useState([]);
+  const [selectedRun, setSelectedRun] = useState(null);
+  const [runRecords, setRunRecords] = useState([]);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  
+  const [newRunData, setNewRunData] = useState({
+    payroll_month: getCurrentMonth(),
+    calendar_days: 0,
+    sundays: 0,
+    dl_days: 1,
+    other_offdays: 0,
+    is_loading: false
+  });
+
+  // Auto-fetch calendar stats when the modal opens or the month changes
+  useEffect(() => {
+    const fetchPreview = async () => {
+      if (!showRunModal) return;
+      setNewRunData(prev => ({ ...prev, is_loading: true }));
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const centreId = urlParams.get('centre_id');
+        const params = { month: newRunData.payroll_month };
+        if (centreId) params.centre_id = centreId;
+        
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/run-preview`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+          params
+        });
+        
+        setNewRunData(prev => ({
+          ...prev,
+          calendar_days: res.data.calendar_days,
+          sundays: res.data.sundays,
+          dl_days: res.data.dl_days,
+          other_offdays: res.data.other_offdays,
+          is_loading: false
+        }));
+      } catch (err) {
+        setNewRunData(prev => ({ ...prev, is_loading: false }));
+      }
+    };
+    fetchPreview();
+  }, [newRunData.payroll_month, showRunModal]);
+
   const [wallets, setWallets] = useState([]);          
   const [selectedWalletId, setSelectedWalletId] = useState(""); 
   const [walletLoading, setWalletLoading] = useState(false);
@@ -858,105 +1233,70 @@ const AdminAttendance = () => {
   const monthOptions = useMemo(() => generateMonthOptions(), []);
   
   const [attendanceEdit, setAttendanceEdit] = useState({ punch_in: '', punch_out: '', breaks: '', status: 'present' });
-  const [salaryEdit, setSalaryEdit] = useState({ 
-    staff_id: '', 
-    month: getCurrentMonth(), 
-    basic: '', 
-    hra: '', 
-    ta: '', 
-    other_allowances: '', 
-    deductions: '', 
-    working_days: '', 
-    present_days: '', 
-    additional_components: [] 
-  });
-  const [newComponent, setNewComponent] = useState({ name: '', amount: '', operation: 'addition', base: 'basic' });
   const [calendarEdit, setCalendarEdit] = useState({ date: '', type: 'working', description: '' });
-
-  // Helper functions for salary operations
-  const getOperationColor = (operation) => {
-    const colors = {
-      addition: 'bg-emerald-100 text-emerald-700',
-      subtraction: 'bg-rose-100 text-rose-700',
-      multiplication: 'bg-blue-100 text-blue-700',
-      division: 'bg-purple-100 text-purple-700',
-      percentage: 'bg-amber-100 text-amber-700'
-    };
-    return colors[operation] || 'bg-gray-100 text-gray-700';
-  };
-
-  const getOperationIcon = (operation) => {
-    const icons = {
-      addition: <FiAdd className="h-3 w-3" />,
-      subtraction: <FiMinus className="h-3 w-3" />,
-      multiplication: <FiMultiply className="h-3 w-3" />,
-      division: <FiDivide className="h-3 w-3" />,
-      percentage: <FiPercent className="h-3 w-3" />
-    };
-    return icons[operation] || <FiPlus className="h-3 w-3" />;
-  };
-
-  const handleAddComponent = () => {
-    if (!newComponent.name || !newComponent.amount) return;
-    setSalaryEdit(prev => ({
-      ...prev,
-      additional_components: [...prev.additional_components, { ...newComponent }]
-    }));
-    setNewComponent({ name: '', amount: '', operation: 'addition', base: 'basic' });
-  };
-
-  const handleRemoveComponent = (index) => {
-    setSalaryEdit(prev => ({
-      ...prev,
-      additional_components: prev.additional_components.filter((_, i) => i !== index)
-    }));
-  };
-
-  const [autoCalc, setAutoCalc] = useState({
-    working_days: 0,
-    present_days: 0,
-    total_hours: 0,
-  });
-
-  // FIXED: Correct URL for wallet debit
-  const debitSalaryFromWallet = async (walletId, amount, staffName, month) => {
-    try {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/wallet/debit-salary`,
-        { wallet_id: walletId, amount, staff_name: staffName, month },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      );
-    } catch (err) {
-      console.error('Wallet debit failed:', err);
-      throw err; // let the caller show toast
-    }
-  };
 
   // ------------------- STATS -------------------
   const stats = useMemo(() => {
-    const total = staffList.length;
+    const activeStaff = staffList.filter(
+      staff => staff.status === 'Active'
+    );
+
+    const total = activeStaff.length;
     const active = staffList.filter(s => s.status === 'Active').length;
     const today = new Date().toISOString().split('T')[0];
     const todayAtt = allAttendance.filter(a => normalizeDate(a.date) === today);
 
     const presentStaffIds = new Set(
-      todayAtt.filter(a => a.status === 'present').map(a => a.staff_id)
-      );
-  const present = presentStaffIds.size;
+      todayAtt
+        .filter(a => a.status === 'present')
+        .map(a => a.staff_id)
+    );
 
-    const leave = todayAtt.filter(a => a.status.includes('leave')).length;
-    const absent = todayAtt.filter(a => a.status === 'absent').length;
+    const present = presentStaffIds.size;
+
+    const leave = new Set(
+      todayAtt.filter(a => a.status?.includes('leave')).map(a => a.staff_id)
+    ).size;
+
+    const absent = new Set(
+      todayAtt.filter(a => a.status === 'absent').map(a => a.staff_id)
+    ).size;
+
     const totalSal = staffList.reduce((s, st) => s + (Number(st.salary) || 0), 0);
-      let lateH = 0, extraH = 0, recWithSch = 0;
-      todayAtt.forEach(r => {
-      if (r.status === 'present') {
-        const st = staffList.find(s => s.id === r.staff_id);
-        if (st) {
-          const dev = calculateScheduleDeviations(r, st);
-          if (dev.hasSchedule) { lateH += dev.lateHours; extraH += dev.extraHours; recWithSch++; }
-        }
-      }
+    let lateH = 0, extraH = 0, recWithSch = 0;
+
+    // Calculate schedule deviation once per staff/day, using the first IN
+    // and last OUT. This prevents multiple punch sessions from double-counting.
+    const todayPresent = new Map();
+
+    todayAtt
+      .filter(r => r.status === 'present')
+      .forEach(r => {
+        if (!todayPresent.has(r.staff_id)) todayPresent.set(r.staff_id, []);
+        todayPresent.get(r.staff_id).push(r);
+      });
+
+    todayPresent.forEach((records, staffId) => {
+      const st = staffList.find(s => s.id === staffId);
+      if (!st) return;
+
+      const firstIn = records
+        .filter(r => r.punch_in)
+        .sort((a, b) => timeToMinutes(a.punch_in) - timeToMinutes(b.punch_in))[0]?.punch_in;
+
+      const lastOut = records
+        .filter(r => r.punch_out)
+        .sort((a, b) => timeToMinutes(b.punch_out) - timeToMinutes(a.punch_out))[0]?.punch_out;
+
+      const schedule = findEffectiveSchedule(st, records[0].date);
+      if (!schedule) return;
+
+      const dev = calculateDayDeviation(firstIn, lastOut, schedule);
+      lateH += dev.lateMinutes / 60;
+      extraH += dev.extraMinutes / 60;
+      recWithSch++;
     });
+    
     return {
       totalStaff: total, activeStaff: active, presentToday: present, onLeaveToday: leave,
       totalSalary: Math.round(totalSal), attendanceRate: total ? Math.round((present / total) * 100) : 0,
@@ -979,10 +1319,8 @@ const AdminAttendance = () => {
         setAllAttendance(att);
         const leaves = await getPendingLeaves();
         setPendingLeaves(leaves);
-        const allL = await getLeaves(selectedLeaveMonth); // Fetch all leaves for the current leave month
-        setAllLeaves(allL); //
-        const sal = await getSalaryData(selectedSalaryMonth);
-        setSalaryData(sal);
+        const allL = await getLeaves(selectedLeaveMonth);
+        setAllLeaves(allL);
         const cal = await getCalendarData();
         setCalendarData(cal);
       } catch { toast.error('Failed to load data'); }
@@ -992,53 +1330,15 @@ const AdminAttendance = () => {
 
   useEffect(() => { 
     if (selectedMonth) {
-      getAllAttendance(selectedMonth)
-        .then(setAllAttendance)
-        .catch(() => toast.error('Failed to load attendance'));
+      getAllAttendance(selectedMonth).then(setAllAttendance).catch(() => toast.error('Failed to load attendance'));
     }
   }, [selectedMonth]);
   
-  useEffect(() => { 
-    if (selectedSalaryMonth) {
-      getSalaryData(selectedSalaryMonth)
-        .then(setSalaryData)
-        .catch(() => toast.error('Failed to load salary data'));
-    }
-  }, [selectedSalaryMonth]);
-  
-  // New effect to load all leaves when the month changes
   useEffect(() => {
     if (selectedLeaveMonth) {
-      getLeaves(selectedLeaveMonth)
-        .then(setAllLeaves)
-        .catch(() => toast.error('Failed to load leave history'));
+      getLeaves(selectedLeaveMonth).then(setAllLeaves).catch(() => toast.error('Failed to load leave history'));
     }
   }, [selectedLeaveMonth]);
-  // End of new effect
-
-  useEffect(() => {
-    if (salaryEdit.staff_id && salaryEdit.month) {
-      getAutoCalc(salaryEdit.staff_id, salaryEdit.month)
-        .then(data => {
-          setAutoCalc(data);
-          setSalaryEdit(prev => ({
-            ...prev,
-            working_days: data.working_days.toString(),
-            present_days: data.present_days.toString(),
-            total_hours: data.total_hours,
-          }));
-        })
-        .catch(() => toast.error('Failed to load auto-calc'));
-    }
-  }, [salaryEdit.staff_id, salaryEdit.month]);
-
-  // Update salaryEdit month when salary month changes
-  useEffect(() => {
-    setSalaryEdit(prev => ({
-      ...prev,
-      month: selectedSalaryMonth
-    }));
-  }, [selectedSalaryMonth]);
 
   useEffect(() => {
     const loadWallets = async () => {
@@ -1046,27 +1346,25 @@ const AdminAttendance = () => {
         setWalletLoading(true);
         const data = await getWalletsForCentre();
         setWallets(data);
-        // optionally pre-select the first wallet
         if (data.length > 0 && !selectedWalletId) {
           setSelectedWalletId(data[0].id);
         }
       } catch (err) {
-        toast.error("Failed to load wallets");
         console.error(err);
       } finally {
         setWalletLoading(false);
       }
     };
-
     loadWallets();
   }, []); 
 
-  // ------------------- ATTENDANCE -------------------
+  // ------------------- ATTENDANCE & CALENDAR HANDLERS -------------------
   const handleEditAttendance = (rec) => {
     setSelectedAttendance(rec);
     setAttendanceEdit({ punch_in: rec.punch_in || '', punch_out: rec.punch_out || '', breaks: rec.breaks || '', status: rec.status || 'present' });
     setShowAttendanceEditModal(true);
   };
+
   const calculateHours = (inT, outT) => {
     if (!inT || !outT) return 0;
     const [ih, im] = inT.split(':').map(Number);
@@ -1075,6 +1373,7 @@ const AdminAttendance = () => {
     if (m < 0) { h--; m += 60; }
     return Number(h + m / 60).toFixed(2);
   };
+
   const handleSaveAttendance = async () => {
     const data = { ...attendanceEdit, hours: calculateHours(attendanceEdit.punch_in, attendanceEdit.punch_out) };
     try {
@@ -1085,25 +1384,12 @@ const AdminAttendance = () => {
     } catch { toast.error('Failed'); }
   };
 
-  // ------------------- CALENDAR -------------------
-  const handleUpdateCalendarEvent = async (id, ev) => {
-    try { const upd = await updateCalendarEvent(id, ev); setCalendarData(p => p.map(e => e.id === id ? upd : e)); }
-    catch { throw new Error(); }
-  };
-  const handleDeleteCalendarEvent = async (ev) => {
-    if (window.confirm('Delete?')) {
-      try { await deleteCalendarEvent(ev.id); setCalendarData(p => p.filter(e => e.id !== ev.id)); toast.success('Deleted'); }
-      catch { toast.error('Failed'); }
-    }
-  };
-
-  // ------------------- LEAVE -------------------
   const handleLeaveAction = async (id, act) => {
     try { 
       const upd = await updateLeave(id, act); 
       setPendingLeaves(p => p.filter(l => l.id !== id)); 
       
-      // FIX: Merge the existing leave data (l) with the updated response (upd)
+      // Merge the existing leave data (l) with the updated response (upd)
       // This preserves 'staff_name' and 'department' while updating the 'status'
       setAllLeaves(p => p.map(l => l.id === id ? { ...l, ...upd } : l)); 
       
@@ -1114,145 +1400,208 @@ const AdminAttendance = () => {
     catch { toast.error(`Failed`); }
   };
 
-  // ------------------- SALARY -------------------
-  const handleEditSalary = (s) => {
-    setSelectedSalary(s);
-    setSalaryEdit({ ...s, additional_components: s.additional_components || [] });
-    setShowSalaryEditModal(true);
-  };
-  const calculateWithOperations = (base, comps) => {
-    let res = Number(base) || 0;
-    comps.forEach(c => {
-      const amt = Number(c.amount) || 0;
-      switch (c.operation) {
-        case 'addition': res += amt; break;
-        case 'subtraction': res -= amt; break;
-        case 'multiplication': res = (c.base === 'basic' ? Number(salaryEdit.basic) : res) * amt; break;
-        case 'division': res = amt !== 0 ? (c.base === 'basic' ? Number(salaryEdit.basic) : res) / amt : res; break;
-        case 'percentage': res += ((c.base === 'basic' ? Number(salaryEdit.basic) : res) * amt) / 100; break;
-      }
-    });
-    return Number(res.toFixed(2));
-  };
-  const handleSaveSalary = async () => {
-  const base = Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances);
-  const net = calculateWithOperations(base, salaryEdit.additional_components) - Number(salaryEdit.deductions);
-
-  const upd = {
-    ...salaryEdit,
-    net_salary: Number(net.toFixed(2)),
-    total_hours: autoCalc.total_hours,
-    working_days: autoCalc.working_days,
-    present_days: autoCalc.present_days,
+  const handleUpdateCalendarEvent = async (id, ev) => {
+    try { const upd = await updateCalendarEvent(id, ev); setCalendarData(p => p.map(e => e.id === id ? upd : e)); }
+    catch { toast.error('Update failed'); }
   };
 
-  try {
-    const saved = await updateSalary(selectedSalary.id, upd);
-    setSalaryData(p => p.map(i => i.id === selectedSalary.id ? saved : i));
-    setShowSalaryEditModal(false); setSelectedSalary(null);
-    toast.success('Salary updated');
-  } catch {
-    toast.error('Failed');
-  }
-};
-  const handleCreateSalary = async () => {
-  // Validation
-  if (!salaryEdit.staff_id) return toast.error("Please select a staff member");
-  if (!salaryEdit.month) return toast.error("Month is required");
-  if (!salaryEdit.basic || salaryEdit.basic <= 0) return toast.error("Basic salary is required");
-  if (!selectedWalletId) return toast.error("Please select a wallet to debit from");
-
-  const base = Number(salaryEdit.basic) + Number(salaryEdit.hra || 0) + Number(salaryEdit.ta || 0) + Number(salaryEdit.other_allowances || 0);
-  const netAfterComponents = calculateWithOperations(base, salaryEdit.additional_components || []);
-  const netSalary = netAfterComponents - Number(salaryEdit.deductions || 0);
-
-  const payload = {
-    staff_id: Number(salaryEdit.staff_id),
-    month: salaryEdit.month,
-    basic: Number(salaryEdit.basic),
-    hra: Number(salaryEdit.hra || 0),
-    ta: Number(salaryEdit.ta || 0),
-    other_allowances: Number(salaryEdit.other_allowances || 0),
-    deductions: Number(salaryEdit.deductions || 0),
-    net_salary: Number(netSalary.toFixed(2)),
-    working_days: Number(autoCalc.working_days),
-    present_days: Number(autoCalc.present_days),
-    total_hours: Number(autoCalc.total_hours),
-  };
-
-  try {
-    // Step 1: Create salary
-    const createdSalary = await createSalary(payload);
-    setSalaryData(prev => [...prev, createdSalary]);
-
-    // Step 2: Try to debit wallet (but don't crash if it fails)
-    try {
-      // FIXED: Correct URL
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/wallet/debit-salary`,
-        {
-          wallet_id: selectedWalletId,
-          amount: netSalary,
-          salary_id: createdSalary.id,
-          month: salaryEdit.month
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-      );
-
-      // Success: Both salary created AND wallet debited
-      toast.success(`Salary created and ₹${netSalary.toLocaleString()} debited successfully!`);
-
-    } catch (walletError) {
-      console.error("Wallet debit failed:", walletError);
-      // Salary created, but wallet failed → warn user
-      toast.warn(
-        `Salary created successfully, but wallet debit failed: ${walletError.response?.data?.error || walletError.message}`
-      );
+  const handleDeleteCalendarEvent = async (ev) => {
+    if (window.confirm('Delete?')) {
+      try { await deleteCalendarEvent(ev.id); setCalendarData(p => p.filter(e => e.id !== ev.id)); toast.success('Deleted'); }
+      catch { toast.error('Failed'); }
     }
-
-    // Always close modal on success
-    setShowCreateSalaryModal(false);
-    setSelectedWalletId("");
-    setSalaryEdit({
-      staff_id: '',
-      month: getCurrentMonth(),
-      basic: '',
-      hra: '',
-      ta: '',
-      other_allowances: '',
-      deductions: '',
-      working_days: '',
-      present_days: '',
-      additional_components: []
-    });
-
-  } catch (err) {
-    console.error("Salary creation failed:", err);
-    toast.error(
-      err.response?.data?.error || 
-      "Failed to create salary. Please try again."
-    );
-  }
-};
-  const handleSendToStaff = async (s) => {
-    try { const upd = await sendSalary(s.id); setSalaryData(p => p.map(i => i.id === s.id ? upd : i)); toast.success('Sent'); }
-    catch { toast.error('Failed'); }
   };
-  const handleSendSalary = async () => {
-    const pending = salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'pending');
-    if (!pending.length) return toast.warn('No pending');
-    const ct = toast.info(
-      <div><p>Send {pending.length}?</p><div className="mt-2 flex justify-end gap-2">
-        <button onClick={async () => { toast.dismiss(ct); try { const list = await bulkSendSalaries(selectedSalaryMonth); setSalaryData(list); toast.success('Sent'); } catch { toast.error('Failed'); } }} className="px-3 py-1 bg-green-500 text-white rounded">Yes</button>
-        <button onClick={() => toast.dismiss(ct)} className="px-3 py-1 bg-gray-400 text-white rounded">Cancel</button>
-      </div></div>,
-      { autoClose: false, closeOnClick: false }
-    );
+
+  // --- PAYROLL CONFIGURATION STATE & HANDLERS ---
+  const [showStructuresModal, setShowStructuresModal] = useState(false);
+  const [salaryStructures, setSalaryStructures] = useState([]);
+
+  const fetchSalaryStructures = async () => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const centreId = urlParams.get('centre_id');
+      const params = centreId ? { centre_id: centreId } : {};
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/structures`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        params
+      });
+      setSalaryStructures(res.data);
+      setShowStructuresModal(true);
+    } catch (err) { toast.error("Failed to load payroll configurations"); }
   };
+
+  const handleUpdateStructureInput = (staffId, field, value) => {
+    setSalaryStructures(prev => prev.map(s => s.staff_id === staffId ? { ...s, [field]: value } : s));
+  };
+
+  const handleSaveStructure = async (staffId) => {
+    const struct = salaryStructures.find(s => s.staff_id === staffId);
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/structures/${staffId}`, {
+        basic_salary: struct.basic_salary,
+        hourly_service_revenue_target: struct.hourly_service_revenue_target,
+        ta: struct.ta,
+        fa: struct.fa
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success(`${struct.staff_name}'s payroll config updated successfully!`);
+    } catch (err) { toast.error("Failed to update structure"); }
+  };
+
+  // --- NEW PAYROLL LIFECYCLE HANDLERS ---
+  const fetchSalaryRuns = async () => {
+    try {
+      // Safely grab centre_id from URL if a Superadmin is viewing a specific centre
+      const urlParams = new URLSearchParams(window.location.search);
+      const centreId = urlParams.get('centre_id');
+      const params = centreId ? { centre_id: centreId } : {};
+
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/runs`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        params
+      });
+      setSalaryRuns(res.data);
+    } catch (err) { console.error("Error fetching runs:", err); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'salary') fetchSalaryRuns();
+  }, [activeTab]);
+
+  const handleCreateRun = async () => {
+    try {
+      // Safely attach centre_id for Superadmins
+      const urlParams = new URLSearchParams(window.location.search);
+      const centreId = urlParams.get('centre_id');
+      const payload = { ...newRunData };
+      if (centreId) payload.centre_id = centreId;
+
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs`, payload, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      setSalaryRuns([res.data, ...salaryRuns]);
+      setShowRunModal(false);
+      toast.success("Draft Run Created. Ready to Generate.");
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to create run. Ensure a centre is selected."); 
+    }
+  };
+
+  const handleGenerateRun = async (runId) => {
+    const toastId = toast.loading("Calculating payroll...");
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs/${runId}/generate`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      // 🔥 FIX: Properly resolve the loading toast into a success message
+      toast.update(toastId, { 
+        render: "Payroll Generated Successfully!", 
+        type: "success", 
+        isLoading: false, 
+        autoClose: 3000 
+      });
+      
+      fetchSalaryRuns();
+    } catch (err) { 
+      // 🔥 FIX: Properly resolve the loading toast into an error message
+      toast.update(toastId, { 
+        render: err.response?.data?.error || "Generation failed", 
+        type: "error", 
+        isLoading: false, 
+        autoClose: 5000 
+      }); 
+    }
+  };
+
+  const handleDeleteRun = async (runId) => {
+    if (!window.confirm("Are you sure you want to delete this payroll run? You can recreate it from the calendar later.")) return;
+    
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/salary/runs/${runId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success("Payroll run deleted successfully");
+      fetchSalaryRuns();
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to delete run"); 
+    }
+  };
+
+  const handleReviewRun = async (run) => {
+    setSelectedRun(run);
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/salary/runs/${run.id}/records`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setRunRecords(res.data);
+      setShowReviewModal(true);
+    } catch (err) { toast.error("Failed to load records"); }
+  };
+
+  const handleUpdateDeduction = async (recordId, newDeduction) => {
+    try {
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}`, { deductions: newDeduction }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, deductions: res.data.deductions, net_pay: res.data.net_pay } : r));
+      toast.success("Deduction updated");
+    } catch (err) { toast.error("Update failed"); }
+  };
+
+  const handleUpdateNetPay = async (recordId, newNetPay) => {
+    try {
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}/override-net-pay`, 
+        { net_pay: newNetPay }, 
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      // Update the UI immediately
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, net_pay: res.data.net_pay } : r));
+      toast.success("Final Net Pay manually adjusted!");
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to update Net Pay"); 
+    }
+  };
+
+  const handleUpdateWorkedHours = async (recordId, newHours) => {
+    try {
+      const res = await axios.put(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}/override-hours`, 
+        { override_hours: newHours }, 
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      // Immediately merge the recalculated math back into the table row
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, ...res.data } : r));
+      toast.success("Hours overridden and salary recalculated!");
+    } catch (err) { 
+      toast.error(err.response?.data?.error || "Failed to update hours"); 
+    }
+  };
+
+  const handleFinalizeRun = async () => {
+    if (!window.confirm("Are you sure? This will lock the payroll and prevent future recalculations.")) return;
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/runs/${selectedRun.id}/finalize`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success("Payroll Finalized!");
+      setShowReviewModal(false);
+      fetchSalaryRuns();
+    } catch (err) { toast.error("Failed to finalize"); }
+  };
+
+  const handlePayRecord = async (recordId) => {
+    if (!selectedWalletId) return toast.error("Please select a wallet to debit from");
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/salary/records/${recordId}/pay`, { wallet_id: selectedWalletId }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setRunRecords(prev => prev.map(r => r.id === recordId ? { ...r, payment_status: 'paid' } : r));
+      toast.success("Payment issued successfully");
+    } catch (err) { toast.error(err.response?.data?.error || "Payment failed"); }
+  };
+
   const handleAddCalendarEvent = async () => {
     if (!calendarEdit.date || !calendarEdit.type) return toast.error('Required');
     try { const ev = await addCalendarEvent(calendarEdit); setCalendarData(p => [...p, ev]); setShowCalendarModal(false); setCalendarEdit({ date: '', type: 'working', description: '' }); toast.success('Added'); }
@@ -1382,29 +1731,33 @@ const AdminAttendance = () => {
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Individual Staff Statistics</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {staffList.map(s => <StaffMonthlyStats key={s.id} staff={s} attendance={allAttendance} selectedMonth={selectedMonth} />)}
+                {/* 👇 Added .filter(s => s.status === 'Active') to hide terminated/leave staff */}
+                {staffList
+                  .filter(s => s.status === 'Active')
+                  .map(s => <StaffMonthlyStats key={s.id} staff={s} attendance={allAttendance} selectedMonth={selectedMonth} />)}
               </div>
             </div>
 
-            {/* GROUPED TABLE */}
+            {/* GROUPED BY DATE TABLE */}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Staff</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Punch In</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Punch Out</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Breaks</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Schedule Deviations</th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Present</th>
+                    <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Absent / Leave</th>
+                    <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Total Late</th>
+                    <th className="py-3 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Total Extra</th>
+                    <th className="py-3 px-6 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
                    </tr>
                 </thead>
                 <tbody>
-                  {groupAttendance(allAttendance, staffList).map(g => (
-                    <CollapsibleAttendanceRow key={`${g.staff_id}-${g.date}`} group={g} staffList={staffList} onEdit={handleEditAttendance} />
+                  {groupAttendanceByDate(allAttendance, staffList).map(dateGroup => (
+                    <DailyAttendanceRow 
+                      key={dateGroup.date} 
+                      dateGroup={dateGroup} 
+                      onEdit={handleEditAttendance} 
+                    />
                   ))}
                 </tbody>
               </table>
@@ -1480,94 +1833,91 @@ const AdminAttendance = () => {
           </div>
         )}
 
-        {/* Salary Tab */}
+        {/* NEW PAYROLL BATCH UI */}
         {activeTab === 'salary' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Salary Management</h2>
-                <div className="flex items-center space-x-3">
-                  <select
-                    className="border border-gray-300 rounded-lg px-3 py-2"
-                    value={selectedSalaryMonth}
-                    onChange={e => setSelectedSalaryMonth(e.target.value)}
-                  >
-                    {monthOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button onClick={handleSendSalary} className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
-                    <FiSend className="h-4 w-4" /><span>Send Salaries</span>
-                  </button>
-                  <button onClick={() => {
-                    setSalaryEdit({
-                      staff_id: '', month: selectedSalaryMonth, basic: '', hra: '', ta: '', other_allowances: '', deductions: '', working_days: '', present_days: '', additional_components: []
-                    });
-                    setShowCreateSalaryModal(true);
-                  }} className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                    <FiRefreshCw className="h-4 w-4" /><span>Generate Payroll</span>
-                  </button>
-                  <button onClick={() => setShowCalendarModal(true)} className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors">
-                    <FiCalendar className="h-4 w-4" /><span>Manage Offdays</span>
-                  </button>
-                </div>
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Payroll Runs</h2>
+                <p className="text-gray-500 text-sm mt-1">Manage monthly salary calculations and batches.</p>
               </div>
-              <div className="mt-4">
-                <p className="text-sm text-gray-600 mb-4">
-                  Managing salaries for: <span className="font-semibold">{formatMonthForDisplay(selectedSalaryMonth)}</span>
-                </p>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-blue-50 rounded-lg p-4"><p className="text-sm text-blue-600 font-medium">Total Payroll</p><p className="text-xl font-bold text-blue-900">₹{salaryData.filter(s => s.month === selectedSalaryMonth).reduce((a, s) => a + Number(s.net_salary), 0).toLocaleString()}</p></div>
-                  <div className="bg-emerald-50 rounded-lg p-4"><p className="text-sm text-emerald-600 font-medium">Sent</p><p className="text-xl font-bold text-emerald-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'sent').length}</p></div>
-                  <div className="bg-amber-50 rounded-lg p-4"><p className="text-sm text-amber-600 font-medium">Pending</p><p className="text-xl font-bold text-amber-900">{salaryData.filter(s => s.month === selectedSalaryMonth && s.status === 'pending').length}</p></div>
-                  <div className="bg-purple-50 rounded-lg p-4"><p className="text-sm text-purple-600 font-medium">Staff</p><p className="text-xl font-bold text-purple-900">{salaryData.filter(s => s.month === selectedSalaryMonth).length}</p></div>
-                </div>
+              <div className="flex items-center space-x-3">
+                <button 
+                  onClick={fetchSalaryStructures} 
+                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                >
+                  <FiSettings className="h-4 w-4" /><span>Payroll Config</span>
+                </button>
+                <button 
+                  onClick={() => setShowRunModal(true)} 
+                  className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                  <FiPlus className="h-4 w-4" /><span>Create New Run</span>
+                </button>
               </div>
             </div>
 
-            <div className="overflow-x-auto pb-4">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-y border-gray-200">
-                  <tr>
-                    <th className="py-3 px-4 sticky left-0 bg-gray-100 z-10 border-r border-gray-200 align-bottom" rowSpan="2">Staff Name</th>
-                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
-                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Service Revenue</th>
-                    <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="5">Earnings Breakdown (₹)</th>
-                    <th className="py-3 px-4 text-right align-bottom" rowSpan="2">Net Pay</th>
-                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Status</th>
-                    <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Actions</th>
-                  </tr>
-                  <tr>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-l border-gray-200">Target</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Worked</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Target</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Actual</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">%</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus %</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Basic</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Bonus</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium">Allowances</th>
-                    <th className="py-2 px-3 text-gray-500 font-medium border-r border-gray-200">Ded.</th>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-white">
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payroll Month</th>
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target Days</th>
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="py-3 px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="py-3 px-6 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {salaryData
-                    .filter(salary => salary.month === selectedSalaryMonth)
-                    .map(salary => (
-                      <SalaryRow key={`${salary.staff_id}-${salary.month}`} salary={salary} onSendToStaff={handleSendToStaff} handleEditSalary={handleEditSalary} />
-                    ))}
+                <tbody className="divide-y divide-gray-100">
+                  {salaryRuns.map((run) => (
+                    <tr key={run.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-4 px-6 font-bold text-gray-900">{formatMonthForDisplay(run.payroll_month.substring(0,7))}</td>
+                      <td className="py-4 px-6 text-sm text-gray-600">{run.days_targeted} days</td>
+                      <td className="py-4 px-6 text-sm text-gray-600">{new Date(run.created_at).toLocaleDateString('en-IN')}</td>
+                      <td className="py-4 px-6">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                          run.status === 'finalized' ? 'bg-emerald-100 text-emerald-800' : 
+                          run.status === 'generated' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {run.status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          {run.status === 'draft' ? (
+                            <button onClick={() => handleGenerateRun(run.id)} className="text-sm px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium transition">
+                              Generate
+                            </button>
+                          ) : (
+                            <button onClick={() => handleReviewRun(run)} className="text-sm px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium transition">
+                              Review & Pay
+                            </button>
+                          )}
+                          
+                          {/* ONLY allow deletion if it hasn't been finalized and locked */}
+                          {run.status !== 'finalized' && (
+                            <button 
+                              onClick={() => handleDeleteRun(run.id)} 
+                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="Delete Run"
+                            >
+                              <FiTrash2 className="h-5 w-5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {salaryRuns.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="py-12 text-center text-gray-500">
+                        <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                        No payroll runs found. Create your first batch above.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
-              {salaryData.filter(s => s.month === selectedSalaryMonth).length === 0 && (
-                <div className="text-center py-12">
-                  <FiFileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg font-medium">No payroll data generated yet for {formatMonthForDisplay(selectedSalaryMonth)}</p>
-                  <p className="text-gray-400 mt-1">Click "Generate Payroll" to calculate staff salaries.</p>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -1588,7 +1938,7 @@ const AdminAttendance = () => {
       {/* Attendance Edit Modal */}
       <AnimatePresence>
         {showAttendanceEditModal && selectedAttendance && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1672,518 +2022,291 @@ const AdminAttendance = () => {
         )}
       </AnimatePresence>
 
+      {/* Create Run Modal (Preview & Override) */}
       <AnimatePresence>
-        {showSalaryEditModal && selectedSalary && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Edit Salary - {selectedSalary.staff_name}</h3>
-                <button
-                  onClick={() => {
-                    setShowSalaryEditModal(false);
-                    setSelectedSalary(null);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <FiX className="h-5 w-5 text-gray-600" />
-                </button>
+        {showRunModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-gray-900">Initiate Payroll Batch</h3>
+                <button onClick={() => setShowRunModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><FiX /></button>
               </div>
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-semibold text-gray-900 mb-2">Salary Distribution Status</h4>
-                <div className="flex items-center space-x-4 text-sm">
-                  <span
-                    className={`px-3 py-1 rounded-full font-medium ${
-                      selectedSalary.status === 'sent' ? 'bg-emerald-100 text-emerald-700'
-                        : selectedSalary.status === 'viewed'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    Status:{' '}
-                    {selectedSalary.status === 'sent'
-                      ? 'Sent to Staff'
-                      : selectedSalary.status === 'viewed'
-                      ? 'Viewed by Staff'
-                      : 'Pending'}
-                  </span>
-                  {selectedSalary.sent_date && (
-                    <span className="text-gray-600">
-                      Sent on: {new Date(selectedSalary.sent_date).toLocaleDateString('en-IN')}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.basic}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, basic: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">HRA</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.hra}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, hra: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Travel Allowance</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.ta}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, ta: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Other Allowances</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.other_allowances}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, other_allowances: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Deductions</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.deductions}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, deductions: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Working Days</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.working_days}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, working_days: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Present Days</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.present_days}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, present_days: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Wallet (Debit from)</label>
-                  <select
-                    value={selectedWalletId}
-                    onChange={(e) => setSelectedWalletId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">-- Select Wallet --</option>
-                    {wallets.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} – ₹{Number(w.balance).toLocaleString()}
-                      </option>
-                    ))}
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Select Payroll Month</label>
+                  <select value={newRunData.payroll_month} onChange={e => setNewRunData({...newRunData, payroll_month: e.target.value})} className="w-full border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-900 font-medium focus:ring-2 focus:ring-indigo-500 outline-none">
+                    {monthOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
                 </div>
-              </div>
-              <div className="mb-6">
-                <h4 className="font-semibold text-gray-900 mb-4">Advanced Salary Components</h4>
-                <div className="space-y-3 mb-4">
-                  {salaryEdit.additional_components.map((component, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getOperationColor(component.operation)}`}>
-                        {getOperationIcon(component.operation)}
-                      </span>
-                      <span className="flex-1 text-sm font-medium">{component.name}</span>
-                      <span className="text-sm">
-                        {component.operation === 'percentage' ? `${component.amount}%` : component.amount}
-                        {component.base && component.base !== 'basic' && ` of ${component.base}`}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveComponent(index)}
-                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                      >
-                        <FiX className="h-4 w-4" />
-                      </button>
+                
+                {newRunData.is_loading ? (
+                  <div className="py-8 text-center text-gray-500"><FiRefreshCw className="animate-spin h-6 w-6 mx-auto mb-2" /> Syncing with Calendar...</div>
+                ) : (
+                  <>
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mt-4">
+                    <p className="text-sm text-indigo-800 font-medium mb-3">
+                        <FiCalendar className="inline mr-2" />
+                        Evaluating performance for <strong className="uppercase">{formatMonthForDisplay(newRunData.payroll_month)}</strong>. Values synced from calendar.
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Calendar Days</label><input type="number" value={newRunData.calendar_days} onChange={e => setNewRunData({...newRunData, calendar_days: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Duty Leaves (DL)</label><input type="number" value={newRunData.dl_days} onChange={e => setNewRunData({...newRunData, dl_days: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Sundays</label><input type="number" value={newRunData.sundays} onChange={e => setNewRunData({...newRunData, sundays: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                        <div><label className="block text-xs font-bold text-indigo-900 mb-1">Other Offdays</label><input type="number" value={newRunData.other_offdays} onChange={e => setNewRunData({...newRunData, other_offdays: e.target.value})} className="w-full border-indigo-200 rounded-lg p-2 bg-white font-semibold" /></div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-12 gap-2 mb-3">
-                  <div className="col-span-4">
-                    <input
-                      type="text"
-                      placeholder="Component name"
-                      value={newComponent.name}
-                      onChange={e => setNewComponent(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <input
-                      type="number"
-                      placeholder="Value"
-                      value={newComponent.amount}
-                      onChange={e => setNewComponent(prev => ({ ...prev, amount: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <select
-                      value={newComponent.operation}
-                      onChange={e => setNewComponent(prev => ({ ...prev, operation: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="addition">Addition (+)</option>
-                      <option value="subtraction">Subtraction (-)</option>
-                      <option value="multiplication">Multiplication (×)</option>
-                      <option value="division">Division (÷)</option>
-                      <option value="percentage">Percentage (%)</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <select
-                      value={newComponent.base}
-                      onChange={e => setNewComponent(prev => ({ ...prev, base: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="basic">Basic</option>
-                      <option value="current">Current Total</option>
-                    </select>
-                  </div>
-                  <div className="col-span-1">
-                    <button
-                      onClick={handleAddComponent}
-                      className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-                    >
-                      <FiPlus className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
+                    
+                    <div className="pt-2 text-right text-base font-black text-gray-900 flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Final Target Working Days:</span>
+                      <span className="bg-gray-100 px-3 py-1 rounded-md border border-gray-200">
+                        {Number(newRunData.calendar_days) - (Number(newRunData.sundays) + Number(newRunData.dl_days) + Number(newRunData.other_offdays))} Days
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <h4 className="font-semibold text-gray-900 mb-3">Salary Preview</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
-                    <span>Basic + HRA + TA + Allowances:</span>
-                    <span>
-                      ₹{(Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances)).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Components:</span>
-                    <span>
-                      ₹{calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Deductions:</span>
-                    <span className="font-bold text-emerald-600">
-                      ₹{(calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ) - Number(salaryEdit.deductions)).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    setShowSalaryEditModal(false);
-                    setSelectedSalary(null);
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveSalary}
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Save Salary
-                </button>
-              </div>
+              <button 
+                onClick={handleCreateRun} 
+                disabled={newRunData.is_loading}
+                className="w-full mt-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold transition shadow-sm disabled:opacity-50"
+              >
+                Create Batch
+              </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Create Salary Modal */}
+      {/* Review & Pay Data Grid Modal */}
       <AnimatePresence>
-        {showCreateSalaryModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-gray-900">Create New Salary</h3>
-                <button
-                  onClick={() => setShowCreateSalaryModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <FiX className="h-5 w-5 text-gray-600" />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+        {showReviewModal && selectedRun && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="bg-white rounded-xl w-full max-w-[95vw] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Staff Member</label>
-                  <select
-                    value={salaryEdit.staff_id}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, staff_id: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select Staff</option>
-                    {staffList.map(staff => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} ({staff.employeeId})
-                      </option>
-                    ))}
-                  </select>
+                  <h3 className="text-xl font-bold text-gray-900">Payroll Review: {formatMonthForDisplay(selectedRun.payroll_month.substring(0,7))}</h3>
+                  <p className="text-sm text-gray-500 mt-1">Status: <span className="uppercase font-bold text-indigo-600 ml-1">{selectedRun.status}</span></p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-                  <select
-                    value={salaryEdit.month}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, month: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {monthOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Wallet (Debit from)</label>
-                  {walletLoading ? (
-                    <p className="text-sm text-gray-500">Loading wallets…</p>
-                  ) : wallets.length === 0 ? (
-                    <p className="text-sm text-red-600">No wallets available</p>
-                  ) : (
-                    <select
-                      value={selectedWalletId}
-                      onChange={(e) => setSelectedWalletId(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      required
-                    >
-                      <option value="">-- Select Wallet --</option>
-                      {wallets.map((w) => (
-                        <option key={w.id} value={w.id}>
-                          {w.name} ({w.wallet_type}) – ₹{Number(w.balance).toLocaleString()} bal.
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.basic}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, basic: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">HRA</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.hra}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, hra: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Travel Allowance</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.ta}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, ta: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Other Allowances</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.other_allowances}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, other_allowances: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Deductions</label>
-                  <input
-                    type="number"
-                    value={salaryEdit.deductions}
-                    onChange={e => setSalaryEdit(prev => ({ ...prev, deductions: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Working Days (auto)</label>
-                  <input
-                    type="text"
-                    value={autoCalc.working_days}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Present Days (auto)</label>
-                  <input
-                    type="text"
-                    value={autoCalc.present_days}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Total Hours (auto)</label>
-                  <input
-                    type="text"
-                    value={autoCalc.total_hours}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  />
-                </div>
-              </div>
-              <div className="mb-6">
-                <h4 className="font-semibold text-gray-900 mb-4">Advanced Salary Components</h4>
-                <div className="space-y-3 mb-4">
-                  {salaryEdit.additional_components.map((component, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${getOperationColor(component.operation)}`}>
-                        {getOperationIcon(component.operation)}
-                      </span>
-                      <span className="flex-1 text-sm font-medium">{component.name}</span>
-                      <span className="text-sm">
-                        {component.operation === 'percentage' ? `${component.amount}%` : component.amount}
-                        {component.base && component.base !== 'basic' && ` of ${component.base}`}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveComponent(index)}
-                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                      >
-                        <FiX className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-12 gap-2 mb-3">
-                  <div className="col-span-4">
-                    <input
-                      type="text"
-                      placeholder="Component name"
-                      value={newComponent.name}
-                      onChange={e => setNewComponent(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <input
-                      type="number"
-                      placeholder="Value"
-                      value={newComponent.amount}
-                      onChange={e => setNewComponent(prev => ({ ...prev, amount: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <select
-                      value={newComponent.operation}
-                      onChange={e => setNewComponent(prev => ({ ...prev, operation: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="addition">Addition (+)</option>
-                      <option value="subtraction">Subtraction (-)</option>
-                      <option value="multiplication">Multiplication (×)</option>
-                      <option value="division">Division (÷)</option>
-                      <option value="percentage">Percentage (%)</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <select
-                      value={newComponent.base}
-                      onChange={e => setNewComponent(prev => ({ ...prev, base: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    >
-                      <option value="basic">Basic</option>
-                      <option value="current">Current Total</option>
-                    </select>
-                  </div>
-                  <div className="col-span-1">
-                    <button
-                      onClick={handleAddComponent}
-                      className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-                    >
-                      <FiPlus className="h-4 w-4" />
+                <div className="flex items-center space-x-4">
+                  {selectedRun.status === 'generated' && (
+                    <button onClick={handleFinalizeRun} className="px-5 py-2.5 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 shadow-sm transition">
+                      Lock & Finalize Payroll
                     </button>
-                  </div>
+                  )}
+                  {selectedRun.status === 'finalized' && (
+                    <div className="flex items-center space-x-2 border-l border-gray-300 pl-4">
+                      <select value={selectedWalletId} onChange={(e) => setSelectedWalletId(e.target.value)} className="border-gray-300 rounded-lg p-2.5 text-sm bg-white shadow-sm">
+                        <option value="">-- Select Disbursement Wallet --</option>
+                        {wallets.map((w) => <option key={w.id} value={w.id}>{w.name} (₹{w.balance})</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <button onClick={() => setShowReviewModal(false)} className="p-2.5 text-gray-500 hover:bg-gray-200 rounded-lg transition"><FiX className="h-6 w-6" /></button>
                 </div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <h4 className="font-semibold text-gray-900 mb-3">Salary Preview</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
-                    <span>Basic + HRA + TA + Allowances:</span>
-                    <span>
-                      ₹{(Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances)).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Components:</span>
-                    <span>
-                      ₹{calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>After Deductions:</span>
-                    <span className="font-bold text-emerald-600">
-                      ₹{(calculateWithOperations(
-                        Number(salaryEdit.basic) + Number(salaryEdit.hra) + Number(salaryEdit.ta) + Number(salaryEdit.other_allowances),
-                        salaryEdit.additional_components
-                      ) - Number(salaryEdit.deductions)).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowCreateSalaryModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateSalary}
-                  disabled={!salaryEdit.staff_id || !salaryEdit.month || !salaryEdit.basic || !salaryEdit.working_days || !salaryEdit.present_days}
-                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Create Salary
-                </button>
+
+              {/* The Grid */}
+              <div className="overflow-auto grow p-0">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b border-gray-200 sticky top-0 z-20">
+                    <tr>
+                      <th className="py-3 px-4 sticky left-0 bg-gray-100 z-30 border-r border-gray-200" rowSpan="2">Staff Name</th>
+                      
+                      {/* NEW: Base Rates Group */}
+                    <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-blue-50/50" colSpan="2">Base Rates (₹)</th>
+                      
+                      <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
+                      <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-emerald-50/50" colSpan="3">Service Charge Earned</th>
+                      <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-indigo-50/30" colSpan="7">Earnings Breakdown (₹)</th>
+                      <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Deductions</th>
+                      <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Net Pay</th>
+                      <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Payment</th>
+                    </tr>
+                    <tr>
+                      {/* Base Rates */}
+                      <th className="py-2 px-3 border-l border-gray-200 bg-blue-50/50">Per Day</th>
+                      <th className="py-2 px-3 border-r border-gray-200 bg-blue-50/50">Per Hour</th>
+                      
+                      {/* Hours */}
+                      <th className="py-2 px-3">Target</th>
+                      <th className="py-2 px-3">Worked</th>
+                      <th className="py-2 px-3 border-r border-gray-200">%</th>
+                      
+                      {/* Service Charge */}
+                      <th className="py-2 px-3 bg-emerald-50/50">Target</th>
+                      <th className="py-2 px-3 bg-emerald-50/50">Actual Earned</th>
+                      <th className="py-2 px-3 border-r border-gray-200 bg-emerald-50/50">Col %</th>
+                      
+                      {/* Earnings */}
+                      <th className="py-2 px-3 text-indigo-600">Bonus %</th>
+                      <th className="py-2 px-3">Basic Pay</th>
+                      <th className="py-2 px-3">Bonus</th>
+                      <th className="py-2 px-3">Offday Pay</th>
+                      <th className="py-2 px-3">TA</th>
+                      <th className="py-2 px-3">FA</th>
+                      <th className="py-2 px-3 border-r border-gray-200">Total Gross</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {/* 1. FORCE ALPHABETICAL SORTING BY STAFF NAME */}
+                    {[...runRecords]
+                      .sort((a, b) => (a.staff_name || "").localeCompare(b.staff_name || ""))
+                      .map((r) => {
+                      
+                      // Calculate Base Rates safely with fallbacks to prevent NaN
+                      const basicSalary = Number(r.snapshot_basic_salary || r.basic_pay || 0);
+                      const calendarDays = Number(selectedRun.calendar_days || 30);
+                      const basicPayPerDay = calendarDays > 0 ? basicSalary / calendarDays : 0;
+                      
+                      const dailyHours = Number(r.snapshot_daily_hours || 9);
+                      const basicPayPerHour = dailyHours > 0 ? basicPayPerDay / dailyHours : 0;
+                      
+                      // Calculate Tooltip Math
+                      const ta = Number(r.ta_pay || r.ta || 0);
+                      const fa = Number(r.fa_pay || r.fa || 0);
+                      const off = Number(r.paid_offdays || 0);
+                      
+                      const workPct = Number(r.working_hours_percent || 0);
+                      const isFull = workPct >= 100;
+                      const offdaysCount = Number(selectedRun.sundays || 0) + Number(selectedRun.dl_days || 0) + Number(selectedRun.other_offdays || 0);
+                      const surplus = Math.max(0, Number(r.achieved_service_revenue || 0) - Number(r.total_monthly_target || 0));
+
+                      // Hover Strings
+                      const basicTooltip = `${Number(r.total_worked_hours || 0).toFixed(1)} Worked Hrs × ₹${basicPayPerHour.toFixed(2)}/hr`;
+                      const bonusTooltip = `${Number(r.bonus_percent || 0).toFixed(1)}% × ₹${surplus.toLocaleString()} (Surplus Service Charge)`;
+                      const offdayTooltip = isFull 
+                          ? `${offdaysCount} Offdays × ₹${basicPayPerDay.toFixed(2)}/day\n(100%+ attendance)` 
+                          : `${offdaysCount} Offdays × ₹${basicPayPerDay.toFixed(2)}/day × ${workPct.toFixed(1)}%\n(Prorated due to <100% attendance)`;
+                      const taTooltip = isFull ? "100%+ attendance (Full TA)" : `Prorated at ${workPct.toFixed(1)}% attendance`;
+                      const faTooltip = isFull ? "100%+ attendance (Full FA)" : `Prorated at ${workPct.toFixed(1)}% attendance`;
+                      
+                      return (
+                        <tr key={r.id} className="hover:bg-gray-50 transition-colors bg-white group">
+                          
+                          {/* ENHANCED STAFF NAME COLUMN WITH SCHEDULE VIEW */}
+                          <td className="py-3 px-4 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10 border-r border-gray-100">
+                            <div className="font-bold text-gray-900">{r.staff_name}</div>
+                            <div className="text-[11px] text-indigo-600 font-bold mt-0.5 uppercase tracking-wider">
+                              Shift: {Number(r.snapshot_daily_hours || 9).toFixed(1)}h / Day
+                            </div>
+                          </td>
+                          
+                          {/* NEW: BASE RATES */}
+                          <td className="py-3 px-3 text-blue-700 font-medium bg-blue-50/20 border-l border-gray-100">₹{basicPayPerDay.toFixed(2)}</td>
+                          <td className="py-3 px-3 text-blue-700 font-medium bg-blue-50/20 border-r border-gray-100">₹{basicPayPerHour.toFixed(2)}</td>
+                          
+                          {/* HOURS */}
+                          <td className="py-3 px-3 text-gray-500">{Number(r.total_targeted_hours || 0).toFixed(1)}h</td>
+                          
+                          {/* OVERRIDEABLE WORKED HOURS INPUT */}
+                          <td className="py-2 px-3 bg-blue-50/10">
+                            {selectedRun.status === 'generated' ? (
+                              <div className="flex items-center">
+                                <input 
+                                  type="number" 
+                                  defaultValue={Number(r.total_worked_hours || 0).toFixed(1)}
+                                  onBlur={(e) => handleUpdateWorkedHours(r.id, e.target.value)}
+                                  className="w-20 text-right p-1.5 border border-blue-200 rounded text-blue-700 font-bold text-sm focus:ring-1 focus:ring-blue-500 bg-white shadow-sm"
+                                  step="0.1"
+                                />
+                                <span className="ml-1 text-gray-500 text-xs font-medium">h</span>
+                              </div>
+                            ) : (
+                              <span className="font-medium text-gray-900 block px-1">{Number(r.total_worked_hours || 0).toFixed(1)}h</span>
+                            )}
+                          </td>
+                          
+                          <td className="py-3 px-3 border-r border-gray-100"><span className={`font-bold ${Number(r.working_hours_percent || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.working_hours_percent || 0).toFixed(1)}%</span></td>
+                          
+                          {/* SERVICE CHARGE & COLLECTION % */}
+                          <td className="py-3 px-3 text-gray-500">₹{Number(r.total_monthly_target || 0).toLocaleString()}</td>
+                          <td className="py-3 px-3 font-medium text-gray-900">₹{Number(r.achieved_service_revenue || 0).toLocaleString()}</td>
+                          <td className="py-3 px-3 border-r border-gray-100 bg-emerald-50/30"><span className={`font-bold ${Number(r.revenue_percent || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{Number(r.revenue_percent || 0).toFixed(1)}%</span></td>
+                          
+                          {/* EARNINGS WITH INFO TOOLTIPS */}
+                          <td className="py-3 px-3 text-indigo-600 font-bold bg-indigo-50/50">{Number(r.bonus_percent || 0).toFixed(1)}%</td>
+                          
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={basicTooltip}>
+                              <span>₹{Number(r.basic_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-emerald-600 font-bold">
+                            <div className="flex items-center justify-between cursor-help" title={bonusTooltip}>
+                              <span>₹{Number(r.bonus || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-emerald-400 hover:text-emerald-600" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={offdayTooltip}>
+                              <span>₹{off.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={taTooltip}>
+                              <span>₹{ta.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-gray-700">
+                            <div className="flex items-center justify-between cursor-help" title={faTooltip}>
+                              <span>₹{fa.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
+                            </div>
+                          </td>
+                          
+                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          
+                          <td className="py-2 px-3 border-r border-gray-100 bg-red-50/20">
+                            {selectedRun.status === 'generated' ? (
+                              <input 
+                                type="number" 
+                                defaultValue={r.deductions}
+                                onBlur={(e) => handleUpdateDeduction(r.id, e.target.value)}
+                                className="w-24 text-right p-1.5 border border-red-200 rounded text-red-700 font-medium text-sm focus:ring-1 focus:ring-red-500"
+                              />
+                            ) : (
+                              <span className="text-red-600 font-medium block text-right pr-2">₹{Number(r.deductions || 0).toLocaleString()}</span>
+                            )}
+                          </td>
+                          
+                          <td className="py-2 px-3 text-right bg-emerald-50/30 border-r border-gray-100">
+                            {selectedRun.status === 'generated' ? (
+                              <div className="flex items-center justify-end">
+                                <span className="text-gray-500 font-bold mr-1">₹</span>
+                                <input 
+                                  type="number" 
+                                  defaultValue={Number(r.net_pay || 0).toFixed(0)}
+                                  onBlur={(e) => handleUpdateNetPay(r.id, e.target.value)}
+                                  className="w-24 text-right p-1.5 border border-emerald-200 rounded text-emerald-700 font-black text-base focus:ring-1 focus:ring-emerald-500 bg-white shadow-sm"
+                                />
+                              </div>
+                            ) : (
+                              <span className="font-black text-gray-900 text-base block px-2">₹{Number(r.net_pay || 0).toLocaleString()}</span>
+                            )}
+                          </td><td className="py-3 px-4 text-right font-black text-gray-900 bg-emerald-50/30 border-r border-gray-100 text-base">
+                            ₹{Number(r.net_pay || 0).toLocaleString()}
+                          </td>
+                          
+                          <td className="py-3 px-4 text-center bg-gray-50/50">
+                            {r.payment_status === 'paid' ? (
+                              <span className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-md text-xs font-bold">Paid</span>
+                            ) : selectedRun.status === 'finalized' ? (
+                              <button onClick={() => handlePayRecord(r.id)} className="px-4 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-md text-xs font-bold transition shadow-sm">
+                                Issue Pay
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400 font-medium">Pending Finalization</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </motion.div>
           </div>
@@ -2193,7 +2316,7 @@ const AdminAttendance = () => {
       {/* Calendar Event Modal */}
       <AnimatePresence>
         {showCalendarModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2264,7 +2387,7 @@ const AdminAttendance = () => {
       {/* Leave Action Modal */}
       <AnimatePresence>
         {showLeaveActionModal && selectedLeave && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2329,6 +2452,66 @@ const AdminAttendance = () => {
                 >
                   Approve
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Payroll Configuration Modal (Bulk Editor) */}
+      <AnimatePresence>
+        {showStructuresModal && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl w-full max-w-5xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Staff Payroll Configuration</h3>
+                  <p className="text-sm text-gray-500 mt-1">Set Basic Salary, Target Revenue per Hour, TA, and FA for each staff member.</p>
+                </div>
+                <button onClick={() => setShowStructuresModal(false)} className="p-2.5 text-gray-500 hover:bg-gray-200 rounded-lg transition"><FiX className="h-6 w-6" /></button>
+              </div>
+              
+              <div className="overflow-auto grow p-0">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b border-gray-200 sticky top-0 z-20">
+                    <tr>
+                      <th className="py-3 px-4 sticky left-0 bg-gray-100 z-30 border-r border-gray-200 shadow-[1px_0_0_0_#e5e7eb]">Staff Name</th>
+                      <th className="py-3 px-4">Basic Salary (₹)</th>
+                      <th className="py-3 px-4">Hourly Target (₹)</th>
+                      <th className="py-3 px-4">TA (₹)</th>
+                      <th className="py-3 px-4">FA (₹)</th>
+                      <th className="py-3 px-4 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {salaryStructures.map((s) => (
+                      <tr key={s.staff_id} className="hover:bg-gray-50 bg-white">
+                        <td className="py-3 px-4 font-bold text-gray-900 sticky left-0 bg-white border-r border-gray-100 shadow-[1px_0_0_0_#f3f4f6]">
+                          {s.staff_name}
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.basic_salary} onChange={e => handleUpdateStructureInput(s.staff_id, 'basic_salary', e.target.value)} className="w-32 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.hourly_service_revenue_target} onChange={e => handleUpdateStructureInput(s.staff_id, 'hourly_service_revenue_target', e.target.value)} className="w-32 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.ta} onChange={e => handleUpdateStructureInput(s.staff_id, 'ta', e.target.value)} className="w-24 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <input type="number" value={s.fa} onChange={e => handleUpdateStructureInput(s.staff_id, 'fa', e.target.value)} className="w-24 border border-gray-300 rounded p-2 focus:ring-indigo-500 focus:outline-none" />
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button onClick={() => handleSaveStructure(s.staff_id)} className="px-4 py-2 bg-indigo-50 text-indigo-700 font-bold rounded-lg hover:bg-indigo-100 transition shadow-sm border border-indigo-200">
+                            Save
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {salaryStructures.length === 0 && (
+                      <tr><td colSpan="6" className="py-8 text-center text-gray-500">No active staff structures found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </motion.div>
           </div>

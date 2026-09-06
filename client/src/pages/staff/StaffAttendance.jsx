@@ -34,7 +34,7 @@ import {
 } from '/src/services/salaryService';
 import CalendarView from '/src/components/CalendarView';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import autoTable from 'jspdf-autotable';
 
 // Register Chart.js components
 ChartJS.register(
@@ -336,7 +336,19 @@ const MonthlySalaryChart = ({ allSalaryData }) => {
 };
 
 const StaffAttendance = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // 1. Read the 'tab' from the URL, default to 'dashboard'
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'dashboard';
+  });
+
+  // 2. Update the URL quietly when a user clicks different tabs manually
+  useEffect(() => {
+    const url = new URL(window.location);
+    url.searchParams.set('tab', activeTab);
+    window.history.replaceState({}, '', url);
+  }, [activeTab]);
+
   const [staff, setStaff] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [salaryData, setSalaryData] = useState([]);
@@ -673,92 +685,130 @@ const StaffAttendance = () => {
   };
 
   const handleDownloadPayslip = async (salary) => {
-    toast.info("Generating Payslip PDF...");
-    
-    // Create a temporary hidden div to hold the payslip design
-    const payslipDiv = document.createElement("div");
-    payslipDiv.id = "payslip-pdf-container";
-    payslipDiv.style.width = "800px";
-    payslipDiv.style.padding = "40px";
-    payslipDiv.style.backgroundColor = "white";
-    payslipDiv.style.position = "absolute";
-    payslipDiv.style.left = "-9999px"; // Keep it off-screen
-    
-    payslipDiv.innerHTML = `
-      <div style="font-family: Arial, sans-serif; color: #333;">
-        <div style="text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
-          <h1 style="color: #4f46e5; margin: 0; font-size: 28px;">AKSHAYA CRM</h1>
-          <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Official Payslip Statement</p>
-        </div>
-        
-        <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
-          <div>
-            <p><strong>Employee Name:</strong> ${staff?.name || 'N/A'}</p>
-            <p><strong>Employee ID:</strong> ${staff?.employeeId || 'N/A'}</p>
-            <p><strong>Department:</strong> ${staff?.department || 'N/A'}</p>
-          </div>
-          <div style="text-align: right;">
-            <p><strong>Salary Month:</strong> ${getMonthName(salary.month)}</p>
-            <p><strong>Working Days:</strong> ${salary.working_days}</p>
-            <p><strong>Present Days:</strong> ${salary.present_days}</p>
-          </div>
-        </div>
-
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-          <thead>
-            <tr style="background-color: #f3f4f6;">
-              <th style="padding: 12px; border: 1px solid #d1d5db; text-align: left;">Earnings</th>
-              <th style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">Basic Salary</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.basic).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">HRA</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.hra).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">Other Allowances</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.other_allowances).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db; color: #dc2626;"><strong>Deductions</strong></td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #dc2626;">-${Number(salary.deductions).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr style="background-color: #f3f4f6; font-weight: bold;">
-              <td style="padding: 12px; border: 1px solid #d1d5db; font-size: 16px;">Net Salary Payable</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; font-size: 16px; color: #059669;">₹${Number(salary.net_salary).toLocaleString('en-IN')}</td>
-            </tr>
-          </tbody>
-        </table>
-        
-        <div style="margin-top: 50px; text-align: center; color: #888; font-size: 12px;">
-          <p>This is a system generated document and does not require a physical signature.</p>
-          <p>Generated on ${new Date().toLocaleDateString('en-IN')}</p>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(payslipDiv);
-
     try {
-      const canvas = await html2canvas(payslipDiv, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      toast.info("Generating Professional Payslip...");
+      const doc = new jsPDF('p', 'mm', 'a4');
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Payslip_${staff?.name.replace(/\s+/g, '_')}_${salary.month}.pdf`);
-      toast.success("Payslip downloaded successfully!");
+      const centreName = salary.centre_name || 'AKSHAYA CRM';
+      const centreAddress = salary.centre_address || 'Official Payslip Statement';
+      
+      // ==========================================
+      // 1. DYNAMIC LOGO LOADER
+      // ==========================================
+      if (salary.centre_logo) {
+        try {
+          const logoUrl = salary.centre_logo.startsWith('http') 
+            ? salary.centre_logo 
+            : `${import.meta.env.VITE_API_URL}${salary.centre_logo}`;
+            
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.src = logoUrl;
+          
+          await new Promise((resolve) => {
+            img.onload = () => {
+              doc.addImage(img, 'PNG', 14, 12, 22, 22); 
+              resolve();
+            };
+            img.onerror = () => resolve(); 
+          });
+        } catch (e) {
+          console.warn("Could not load logo into PDF");
+        }
+      }
+
+      // ==========================================
+      // 2. OFFICIAL LETTERHEAD
+      // ==========================================
+      doc.setFontSize(22);
+      doc.setTextColor(30, 58, 138); // 🔥 Dark Navy Blue (Tailwind blue-900)
+      doc.setFont(undefined, 'bold');
+      doc.text(centreName.toUpperCase(), 105, 22, { align: "center" });
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.setFont(undefined, 'normal');
+      const splitAddress = doc.splitTextToSize(centreAddress, 140);
+      doc.text(splitAddress, 105, 29, { align: "center" });
+      
+      const headerBottomY = 32 + (splitAddress.length * 4);
+      doc.setDrawColor(30, 58, 138); // 🔥 Matches the line color to the Dark Navy text
+      doc.setLineWidth(0.5);
+      doc.line(14, headerBottomY, 196, headerBottomY);
+      
+      // ==========================================
+      // 3. EMPLOYEE & NEW ENGINE HOURS DATA
+      // ==========================================
+      const infoStartY = headerBottomY + 8;
+      doc.setFontSize(10);
+      doc.setTextColor(40, 40, 40);
+      
+      doc.text(`Employee Name: ${salary.staff_name || 'N/A'}`, 14, infoStartY);
+      doc.text(`Employee ID: ${salary.employee_id || 'N/A'}`, 14, infoStartY + 7);
+      doc.text(`Department: ${salary.department || 'N/A'}`, 14, infoStartY + 14);
+      
+      doc.text(`Salary Month: ${getMonthName(salary.month)}`, 196, infoStartY, { align: "right" });
+      doc.text(`Target Hours: ${Number(salary.working_days * salary.snapshot_daily_hours).toFixed(1)}h`, 196, infoStartY + 7, { align: "right" });
+      doc.text(`Worked Hours: ${Number(salary.total_worked_hours).toFixed(1)}h`, 196, infoStartY + 14, { align: "right" });
+      
+      // ==========================================
+      // 4. NEW ENGINE EARNINGS TABLE
+      // ==========================================
+      const tableBody = [
+        ["Basic Pay (Hours Worked)", `Rs ${Number(salary.basic || 0).toLocaleString('en-IN')}`],
+        ["Offday Pay (Prorated)", `Rs ${Number(salary.offday_pay || 0).toLocaleString('en-IN')}`],
+        ["Travel Allowance (TA)", `Rs ${Number(salary.ta || 0).toLocaleString('en-IN')}`],
+        ["Food Allowance (FA)", `Rs ${Number(salary.fa || 0).toLocaleString('en-IN')}`],
+        ["Service Charge Bonus", `+ Rs ${Number(salary.bonus || 0).toLocaleString('en-IN')}`],
+        ["Deductions / Advances", `- Rs ${Number(salary.deductions || 0).toLocaleString('en-IN')}`],
+      ];
+
+      autoTable(doc, {
+        startY: infoStartY + 22,
+        head: [["Earnings & Deductions", "Amount"]],
+        body: tableBody,
+        theme: 'striped',
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        styles: { fontSize: 10, cellPadding: 6 },
+        columnStyles: {
+          0: { fontStyle: 'normal' },
+          1: { halign: 'right', fontStyle: 'bold' }
+        },
+        willDrawCell: (data) => {
+          if (data.row.index === 4 && data.column.index === 1) data.cell.styles.textColor = [5, 150, 105]; 
+          if (data.row.index === 5) data.cell.styles.textColor = [220, 38, 38]; 
+        }
+      });
+
+      // ==========================================
+      // 5. NET SALARY BOX & FOOTER
+      // ==========================================
+      const finalY = doc.lastAutoTable.finalY + 10;
+      doc.setFillColor(243, 244, 246);
+      doc.rect(14, finalY, 182, 12, 'F');
+      
+      doc.setFontSize(12);
+      doc.setTextColor(40, 40, 40);
+      doc.setFont(undefined, 'bold');
+      doc.text("Net Salary Payable", 18, finalY + 8);
+      
+      doc.setFontSize(14);
+      doc.setTextColor(5, 150, 105);
+      doc.text(`Rs ${Number(salary.net_salary).toLocaleString('en-IN')}`, 192, finalY + 8, { align: "right" });
+
+      doc.setFontSize(9);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont(undefined, 'normal');
+      doc.text("This is a system generated document and does not require a physical signature.", 105, finalY + 30, { align: "center" });
+      doc.text(`${centreName} • Generated on ${new Date().toLocaleDateString('en-IN')}`, 105, finalY + 36, { align: "center" });
+
+      doc.save(`Payslip_${(salary.staff_name || 'Staff').replace(/\s+/g, '_')}_${salary.month}.pdf`);
+      toast.success("Professional Payslip Downloaded!");
+      
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      toast.error("Failed to generate PDF. Please try again.");
-    } finally {
-      document.body.removeChild(payslipDiv); // Clean up
+      console.error("Error generating native PDF:", error);
+      toast.error("Failed to generate PDF.");
     }
   };
 
@@ -854,88 +904,76 @@ const StaffAttendance = () => {
     </tr>
   );
 
-const LeaveApplicationRow = ({ application }) => {
-    // Helper to format 'casual_leave' to 'Casual Leave'
-    const formatLeaveType = (type) => {
-      if (!type) return 'Unknown';
-      return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-    };
+  const LeaveApplicationRow = ({ application }) => {
+      // Helper to format 'casual_leave' to 'Casual Leave'
+      const formatLeaveType = (type) => {
+        if (!type) return 'Unknown';
+        return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+      };
 
-    return (
-      <tr key={application.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-        <td className="py-4 px-4">
-          <p className="text-sm font-medium text-gray-900">{formatLeaveType(application.type)}</p>
-          <div className="mt-1">
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
-              application.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-            }`}>
-              {application.leave_duration === 'half' 
-                ? `Half Day ${application.leave_time ? `(${application.leave_time})` : ''}` 
-                : 'Full Day'}
-            </span>
-          </div>
+      return (
+        <tr key={application.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+          <td className="py-4 px-4">
+            <p className="text-sm font-medium text-gray-900">{formatLeaveType(application.type)}</p>
+            <div className="mt-1">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                application.leave_duration === 'half' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+              }`}>
+                {application.leave_duration === 'half' 
+                  ? `Half Day ${application.leave_time ? `(${application.leave_time})` : ''}` 
+                  : 'Full Day'}
+              </span>
+            </div>
+          </td>
+          <td className="py-4 px-4">
+          <p className="text-sm text-gray-900">
+            {new Date(application.from_date).toLocaleDateString('en-IN')}
+          </p>
         </td>
         <td className="py-4 px-4">
-        <p className="text-sm text-gray-900">
-          {new Date(application.from_date).toLocaleDateString('en-IN')}
-        </p>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm text-gray-900">
-          {new Date(application.to_date).toLocaleDateString('en-IN')}
-        </p>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm text-gray-900">{application.reason}</p>
-      </td>
-      <td className="py-4 px-4">
-        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-          application.status === 'approved' ? 'bg-emerald-50 text-emerald-700' :
-          application.status === 'rejected' ? 'bg-rose-50 text-rose-700' :
-          'bg-amber-50 text-amber-700'
-        }`}>
-          {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-        </span>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm text-gray-600">
-          {new Date(application.applied_date).toLocaleDateString('en-IN')}
-        </p>
-      </td>
-    </tr>
-  );
-};
+          <p className="text-sm text-gray-900">
+            {new Date(application.to_date).toLocaleDateString('en-IN')}
+          </p>
+        </td>
+        <td className="py-4 px-4">
+          <p className="text-sm text-gray-900">{application.reason}</p>
+        </td>
+        <td className="py-4 px-4">
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+            application.status === 'approved' ? 'bg-emerald-50 text-emerald-700' :
+            application.status === 'rejected' ? 'bg-rose-50 text-rose-700' :
+            'bg-amber-50 text-amber-700'
+          }`}>
+            {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+          </span>
+        </td>
+        <td className="py-4 px-4">
+          <p className="text-sm text-gray-600">
+            {new Date(application.applied_date).toLocaleDateString('en-IN')}
+          </p>
+        </td>
+      </tr>
+    );
+  };
 
   const SalaryRow = ({ salary }) => (
     <tr key={`${salary.staff_id}-${salary.month}`} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+      <td className="py-4 px-4"><p className="text-sm font-medium text-gray-900">{getMonthName(salary.month)}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.basic).toLocaleString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.ta).toLocaleString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.fa).toLocaleString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm font-bold text-emerald-600">₹{Number(salary.bonus || 0).toLocaleString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-gray-900">₹{Number(salary.offday_pay || 0).toLocaleString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm text-rose-600">-₹{Number(salary.deductions).toLocaleString('en-IN')}</p></td>
+      <td className="py-4 px-4"><p className="text-sm font-bold text-emerald-600">₹{Number(salary.net_salary).toLocaleString('en-IN')}</p></td>
       <td className="py-4 px-4">
-        <p className="text-sm font-medium text-gray-900">{getMonthName(salary.month)}</p>
+        <p className="text-sm text-gray-900">{Number(salary.total_worked_hours).toFixed(1)}h / {salary.working_days * salary.snapshot_daily_hours}h</p>
       </td>
       <td className="py-4 px-4">
-        <p className="text-sm text-gray-900">₹{Number(salary.basic).toLocaleString('en-IN')}</p>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm text-gray-900">₹{Number(salary.hra).toLocaleString('en-IN')}</p>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm text-gray-900">₹{Number(salary.other_allowances).toLocaleString('en-IN')}</p>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm text-rose-600">-₹{Number(salary.deductions).toLocaleString('en-IN')}</p>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm font-bold text-emerald-600">₹{Number(salary.net_salary).toLocaleString('en-IN')}</p>
-      </td>
-      <td className="py-4 px-4">
-        <p className="text-sm text-gray-900">{salary.present_days}/{salary.working_days}</p>
-      </td>
-      <td className="py-4 px-4">
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          salary.status === 'sent' ? 'bg-emerald-100 text-emerald-700' :
-          salary.status === 'viewed' ? 'bg-blue-100 text-blue-700' :
-          'bg-amber-100 text-amber-700'
+        <span className={`px-2.5 py-1 rounded-full text-xs font-bold tracking-wider uppercase ${
+          salary.status === 'sent' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
         }`}>
-          {salary.status.charAt(0).toUpperCase() + salary.status.slice(1)}
+          {salary.status === 'sent' ? 'Paid' : 'Pending'}
         </span>
       </td>
     </tr>
@@ -1124,7 +1162,7 @@ const LeaveApplicationRow = ({ application }) => {
                           <div>
                             <p className="text-sm font-medium text-gray-900">{getMonthName(salary.month)}</p>
                             <p className="text-xs text-gray-500">
-                              {salary.present_days}/{salary.working_days} days
+                              {Number(salary.total_worked_hours).toFixed(1)}h / {salary.working_days * salary.snapshot_daily_hours}h
                             </p>
                           </div>
                           <p className="text-sm font-bold text-emerald-600">
@@ -1242,16 +1280,18 @@ const LeaveApplicationRow = ({ application }) => {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-gray-200 bg-gray-50">
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Basic</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">HRA</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Allowances</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Deductions</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Net Salary</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
-                          <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                        </tr>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Basic Pay</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">TA</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">FA</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Bonus</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Offdays</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Deductions</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Net Salary</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
+                        <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      </tr>
                       </thead>
                       <tbody>
                         {(selectedMonth 
@@ -1400,7 +1440,7 @@ const LeaveApplicationRow = ({ application }) => {
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Salary Month</th>
-                        <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Days (Present/Total)</th>
+                        <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Hours Worked</th>
                         <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Net Amount</th>
                         <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                         <th className="py-4 px-6 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
@@ -1424,14 +1464,14 @@ const LeaveApplicationRow = ({ application }) => {
                                 {getMonthName(salary.month)}
                               </td>
                               <td className="py-4 px-6 text-sm text-gray-600">
-                                {salary.present_days} / {salary.working_days}
+                                {Number(salary.total_worked_hours).toFixed(1)}h / {salary.working_days * salary.snapshot_daily_hours}h
                               </td>
                               <td className="py-4 px-6 font-bold text-emerald-600">
                                 ₹{Number(salary.net_salary).toLocaleString('en-IN')}
                               </td>
                               <td className="py-4 px-6">
                                 <span className="px-2.5 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
-                                  Issued
+                                  Paid
                                 </span>
                               </td>
                               <td className="py-4 px-6 text-right">

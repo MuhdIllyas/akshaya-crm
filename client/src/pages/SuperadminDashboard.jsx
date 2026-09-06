@@ -6,6 +6,11 @@ import {
   Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
+  FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown
+} from "react-icons/fi";
 
 // ==========================================
 // STAFF PERFORMANCE CHART (unchanged)
@@ -141,7 +146,7 @@ const StaffPerformanceChart = ({ staffData }) => {
 };
 
 // ==========================================
-// REVENUE CHART COMPONENT
+// REVENUE CHART COMPONENT (unchanged)
 // ==========================================
 const RevenueChart = ({ data, view }) => {
   if (!data || data.length === 0) {
@@ -224,6 +229,36 @@ const RevenueChart = ({ data, view }) => {
     </ResponsiveContainer>
   );
 };
+
+// ==========================================
+// StatCard Component (matching Admin Dashboard)
+// ==========================================
+const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick }) => (
+  <motion.div
+    whileHover={{ y: -4, scale: 1.02 }}
+    onClick={onClick}
+    className={`bg-white rounded-xl border border-gray-200 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer ${onClick ? 'hover:border-indigo-300' : ''}`}
+  >
+    <div className="flex items-center justify-between">
+      <div className="flex-1">
+        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
+        <div className="flex items-end space-x-2">
+          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          {trend !== undefined && (
+            <div className={`flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-gray-500'}`}>
+              {trend > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
+              <span>{Math.abs(trend)}%</span>
+            </div>
+          )}
+        </div>
+        <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+      </div>
+      <div className={`p-3 rounded-xl ${color} shadow-md`}>
+        <Icon className="h-6 w-6 text-white" />
+      </div>
+    </div>
+  </motion.div>
+);
 
 // ==========================================
 // MAIN DASHBOARD COMPONENT
@@ -347,10 +382,78 @@ const SuperadminDashboard = () => {
     );
   };
 
+  // Prepare data for the new StatCards
+  const kpiData = [
+    {
+      title: "Total Centres",
+      value: totalCentres,
+      icon: FiHome,
+      color: "bg-blue-500",
+      subtitle: `+${newCentresThisMonth ?? 0} this month`,
+      trend: newCentresThisMonth > 0 ? 5 : -2,
+      onClick: () => navigate('/dashboard/superadmin/centremanagement')
+    },
+    {
+      title: "Total Staff",
+      value: totalStaff,
+      icon: FiUsers,
+      color: "bg-purple-500",
+      subtitle: `${admins ?? 0} Admins, ${staffCount ?? 0} Staff`,
+      trend: 0,
+      onClick: () => navigate('/dashboard/superadmin/staffmanagement')
+    },
+    {
+      title: "Customers",
+      value: totalCustomers?.toLocaleString(),
+      icon: FiUserCheck,
+      color: "bg-green-500",
+      subtitle: `+${customerGrowth ?? 0} this month`,
+      trend: customerGrowth > 0 ? 8 : -3,
+    },
+    {
+      title: "Today's Services",
+      value: todayServices ?? 0,
+      icon: FiShoppingBag,
+      color: "bg-indigo-500",
+      subtitle: "All centres",
+      trend: 0,
+    },
+    {
+      title: "Today's Revenue",
+      value: formatCurrency(todayRevenue),
+      icon: FiDollarSign,
+      color: "bg-yellow-500",
+      subtitle: "Live collection",
+      trend: todayRevenue > 0 ? 12 : -5,
+    },
+    {
+      title: "Period Revenue",
+      value: formatCurrency(monthlyRevenue),
+      icon: FiTrendingUp,
+      color: "bg-orange-500",
+      subtitle: `vs previous`,
+      trend: revenueGrowthPercent,
+    },
+    {
+      title: "Period Profit",
+      value: formatCurrency(netProfit),
+      icon: FiPieChart,
+      color: "bg-red-500",
+      subtitle: "Selected range",
+      trend: netProfit > 0 ? 6 : -2,
+    },
+    {
+      title: "Pending Payments",
+      value: formatCurrency(health?.metrics?.pendingPaymentValue),
+      icon: FiAlertCircle,
+      color: "bg-pink-500",
+      subtitle: `${health?.metrics?.pendingCustomers ?? 0} Customers`,
+      trend: health?.metrics?.pendingCustomers > 5 ? 15 : -4,
+    }
+  ];
+
   return (
     <div className="bg-gray-50 min-h-screen p-4 lg:p-8 space-y-8">
-      {/* Removed max-width constraint – now full width with padding */}
-
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-gray-800 tracking-tight">📊 Superadmin Dashboard</h1>
@@ -359,103 +462,12 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Global KPI Cards - responsive grid updated for better laptop display */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-8 gap-3">
-        
-        {/* 1. Total Centres */}
-        <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-blue-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Total Centres</span><span>🌍</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-blue-950">{totalCentres}</div>
-          <div className="text-[10px] font-medium text-blue-700 mt-1 truncate">
-            +{newCentresThisMonth ?? 0} this month
-          </div>
-        </div>
-
-        {/* 2. Total Staff */}
-        <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-purple-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Total Staff</span><span>👥</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-purple-950">{totalStaff}</div>
-          <div className="text-[10px] font-medium text-purple-700 mt-1 truncate">
-            {admins ?? 0} Admins, {staffCount ?? 0} Staff
-          </div>
-        </div>
-
-        {/* 3. Total Customers */}
-        <div className="bg-green-50 p-3 rounded-xl border border-green-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-green-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Customers</span><span>👨‍👩‍👧</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-green-950">{totalCustomers?.toLocaleString()}</div>
-          <div className="text-[10px] font-medium text-green-700 mt-1 truncate">
-            +{customerGrowth ?? 0} this month
-          </div>
-        </div>
-
-        {/* 4. Services Completed Today */}
-        <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-indigo-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Today's Services</span><span>📑</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-indigo-950">{todayServices ?? 0}</div>
-          <div className="text-[10px] font-medium text-indigo-700 mt-1 truncate">
-            All centres
-          </div>
-        </div>
-
-        {/* 5. Today's Revenue */}
-        <div className="bg-yellow-50 p-3 rounded-xl border border-yellow-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-yellow-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Today's Revenue</span><span>💰</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-yellow-950 truncate">{formatCurrency(todayRevenue)}</div>
-          <div className="text-[10px] font-medium text-yellow-700 mt-1 truncate">
-            Live collection
-          </div>
-        </div>
-
-        {/* 6. Period Revenue */}
-        <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-orange-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Period Revenue</span><span>📈</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-orange-950 truncate">{formatCurrency(monthlyRevenue)}</div>
-          <div className="text-[10px] mt-1 flex items-center truncate">
-            <span className={`font-bold mr-1 ${revenueGrowthPercent >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {revenueGrowthPercent >= 0 ? '↑' : '↓'} {Math.abs(revenueGrowthPercent)}%
-            </span>
-            <span className="text-orange-600 font-medium">vs prev</span>
-          </div>
-        </div>
-
-        {/* 7. Period Profit */}
-        <div className="bg-red-50 p-3 rounded-xl border border-red-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-red-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Period Profit</span><span>💵</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-red-950 truncate">{formatCurrency(netProfit)}</div>
-          <div className="text-[10px] font-medium text-red-700 mt-1 truncate">
-            Selected range
-          </div>
-        </div>
-
-        {/* 8. Pending Payments */}
-        <div className="bg-pink-50 p-3 rounded-xl border border-pink-100 flex flex-col justify-between shadow-sm">
-          <div className="text-xs text-pink-800 font-semibold mb-1 flex justify-between">
-            <span className="truncate mr-1">Pending Payments</span><span>💳</span>
-          </div>
-          <div className="text-lg xl:text-xl font-bold text-pink-950 truncate">{formatCurrency(health?.metrics?.pendingPaymentValue)}</div>
-          <div className="text-[10px] font-medium text-pink-700 mt-1 truncate">
-            {health?.metrics?.pendingCustomers ?? 0} Customers
-          </div>
-        </div>
-
+      {/* Global KPI Cards - using StatCard (matches Admin Dashboard) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpiData.map((kpi, index) => (
+          <StatCard key={index} {...kpi} />
+        ))}
       </div>
-
-      {/* Rest of the dashboard remains the same – just adjust max width removed */}
 
       {/* Revenue Analytics + Centre Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

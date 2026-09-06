@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = {
   REVIEW: 'review',
   TEAM: 'team',
   SYSTEM: 'system',
+  SALARY_PAID: 'salary_paid',
 
   //Operation Hub
   KNOWLEDGE_MENTION: 'knowledge_mention',
@@ -154,6 +155,19 @@ export const notificationTemplates = {
     priority: 'low', 
     metadata: {
       'Discussion': data.discussionTitle
+    }
+  }),
+
+  salaryPaid: (data) => ({
+    type: NOTIFICATION_TYPES.SALARY_PAID,
+    category: NOTIFICATION_CATEGORIES.FINANCE,
+    title: '💰 Salary Disbursed',
+    message: `Your salary for ${data.month} has been successfully paid to your account.`,
+    priority: 'high',
+    metadata: {
+      'Month': data.month,
+      'Net Pay': data.amount,
+      'Disbursed By': data.disbursedBy
     }
   })
   

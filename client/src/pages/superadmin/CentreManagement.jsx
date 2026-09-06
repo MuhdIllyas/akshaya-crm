@@ -20,6 +20,18 @@ const CentreManagement = () => {
   const [showCentreDetails, setShowCentreDetails] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return "";
+    // If it's already a full URL or a legacy base64 string, return as is
+    if (imagePath.startsWith("http") || imagePath.startsWith("data:image")) {
+      return imagePath;
+    }
+    // Otherwise, append the backend URL
+    const baseUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
+    const path = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
+    return `${baseUrl}${path}`;
+  };
+
   useEffect(() => {
     fetchCentres();
     fetchCommAccounts();
@@ -389,6 +401,32 @@ const CentreManagement = () => {
                   <label htmlFor="centre-logo" className="block text-sm font-medium text-gray-700 mb-2">
                     Centre Logo
                   </label>
+                  
+                  {/* Show existing logo when editing */}
+                  {editingCentreId && typeof centreForm.logo === 'string' && centreForm.logo !== "" && (
+                    <div className="mb-3 p-2 bg-gray-50 border border-gray-200 rounded-lg inline-block">
+                      <p className="text-xs text-gray-500 mb-2">Current Logo:</p>
+                      <img 
+                        src={getImageUrl(centreForm.logo)} 
+                        alt="Current Centre Logo" 
+                        className="h-16 w-auto object-contain rounded"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Show preview of newly selected file */}
+                  {centreForm.logo && typeof centreForm.logo === 'object' && (
+                    <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg inline-block">
+                      <p className="text-xs text-blue-600 mb-2">New Logo Preview:</p>
+                      <img 
+                        src={URL.createObjectURL(centreForm.logo)} 
+                        alt="New Logo Preview" 
+                        className="h-16 w-auto object-contain rounded"
+                      />
+                    </div>
+                  )}
+
                   <input
                     type="file"
                     id="centre-logo"
@@ -397,9 +435,8 @@ const CentreManagement = () => {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     disabled={loading}
                   />
-                  {/* Optional: Show a message if editing and a logo already exists */}
-                  {editingCentreId && typeof centreForm.logo === 'string' && centreForm.logo !== "" && (
-                     <p className="text-xs text-gray-500 mt-1">Current logo is uploaded. Select a new file to overwrite.</p>
+                  {editingCentreId && (
+                    <p className="text-xs text-gray-500 mt-1">Select a new file to overwrite the current logo.</p>
                   )}
                 </div>
 
@@ -700,9 +737,14 @@ const CentreManagement = () => {
                         <div className="flex items-center mb-4">
                           {staff.photo ? (
                             <img
-                              src={staff.photo}
+                              src={getImageUrl(staff.photo)}
                               alt={`${staff.name}'s photo`}
                               className="w-14 h-14 rounded-full object-cover mr-4"
+                              onError={(e) => {
+                                // Fallback if the image file is missing on the server
+                                e.target.onerror = null; 
+                                e.target.src = "https://ui-avatars.com/api/?name=" + encodeURIComponent(staff.name) + "&background=random";
+                              }}
                             />
                           ) : (
                             <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center mr-4">

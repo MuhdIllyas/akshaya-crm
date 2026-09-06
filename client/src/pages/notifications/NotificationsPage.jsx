@@ -80,6 +80,11 @@ const mapDBNotificationToUI = (dbNotif) => {
       : `/dashboard/staff/expense_entry`;
   }
 
+  // 🔥 Route for Salary Paid (Goes straight to Payslips)
+  if (dbNotif.type === 'salary_paid') {
+    actionUrl = `/dashboard/${role}/attendance?tab=payslips`;
+  }
+
   // 🔥 Route for Knowledge/Operations Hub Discussions
   if (dbNotif.related_entity_type === 'discussion' || dbNotif.type?.startsWith('knowledge_')) {
     actionUrl = `/dashboard/${role}/operationshub`; 
@@ -96,11 +101,13 @@ const mapDBNotificationToUI = (dbNotif) => {
       conversationId: dbNotif.conversation_id,
       
       type: typeStr,
-      icon: typeStr.startsWith('knowledge_') ? FiMessageCircle :
+      icon: typeStr === 'salary_paid' ? FiDollarSign :
+            typeStr.startsWith('knowledge_') ? FiMessageCircle :
             typeStr.includes('message') ? FiMessageSquareIcon : 
             typeStr.includes('task') ? FiCheckSquare : 
             typeStr.includes('service') ? FiBriefcase : FiBell,
-      color: typeStr === 'knowledge_solved' ? 'emerald' : 
+      color: typeStr === 'salary_paid' ? 'emerald' :
+            typeStr === 'knowledge_solved' ? 'emerald' : 
             typeStr.startsWith('knowledge_') ? 'indigo' :
             typeStr.includes('message') ? 'blue' : 
             typeStr.includes('task') ? 'emerald' : 
@@ -176,6 +183,7 @@ const TYPE_ACTIONS = {
   review: ['view', 'mark_read'],
   team: ['view', 'mark_read'],
   system: ['view', 'mark_read'],
+  salary_paid: ['view', 'mark_read'],
 
   // 🔥 knowledge hub
   knowledge_mention: ['reply', 'mark_read'],
@@ -627,6 +635,13 @@ const NotificationsPage = () => {
       // Grab the ID from the notification metadata/entity and open the drawer
       setSelectedPaymentId(notification.related_entity_id || id);
       setIsReceiptDrawerOpen(true);
+      return;
+    }
+
+    // 🔥 Handle "View Details" for Salary Paid
+    if (action === 'view' && notification.type === 'salary_paid') {
+      handleMarkRead(id);
+      navigate(`/dashboard/${role}/attendance?tab=payslips`);
       return;
     }
 
