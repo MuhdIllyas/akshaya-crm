@@ -709,7 +709,7 @@ const StaffAttendance = () => {
       // 2. OFFICIAL LETTERHEAD
       // ==========================================
       doc.setFontSize(22);
-      doc.setTextColor(79, 70, 229); // Indigo-600
+      doc.setTextColor(30, 58, 138); // 🔥 Dark Navy Blue (Tailwind blue-900)
       doc.setFont(undefined, 'bold');
       doc.text(centreName.toUpperCase(), 105, 22, { align: "center" });
       
@@ -720,7 +720,7 @@ const StaffAttendance = () => {
       doc.text(splitAddress, 105, 29, { align: "center" });
       
       const headerBottomY = 32 + (splitAddress.length * 4);
-      doc.setDrawColor(79, 70, 229);
+      doc.setDrawColor(30, 58, 138); // 🔥 Matches the line color to the Dark Navy text
       doc.setLineWidth(0.5);
       doc.line(14, headerBottomY, 196, headerBottomY);
       
