@@ -34,7 +34,7 @@ import {
 } from '/src/services/salaryService';
 import CalendarView from '/src/components/CalendarView';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import autoTable from 'jspdf-autotable';
 
 // Register Chart.js components
 ChartJS.register(
@@ -672,101 +672,101 @@ const StaffAttendance = () => {
     }
   };
 
-  const handleDownloadPayslip = async (salary) => {
-    toast.info("Generating Payslip PDF...");
-    
-    // Create a temporary hidden div to hold the payslip design
-    const payslipDiv = document.createElement("div");
-    payslipDiv.id = "payslip-pdf-container";
-    payslipDiv.style.width = "800px";
-    payslipDiv.style.padding = "40px";
-    payslipDiv.style.backgroundColor = "white";
-    payslipDiv.style.position = "absolute";
-    payslipDiv.style.left = "-9999px"; // Keep it off-screen
-    
-    payslipDiv.innerHTML = `
-      <div style="font-family: Arial, sans-serif; color: #333;">
-        <div style="text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
-          <h1 style="color: #4f46e5; margin: 0; font-size: 28px;">AKSHAYA CRM</h1>
-          <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Official Payslip Statement</p>
-        </div>
-        
-        <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
-          <div>
-            <p><strong>Employee Name:</strong> ${staff?.name || 'N/A'}</p>
-            <p><strong>Employee ID:</strong> ${staff?.employeeId || staff?.employee_id || 'N/A'}</p>
-            <p><strong>Department:</strong> ${staff?.department || 'N/A'}</p>
-          </div>
-          <div style="text-align: right;">
-            <p><strong>Salary Month:</strong> ${getMonthName(salary.month)}</p>
-            <p><strong>Target Hours:</strong> ${Number(salary.working_days * salary.snapshot_daily_hours).toFixed(1)}h</p>
-            <p><strong>Worked Hours:</strong> ${Number(salary.total_worked_hours).toFixed(1)}h</p>
-          </div>
-        </div>
-
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-          <thead>
-            <tr style="background-color: #f3f4f6;">
-              <th style="padding: 12px; border: 1px solid #d1d5db; text-align: left;">Earnings</th>
-              <th style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">Basic Pay (Hours Worked)</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.basic).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">Offday Pay (Prorated)</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.offday_pay || 0).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">Travel Allowance (TA)</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.ta || 0).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">Food Allowance (FA)</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right;">${Number(salary.fa || 0).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db;">Service Charge Bonus</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #059669;">+${Number(salary.bonus || 0).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border: 1px solid #d1d5db; color: #dc2626;"><strong>Deductions / Advances</strong></td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; color: #dc2626;">-${Number(salary.deductions || 0).toLocaleString('en-IN')}</td>
-            </tr>
-            <tr style="background-color: #f3f4f6; font-weight: bold;">
-              <td style="padding: 12px; border: 1px solid #d1d5db; font-size: 16px;">Net Salary Payable</td>
-              <td style="padding: 12px; border: 1px solid #d1d5db; text-align: right; font-size: 16px; color: #059669;">₹${Number(salary.net_salary).toLocaleString('en-IN')}</td>
-            </tr>
-          </tbody>
-        </table>
-        
-        <div style="margin-top: 50px; text-align: center; color: #888; font-size: 12px;">
-          <p>This is a system generated document and does not require a physical signature.</p>
-          <p>Generated on ${new Date().toLocaleDateString('en-IN')}</p>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(payslipDiv);
-
+  const handleDownloadPayslip = (salary) => {
     try {
-      const canvas = await html2canvas(payslipDiv, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      toast.info("Generating Payslip PDF...");
+      const doc = new jsPDF('p', 'mm', 'a4');
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Payslip_${staff?.name.replace(/\s+/g, '_')}_${salary.month}.pdf`);
+      // 1. Header Section
+      doc.setFontSize(22);
+      doc.setTextColor(79, 70, 229); // Indigo-600
+      doc.text("AKSHAYA CRM", 105, 20, { align: "center" });
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Official Payslip Statement", 105, 28, { align: "center" });
+      
+      // Divider Line
+      doc.setDrawColor(79, 70, 229);
+      doc.setLineWidth(0.5);
+      doc.line(14, 35, 196, 35);
+      
+      // 2. Employee & Salary Info
+      doc.setFontSize(10);
+      doc.setTextColor(40, 40, 40);
+      
+      // Left Side
+      doc.text(`Employee Name: ${staff?.name || 'N/A'}`, 14, 45);
+      doc.text(`Employee ID: ${staff?.employeeId || staff?.employee_id || 'N/A'}`, 14, 52);
+      doc.text(`Department: ${staff?.department || 'N/A'}`, 14, 59);
+      
+      // Right Side
+      doc.text(`Salary Month: ${getMonthName(salary.month)}`, 196, 45, { align: "right" });
+      doc.text(`Target Hours: ${Number(salary.working_days * salary.snapshot_daily_hours).toFixed(1)}h`, 196, 52, { align: "right" });
+      doc.text(`Worked Hours: ${Number(salary.total_worked_hours).toFixed(1)}h`, 196, 59, { align: "right" });
+      
+      // 3. Earnings Table
+      const tableBody = [
+        ["Basic Pay (Hours Worked)", `Rs ${Number(salary.basic).toLocaleString('en-IN')}`],
+        ["Offday Pay (Prorated)", `Rs ${Number(salary.offday_pay || 0).toLocaleString('en-IN')}`],
+        ["Travel Allowance (TA)", `Rs ${Number(salary.ta || 0).toLocaleString('en-IN')}`],
+        ["Food Allowance (FA)", `Rs ${Number(salary.fa || 0).toLocaleString('en-IN')}`],
+        ["Service Charge Bonus", `+ Rs ${Number(salary.bonus || 0).toLocaleString('en-IN')}`],
+        ["Deductions / Advances", `- Rs ${Number(salary.deductions || 0).toLocaleString('en-IN')}`],
+      ];
+
+      autoTable(doc, {
+        startY: 70,
+        head: [["Earnings & Deductions", "Amount"]],
+        body: tableBody,
+        theme: 'striped',
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        styles: { fontSize: 10, cellPadding: 6 },
+        columnStyles: {
+          0: { fontStyle: 'normal' },
+          1: { halign: 'right', fontStyle: 'bold' }
+        },
+        willDrawCell: (data) => {
+          // Make Bonus Green
+          if (data.row.index === 4 && data.column.index === 1) {
+            data.cell.styles.textColor = [5, 150, 105]; 
+          }
+          // Make Deductions Red
+          if (data.row.index === 5) {
+            data.cell.styles.textColor = [220, 38, 38]; 
+          }
+        }
+      });
+
+      // 4. Net Salary Highlight Box
+      const finalY = doc.lastAutoTable.finalY + 10;
+      doc.setFillColor(243, 244, 246); // Gray-100 background
+      doc.rect(14, finalY, 182, 12, 'F');
+      
+      doc.setFontSize(12);
+      doc.setTextColor(40, 40, 40);
+      doc.setFont(undefined, 'bold');
+      doc.text("Net Salary Payable", 18, finalY + 8);
+      
+      doc.setFontSize(14);
+      doc.setTextColor(5, 150, 105); // Emerald-600
+      doc.text(`Rs ${Number(salary.net_salary).toLocaleString('en-IN')}`, 192, finalY + 8, { align: "right" });
+
+      // 5. Footer
+      doc.setFontSize(9);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont(undefined, 'normal');
+      doc.text("This is a system generated document and does not require a physical signature.", 105, finalY + 30, { align: "center" });
+      doc.text(`Generated on ${new Date().toLocaleDateString('en-IN')}`, 105, finalY + 36, { align: "center" });
+
+      // Save natively!
+      doc.save(`Payslip_${staff?.name?.replace(/\s+/g, '_')}_${salary.month}.pdf`);
       toast.success("Payslip downloaded successfully!");
+      
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      toast.error("Failed to generate PDF. Please try again.");
-    } finally {
-      document.body.removeChild(payslipDiv); // Clean up
+      console.error("Error generating native PDF:", error);
+      toast.error("Failed to generate PDF.");
     }
   };
 
