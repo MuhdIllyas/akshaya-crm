@@ -797,16 +797,6 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
         );
         setPendingLeaves(prev => ({ ...prev, [selectedCenter.id]: pendingLeavesResponse.data }));
         
-        // Load salaries for this center
-        const salariesResponse = await axios.get(
-          `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/salaries`,
-          { 
-            params: { month: selectedSalaryMonth },
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
-          }
-        );
-        setCenterSalaries(prev => ({ ...prev, [selectedCenter.id]: salariesResponse.data }));
-        
         // Load calendar for this center
         const calendarResponse = await axios.get(
           `${import.meta.env.VITE_API_URL}/api/salary/centers/${selectedCenter.id}/calendar`,
@@ -1245,9 +1235,8 @@ const CollapsibleAttendanceRow = ({ group, staffList, onEdit }) => {
     const present = presentStaffIds.size;
     const leave = todayAtt.filter(a => a.status.includes('leave')).length;
     const absent = todayAtt.filter(a => a.status === 'absent').length;
-    const totalSal = (centerSalaries[selectedCenter.id] || [])
-      .filter(s => s.month === selectedSalaryMonth)
-      .reduce((sum, s) => sum + Number(s.net_salary || 0), 0);
+    // Calculate total base salary from the active staff list (Matches Admin view)
+    const totalSal = staff.reduce((sum, st) => sum + (Number(st.salary) || 0), 0);
       
     let lateH = 0, extraH = 0, recWithSch = 0;
     todayAtt.forEach(r => {
