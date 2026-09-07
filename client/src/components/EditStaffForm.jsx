@@ -528,6 +528,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
               <option value="Part-time">Part-time</option>
               <option value="Contract">Contract</option>
               <option value="Freelance">Freelance</option>
+              <option value="Probation">Probation</option>
             </select>
           </div>
           <div>
