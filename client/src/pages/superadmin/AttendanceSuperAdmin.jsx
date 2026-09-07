@@ -2016,9 +2016,11 @@ const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-emerald-50/50" colSpan="3">Service Charge Earned</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-indigo-50/30" colSpan="7">Earnings Breakdown (₹)</th>
+                      {/* REORDERED & FIXED HEADERS */}
                       <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Deductions</th>
+                      <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Payment</th>
                       <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Net Pay</th>
-                      <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Payment</th>
+                      <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Action</th>
                     </tr>
                     <tr>
                       <th className="py-2 px-3 border-l border-gray-200 bg-blue-50/50">Per Day</th>
@@ -2131,8 +2133,11 @@ const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
                               <FiInfo className="h-3.5 w-3.5 text-gray-400 hover:text-indigo-500" />
                             </div>
                           </td>
-                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">
+                            ₹{Number(r.full_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
                           
+                          {/* 1. DEDUCTIONS (Editable) */}
                           <td className="py-2 px-3 border-r border-gray-100 bg-red-50/20">
                             {selectedRun.status === 'generated' ? (
                               <input 
@@ -2146,6 +2151,12 @@ const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
                             )}
                           </td>
                           
+                          {/* 2. PAYMENT (Calculated: Total Gross - Deductions) */}
+                          <td className="py-3 px-3 text-right font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">
+                            ₹{(Number(r.full_pay || 0) - Number(r.deductions || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+
+                          {/* 3. NET PAY (Final Admin Override) */}
                           <td className="py-2 px-3 text-right bg-emerald-50/30 border-r border-gray-100">
                             {selectedRun.status === 'generated' ? (
                               <div className="flex items-center justify-end">
@@ -2162,6 +2173,7 @@ const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
                             )}
                           </td>
                           
+                          {/* 4. ACTION (Status / Issue Pay Button) */}
                           <td className="py-3 px-4 text-center bg-gray-50/50">
                             {r.payment_status === 'paid' ? (
                               <span className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-md text-xs font-bold">Paid</span>
@@ -2170,7 +2182,7 @@ const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
                                 Issue Pay
                               </button>
                             ) : (
-                              <span className="text-xs text-gray-400 font-medium">Pending</span>
+                              <span className="text-xs text-gray-400 font-medium">Pending Finalization</span>
                             )}
                           </td>
                         </tr>
