@@ -2119,9 +2119,11 @@ const AdminAttendance = () => {
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200" colSpan="3">Hours Performance</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-emerald-50/50" colSpan="3">Service Charge Earned</th>
                       <th className="py-2 px-4 text-center border-b border-r border-gray-200 bg-indigo-50/30" colSpan="7">Earnings Breakdown (₹)</th>
+                      {/* REORDERED & FIXED HEADERS */}
                       <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Deductions</th>
-                      <th className="py-3 px-4 text-center align-bottom border-r border-gray-200" rowSpan="2">Payment</th>
-                      <th className="py-3 px-4 text-right align-bottom" rowSpan="2">Net Pay</th>
+                      <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Payment</th>
+                      <th className="py-3 px-4 text-right align-bottom border-r border-gray-200" rowSpan="2">Net Pay</th>
+                      <th className="py-3 px-4 text-center align-bottom" rowSpan="2">Action</th>
                     </tr>
                     <tr>
                       {/* Base Rates */}
@@ -2258,9 +2260,11 @@ const AdminAttendance = () => {
                             </div>
                           </td>
                           
-                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">₹{Number(r.full_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-3 font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">
+                            ₹{Number(r.full_pay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
                           
-                          {/* 1. DEDUCTIONS */}
+                          {/* 1. DEDUCTIONS (Editable) */}
                           <td className="py-2 px-3 border-r border-gray-100 bg-red-50/20">
                             {selectedRun.status === 'generated' ? (
                               <input 
@@ -2274,21 +2278,13 @@ const AdminAttendance = () => {
                             )}
                           </td>
                           
-                          {/* 2. PAYMENT STATUS / BUTTON */}
-                          <td className="py-3 px-4 text-center bg-gray-50/50 border-r border-gray-100">
-                            {r.payment_status === 'paid' ? (
-                              <span className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-md text-xs font-bold">Paid</span>
-                            ) : selectedRun.status === 'finalized' ? (
-                              <button onClick={() => handlePayRecord(r.id)} className="px-4 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-md text-xs font-bold transition shadow-sm">
-                                Issue Pay
-                              </button>
-                            ) : (
-                              <span className="text-xs text-gray-400 font-medium">Pending Finalization</span>
-                            )}
+                          {/* 2. PAYMENT (Calculated: Total Gross - Deductions) */}
+                          <td className="py-3 px-3 text-right font-bold text-gray-900 border-r border-gray-100 bg-gray-50/50">
+                            ₹{(Number(r.full_pay || 0) - Number(r.deductions || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
 
-                          {/* 3. NET PAY */}
-                          <td className="py-2 px-3 text-right bg-emerald-50/30">
+                          {/* 3. NET PAY (Final Admin Override) */}
+                          <td className="py-2 px-3 text-right bg-emerald-50/30 border-r border-gray-100">
                             {selectedRun.status === 'generated' ? (
                               <div className="flex items-center justify-end">
                                 <span className="text-gray-500 font-bold mr-1">₹</span>
@@ -2301,6 +2297,19 @@ const AdminAttendance = () => {
                               </div>
                             ) : (
                               <span className="font-black text-gray-900 text-base block px-2">₹{Number(r.net_pay || 0).toLocaleString()}</span>
+                            )}
+                          </td>
+                          
+                          {/* 4. ACTION (Status / Issue Pay Button) */}
+                          <td className="py-3 px-4 text-center bg-gray-50/50">
+                            {r.payment_status === 'paid' ? (
+                              <span className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-md text-xs font-bold">Paid</span>
+                            ) : selectedRun.status === 'finalized' ? (
+                              <button onClick={() => handlePayRecord(r.id)} className="px-4 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-md text-xs font-bold transition shadow-sm">
+                                Issue Pay
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400 font-medium">Pending Finalization</span>
                             )}
                           </td>
                         </tr>
