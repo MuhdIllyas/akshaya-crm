@@ -2465,31 +2465,49 @@ router.put('/records/:id/override-net-pay', authMiddleware(['admin', 'superadmin
   }
 });
 
-// GET /api/salary/my-planner-config - Staff fetches their own baseline for the calculator
+// GET /api/salary/my-planner-config - Staff Planner with Calendar Math & MTD Actuals
 router.get('/my-planner-config', authMiddleware(['staff']), async (req, res) => {
   const client = await pool.connect();
   try {
-    // 1. Get their active salary structure
-    const structRes = await client.query(`
-      SELECT basic_salary, hourly_service_revenue_target, ta, fa 
-      FROM salary_structures 
-      WHERE staff_id = $1 AND status = 'active'
-    `, [req.user.id]);
+    const targetMonth = req.query.month || new Date().toISOString().slice(0, 7);
+    const [year, monthNum] = targetMonth.split('-');
     
-    // 2. Get global bonus slabs
+    // 1. Get their active configuration
+    const structRes = await client.query(`SELECT * FROM salary_structures WHERE staff_id = $1 AND status = 'active'`, [req.user.id]);
     const slabsRes = await client.query(`SELECT * FROM bonus_slabs WHERE active = true ORDER BY min_working_hours_pct ASC`);
+    const schRes = await client.query(`SELECT standard_hours FROM staff_schedules WHERE staff_id = $1 AND effective_from <= CURRENT_DATE ORDER BY effective_from DESC LIMIT 1`, [req.user.id]);
+
+    // 2. Mathematically Calculate Exact Month Metrics
+    const calendar_days = new Date(year, monthNum, 0).getDate();
+    let sundays = 0;
+    for (let i = 1; i <= calendar_days; i++) {
+        if (new Date(year, parseInt(monthNum) - 1, i).getDay() === 0) sundays++;
+    }
+    const dl_days = 1;
+    const holidaysRes = await client.query(`SELECT COUNT(*) as count FROM calendar_events WHERE centre_id = $1 AND TO_CHAR(date, 'YYYY-MM') = $2 AND type = 'holiday'`, [req.user.centre_id, targetMonth]);
+    const other_offdays = parseInt(holidaysRes.rows[0].count);
     
-    // 3. Get their current schedule hours
-    const schRes = await client.query(`
-      SELECT standard_hours FROM staff_schedules 
-      WHERE staff_id = $1 AND effective_from <= CURRENT_DATE 
-      ORDER BY effective_from DESC LIMIT 1
-    `, [req.user.id]);
+    const target_working_days = calendar_days - (sundays + dl_days + other_offdays);
+
+    // 3. Month-to-Date (MTD) Actuals
+    const attRes = await client.query(`SELECT COALESCE(SUM(hours), 0) AS worked_hours FROM attendance WHERE staff_id = $1 AND TO_CHAR(date, 'YYYY-MM') = $2 AND status = 'present'`, [req.user.id, targetMonth]);
+    const collRes = await client.query(`SELECT COALESCE(SUM(service_charges), 0) AS achieved_revenue FROM service_entries WHERE staff_id = $1 AND TO_CHAR(created_at, 'YYYY-MM') = $2`, [req.user.id, targetMonth]);
 
     res.json({
       structure: structRes.rows[0] || { basic_salary: 0, hourly_service_revenue_target: 0, ta: 0, fa: 0 },
       slabs: slabsRes.rows,
-      daily_hours: schRes.rows[0] ? parseFloat(schRes.rows[0].standard_hours) : 9.0
+      daily_hours: schRes.rows[0] ? parseFloat(schRes.rows[0].standard_hours) : 9.0,
+      month_stats: {
+        calendar_days,
+        sundays,
+        dl_days,
+        other_offdays,
+        target_working_days
+      },
+      mtd_actuals: {
+        worked_hours: parseFloat(attRes.rows[0].worked_hours),
+        achieved_revenue: parseFloat(collRes.rows[0].achieved_revenue)
+      }
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch planner config' });

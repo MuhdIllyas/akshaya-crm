@@ -336,121 +336,217 @@ const MonthlySalaryChart = ({ allSalaryData }) => {
   );
 };
 
-// --- NEW: STAFF GOAL PLANNER ---
-const SalaryPlanner = () => {
+// --- STAFF GOAL PLANNER (DYNAMIC & REVERSE CALCULATION) ---
+const SalaryPlanner = ({ selectedMonth }) => {
   const [config, setConfig] = useState(null);
+  const [plannerMode, setPlannerMode] = useState('predict'); // 'predict' or 'target'
+
+  // Predict State
   const [plannedLeaves, setPlannedLeaves] = useState(0);
   const [projectedRevenue, setProjectedRevenue] = useState(0);
+
+  // Target State
+  const [targetSalary, setTargetSalary] = useState(0);
+  const [targetLeaves, setTargetLeaves] = useState(0);
 
   useEffect(() => {
     import('axios').then(axios => {
       axios.default.get(`${import.meta.env.VITE_API_URL}/api/salary/my-planner-config`, {
+        params: { month: selectedMonth },
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      }).then(res => setConfig(res.data)).catch(console.error);
+      }).then(res => {
+        setConfig(res.data);
+        setProjectedRevenue(res.data.mtd_actuals.achieved_revenue);
+        // Initialize target salary to their base line
+        setTargetSalary(Number(res.data.structure.basic_salary) + Number(res.data.structure.ta) + Number(res.data.structure.fa));
+      }).catch(console.error);
     });
-  }, []);
+  }, [selectedMonth]);
 
-  if (!config) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Planner...</div>;
+  if (!config) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Planner Engine...</div>;
 
-  // Math Engine
-  const totalDaysInMonth = 30; 
-  const standardOffDays = 5; 
-  const targetWorkingDays = totalDaysInMonth - standardOffDays;
-  
-  const actualWorkedDays = Math.max(0, targetWorkingDays - plannedLeaves);
-  const workedHours = actualWorkedDays * config.daily_hours;
-  const targetHours = targetWorkingDays * config.daily_hours;
-  const targetRevenue = targetHours * Number(config.structure.hourly_service_revenue_target);
-  
-  const workingHoursPercent = targetHours > 0 ? (workedHours / targetHours) * 100 : 0;
-  const revenuePercent = targetRevenue > 0 ? (projectedRevenue / targetRevenue) * 100 : 0;
+  // --- BASE METRICS FROM BACKEND ---
+  const { calendar_days, target_working_days } = config.month_stats;
+  const standardOffDays = config.month_stats.sundays + config.month_stats.dl_days + config.month_stats.other_offdays;
+  const dailyRate = Number(config.structure.basic_salary) / calendar_days;
+  const globalTargetHours = target_working_days * config.daily_hours;
+  const globalTargetRevenue = globalTargetHours * Number(config.structure.hourly_service_revenue_target);
+  const mtdRevenue = config.mtd_actuals.achieved_revenue;
 
-  let activeBonusPct = 0;
+  // ==========================================
+  // MATH ENGINE: MODE 1 (PREDICT)
+  // ==========================================
+  const pActualWorkedDays = Math.max(0, target_working_days - plannedLeaves);
+  const pWorkedHours = pActualWorkedDays * config.daily_hours;
+  const pWorkPct = globalTargetHours > 0 ? (pWorkedHours / globalTargetHours) * 100 : 0;
+  const pRevPct = globalTargetRevenue > 0 ? (projectedRevenue / globalTargetRevenue) * 100 : 0;
+
+  let pBonusPct = 0;
   for (const slab of config.slabs) {
-    if (workingHoursPercent >= Number(slab.min_working_hours_pct) && 
-        revenuePercent >= Number(slab.min_collection_pct)) {
-      activeBonusPct = Number(slab.bonus_pct);
+    if (pWorkPct >= Number(slab.min_working_hours_pct) && pRevPct >= Number(slab.min_collection_pct)) {
+      pBonusPct = Number(slab.bonus_pct);
     }
   }
 
-  const dailyRate = Number(config.structure.basic_salary) / totalDaysInMonth;
-  const basicPay = workedHours * (dailyRate / config.daily_hours);
-  const offdayPay = workingHoursPercent >= 100 ? (standardOffDays * dailyRate) : (standardOffDays * (workingHoursPercent / 100) * dailyRate);
-  
-  const surplusRevenue = Math.max(0, projectedRevenue - targetRevenue);
-  const bonusEarned = (activeBonusPct / 100) * surplusRevenue;
+  const pBasicPay = pWorkedHours * (dailyRate / config.daily_hours);
+  const pOffdayPay = pWorkPct >= 100 ? (standardOffDays * dailyRate) : (standardOffDays * (pWorkPct / 100) * dailyRate);
+  const pTa = pWorkPct >= 100 ? Number(config.structure.ta) : Number(config.structure.ta) * (pWorkPct / 100);
+  const pFa = pWorkPct >= 100 ? Number(config.structure.fa) : Number(config.structure.fa) * (pWorkPct / 100);
+  const pSurplus = Math.max(0, projectedRevenue - globalTargetRevenue);
+  const pBonusEarned = (pBonusPct / 100) * pSurplus;
+  const pTotalPay = pBasicPay + pOffdayPay + pTa + pFa + pBonusEarned;
 
-  const totalPay = basicPay + offdayPay + Number(config.structure.ta) + Number(config.structure.fa) + bonusEarned;
+  // ==========================================
+  // MATH ENGINE: MODE 2 (TARGET/REVERSE CALC)
+  // ==========================================
+  const tActualWorkedDays = Math.max(0, target_working_days - targetLeaves);
+  const tWorkedHours = tActualWorkedDays * config.daily_hours;
+  const tWorkPct = globalTargetHours > 0 ? (tWorkedHours / globalTargetHours) * 100 : 0;
+  
+  const tBasicPay = tWorkedHours * (dailyRate / config.daily_hours);
+  const tOffdayPay = tWorkPct >= 100 ? (standardOffDays * dailyRate) : (standardOffDays * (tWorkPct / 100) * dailyRate);
+  const tTa = tWorkPct >= 100 ? Number(config.structure.ta) : Number(config.structure.ta) * (tWorkPct / 100);
+  const tFa = tWorkPct >= 100 ? Number(config.structure.fa) : Number(config.structure.fa) * (tWorkPct / 100);
+  const tBaseTotal = tBasicPay + tOffdayPay + tTa + tFa;
+
+  let requiredBonus = targetSalary - tBaseTotal;
+  let requiredTotalRevenue = globalTargetRevenue;
+  let hitSlab = null;
+
+  if (requiredBonus > 0 && globalTargetRevenue > 0) {
+    const validSlabs = config.slabs
+      .filter(s => tWorkPct >= Number(s.min_working_hours_pct) && Number(s.bonus_pct) > 0)
+      .sort((a,b) => Number(a.min_collection_pct) - Number(b.min_collection_pct));
+    
+    for (const slab of validSlabs) {
+       const neededSurplus = requiredBonus / (Number(slab.bonus_pct) / 100);
+       const candidateRev = globalTargetRevenue + neededSurplus;
+       const candidateRevPct = (candidateRev / globalTargetRevenue) * 100;
+
+       if (candidateRevPct >= Number(slab.min_collection_pct) && 
+           (slab.max_collection_pct === null || candidateRevPct < Number(slab.max_collection_pct))) {
+           requiredTotalRevenue = candidateRev;
+           hitSlab = slab;
+           break;
+       }
+    }
+    // Fallback to highest slab if they exceed chart
+    if (!hitSlab && validSlabs.length > 0) {
+       const highestSlab = validSlabs[validSlabs.length - 1];
+       const neededSurplus = requiredBonus / (Number(highestSlab.bonus_pct) / 100);
+       requiredTotalRevenue = globalTargetRevenue + neededSurplus;
+       hitSlab = highestSlab;
+    }
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm fade-in">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Monthly Goal Planner</h2>
-          <p className="text-gray-500 text-sm">Drag the sliders to see how leaves and performance impact your payout.</p>
+          <h2 className="text-2xl font-bold text-gray-900">Salary & Goal Planner</h2>
+          <p className="text-gray-500 text-sm mt-1">
+            Month Data: {target_working_days} Target Days | Base Target: ₹{globalTargetRevenue.toLocaleString()}
+          </p>
         </div>
-        <div className="text-left md:text-right">
-          <p className="text-sm text-gray-500 uppercase tracking-wider font-bold">Projected Net Pay</p>
-          <p className="text-4xl font-black text-emerald-600">₹{totalPay.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+        <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
+          <button onClick={() => setPlannerMode('predict')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${plannerMode === 'predict' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'}`}>Predict Payout</button>
+          <button onClick={() => setPlannerMode('target')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${plannerMode === 'target' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'}`}>Hit My Goal</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        <div className="space-y-8">
-          <div>
-            <div className="flex justify-between mb-2">
-              <label className="font-bold text-gray-700">Planned Leaves (Unpaid)</label>
-              <span className="font-black text-rose-600">{plannedLeaves} Days</span>
-            </div>
-            <input 
-              type="range" 
-              min="0" 
-              max="15" 
-              value={plannedLeaves} 
-              onChange={(e) => setPlannedLeaves(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-rose-500"
-            />
-            <p className="text-xs text-gray-400 mt-2">Working {actualWorkedDays} out of {targetWorkingDays} target days.</p>
-          </div>
-
-          <div>
-            <div className="flex justify-between mb-2">
-              <label className="font-bold text-gray-700">Expected Service Charge</label>
-              <span className="font-black text-indigo-600">₹{projectedRevenue.toLocaleString()}</span>
-            </div>
-            <input 
-              type="range" 
-              min="0" 
-              max={targetRevenue * 3} 
-              step="500"
-              value={projectedRevenue} 
-              onChange={(e) => setProjectedRevenue(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-            />
-            <div className="flex justify-between text-xs text-gray-400 mt-2">
-              <span>Target: ₹{targetRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-              {surplusRevenue > 0 && <span className="text-emerald-500 font-bold">+₹{surplusRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})} Surplus</span>}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
-          <h3 className="font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2">Payout Breakdown</h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-gray-600">Basic Pay ({actualWorkedDays} days)</span><span className="font-medium">₹{basicPay.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Paid Offdays (Prorated)</span><span className="font-medium">₹{offdayPay.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
-            <div className="flex justify-between"><span className="text-gray-600">Allowances (TA + FA)</span><span className="font-medium">₹{(Number(config.structure.ta) + Number(config.structure.fa)).toLocaleString()}</span></div>
-            
-            <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between items-center">
-              <div>
-                <span className="text-gray-900 font-bold block">Performance Bonus</span>
-                <span className="text-xs text-emerald-600 font-medium">Unlocked Tier: {activeBonusPct}%</span>
+      {plannerMode === 'predict' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* SLIDERS */}
+          <div className="space-y-8">
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="font-bold text-gray-700">Planned Leaves (Unpaid)</label>
+                <span className="font-black text-rose-600">{plannedLeaves} Days</span>
               </div>
-              <span className="font-bold text-emerald-600">+₹{bonusEarned.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+              <input type="range" min="0" max={target_working_days} value={plannedLeaves} onChange={(e) => setPlannedLeaves(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-rose-500" />
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="font-bold text-gray-700">Expected Total Service Charge</label>
+                <span className="font-black text-indigo-600">₹{projectedRevenue.toLocaleString()}</span>
+              </div>
+              <input type="range" min="0" max={globalTargetRevenue * 3} step="500" value={projectedRevenue} onChange={(e) => setProjectedRevenue(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+              <div className="flex justify-between text-xs font-bold mt-2">
+                <span className="text-gray-400">MTD: ₹{mtdRevenue.toLocaleString()}</span>
+                {pSurplus > 0 && <span className="text-emerald-500">+₹{pSurplus.toLocaleString()} Surplus</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* MATH BREAKDOWN */}
+          <div className="bg-gray-50 rounded-xl p-6 border border-gray-200 flex flex-col justify-between">
+            <div>
+              <h3 className="font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2">Payout Breakdown</h3>
+              <div className="space-y-3 text-sm text-gray-600">
+                <div className="flex justify-between"><span>Base Pay & Allowances</span><span className="font-medium text-gray-900">₹{(pBasicPay + pOffdayPay + pTa + pFa).toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+                <div className="flex justify-between"><span>Performance Bonus ({pBonusPct}%)</span><span className="font-bold text-emerald-600">+₹{pBonusEarned.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+              </div>
+            </div>
+            <div className="pt-4 mt-4 border-t border-gray-200 flex justify-between items-end">
+              <span className="text-gray-500 font-bold uppercase tracking-wider text-xs">Projected Net Pay</span>
+              <span className="text-4xl font-black text-emerald-600">₹{pTotalPay.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* REVERSE CALC INPUTS */}
+          <div className="space-y-6">
+            <div>
+              <label className="font-bold text-gray-700 block mb-2">My Target Salary (Net Pay)</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₹</span>
+                <input 
+                  type="number" 
+                  value={targetSalary} 
+                  onChange={(e) => setTargetSalary(Number(e.target.value))}
+                  className="w-full pl-8 pr-4 py-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold text-lg text-indigo-900 bg-indigo-50/30"
+                />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="font-bold text-gray-700">Planned Leaves</label>
+                <span className="font-black text-rose-600">{targetLeaves} Days</span>
+              </div>
+              <input type="range" min="0" max={target_working_days} value={targetLeaves} onChange={(e) => setTargetLeaves(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-rose-500" />
+            </div>
+          </div>
+
+          {/* REQUIRED METRICS OUTPUT */}
+          <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-100 flex flex-col justify-between">
+            <div>
+              <h3 className="font-bold text-emerald-900 mb-4 border-b border-emerald-200 pb-2">How to Hit ₹{targetSalary.toLocaleString()}</h3>
+              <div className="space-y-4 text-sm text-emerald-800">
+                <div className="flex justify-between">
+                  <span>Guaranteed Base Payout</span>
+                  <span className="font-bold">₹{tBaseTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Required Bonus</span>
+                  <span className="font-bold">{requiredBonus > 0 ? `₹${requiredBonus.toLocaleString(undefined, {maximumFractionDigits: 0})}` : 'None needed!'}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="pt-4 mt-4 border-t border-emerald-200">
+              <span className="text-emerald-700 font-bold uppercase tracking-wider text-xs block mb-1">Required Total Service Charge</span>
+              <div className="flex justify-between items-end">
+                <span className="text-3xl font-black text-emerald-700">₹{requiredTotalRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                <span className="text-sm font-bold text-rose-600 bg-white px-2 py-1 rounded shadow-sm">
+                  {requiredTotalRevenue - mtdRevenue > 0 ? `₹${(requiredTotalRevenue - mtdRevenue).toLocaleString(undefined, {maximumFractionDigits: 0})} left this month` : 'Goal Hit!'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1549,7 +1645,7 @@ const StaffAttendance = () => {
               </div>
             )}
             {activeTab === 'planner' && (
-              <SalaryPlanner />
+              <SalaryPlanner selectedMonth={selectedMonth} />
             )}
 
             {activeTab === 'payslips' && (
