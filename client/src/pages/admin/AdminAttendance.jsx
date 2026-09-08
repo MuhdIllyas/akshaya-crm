@@ -104,6 +104,25 @@ const normalizeDate = (dateStr) => {
   }
 };
 
+// --- TIME CONVERTERS (HH:MM <-> Decimal) ---
+const formatDecimalToHHMM = (decimalHours) => {
+  if (!decimalHours || isNaN(decimalHours)) return "0:00";
+  const num = Math.abs(Number(decimalHours));
+  const h = Math.floor(num);
+  const m = Math.round((num - h) * 60);
+  return `${decimalHours < 0 ? '-' : ''}${h}:${m.toString().padStart(2, '0')}`;
+};
+
+const parseHHMMToDecimal = (timeStr) => {
+  if (!timeStr) return 0;
+  const str = String(timeStr).trim();
+  if (str.includes(':')) {
+    const [h, m] = str.split(':').map(Number);
+    return Number(((h || 0) + (m || 0) / 60).toFixed(2));
+  }
+  return Number(str); // Fallback: Allows user to still type "180.5" if they want
+};
+
 // Helper function to get current month in YYYY-MM format
 const getCurrentMonth = () => {
   const now = new Date();
@@ -2198,24 +2217,24 @@ const AdminAttendance = () => {
                           <td className="py-3 px-3 text-blue-700 font-medium bg-blue-50/20 border-l border-gray-100">₹{basicPayPerDay.toFixed(2)}</td>
                           <td className="py-3 px-3 text-blue-700 font-medium bg-blue-50/20 border-r border-gray-100">₹{basicPayPerHour.toFixed(2)}</td>
                           
-                          {/* HOURS */}
-                          <td className="py-3 px-3 text-gray-500">{Number(r.total_targeted_hours || 0).toFixed(1)}h</td>
+                          {/* HOURS TARGET (Formatted to HH:MM) */}
+                          <td className="py-3 px-3 text-gray-500">{formatDecimalToHHMM(r.total_targeted_hours)}</td>
                           
-                          {/* OVERRIDEABLE WORKED HOURS INPUT */}
+                          {/* OVERRIDEABLE WORKED HOURS INPUT (Accepts HH:MM) */}
                           <td className="py-2 px-3 bg-blue-50/10">
                             {selectedRun.status === 'generated' ? (
                               <div className="flex items-center">
                                 <input 
-                                  type="number" 
-                                  defaultValue={Number(r.total_worked_hours || 0).toFixed(1)}
-                                  onBlur={(e) => handleUpdateWorkedHours(r.id, e.target.value)}
+                                  type="text" 
+                                  defaultValue={formatDecimalToHHMM(r.total_worked_hours)}
+                                  onBlur={(e) => handleUpdateWorkedHours(r.id, parseHHMMToDecimal(e.target.value))}
+                                  placeholder="HH:MM"
                                   className="w-20 text-right p-1.5 border border-blue-200 rounded text-blue-700 font-bold text-sm focus:ring-1 focus:ring-blue-500 bg-white shadow-sm"
-                                  step="0.1"
                                 />
-                                <span className="ml-1 text-gray-500 text-xs font-medium">h</span>
+                                <span className="ml-1 text-gray-500 text-[10px] font-medium uppercase tracking-widest">h:m</span>
                               </div>
                             ) : (
-                              <span className="font-medium text-gray-900 block px-1">{Number(r.total_worked_hours || 0).toFixed(1)}h</span>
+                              <span className="font-medium text-gray-900 block px-1 text-center">{formatDecimalToHHMM(r.total_worked_hours)}</span>
                             )}
                           </td>
                           
