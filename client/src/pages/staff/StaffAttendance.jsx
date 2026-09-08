@@ -374,6 +374,32 @@ const SalaryPlanner = ({ selectedMonth }) => {
   const mtdRevenue = config.mtd_actuals.achieved_revenue;
 
   // ==========================================
+  // NEW: MTD (EARNED SO FAR) MATH
+  // ==========================================
+  const mtdWorkedHours = config.mtd_actuals.worked_hours;
+  const mtdWorkPct = globalTargetHours > 0 ? (mtdWorkedHours / globalTargetHours) * 100 : 0;
+  const mtdRevPct = globalTargetRevenue > 0 ? (mtdRevenue / globalTargetRevenue) * 100 : 0;
+
+  let mtdBonusPct = 0;
+  for (const slab of config.slabs) {
+    if (mtdWorkPct >= Number(slab.min_working_hours_pct) && mtdRevPct >= Number(slab.min_collection_pct)) {
+      mtdBonusPct = Number(slab.bonus_pct);
+    }
+  }
+
+  const basicPayPerHour = config.daily_hours > 0 ? dailyRate / config.daily_hours : 0;
+  const mtdBasicPay = mtdWorkedHours * basicPayPerHour;
+  // Prorate offdays, TA, and FA based on the percentage of hours worked so far
+  const mtdOffdayPay = standardOffDays * (mtdWorkPct / 100) * dailyRate;
+  const mtdTa = Number(config.structure.ta) * (mtdWorkPct / 100);
+  const mtdFa = Number(config.structure.fa) * (mtdWorkPct / 100);
+  
+  const mtdSurplus = Math.max(0, mtdRevenue - globalTargetRevenue);
+  const mtdBonusEarned = (mtdBonusPct / 100) * mtdSurplus;
+  
+  const mtdTotalEarned = mtdBasicPay + mtdOffdayPay + mtdTa + mtdFa + mtdBonusEarned;
+
+  // ==========================================
   // MATH ENGINE: MODE 1 (PREDICT)
   // ==========================================
   const pActualWorkedDays = Math.max(0, target_working_days - plannedLeaves);
@@ -441,13 +467,26 @@ const SalaryPlanner = ({ selectedMonth }) => {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm fade-in">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-gray-100 pb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Salary & Goal Planner</h2>
           <p className="text-gray-500 text-sm mt-1">
             Month Data: {target_working_days} Target Days | Base Target: ₹{globalTargetRevenue.toLocaleString()}
           </p>
         </div>
+        
+        {/* NEW: MTD EARNINGS BADGE */}
+        <div className="bg-emerald-50 border border-emerald-200 px-4 py-3 rounded-xl flex items-center gap-4 shadow-sm">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-800">Earned Till Date</p>
+            <p className="text-2xl font-black text-emerald-600">₹{mtdTotalEarned.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+          </div>
+          <div className="border-l border-emerald-200 pl-4">
+            <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-800">Hours</p>
+            <p className="text-sm font-bold text-emerald-700">{mtdWorkedHours.toFixed(1)}h</p>
+          </div>
+        </div>
+
         <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
           <button onClick={() => setPlannerMode('predict')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${plannerMode === 'predict' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'}`}>Predict Payout</button>
           <button onClick={() => setPlannerMode('target')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${plannerMode === 'target' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'}`}>Hit My Goal</button>
