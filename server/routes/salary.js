@@ -2465,4 +2465,37 @@ router.put('/records/:id/override-net-pay', authMiddleware(['admin', 'superadmin
   }
 });
 
+// GET /api/salary/my-planner-config - Staff fetches their own baseline for the calculator
+router.get('/my-planner-config', authMiddleware(['staff']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    // 1. Get their active salary structure
+    const structRes = await client.query(`
+      SELECT basic_salary, hourly_service_revenue_target, ta, fa 
+      FROM salary_structures 
+      WHERE staff_id = $1 AND status = 'active'
+    `, [req.user.id]);
+    
+    // 2. Get global bonus slabs
+    const slabsRes = await client.query(`SELECT * FROM bonus_slabs WHERE active = true ORDER BY min_working_hours_pct ASC`);
+    
+    // 3. Get their current schedule hours
+    const schRes = await client.query(`
+      SELECT standard_hours FROM staff_schedules 
+      WHERE staff_id = $1 AND effective_from <= CURRENT_DATE 
+      ORDER BY effective_from DESC LIMIT 1
+    `, [req.user.id]);
+
+    res.json({
+      structure: structRes.rows[0] || { basic_salary: 0, hourly_service_revenue_target: 0, ta: 0, fa: 0 },
+      slabs: slabsRes.rows,
+      daily_hours: schRes.rows[0] ? parseFloat(schRes.rows[0].standard_hours) : 9.0
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch planner config' });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;

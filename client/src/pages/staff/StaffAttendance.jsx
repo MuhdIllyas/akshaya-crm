@@ -5,7 +5,8 @@ import {
   FiRefreshCw, FiDownload, FiPlus, FiEdit, FiTrash2, FiSend,
   FiHome, FiBriefcase, FiCoffee, FiFileText, FiSettings,
   FiChevronDown, FiChevronUp, FiFilter, FiSearch, FiX, FiArrowRight,
-  FiClock as FiTime, FiUserCheck, FiUserX, FiWatch
+  FiClock as FiTime, FiUserCheck, FiUserX, FiWatch,
+  FiChevronLeft, FiChevronRight, FiMapPin, FiMove, FiTarget
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -330,6 +331,125 @@ const MonthlySalaryChart = ({ allSalaryData }) => {
       </div>
       <div className="h-64">
         <Bar data={data} options={options} />
+      </div>
+    </div>
+  );
+};
+
+// --- NEW: STAFF GOAL PLANNER ---
+const SalaryPlanner = () => {
+  const [config, setConfig] = useState(null);
+  const [plannedLeaves, setPlannedLeaves] = useState(0);
+  const [projectedRevenue, setProjectedRevenue] = useState(0);
+
+  useEffect(() => {
+    import('axios').then(axios => {
+      axios.default.get(`${import.meta.env.VITE_API_URL}/api/salary/my-planner-config`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      }).then(res => setConfig(res.data)).catch(console.error);
+    });
+  }, []);
+
+  if (!config) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading Planner...</div>;
+
+  // Math Engine
+  const totalDaysInMonth = 30; 
+  const standardOffDays = 5; 
+  const targetWorkingDays = totalDaysInMonth - standardOffDays;
+  
+  const actualWorkedDays = Math.max(0, targetWorkingDays - plannedLeaves);
+  const workedHours = actualWorkedDays * config.daily_hours;
+  const targetHours = targetWorkingDays * config.daily_hours;
+  const targetRevenue = targetHours * Number(config.structure.hourly_service_revenue_target);
+  
+  const workingHoursPercent = targetHours > 0 ? (workedHours / targetHours) * 100 : 0;
+  const revenuePercent = targetRevenue > 0 ? (projectedRevenue / targetRevenue) * 100 : 0;
+
+  let activeBonusPct = 0;
+  for (const slab of config.slabs) {
+    if (workingHoursPercent >= Number(slab.min_working_hours_pct) && 
+        revenuePercent >= Number(slab.min_collection_pct)) {
+      activeBonusPct = Number(slab.bonus_pct);
+    }
+  }
+
+  const dailyRate = Number(config.structure.basic_salary) / totalDaysInMonth;
+  const basicPay = workedHours * (dailyRate / config.daily_hours);
+  const offdayPay = workingHoursPercent >= 100 ? (standardOffDays * dailyRate) : (standardOffDays * (workingHoursPercent / 100) * dailyRate);
+  
+  const surplusRevenue = Math.max(0, projectedRevenue - targetRevenue);
+  const bonusEarned = (activeBonusPct / 100) * surplusRevenue;
+
+  const totalPay = basicPay + offdayPay + Number(config.structure.ta) + Number(config.structure.fa) + bonusEarned;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm fade-in">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Monthly Goal Planner</h2>
+          <p className="text-gray-500 text-sm">Drag the sliders to see how leaves and performance impact your payout.</p>
+        </div>
+        <div className="text-left md:text-right">
+          <p className="text-sm text-gray-500 uppercase tracking-wider font-bold">Projected Net Pay</p>
+          <p className="text-4xl font-black text-emerald-600">₹{totalPay.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="space-y-8">
+          <div>
+            <div className="flex justify-between mb-2">
+              <label className="font-bold text-gray-700">Planned Leaves (Unpaid)</label>
+              <span className="font-black text-rose-600">{plannedLeaves} Days</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="15" 
+              value={plannedLeaves} 
+              onChange={(e) => setPlannedLeaves(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-rose-500"
+            />
+            <p className="text-xs text-gray-400 mt-2">Working {actualWorkedDays} out of {targetWorkingDays} target days.</p>
+          </div>
+
+          <div>
+            <div className="flex justify-between mb-2">
+              <label className="font-bold text-gray-700">Expected Service Charge</label>
+              <span className="font-black text-indigo-600">₹{projectedRevenue.toLocaleString()}</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max={targetRevenue * 3} 
+              step="500"
+              value={projectedRevenue} 
+              onChange={(e) => setProjectedRevenue(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+            />
+            <div className="flex justify-between text-xs text-gray-400 mt-2">
+              <span>Target: ₹{targetRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+              {surplusRevenue > 0 && <span className="text-emerald-500 font-bold">+₹{surplusRevenue.toLocaleString(undefined, {maximumFractionDigits: 0})} Surplus</span>}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+          <h3 className="font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2">Payout Breakdown</h3>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between"><span className="text-gray-600">Basic Pay ({actualWorkedDays} days)</span><span className="font-medium">₹{basicPay.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600">Paid Offdays (Prorated)</span><span className="font-medium">₹{offdayPay.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600">Allowances (TA + FA)</span><span className="font-medium">₹{(Number(config.structure.ta) + Number(config.structure.fa)).toLocaleString()}</span></div>
+            
+            <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between items-center">
+              <div>
+                <span className="text-gray-900 font-bold block">Performance Bonus</span>
+                <span className="text-xs text-emerald-600 font-medium">Unlocked Tier: {activeBonusPct}%</span>
+              </div>
+              <span className="font-bold text-emerald-600">+₹{bonusEarned.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1058,6 +1178,7 @@ const StaffAttendance = () => {
                 { id: 'leave', label: 'Leave', icon: FiCoffee },
                 { id: 'calendar', label: 'Calendar', icon: FiCalendar },
                 { id: 'schedule', label: 'My Schedule', icon: FiClock },
+                { id: 'planner', label: 'Goal Planner', icon: FiTarget },
                 { id: 'payslips', label: 'Payslips', icon: FiFileText }
               ].map(tab => {
                 const Icon = tab.icon;
@@ -1427,6 +1548,11 @@ const StaffAttendance = () => {
                 </div>
               </div>
             )}
+            // Salary Planner Tab
+            {activeTab === 'planner' && (
+              <SalaryPlanner />
+            )}
+
             {activeTab === 'payslips' && (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden fade-in">
                 <div className="p-6 border-b border-gray-200 flex justify-between items-center">
