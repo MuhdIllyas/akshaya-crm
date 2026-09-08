@@ -1548,7 +1548,6 @@ const StaffAttendance = () => {
                 </div>
               </div>
             )}
-            // Salary Planner Tab
             {activeTab === 'planner' && (
               <SalaryPlanner />
             )}
