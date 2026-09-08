@@ -1152,9 +1152,11 @@ router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async
           JOIN staff s ON ss.staff_id = s.id
           WHERE s.centre_id = $1 
             AND ss.status = 'active'
-            AND s.status = 'Active'   -- 🔥 NEVER GENERATE FOR INACTIVE STAFF
-            AND s.role = 'staff'      -- 🔥 NEVER GENERATE FOR ADMINS
-      `, [run.centre_id])).rows;
+            AND s.status = 'Active'   
+            AND s.role = 'staff'      
+            -- 🔥 NEW: Ensure staff joined on or before the payroll month
+            AND DATE_TRUNC('month', s.join_date::date) <= DATE_TRUNC('month', $2::date)
+      `, [run.centre_id, run.payroll_month])).rows; // 🔥 Added run.payroll_month as the 2nd parameter
 
       await client.query(`DELETE FROM salary_records WHERE salary_run_id = $1`, [run.id]);
 
