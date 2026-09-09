@@ -38,41 +38,29 @@ router.use(authenticateToken);
    ROLE FILTER (CORRECTED)
 ====================================================== */
 
-const buildRoleFilter = (user) => {
-  // SUPERADMIN → ALL EVENTS
+// 1. Update the function to accept requestedCentreId
+const buildRoleFilter = (user, requestedCentreId) => {
   if (user.role === "superadmin") {
+    // FIX: Apply centre filter for superadmin if provided
+    if (requestedCentreId) {
+      return { 
+        query: "AND (e.centre_id = $1 OR e.visibility = 'global')", 
+        values: [requestedCentreId] 
+      };
+    }
     return { query: "", values: [] };
   }
 
-  // ADMIN → Centre events + Global events
   if (user.role === "admin") {
     return {
-      query: `
-        AND (
-          e.visibility = 'global'
-          OR (
-            e.visibility = 'centre'
-            AND e.centre_id = $1
-          )
-        )
-      `,
+      query: `AND (e.visibility = 'global' OR (e.visibility = 'centre' AND e.centre_id = $1))`,
       values: [user.centre_id],
     };
   }
 
-  // STAFF → Global + Unassigned Centre events + Own assigned events
   if (user.role === "staff") {
     return {
-      query: `
-        AND (
-          e.visibility = 'global'
-          OR (
-            e.visibility = 'centre'
-            AND e.centre_id = $1
-            AND (e.assigned_to IS NULL OR e.assigned_to = $2)
-          )
-        )
-      `,
+      query: `AND (e.visibility = 'global' OR (e.visibility = 'centre' AND e.centre_id = $1 AND (e.assigned_to IS NULL OR e.assigned_to = $2)))`,
       values: [user.centre_id, user.id],
     };
   }
@@ -84,18 +72,12 @@ const buildRoleFilter = (user) => {
 
 router.get("/", async (req, res) => {
   const client = await pool.connect();
-
   try {
-    const {
-      start,
-      end,
-      type,
-      event_type,
-      priority,
-      visibility,
-    } = req.query;
+    // 2. Extract centre_id from req.query
+    const { start, end, type, event_type, priority, visibility, centre_id } = req.query;
 
-    const roleFilter = buildRoleFilter(req.user);
+    // 3. Pass centre_id into the filter builder
+    const roleFilter = buildRoleFilter(req.user, centre_id);
 
     let conditions = [];
     let values = [...roleFilter.values];
@@ -202,18 +184,15 @@ router.get("/", async (req, res) => {
     let taskValues = [];
 
     if (req.user.role === "staff") {
-      taskFilter = `
-        AND t.assigned_to = $1
-      `;
-
+      taskFilter = `AND t.assigned_to = $1`;
       taskValues.push(req.user.id);
-
     } else if (req.user.role === "admin") {
-      taskFilter = `
-        AND t.centre_id = $1
-      `;
-
+      taskFilter = `AND t.centre_id = $1`;
       taskValues.push(req.user.centre_id);
+    } else if (req.user.role === "superadmin" && centre_id) {
+      // FIX: Apply to superadmin
+      taskFilter = `AND t.centre_id = $1`;
+      taskValues.push(centre_id);
     }
 
     const tasksQuery = `
@@ -261,22 +240,20 @@ router.get("/", async (req, res) => {
     let expiryFilter = "";
     let expiryValues = [];
 
-    // STAFF → own service entries
     if (req.user.role === "staff") {
-      expiryFilter = `
-        WHERE se.staff_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE
-      `;
-
+      expiryFilter = `WHERE se.staff_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
       expiryValues.push(req.user.id);
-    }
-
-    // ADMIN → centre entries
-    else if (req.user.role === "admin") {
-      expiryFilter = `
-        WHERE sf.centre_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE
-      `;
-
+    } else if (req.user.role === "admin") {
+      expiryFilter = `WHERE sf.centre_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
       expiryValues.push(req.user.centre_id);
+    } else {
+      // FIX: Apply to superadmin
+      if (centre_id) {
+        expiryFilter = `WHERE sf.centre_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
+        expiryValues.push(centre_id);
+      } else {
+        expiryFilter = `WHERE se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
+      }
     }
 
     const expiryQuery = `
@@ -348,15 +325,16 @@ router.get("/", async (req, res) => {
       let deliveryFilter = "WHERE tr.status NOT IN ('completed', 'paid', 'delivered')";
       let deliveryValues = [];
 
-      // STAFF → assigned tracking
       if (req.user.role === "staff") {
         deliveryFilter += ` AND tr.assigned_to = $1`;
         deliveryValues.push(req.user.id);
-      }
-      // ADMIN → centre entries
-      else if (req.user.role === "admin") {
+      } else if (req.user.role === "admin") {
         deliveryFilter += ` AND sf.centre_id = $1`;
         deliveryValues.push(req.user.centre_id);
+      } else if (req.user.role === "superadmin" && centre_id) {
+        // FIX: Apply to superadmin
+        deliveryFilter += ` AND sf.centre_id = $1`;
+        deliveryValues.push(centre_id);
       }
 
       const deliveryQuery = `
