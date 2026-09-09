@@ -1541,7 +1541,8 @@ export default function CalendarPage() {
 
   // ---------- UI state ----------
   const [filters, setFilters] = useState({
-    type: "",
+    // 🔥 FIX: Default to "application" for upper management to prevent rendering overload
+    type: (userRole === "admin" || userRole === "superadmin") ? "application" : "",
     priority: "",
     event_type: "",
     visibility: "",
