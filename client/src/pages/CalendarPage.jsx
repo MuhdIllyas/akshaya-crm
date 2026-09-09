@@ -1455,7 +1455,9 @@ export default function CalendarPage() {
 
   // ---------- Centres ----------
   const [centres, setCentres] = useState([]);
-  const [activeCentreId, setActiveCentreId] = useState(null);
+  
+  // FIX 1: Initialize synchronously with the token's centreId to prevent a 'null' fetch
+  const [activeCentreId, setActiveCentreId] = useState(userCentreId || null);
 
   useEffect(() => {
     if (userRole === "superadmin") {
@@ -1467,16 +1469,15 @@ export default function CalendarPage() {
         .then((res) => res.json())
         .then((data) => {
           setCentres(data);
+          // Only fallback to data[0].id if the superadmin has no assigned centre
           if (data.length > 0 && !activeCentreId) {
             setActiveCentreId(data[0].id);
           }
         })
         .catch(() => setCentres([]));
-    } else {
-      setActiveCentreId(userCentreId);
     }
-  }, [userRole, userCentreId]);
-
+    
+  }, [userRole]); 
   // ---------- Services & Staff ----------
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -1523,7 +1524,7 @@ export default function CalendarPage() {
 
   // ---------- Hook ----------
   const [hookFilters, setHookFilters] = useState({
-    centreId: activeCentreId,
+    centreId: userCentreId || null,
   });
   useEffect(() => {
     setHookFilters((prev) => ({ ...prev, centreId: activeCentreId }));
@@ -1577,6 +1578,11 @@ export default function CalendarPage() {
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
     return events.filter((e) => {
+      // 🔥 FIX 3: Race Condition Guard - Forcefully hide events that bled over from slow network requests
+      if (activeCentreId && e.centre_id && e.centre_id !== activeCentreId) {
+        return false;
+      }
+
       if (filters.type && e.type !== filters.type) return false;
       if (filters.priority && e.priority !== filters.priority) return false;
       if (filters.event_type && e.event_type !== filters.event_type) return false;
@@ -1593,7 +1599,7 @@ export default function CalendarPage() {
       }
       return true;
     });
-  }, [events, filters, userId]);
+  }, [events, filters, userId, activeCentreId]); 
 
   // ---------- CRUD handlers (with toasts) ----------
   const handleAddEvent = useCallback(
