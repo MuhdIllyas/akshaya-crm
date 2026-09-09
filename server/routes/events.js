@@ -157,42 +157,31 @@ router.get("/", async (req, res) => {
     const manualEventsQuery = `
       SELECT
         e.id,
-
         e.title,
         e.description,
-
         e.date,
         e.start_datetime,
         e.end_datetime,
-
         e.type,
         e.event_type,
-
         e.priority,
         e.status,
         e.visibility,
-
         e.created_at,
         e.centre_id,
-
         e.related_service_id,
         e.related_task_id,
-
         s.name AS service_name,
-
         st.name AS assigned_staff_name,
-
         'calendar_event' AS source
-
       FROM calendar_events e
-
       LEFT JOIN services s
         ON s.id = e.related_service_id
-
       LEFT JOIN staff st
         ON st.id = e.assigned_to
 
-      WHERE 1=1
+      -- FIX 1: Filter out the mirrored duplicate tasks
+      WHERE e.related_task_id IS NULL
       ${roleFilter.query}
       ${whereClause}
 
@@ -230,39 +219,29 @@ router.get("/", async (req, res) => {
     const tasksQuery = `
       SELECT
         t.id,
-
         t.title,
         t.description,
-
         t.due_date AS date,
-
         NULL AS start_datetime,
         NULL AS end_datetime,
-
         'task' AS type,
-        'deadline' AS event_type,
+
+        -- FIX 2: Stop forcing tasks to look like deadlines
+        'task' AS event_type,
 
         t.priority,
         t.status,
-
         'centre' AS visibility,
-
         t.created_at,
         t.centre_id,
-
         t.related_service_id,
-
         s.name AS service_name,
-
         st.name AS assigned_staff_name,
-
         'task' AS source
 
       FROM tasks t
-
       LEFT JOIN services s
         ON s.id = t.related_service_id
-
       LEFT JOIN staff st
         ON st.id = t.assigned_to
 
