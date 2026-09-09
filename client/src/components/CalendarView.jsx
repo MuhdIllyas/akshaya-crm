@@ -239,21 +239,25 @@ const CalendarView = ({
     const leaves = day.leavesForDay || [];
 
     const getFilteredItems = () => {
+      // Safely flag items without overwriting the core 'type' property
+      const mappedEvents = events.map(e => ({ ...e, _isLeave: false }));
+      const mappedLeaves = leaves.map(l => ({ ...l, _isLeave: true }));
+
       if (activeTab === "all") {
         return [
-          ...events.map(e => ({ ...e, type: 'event' })),
-          ...leaves.map(l => ({ ...l, type: 'leave' }))
+          ...mappedEvents,
+          ...mappedLeaves
         ].sort((a, b) => {
           const dateA = new Date(a.date || a.from_date || 0);
           const dateB = new Date(b.date || b.from_date || 0);
           return dateA - dateB;
         });
       } else if (activeTab === "events") {
-        return events;
+        return mappedEvents;
       } else if (activeTab === "leaves") {
-        return leaves;
+        return mappedLeaves;
       } else if (activeTab === "tasks") {
-        return events.filter(e => e.type === 'task');
+        return mappedEvents.filter(e => e.type === 'task');
       }
       return [];
     };
@@ -347,7 +351,8 @@ const CalendarView = ({
                 </div>
               ) : (
                 filteredItems.map((item, idx) => {
-                  if (item.type === 'leave' || item.staff_name) {
+                  // FIX: Use the specific _isLeave flag instead of checking for staff_name
+                  if (item._isLeave) {
                     const fromDate = item.from_date;
                     const toDate = item.to_date;
                     
