@@ -39,9 +39,12 @@ function TooltipCard({ event, position }) {
     announcement: "text-blue-700 bg-blue-50 border-blue-200",
     expiry: "text-yellow-700 bg-yellow-50 border-yellow-200",
     task: "text-purple-700 bg-purple-50 border-purple-200",
+    holiday: "text-red-700 bg-red-50 border-red-200",
+    working: "text-green-700 bg-green-50 border-green-200",
+    weekend: "text-gray-700 bg-gray-50 border-gray-200",
     default: "text-gray-700 bg-gray-50 border-gray-200",
   };
-  const typeStyle = typeColors[event.event_type] || typeColors.default;
+  const typeStyle = typeColors[event.event_type] || typeColors[event.type] || typeColors.default;
 
   const adjustedStyle = useMemo(() => {
     const tw = 280,
@@ -78,7 +81,7 @@ function TooltipCard({ event, position }) {
       <div className="bg-white rounded-xl shadow-xl border border-gray-100 p-4 w-72 backdrop-blur-sm">
         <div className="flex items-start justify-between mb-2">
           <h4 className="font-semibold text-gray-900 text-sm leading-tight pr-2">
-            {event.title || "Untitled Event"}
+            {event.title || event.description || event.type || "Untitled Event"}
           </h4>
           {event.priority === "high" && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
