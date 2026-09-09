@@ -13,13 +13,17 @@ router.get("/", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    // Default filter excludes mirrored tasks
+    const targetCentre = req.query.centre_id || req.query.centreId;
+
     let centreFilter = "WHERE ce.related_task_id IS NULL";
     let values = [];
 
-    // Role-based isolation for calendar events
     if (req.user.role === "superadmin") {
-      // no additional filter
+      // FIX: Apply filter for superadmin if they selected a centre
+      if (targetCentre) {
+        centreFilter += " AND ce.centre_id = $1";
+        values.push(targetCentre);
+      }
     } else if (req.user.role === "admin") {
       centreFilter += " AND ce.centre_id = $1";
       values.push(req.user.centre_id);
@@ -51,10 +55,15 @@ router.get("/", async (req, res) => {
     // 2️⃣ Task due dates with staff information
     let taskFilter = "";
     let taskValues = [];
+    // If superadmin provided a centre, $1 is used. Otherwise for admin/staff, it's also $1.
+    // We must track the index dynamically.
 
-    // FIX 4: Role-based isolation for actual Tasks
     if (req.user.role === "superadmin") {
-      // no filter
+      // FIX: Apply filter for superadmin tasks
+      if (targetCentre) {
+        taskFilter = "AND t.centre_id = $1";
+        taskValues.push(targetCentre);
+      }
     } else if (req.user.role === "admin") {
       taskFilter = "AND t.centre_id = $1";
       taskValues.push(req.user.centre_id);
