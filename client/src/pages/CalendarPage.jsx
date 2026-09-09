@@ -1580,7 +1580,13 @@ export default function CalendarPage() {
     return events.filter((e) => {
       // 🔥 FIX 3: Race Condition Guard - Now type-safe! 
       // Forcefully hides events that bled over from slow network requests
-      if (activeCentreId && e.centre_id && String(e.centre_id) !== String(activeCentreId)) {
+      // EXCEPT when the event is explicitly marked as global
+      if (
+        activeCentreId && 
+        e.centre_id && 
+        String(e.centre_id) !== String(activeCentreId) &&
+        e.visibility !== "global"
+      ) {
         return false;
       }
 
