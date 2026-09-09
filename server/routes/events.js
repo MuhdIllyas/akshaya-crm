@@ -268,7 +268,7 @@ router.get("/", async (req, res) => {
         se.expiry_date,
         se.staff_id AS assigned_to,
         sf.name AS staff_name,
-        -- 🔥 ADD THIS LINE: Fetch the most recent tracking ID for this service entry
+        sf.centre_id, -- 🔥 FIX: Added missing centre_id so frontend can filter it!
         (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) AS tracking_id
       FROM service_entries se
       LEFT JOIN services sv ON sv.id = se.category_id

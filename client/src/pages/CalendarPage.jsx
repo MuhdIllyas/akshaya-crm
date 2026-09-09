@@ -1578,8 +1578,9 @@ export default function CalendarPage() {
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
     return events.filter((e) => {
-      // 🔥 FIX 3: Race Condition Guard - Forcefully hide events that bled over from slow network requests
-      if (activeCentreId && e.centre_id && e.centre_id !== activeCentreId) {
+      // 🔥 FIX 3: Race Condition Guard - Now type-safe! 
+      // Forcefully hides events that bled over from slow network requests
+      if (activeCentreId && e.centre_id && String(e.centre_id) !== String(activeCentreId)) {
         return false;
       }
 
@@ -1599,7 +1600,7 @@ export default function CalendarPage() {
       }
       return true;
     });
-  }, [events, filters, userId, activeCentreId]); 
+  }, [events, filters, userId, activeCentreId]);
 
   // ---------- CRUD handlers (with toasts) ----------
   const handleAddEvent = useCallback(
