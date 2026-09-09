@@ -41,27 +41,41 @@ router.use(authenticateToken);
 const buildRoleFilter = (user) => {
   // SUPERADMIN → ALL EVENTS
   if (user.role === "superadmin") {
+    return { query: "", values: [] };
+  }
+
+  // ADMIN → Centre events + Global events
+  if (user.role === "admin") {
     return {
-      query: "",
-      values: [],
+      query: `
+        AND (
+          e.visibility = 'global'
+          OR (
+            e.visibility = 'centre'
+            AND e.centre_id = $1
+          )
+        )
+      `,
+      values: [user.centre_id],
     };
   }
 
-  // ADMIN + STAFF:
-  //   - GLOBAL events (visible to everyone)
-  //   - CENTRE events only if they belong to the user's centre
-  return {
-    query: `
-      AND (
-        e.visibility = 'global'
-        OR (
-          e.visibility = 'centre'
-          AND e.centre_id = $1
+  // STAFF → Global + Unassigned Centre events + Own assigned events
+  if (user.role === "staff") {
+    return {
+      query: `
+        AND (
+          e.visibility = 'global'
+          OR (
+            e.visibility = 'centre'
+            AND e.centre_id = $1
+            AND (e.assigned_to IS NULL OR e.assigned_to = $2)
+          )
         )
-      )
-    `,
-    values: [user.centre_id],
-  };
+      `,
+      values: [user.centre_id, user.id],
+    };
+  }
 };
 
 /* ======================================================

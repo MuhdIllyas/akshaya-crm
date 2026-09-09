@@ -13,17 +13,22 @@ router.get("/", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    let centreFilter = "";
+    // Default filter excludes mirrored tasks
+    let centreFilter = "WHERE ce.related_task_id IS NULL";
     let values = [];
 
+    // Role-based isolation for calendar events
     if (req.user.role === "superadmin") {
-      // no filter → all centres
-    } else {
-      centreFilter = "WHERE ce.centre_id = $1";
+      // no additional filter
+    } else if (req.user.role === "admin") {
+      centreFilter += " AND ce.centre_id = $1";
       values.push(req.user.centre_id);
+    } else if (req.user.role === "staff") {
+      centreFilter += " AND ce.centre_id = $1 AND (ce.assigned_to IS NULL OR ce.assigned_to = $2)";
+      values.push(req.user.centre_id, req.user.id);
     }
 
-    // 1️⃣ Calendar events
+    // 1️⃣ Calendar events (Join staff table to stop "Unassigned" bug)
     const eventsQuery = `
       SELECT 
         ce.id,
@@ -32,11 +37,12 @@ router.get("/", async (req, res) => {
         ce.description,
         ce.centre_id,
         c.name AS centre_name,
-        NULL AS staff_id,
-        NULL AS staff_name,
-        NULL AS staff_role
+        ce.assigned_to AS staff_id,
+        s.name AS staff_name,
+        s.role AS staff_role
       FROM calendar_events ce
       JOIN centres c ON ce.centre_id = c.id
+      LEFT JOIN staff s ON ce.assigned_to = s.id
       ${centreFilter}
     `;
 
@@ -46,11 +52,15 @@ router.get("/", async (req, res) => {
     let taskFilter = "";
     let taskValues = [];
 
+    // FIX 4: Role-based isolation for actual Tasks
     if (req.user.role === "superadmin") {
       // no filter
-    } else {
+    } else if (req.user.role === "admin") {
       taskFilter = "AND t.centre_id = $1";
       taskValues.push(req.user.centre_id);
+    } else if (req.user.role === "staff") {
+      taskFilter = "AND t.centre_id = $1 AND t.assigned_to = $2";
+      taskValues.push(req.user.centre_id, req.user.id);
     }
 
     const tasksQuery = `
