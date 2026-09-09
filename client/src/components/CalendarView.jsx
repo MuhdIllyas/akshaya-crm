@@ -24,8 +24,7 @@ const CalendarView = ({
   const [selectedDayEvents, setSelectedDayEvents] = useState(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
-  
-  // Event filters
+
   const [filters, setFilters] = useState({
     working: true,
     holiday: true,
@@ -38,9 +37,13 @@ const CalendarView = ({
 
   const colorMapping = {
     holiday: { background: 'bg-red-50', border: 'border-red-200', text: 'text-red-800' },
+    deadline: { background: 'bg-red-50', border: 'border-red-200', text: 'text-red-800' },
     weekend: { background: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-800' },
     working: { background: 'bg-green-50', border: 'border-green-200', text: 'text-green-800' },
+    start: { background: 'bg-green-50', border: 'border-green-200', text: 'text-green-800' },
     task: { background: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800' },
+    expiry: { background: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-800' },
+    announcement: { background: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800' },
     today: { background: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800' },
     default: { background: 'bg-white', border: 'border-gray-200', text: 'text-gray-900' }
   };
@@ -57,11 +60,11 @@ const CalendarView = ({
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return "Invalid Date";
-      return d.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        month: 'long', 
-        day: 'numeric', 
-        year: 'numeric' 
+      return d.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
       });
     } catch (e) {
       return "Invalid Date";
@@ -83,14 +86,14 @@ const CalendarView = ({
       } else {
         return "N/A";
       }
-      
+
       if (isNaN(date.getTime())) {
         return "N/A";
       }
-      
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
+
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
       });
     } catch (e) {
       return "N/A";
@@ -98,94 +101,97 @@ const CalendarView = ({
   };
 
   const DraggableEvent = ({ event, onDragStart, onEdit, onDelete, isCompact = false }) => {
+    const displayKey = event.event_type || event.type;
+
     const colors = {
       holiday: 'bg-red-100 text-red-800 border-red-200',
+      deadline: 'bg-red-100 text-red-800 border-red-200',
       weekend: 'bg-gray-100 text-gray-800 border-gray-200',
       working: 'bg-green-100 text-green-800 border-green-200',
+      start: 'bg-green-100 text-green-800 border-green-200',
       task: 'bg-purple-100 text-purple-800 border-purple-200',
-      default: 'bg-blue-100 text-blue-800 border-blue-200'
+      expiry: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      announcement: 'bg-blue-100 text-blue-800 border-blue-200',
+      default: 'bg-gray-100 text-gray-800 border-gray-200'
     };
-    
+
     const icons = {
       holiday: FiHeart,
       weekend: FiCoffee,
       working: FiBriefcase,
       task: FiCheckCircle,
+      deadline: FiClock,
+      start: FiCalendar,
       default: FiCalendar
     };
-    
-    const Icon = icons[event.type] || icons.default;
-    
+
+    const Icon = icons[displayKey] || icons.default;
+
     const getEventLabel = () => {
-      switch(event.type) {
-        case 'holiday':
-          return 'Holiday';
-        case 'weekend':
-          return 'Weekend';
-        case 'working':
-          return 'Working Day';
-        case 'task':
-          return 'Task';
-        default:
-          return 'Event';
+      switch (displayKey) {
+        case 'holiday': return 'Holiday';
+        case 'weekend': return 'Weekend';
+        case 'working': return 'Working Day';
+        case 'task': return 'Task';
+        case 'deadline': return 'Deadline';
+        case 'start': return 'Start';
+        case 'expiry': return 'Expiry';
+        case 'announcement': return 'Announcement';
+        default: return 'Event';
       }
     };
 
-    // Get staff initials for avatar
     const getStaffInitials = (name) => {
       if (!name) return '';
       return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
     };
 
-    // Get random color for staff avatar based on staff_id
     const getStaffColor = (staffId) => {
       const colors = [
-        'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500', 
+        'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500',
         'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
       ];
       if (!staffId) return 'bg-gray-400';
       const index = (staffId % colors.length);
       return colors[index];
     };
-    
+
     return (
-      <motion.div 
+      <motion.div
         draggable={!isCompact && event.type !== 'task'}
-        onDragStart={e => !isCompact && onDragStart(e, event)} 
+        onDragStart={e => !isCompact && onDragStart(e, event)}
         whileHover={!isCompact ? { scale: 1.02 } : {}}
         whileTap={!isCompact ? { scale: 0.98 } : {}}
         className={`${isCompact ? 'p-3' : 'p-1.5'} rounded text-xs border ${!isCompact && event.type !== 'task' ? 'cursor-move' : ''} ${colors[event.type] || colors.default} group relative`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1 flex-1 min-w-0">
-            <Icon className="h-3 w-3 flex-shrink-0" />
+            <Icon className="h-3 w-3 shrink-0" />
             <span className="truncate font-medium">
               {getEventLabel()}
             </span>
           </div>
-          
-          {/* Centre badge */}
+
           {(event.centre_name || (event.centre_id && centresMap[event.centre_id])) && (
-            <span className="ml-1 px-1.5 py-0.5 bg-white/80 rounded-full text-[8px] font-medium text-gray-700 border border-gray-200 flex-shrink-0">
+            <span className="ml-1 px-1.5 py-0.5 bg-white/80 rounded-full text-[8px] font-medium text-gray-700 border border-gray-200 shrink-0">
               {event.centre_name || centresMap[event.centre_id] || `Centre ${event.centre_id}`}
             </span>
           )}
-          
+
           {!isCompact && event.type !== 'task' && (
-            <FiMove className="h-2 w-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+            <FiMove className="h-2 w-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
           )}
         </div>
-        
+
         {event.description && (
           <p className="truncate text-xs mt-0.5 text-gray-600">{event.description}</p>
         )}
-        
-        {/* Staff information for tasks */}
+
         {event.type === 'task' && (
           <div className={`flex items-center ${isCompact ? 'mt-2' : 'mt-1 pt-1 border-t border-purple-200 border-opacity-50'}`}>
             {event.staff_name ? (
               <>
-                <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full ${getStaffColor(event.staff_id)} flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 flex-shrink-0`}>
+                <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full ${getStaffColor(event.staff_id)} flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 shrink-0`}>
                   {getStaffInitials(event.staff_name)}
                 </div>
                 <span className={`${isCompact ? 'text-xs' : 'text-[8px]'} text-gray-700 font-medium truncate`}>
@@ -199,7 +205,7 @@ const CalendarView = ({
               </>
             ) : (
               <>
-                <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full bg-gray-400 flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 flex-shrink-0`}>
+                <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full bg-gray-400 flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 shrink-0`}>
                   ?
                 </div>
                 <span className={`${isCompact ? 'text-xs' : 'text-[8px]'} text-gray-500 italic truncate`}>
@@ -209,18 +215,17 @@ const CalendarView = ({
             )}
           </div>
         )}
-        
-        {/* Only show edit/delete buttons for non-task events in non-compact mode */}
+
         {!isCompact && event.type !== 'task' && (
           <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 flex space-x-1 bg-white/80 rounded-bl p-0.5">
-            <button 
-              onClick={e => { e.stopPropagation(); onEdit(event); }} 
+            <button
+              onClick={e => { e.stopPropagation(); onEdit(event); }}
               className="p-0.5 bg-white rounded text-gray-600 hover:text-indigo-600"
             >
               <FiEdit className="h-2 w-2" />
             </button>
-            <button 
-              onClick={e => { e.stopPropagation(); onDelete(event); }} 
+            <button
+              onClick={e => { e.stopPropagation(); onDelete(event); }}
               className="p-0.5 bg-white rounded text-gray-600 hover:text-red-600"
             >
               <FiTrash2 className="h-2 w-2" />
@@ -231,7 +236,6 @@ const CalendarView = ({
     );
   };
 
-  // Day Details Modal
   const DayDetailsModal = ({ day, onClose }) => {
     if (!day) return null;
 
@@ -239,26 +243,21 @@ const CalendarView = ({
     const leaves = day.leavesForDay || [];
 
     const getFilteredItems = () => {
-      // Safely flag items without overwriting the core 'type' property
       const mappedEvents = events.map(e => ({ ...e, _isLeave: false }));
       const mappedLeaves = leaves.map(l => ({ ...l, _isLeave: true }));
 
       if (activeTab === "all") {
-        return [
-          ...mappedEvents,
-          ...mappedLeaves
-        ].sort((a, b) => {
+        return [...mappedEvents, ...mappedLeaves].sort((a, b) => {
           const dateA = new Date(a.date || a.from_date || 0);
           const dateB = new Date(b.date || b.from_date || 0);
           return dateA - dateB;
         });
-      } else if (activeTab === "events") {
-        return mappedEvents;
-      } else if (activeTab === "leaves") {
-        return mappedLeaves;
-      } else if (activeTab === "tasks") {
-        return mappedEvents.filter(e => e.type === 'task');
       }
+
+      if (activeTab === "events") return mappedEvents;
+      if (activeTab === "leaves") return mappedLeaves;
+      if (activeTab === "tasks") return mappedEvents.filter(e => e.type === 'task');
+
       return [];
     };
 
@@ -289,7 +288,7 @@ const CalendarView = ({
                   {events.length} events • {leaves.length} staff on leave
                 </p>
               </div>
-              <button 
+              <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-200 rounded-full transition-colors"
               >
@@ -297,7 +296,6 @@ const CalendarView = ({
               </button>
             </div>
 
-            {/* Tab Navigation */}
             <div className="border-b border-gray-200 px-6 pt-4">
               <div className="flex space-x-6 overflow-x-auto">
                 <button
@@ -351,14 +349,10 @@ const CalendarView = ({
                 </div>
               ) : (
                 filteredItems.map((item, idx) => {
-                  // FIX: Use the specific _isLeave flag instead of checking for staff_name
                   if (item._isLeave) {
-                    const fromDate = item.from_date;
-                    const toDate = item.to_date;
-                    
-                    const formattedFromDate = formatShortDate(fromDate);
-                    const formattedToDate = formatShortDate(toDate);
-                    
+                    const formattedFromDate = formatShortDate(item.from_date);
+                    const formattedToDate = formatShortDate(item.to_date);
+
                     return (
                       <div
                         key={`leave-${item.id}-${idx}`}
@@ -393,18 +387,18 @@ const CalendarView = ({
                         )}
                       </div>
                     );
-                  } else {
-                    return (
-                      <DraggableEvent 
-                        key={`event-${item.id}-${idx}`} 
-                        event={item} 
-                        onDragStart={() => {}} 
-                        onEdit={onEditEvent} 
-                        onDelete={onDeleteEvent}
-                        isCompact={true}
-                      />
-                    );
                   }
+
+                  return (
+                    <DraggableEvent
+                      key={`event-${item.id}-${idx}`}
+                      event={item}
+                      onDragStart={() => {}}
+                      onEdit={onEditEvent}
+                      onDelete={onDeleteEvent}
+                      isCompact={true}
+                    />
+                  );
                 })
               )}
             </div>
@@ -433,34 +427,22 @@ const CalendarView = ({
       else if (day.events.some(e => e.type === 'working')) Object.assign(s, colorMapping.working);
       else if (day.events.some(e => e.type === 'task')) Object.assign(s, colorMapping.task);
     }
-    if (day.isDragOver) { 
-      s.background = 'bg-indigo-100'; 
-      s.border = 'border-indigo-300'; 
+    if (day.isDragOver) {
+      s.background = 'bg-indigo-100';
+      s.border = 'border-indigo-300';
     }
     return s;
-  };
-
-  const getLeavesForDate = (dateStr) => {
-    const d = normalizeDate(dateStr);
-    return leavesData.filter(
-      l =>
-        l?.status === "approved" &&
-        d >= normalizeDate(l.from_date) &&
-        d <= normalizeDate(l.to_date)
-    );
   };
 
   const getDaysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
   const getFirstDayOfMonth = (y, m) => new Date(y, m, 1).getDay();
 
-  // OPTIMIZED VERSION: Pre-index events and leaves by date
   const calendarDays = useMemo(() => {
     const days = [];
     const total = getDaysInMonth(currentYear, currentMonth);
     const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
     const todayStr = normalizeDate(new Date());
 
-    // 1️⃣ Pre-index events by date with filters (O(n))
     const eventMap = {};
     for (const e of calendarData) {
       if (!filters[e.type]) continue;
@@ -469,7 +451,6 @@ const CalendarView = ({
       eventMap[d].push(e);
     }
 
-    // 2️⃣ Pre-index leaves by date range (O(n))
     const leaveMap = {};
     for (const leave of leavesData) {
       if (leave.status !== "approved") continue;
@@ -481,7 +462,7 @@ const CalendarView = ({
 
         let current = new Date(leave.from_date + 'T12:00:00');
         const end = new Date(leave.to_date + 'T12:00:00');
-        
+
         if (isNaN(current.getTime()) || isNaN(end.getTime())) {
           continue;
         }
@@ -528,6 +509,7 @@ const CalendarView = ({
 
   const prevMonth = () =>
     setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
+
   const nextMonth = () =>
     setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
 
@@ -567,48 +549,43 @@ const CalendarView = ({
   };
 
   const monthNames = [
-    "January","February","March","April","May","June",
-    "July","August","September","October","November","December"
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
   ];
-  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
-      {/* Day Details Modal */}
       {isDayModalOpen && (
-        <DayDetailsModal 
-          day={selectedDayEvents} 
-          onClose={() => setIsDayModalOpen(false)} 
+        <DayDetailsModal
+          day={selectedDayEvents}
+          onClose={() => setIsDayModalOpen(false)}
         />
       )}
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div className="flex items-center space-x-4 flex-wrap gap-2">
           <h2 className="text-xl font-bold text-gray-900">Working Days Calendar</h2>
           <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
-            <button 
-              onClick={() => setView('month')} 
+            <button
+              onClick={() => setView('month')}
               className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${view === 'month' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
             >
               Month View
             </button>
-            <button 
-              onClick={() => setView('list')} 
+            <button
+              onClick={() => setView('list')}
               className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
             >
               List View
             </button>
           </div>
 
-          {/* Event Filter Toggles */}
           <div className="flex items-center gap-2 ml-4 flex-wrap">
             {Object.keys(filters).map(type => (
               <button
                 key={type}
-                onClick={() =>
-                  setFilters(prev => ({ ...prev, [type]: !prev[type] }))
-                }
+                onClick={() => setFilters(prev => ({ ...prev, [type]: !prev[type] }))}
                 className={`px-3 py-1 text-xs font-medium rounded-full border capitalize ${
                   filters[type]
                     ? type === 'working' ? 'bg-green-100 text-green-700 border-green-300' :
@@ -635,8 +612,8 @@ const CalendarView = ({
               <FiChevronRight className="h-5 w-5 text-gray-600" />
             </button>
           </div>
-          <button 
-            onClick={onAddEvent} 
+          <button
+            onClick={onAddEvent}
             className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           >
             <FiPlus className="h-4 w-4" />
@@ -645,7 +622,6 @@ const CalendarView = ({
         </div>
       </div>
 
-      {/* Month view */}
       {view === 'month' ? (
         <div className="calendar-grid">
           <div className="grid grid-cols-7 gap-1 mb-2">
@@ -660,7 +636,7 @@ const CalendarView = ({
               const style = getDayStyle(day);
               const hasEvents = day && (day.events.length > 0 || day.leavesForDay.length > 0);
               return (
-                <div 
+                <div
                   key={i}
                   onDragOver={e => day && handleDragOver(e, day.dateStr)}
                   onDragLeave={handleDragLeave}
@@ -686,45 +662,44 @@ const CalendarView = ({
                         )}
                       </div>
                       <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-                        {/* Show first 2 items */}
-                        {day.events.slice(0, 2).map((ev, idx) => (
-                          <div
-                            key={`event-preview-${ev.id}-${idx}`}
-                            className={`px-1.5 py-1 text-[10px] rounded border ${
-                              ev.type === 'holiday' ? 'bg-red-100 text-red-800 border-red-200' :
-                              ev.type === 'weekend' ? 'bg-gray-100 text-gray-800 border-gray-200' :
-                              ev.type === 'working' ? 'bg-green-100 text-green-800 border-green-200' :
-                              'bg-purple-100 text-purple-800 border-purple-200'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="truncate">
-                                {ev.type === 'task' ? '📋' : '📅'} {ev.description || ev.type}
-                              </span>
-                              {ev.centre_name && (
-                                <span className="ml-1 text-[8px] bg-white/50 px-1 rounded-full flex-shrink-0">
-                                  {ev.centre_name}
+                        {day.events.slice(0, 2).map((ev, idx) => {
+                          const displayKey = ev.event_type || ev.type;
+                          return (
+                            <div
+                              key={`event-preview-${ev.id}-${idx}`}
+                              className={`px-1.5 py-1 text-[10px] rounded border ${
+                                displayKey === 'holiday' || displayKey === 'deadline' ? 'bg-red-100 text-red-800 border-red-200' :
+                                displayKey === 'weekend' ? 'bg-gray-100 text-gray-800 border-gray-200' :
+                                displayKey === 'working' || displayKey === 'start' ? 'bg-green-100 text-green-800 border-green-200' :
+                                displayKey === 'task' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                                displayKey === 'expiry' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                'bg-blue-100 text-blue-800 border-blue-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="truncate">
+                                  {ev.type === 'task' ? '📋' : '📅'} {ev.description || ev.type}
                                 </span>
+                                {ev.centre_name && (
+                                  <span className="ml-1 text-[8px] bg-white/50 px-1 rounded-full shrink-0">
+                                    {ev.centre_name}
+                                  </span>
+                                )}
+                              </div>
+                              {ev.type === 'task' && ev.staff_name && (
+                                <div className="flex items-center mt-0.5 text-[8px] text-gray-600">
+                                  <FiUser className="h-2 w-2 mr-0.5" />
+                                  <span className="truncate">{ev.staff_name}</span>
+                                </div>
                               )}
                             </div>
-                            {/* Show staff name for tasks */}
-                            {ev.type === 'task' && ev.staff_name && (
-                              <div className="flex items-center mt-0.5 text-[8px] text-gray-600">
-                                <FiUser className="h-2 w-2 mr-0.5" />
-                                <span className="truncate">{ev.staff_name}</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                        
-                        {/* Show leaves with staff names */}
+                          );
+                        })}
+
                         {day.leavesForDay.slice(0, 1).map((leave, i) => {
-                          const fromDate = leave.from_date;
-                          const toDate = leave.to_date;
-                          
-                          const formattedFromDate = formatShortDate(fromDate);
-                          const formattedToDate = formatShortDate(toDate);
-                          
+                          const formattedFromDate = formatShortDate(leave.from_date);
+                          const formattedToDate = formatShortDate(leave.to_date);
+
                           return (
                             <div
                               key={`leave-preview-${leave.id}-${i}`}
@@ -753,8 +728,7 @@ const CalendarView = ({
                             </div>
                           );
                         })}
-                        
-                        {/* Show count if more items */}
+
                         {(day.events.length + day.leavesForDay.length) > 2 && (
                           <div className="text-[10px] text-gray-500 text-center bg-gray-100 rounded py-1">
                             +{day.events.length + day.leavesForDay.length - 2} more
@@ -769,66 +743,63 @@ const CalendarView = ({
           </div>
         </div>
       ) : (
-        /* List view with filters applied */
         <div className="space-y-3">
           {calendarData
             .filter(e => filters[e.type])
             .filter(e => {
               try {
                 const date = new Date(e.date);
-                return !isNaN(date.getTime()) && 
-                       date.getMonth() === currentMonth && 
-                       date.getFullYear() === currentYear;
+                return !isNaN(date.getTime()) &&
+                  date.getMonth() === currentMonth &&
+                  date.getFullYear() === currentYear;
               } catch {
                 return false;
               }
             })
             .sort((a, b) => new Date(a.date) - new Date(b.date))
             .map((ev, i) => {
-              const s = colorMapping[ev.type] || colorMapping.default;
-              
+              const displayKey = ev.event_type || ev.type;
+              const s = colorMapping[displayKey] || colorMapping.default;
+
               const getEventLabel = () => {
-                switch(ev.type) {
-                  case 'holiday':
-                    return 'Holiday';
-                  case 'weekend':
-                    return 'Weekend';
-                  case 'working':
-                    return 'Working Day';
-                  case 'task':
-                    return 'Task';
-                  default:
-                    return 'Event';
+                switch (displayKey) {
+                  case 'holiday': return 'Holiday';
+                  case 'weekend': return 'Weekend';
+                  case 'working': return 'Working Day';
+                  case 'task': return 'Task';
+                  case 'deadline': return 'Deadline';
+                  case 'start': return 'Start';
+                  case 'expiry': return 'Expiry';
+                  case 'announcement': return 'Announcement';
+                  default: return 'Event';
                 }
               };
 
-              // Get staff initials for avatar
               const getStaffInitials = (name) => {
                 if (!name) return '';
                 return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
               };
 
-              // Get random color for staff avatar based on staff_id
               const getStaffColor = (staffId) => {
                 const colors = [
-                  'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500', 
+                  'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500',
                   'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
                 ];
                 if (!staffId) return 'bg-gray-400';
                 const index = (staffId % colors.length);
                 return colors[index];
               };
-              
+
               return (
-                <motion.div 
-                  key={ev.id || i} 
-                  layout 
-                  className={`flex items-center justify-between p-4 rounded-lg border ${s.background} ${s.border} ${ev.type !== 'task' ? 'cursor-move' : ''}`} 
+                <motion.div
+                  key={ev.id || i}
+                  layout
+                  className={`flex items-center justify-between p-4 rounded-lg border ${s.background} ${s.border} ${ev.type !== 'task' ? 'cursor-move' : ''}`}
                   draggable={ev.type !== 'task'}
                   onDragStart={e => handleDragStart(e, ev)}
                 >
                   <div className="flex items-center space-x-4 flex-1">
-                    <div className={`flex items-center justify-center w-12 h-12 ${s.background} rounded-lg border ${s.border} relative flex-shrink-0`}>
+                    <div className={`flex items-center justify-center w-12 h-12 ${s.background} rounded-lg border ${s.border} relative shrink-0`}>
                       <span className={`text-lg font-bold ${s.text}`}>
                         {new Date(ev.date).getDate()}
                       </span>
@@ -838,7 +809,6 @@ const CalendarView = ({
                         <p className={`font-semibold ${s.text}`}>
                           {getEventLabel()}
                         </p>
-                        {/* Centre badge */}
                         {ev.centre_name ? (
                           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full flex items-center gap-1">
                             <FiMapPin className="h-3 w-3" />
@@ -860,8 +830,7 @@ const CalendarView = ({
                           {ev.description}
                         </p>
                       )}
-                      
-                      {/* Staff information for tasks */}
+
                       {ev.type === 'task' && (
                         <div className="flex items-center mt-2">
                           {ev.staff_name ? (
@@ -890,18 +859,18 @@ const CalendarView = ({
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2 flex-shrink-0">
+                  <div className="flex items-center space-x-2 shrink-0">
                     {ev.type !== 'task' && <FiMove className="h-4 w-4 text-gray-400" />}
                     {ev.type !== 'task' && (
                       <>
-                        <button 
-                          onClick={() => onEditEvent(ev)} 
+                        <button
+                          onClick={() => onEditEvent(ev)}
                           className="p-2 text-gray-600 hover:bg-white rounded-lg"
                         >
                           <FiEdit className="h-4 w-4" />
                         </button>
-                        <button 
-                          onClick={() => onDeleteEvent(ev)} 
+                        <button
+                          onClick={() => onDeleteEvent(ev)}
                           className="p-2 text-red-600 hover:bg-white rounded-lg"
                         >
                           <FiTrash2 className="h-4 w-4" />
@@ -912,12 +881,13 @@ const CalendarView = ({
                 </motion.div>
               );
             })}
+
           {calendarData.filter(e => filters[e.type]).filter(e => {
             try {
               const date = new Date(e.date);
-              return !isNaN(date.getTime()) && 
-                     date.getMonth() === currentMonth && 
-                     date.getFullYear() === currentYear;
+              return !isNaN(date.getTime()) &&
+                date.getMonth() === currentMonth &&
+                date.getFullYear() === currentYear;
             } catch {
               return false;
             }
@@ -930,7 +900,6 @@ const CalendarView = ({
         </div>
       )}
 
-      {/* Legend */}
       <div className="mt-6 pt-6 border-t border-gray-200">
         <div className="flex items-center justify-between">
           <div>
@@ -964,7 +933,6 @@ const CalendarView = ({
           </div>
         </div>
 
-        {/* Centre Legend - Only show for superadmin */}
         {userRole === "superadmin" && Object.keys(centresMap).length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             <h4 className="text-sm font-medium text-gray-900 mb-3">Centres</h4>
