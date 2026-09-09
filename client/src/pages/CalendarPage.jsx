@@ -473,11 +473,15 @@ const eventColors = {
   announcement: { bg: "#bfdbfe", border: "#60a5fa", text: "#1e3a8a" },
   expiry: { bg: "#fde68a", border: "#facc15", text: "#713f12" },
   task: { bg: "#fbd38d", border: "#f6ad55", text: "#7c2d12" },
+  holiday: { bg: "#fee2e2", border: "#fca5a5", text: "#991b1b" },
+  working: { bg: "#dcfce3", border: "#86efac", text: "#166534" },
+  weekend: { bg: "#f3f4f6", border: "#d1d5db", text: "#374151" },
   default: { bg: "#e5e7eb", border: "#9ca3af", text: "#374151" },
 };
 
 function getEventStyle(event) {
-  const key = event.event_type || (event.type === "task" ? "task" : null);
+  // Fallback to event.type if event_type is missing
+  const key = event.event_type || event.type; 
   return eventColors[key] || eventColors.default;
 }
 
@@ -502,7 +506,8 @@ function CalendarView({
         const colors = getEventStyle(ev);
         return {
           id: ev.id.toString(),
-          title: ev.title,
+          // Fallback chain: title -> description -> type
+          title: ev.title || ev.description || ev.type, 
           start: ev.start_datetime || ev.date,
           end: ev.end_datetime,
           allDay: !ev.start_datetime,
@@ -575,13 +580,15 @@ function CalendarView({
         nowIndicator={true}
         dayCellClassNames={(arg) => (arg.isToday ? ["bg-blue-50"] : [])}
         eventContent={(arg) => {
-          const { event_type, priority } = arg.event.extendedProps;
+          const { event_type, type, priority } = arg.event.extendedProps;
+          const displayType = event_type || type; // Fallback to type
+          
           return (
             <div className="px-1 py-0.5 text-xs font-medium leading-tight">
-              <div>{arg.event.title}</div>
-              {event_type && (
+              <div className="capitalize">{arg.event.title}</div>
+              {displayType && (
                 <div className="text-[10px] opacity-70 capitalize">
-                  {event_type}
+                  {displayType}
                   {priority && priority !== "medium" && ` · ${priority}`}
                 </div>
               )}
@@ -607,7 +614,10 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
     start: "Start",
     expiry: "Expiry",
     announcement: "Announcement",
-  }[event.event_type] || "Event";
+    holiday: "Holiday",
+    working: "Working Day",
+    weekend: "Weekend"
+  }[event.event_type || event.type] || (event.type || "Event");
 
   const colorSets = {
     deadline: "border-red-200 bg-red-50",
@@ -615,11 +625,12 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
     expiry: "border-yellow-200 bg-yellow-50",
     announcement: "border-blue-200 bg-blue-50",
     task: "border-purple-200 bg-purple-50",
+    holiday: "border-red-200 bg-red-50",
+    working: "border-green-200 bg-green-50",
+    weekend: "border-gray-200 bg-gray-50",
     default: "border-gray-200 bg-gray-50",
   };
-  const borderColor =
-    colorSets[event.event_type] ||
-    (event.type === "task" ? colorSets.task : colorSets.default);
+  const borderColor = colorSets[event.event_type] || colorSets[event.type] || colorSets.default;
 
   const priorityColor = {
     high: "bg-red-100 text-red-700",
