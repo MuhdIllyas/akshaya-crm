@@ -14,30 +14,30 @@ router.get("/", async (req, res) => {
 
   try {
     const targetCentre = req.query.centre_id || req.query.centreId;
-
     let centreFilter = "WHERE ce.related_task_id IS NULL";
     let values = [];
 
+    // FIX 3: Allow global visibility at the database level for all roles
     if (req.user.role === "superadmin") {
-      // FIX: Apply filter for superadmin if they selected a centre
       if (targetCentre) {
-        centreFilter += " AND ce.centre_id = $1";
+        centreFilter += " AND (ce.centre_id = $1 OR ce.visibility = 'global')";
         values.push(targetCentre);
       }
     } else if (req.user.role === "admin") {
-      centreFilter += " AND ce.centre_id = $1";
+      centreFilter += " AND (ce.centre_id = $1 OR ce.visibility = 'global')";
       values.push(req.user.centre_id);
     } else if (req.user.role === "staff") {
-      centreFilter += " AND ce.centre_id = $1 AND (ce.assigned_to IS NULL OR ce.assigned_to = $2)";
+      centreFilter += " AND (ce.visibility = 'global' OR (ce.centre_id = $1 AND (ce.assigned_to IS NULL OR ce.assigned_to = $2)))";
       values.push(req.user.centre_id, req.user.id);
     }
 
-    // 1️⃣ Calendar events (Join staff table to stop "Unassigned" bug)
+    // FIX 4: Select the visibility column so the frontend can read it!
     const eventsQuery = `
       SELECT 
         ce.id,
         ce.date,
         ce.type,
+        ce.visibility, 
         ce.description,
         ce.centre_id,
         c.name AS centre_name,

@@ -1579,21 +1579,24 @@ export default function CalendarPage() {
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
     return events.filter((e) => {
-      // 🔥 FIX 3: Race Condition Guard - Now type-safe! 
-      // Forcefully hides events that bled over from slow network requests
-      // EXCEPT when the event is explicitly marked as global
+      
+      // Normalize visibility to catch exact matches
+      const isGlobal = e.visibility === "global" || e.visibility === "Global";
+
+      // 🔥 FIX 1: Race Condition Guard (Bypassed by Global Events)
       if (
         activeCentreId && 
         e.centre_id && 
         String(e.centre_id) !== String(activeCentreId) &&
-        e.visibility !== "global"
+        !isGlobal
       ) {
         return false;
       }
 
-      if (filters.type && e.type !== filters.type) return false;
+      // 🔥 FIX 2: Allow Global events to bypass the default "Application" UI filter
+      if (filters.type && e.type !== filters.type && !isGlobal) return false;
       if (filters.priority && e.priority !== filters.priority) return false;
-      if (filters.event_type && e.event_type !== filters.event_type) return false;
+      if (filters.event_type && e.event_type !== filters.event_type && !isGlobal) return false;
       if (filters.visibility && e.visibility !== filters.visibility) return false;
       if (
         filters.service_id &&
