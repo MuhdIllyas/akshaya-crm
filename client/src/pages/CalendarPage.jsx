@@ -667,8 +667,8 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
           >
             <FiX className="h-5 w-5 text-gray-400" />
           </button>
-          <h2 className="text-xl font-semibold text-gray-900 pr-8 mb-2">
-            {event.title}
+          <h2 className="text-xl font-semibold text-gray-900 pr-8 mb-2 capitalize">
+            {event.title || event.description || event.type}
           </h2>
           {event.status === "completed" && (
             <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">
