@@ -115,9 +115,9 @@ function TooltipCard({ event, position }) {
         )}
 
         <div
-          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border mb-2 ${typeStyle}`}
+          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border mb-2 capitalize ${typeStyle}`}
         >
-          {event.event_type || "Event"}
+          {event.event_type || event.type || "Event"}
         </div>
 
         {event.service_name && (
