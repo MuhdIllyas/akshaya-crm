@@ -257,8 +257,7 @@ const StaffDashboard = () => {
 
       // 2. Set Tasks & Events with STRICT isolation
       // Only keep tasks assigned strictly to this staff member
-      const myStrictTasks = (tasks || []).filter(t => String(t.assigned_to) === String(staffId));
-      setMyTasks(myStrictTasks);
+      setMyTasks(tasks || []);
       
       const validEvents = (events || [])
         .filter(e => {

@@ -1416,9 +1416,10 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE sr.staff_id = $1 AND sr.is_submitted = true
       `, [staffId]),
 
-      // 3. Tasks (Fetch description and priority as well)
+      // 3. Tasks
       client.query(`
-        SELECT id, title, description, priority, due_date, status
+        -- 🔥 FIX: Added 'assigned_to' so the frontend filter can read it
+        SELECT id, title, description, priority, due_date, status, assigned_to
         FROM tasks
         WHERE assigned_to = $1 AND status != 'completed'
         ORDER BY due_date ASC NULLS LAST
