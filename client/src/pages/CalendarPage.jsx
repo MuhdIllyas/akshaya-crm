@@ -815,15 +815,43 @@ function CreateEventModal({
   staffList = [],
   userRole = "admin",
 }) {
-  // ... (same as before, no changes needed)
-  const today = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState(
-    initialData || {
+  
+  // 🔥 Helper 1: Get today's date in local time
+  const getLocalIsoDate = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+
+  // 🔥 Helper 2: Convert backend UTC string to local "YYYY-MM-DDTHH:mm" format
+  const formatLocalDatetime = (dateString, fallbackDate, defaultTime) => {
+    if (!dateString) return `${fallbackDate}T${defaultTime}`;
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return `${fallbackDate}T${defaultTime}`;
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
+  const [form, setForm] = useState(() => {
+    const todayStr = getLocalIsoDate();
+    const baseDate = initialData?.date ? String(initialData.date).split("T")[0] : todayStr;
+
+    if (initialData && initialData.id) {
+      // Editing existing event: Format securely so inputs don't crash
+      return {
+        ...initialData,
+        date: baseDate,
+        start_datetime: formatLocalDatetime(initialData.start_datetime, baseDate, "09:00"),
+        end_datetime: formatLocalDatetime(initialData.end_datetime, baseDate, "17:00"),
+        allDay: !initialData.start_datetime,
+      };
+    }
+
+    // Creating new event
+    return {
       title: "",
       description: "",
-      date: today,
-      start_datetime: `${today}T09:00`,
-      end_datetime: `${today}T17:00`,
+      date: baseDate,
+      start_datetime: `${baseDate}T09:00`,
+      end_datetime: `${baseDate}T17:00`,
       type: "task",
       event_type: "deadline",
       priority: "medium",
@@ -831,8 +859,9 @@ function CreateEventModal({
       related_service_id: null,
       assigned_to: null,
       allDay: false,
-    }
-  );
+      ...initialData, // Preserves prepopulated dates from clicking calendar cells
+    };
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
