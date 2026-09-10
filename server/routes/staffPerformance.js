@@ -1416,11 +1416,11 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE sr.staff_id = $1 AND sr.is_submitted = true
       `, [staffId]),
 
-      // 3. Tasks (Unfiltered so staff never lose track of old pending tasks)
+      // 3. Tasks (Fetch description and priority as well)
       client.query(`
-        SELECT id, title, due_date
+        SELECT id, title, description, priority, due_date, status
         FROM tasks
-        WHERE assigned_to = $1 AND status = 'pending'
+        WHERE assigned_to = $1 AND status != 'completed'
         ORDER BY due_date ASC NULLS LAST
       `, [staffId]),
 
@@ -1561,8 +1561,24 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       tracking_id: row.tracking_id
     }));
 
+    // 🔥 FIX: Map actual tasks into the calendar events feed
+    const formattedTasks = tasksRes.rows
+      .filter(t => t.due_date) // Only tasks with a due date show on the calendar
+      .map(t => ({
+        id: `task-${t.id}`,
+        title: t.title,
+        description: t.description,
+        date: t.due_date,
+        type: 'task',
+        event_type: 'deadline',
+        source: 'task',
+        priority: t.priority || 'medium'
+      }));
+
+    // Combine all event streams
     const combinedEvents = [
       ...eventsRes.rows,
+      ...formattedTasks,       // 👈 Real tasks now included!
       ...formattedDeliveries,
       ...formattedExpiries
     ];
