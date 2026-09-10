@@ -151,9 +151,22 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
   const [displayDate, setDisplayDate] = useState(
     currentDate ? new Date(currentDate) : new Date()
   );
-  const selectedDateStr = currentDate
-    ? new Date(currentDate).toISOString().slice(0, 10)
-    : null;
+
+  // 🔥 FIX 1: Create a helper function that forces local timezone extraction
+  const getLocalYYYYMMDD = (d) => {
+    if (!d) return null;
+    const date = new Date(d);
+    return (
+      date.getFullYear() +
+      "-" +
+      String(date.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(date.getDate()).padStart(2, "0")
+    );
+  };
+
+  // 🔥 FIX 2: Use the local helper instead of .toISOString()
+  const selectedDateStr = getLocalYYYYMMDD(currentDate);
 
   useEffect(() => {
     if (currentDate) setDisplayDate(new Date(currentDate));
@@ -177,24 +190,21 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
     return map;
   }, [events]);
 
-  // 🔥 FIX 2 – compute today’s date in LOCAL time (not UTC)
-  const now = new Date();
-  const todayLocalStr =
-    now.getFullYear() +
-    "-" +
-    String(now.getMonth() + 1).padStart(2, "0") +
-    "-" +
-    String(now.getDate()).padStart(2, "0");
+  // 🔥 FIX 3: Use the local helper for today's date
+  const todayLocalStr = getLocalYYYYMMDD(new Date());
 
   const days = [];
   for (let i = 0; i < startDay; i++) days.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const dateObj = new Date(year, month, d);
-    const dateStr = dateObj.toISOString().slice(0, 10);
+    
+    // 🔥 FIX 4: Use the local helper for the grid cells instead of .toISOString()
+    const dateStr = getLocalYYYYMMDD(dateObj);
+    
     days.push({
       day: d,
       dateStr,
-      isToday: dateStr === todayLocalStr,   // 🔥 local string comparison
+      isToday: dateStr === todayLocalStr,
       isSelected: dateStr === selectedDateStr,
       events: eventMap[dateStr],
     });
