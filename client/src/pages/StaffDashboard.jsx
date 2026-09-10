@@ -255,10 +255,17 @@ const StaffDashboard = () => {
         totalReviews: perfData.ratings?.total_reviews || 0,
       });
 
-      // 2. Set Tasks & Events
-      setMyTasks(tasks || []);
+      // 2. Set Tasks & Events with STRICT isolation
+      // Only keep tasks assigned strictly to this staff member
+      const myStrictTasks = (tasks || []).filter(t => String(t.assigned_to) === String(staffId));
+      setMyTasks(myStrictTasks);
       
       const validEvents = (events || [])
+        .filter(e => {
+          // Keep it if it's unassigned (centre-wide/global), or explicitly assigned to ME
+          if (!e.assigned_to) return true;
+          return String(e.assigned_to) === String(staffId);
+        })
         .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
       setUpcomingEvents(validEvents);
 
@@ -1382,8 +1389,10 @@ const StaffDashboard = () => {
                 <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
                   {['All', 'Tasks', 'Deliveries', 'Expiries'].map(tab => {
                     const count = upcomingEvents.filter(e => {
+                      const displayKey = e.event_type || e.type;
                       if (tab === 'All') return true;
-                      if (tab === 'Tasks') return e.source === 'task' || e.source === 'calendar_event';
+                      // 🔥 FIX: Only count actual tasks or deadlines, ignore basic calendar days
+                      if (tab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
                       if (tab === 'Deliveries') return e.source === 'service_delivery';
                       if (tab === 'Expiries') return e.source === 'service_expiry';
                       return false;
@@ -1418,8 +1427,9 @@ const StaffDashboard = () => {
                 >
                   {(() => {
                     const filteredEvents = upcomingEvents.filter(e => {
+                      const displayKey = e.event_type || e.type;
                       if (activeEventTab === 'All') return true;
-                      if (activeEventTab === 'Tasks') return e.source === 'task' || e.source === 'calendar_event';
+                      if (activeEventTab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
                       if (activeEventTab === 'Deliveries') return e.source === 'service_delivery';
                       if (activeEventTab === 'Expiries') return e.source === 'service_expiry';
                       return false;
@@ -1438,10 +1448,13 @@ const StaffDashboard = () => {
                       const isToday = dayLabel === 'Today';
                       const isTomorrow = dayLabel === 'Tomorrow';
                       
+                      const displayKey = event.event_type || event.type;
+                      
                       let Icon = FiCalendar;
                       let typeColor = 'text-indigo-600 bg-indigo-50 border-indigo-100';
                       let badgeLabel = 'Event';
                       
+                      // 🔥 FIX: Distinct styling for every possible event type
                       if (event.source === 'service_delivery') {
                         Icon = FiBriefcase;
                         typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
@@ -1450,10 +1463,26 @@ const StaffDashboard = () => {
                         Icon = FiAlertCircle;
                         typeColor = 'text-rose-600 bg-rose-50 border-rose-100';
                         badgeLabel = 'Expiry';
-                      } else if (event.source === 'task' || event.source === 'calendar_event') {
+                      } else if (event.source === 'task' || displayKey === 'task' || displayKey === 'deadline') {
                         Icon = FiCheckSquare;
                         typeColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
                         badgeLabel = 'Task';
+                      } else if (displayKey === 'working' || displayKey === 'start') {
+                        Icon = FiBriefcase;
+                        typeColor = 'text-green-600 bg-green-50 border-green-100';
+                        badgeLabel = displayKey === 'working' ? 'Working Day' : 'Start';
+                      } else if (displayKey === 'holiday') {
+                        Icon = FiStar; // Or FiHeart
+                        typeColor = 'text-red-600 bg-red-50 border-red-100';
+                        badgeLabel = 'Holiday';
+                      } else if (displayKey === 'weekend') {
+                        Icon = FiClock; 
+                        typeColor = 'text-gray-600 bg-gray-50 border-gray-200';
+                        badgeLabel = 'Weekend';
+                      } else if (displayKey === 'announcement') {
+                        Icon = FiInfo;
+                        typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
+                        badgeLabel = 'Announcement';
                       }
 
                       return (
