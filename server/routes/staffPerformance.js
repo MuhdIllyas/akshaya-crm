@@ -1424,36 +1424,32 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         ORDER BY due_date ASC NULLS LAST
       `, [staffId]),
 
-      // 4. Events (Dynamically respects the dropdown period!)
+      // 4. Events (Sorted descending: largest dates first)
       client.query(`
         SELECT 
           id, 
-          -- 🔥 FIX 1: Force a fallback title directly in SQL so it is never blank
           COALESCE(title, description, type, 'Event') AS title, 
           description, 
           date, 
           start_datetime, 
-          type,        -- 🔥 FIX 2: Send type to frontend for colors
-          event_type,  -- 🔥 FIX 3: Send event_type to frontend for colors
+          type, 
+          event_type, 
           CASE 
             WHEN type ILIKE '%delivery%' OR event_type ILIKE '%delivery%' THEN 'service_delivery'
             WHEN type ILIKE '%expiry%' OR event_type ILIKE '%expiry%' THEN 'service_expiry'
-            ELSE 'calendar_event' -- Better classification than generic 'task'
+            ELSE 'calendar_event'
           END as source, 
           related_service_id as tracking_id
         FROM calendar_events
-        
-        -- 🔥 FIX 4: Prevent duplicate mirrored tasks from showing up
         WHERE related_task_id IS NULL 
           AND (
             visibility = 'global' 
-            -- 🔥 FIX 5: Secure the route so staff only see unassigned days or their own events
             OR (visibility = 'centre' AND centre_id = $1 AND (assigned_to IS NULL OR assigned_to = $2))
           )
           ${applyEventFilter('COALESCE(date, start_datetime::date)')}
-        ORDER BY COALESCE(date, start_datetime::date) ASC
+        ORDER BY COALESCE(date, start_datetime::date) DESC
         LIMIT 50
-      `, [centreId, staffId]), // <-- Added staffId as $2
+      `, [centreId, staffId]),
 
       // 5. Recent Activity
       client.query(`

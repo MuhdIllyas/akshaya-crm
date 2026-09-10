@@ -262,11 +262,11 @@ const StaffDashboard = () => {
       
       const validEvents = (events || [])
         .filter(e => {
-          // Keep it if it's unassigned (centre-wide/global), or explicitly assigned to ME
           if (!e.assigned_to) return true;
           return String(e.assigned_to) === String(staffId);
         })
-        .sort((a, b) => new Date(a.date || a.start_datetime) - new Date(b.date || b.start_datetime));
+        // 🔥 Flip 'a' and 'b' to sort in descending order (largest dates first)
+        .sort((a, b) => new Date(b.date || b.start_datetime) - new Date(a.date || a.start_datetime));
       setUpcomingEvents(validEvents);
 
       // 3. Set Activities & Bookings
