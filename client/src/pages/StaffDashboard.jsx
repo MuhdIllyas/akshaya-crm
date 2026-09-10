@@ -1387,14 +1387,16 @@ const StaffDashboard = () => {
 
                 {/* Event Tabs */}
                 <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
-                  {['All', 'Tasks', 'Deliveries', 'Expiries'].map(tab => {
+                  {/* 🔥 FIX: Added 'Days' to the array */}
+                  {['All', 'Tasks', 'Deliveries', 'Expiries', 'Days'].map(tab => {
                     const count = upcomingEvents.filter(e => {
                       const displayKey = e.event_type || e.type;
                       if (tab === 'All') return true;
-                      // 🔥 FIX: Only count actual tasks or deadlines, ignore basic calendar days
                       if (tab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
                       if (tab === 'Deliveries') return e.source === 'service_delivery';
                       if (tab === 'Expiries') return e.source === 'service_expiry';
+                      // 🔥 FIX: Add the counter logic for the Days tab
+                      if (tab === 'Days') return ['working', 'holiday', 'weekend'].includes(displayKey);
                       return false;
                     }).length;
 
@@ -1432,6 +1434,8 @@ const StaffDashboard = () => {
                       if (activeEventTab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
                       if (activeEventTab === 'Deliveries') return e.source === 'service_delivery';
                       if (activeEventTab === 'Expiries') return e.source === 'service_expiry';
+                      // 🔥 FIX: Add the filter logic for the Days tab
+                      if (activeEventTab === 'Days') return ['working', 'holiday', 'weekend'].includes(displayKey);
                       return false;
                     });
 
