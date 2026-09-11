@@ -13,30 +13,40 @@ router.get("/", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    let centreFilter = "";
+    const targetCentre = req.query.centre_id || req.query.centreId;
+    let centreFilter = "WHERE ce.related_task_id IS NULL";
     let values = [];
 
+    // FIX 3: Allow global visibility at the database level for all roles
     if (req.user.role === "superadmin") {
-      // no filter → all centres
-    } else {
-      centreFilter = "WHERE ce.centre_id = $1";
+      if (targetCentre) {
+        centreFilter += " AND (ce.centre_id = $1 OR ce.visibility = 'global')";
+        values.push(targetCentre);
+      }
+    } else if (req.user.role === "admin") {
+      centreFilter += " AND (ce.centre_id = $1 OR ce.visibility = 'global')";
       values.push(req.user.centre_id);
+    } else if (req.user.role === "staff") {
+      centreFilter += " AND (ce.visibility = 'global' OR (ce.centre_id = $1 AND (ce.assigned_to IS NULL OR ce.assigned_to = $2)))";
+      values.push(req.user.centre_id, req.user.id);
     }
 
-    // 1️⃣ Calendar events
+    // FIX 4: Select the visibility column so the frontend can read it!
     const eventsQuery = `
       SELECT 
         ce.id,
         ce.date,
         ce.type,
+        ce.visibility, 
         ce.description,
         ce.centre_id,
         c.name AS centre_name,
-        NULL AS staff_id,
-        NULL AS staff_name,
-        NULL AS staff_role
+        ce.assigned_to AS staff_id,
+        s.name AS staff_name,
+        s.role AS staff_role
       FROM calendar_events ce
       JOIN centres c ON ce.centre_id = c.id
+      LEFT JOIN staff s ON ce.assigned_to = s.id
       ${centreFilter}
     `;
 
@@ -45,12 +55,21 @@ router.get("/", async (req, res) => {
     // 2️⃣ Task due dates with staff information
     let taskFilter = "";
     let taskValues = [];
+    // If superadmin provided a centre, $1 is used. Otherwise for admin/staff, it's also $1.
+    // We must track the index dynamically.
 
     if (req.user.role === "superadmin") {
-      // no filter
-    } else {
+      // FIX: Apply filter for superadmin tasks
+      if (targetCentre) {
+        taskFilter = "AND t.centre_id = $1";
+        taskValues.push(targetCentre);
+      }
+    } else if (req.user.role === "admin") {
       taskFilter = "AND t.centre_id = $1";
       taskValues.push(req.user.centre_id);
+    } else if (req.user.role === "staff") {
+      taskFilter = "AND t.centre_id = $1 AND t.assigned_to = $2";
+      taskValues.push(req.user.centre_id, req.user.id);
     }
 
     const tasksQuery = `

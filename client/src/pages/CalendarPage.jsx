@@ -39,9 +39,12 @@ function TooltipCard({ event, position }) {
     announcement: "text-blue-700 bg-blue-50 border-blue-200",
     expiry: "text-yellow-700 bg-yellow-50 border-yellow-200",
     task: "text-purple-700 bg-purple-50 border-purple-200",
+    holiday: "text-red-700 bg-red-50 border-red-200",
+    working: "text-green-700 bg-green-50 border-green-200",
+    weekend: "text-gray-700 bg-gray-50 border-gray-200",
     default: "text-gray-700 bg-gray-50 border-gray-200",
   };
-  const typeStyle = typeColors[event.event_type] || typeColors.default;
+  const typeStyle = typeColors[event.event_type] || typeColors[event.type] || typeColors.default;
 
   const adjustedStyle = useMemo(() => {
     const tw = 280,
@@ -78,7 +81,7 @@ function TooltipCard({ event, position }) {
       <div className="bg-white rounded-xl shadow-xl border border-gray-100 p-4 w-72 backdrop-blur-sm">
         <div className="flex items-start justify-between mb-2">
           <h4 className="font-semibold text-gray-900 text-sm leading-tight pr-2">
-            {event.title || "Untitled Event"}
+            {event.title || event.description || event.type || "Untitled Event"}
           </h4>
           {event.priority === "high" && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">
@@ -112,9 +115,9 @@ function TooltipCard({ event, position }) {
         )}
 
         <div
-          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border mb-2 ${typeStyle}`}
+          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border mb-2 capitalize ${typeStyle}`}
         >
-          {event.event_type || "Event"}
+          {event.event_type || event.type || "Event"}
         </div>
 
         {event.service_name && (
@@ -148,9 +151,22 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
   const [displayDate, setDisplayDate] = useState(
     currentDate ? new Date(currentDate) : new Date()
   );
-  const selectedDateStr = currentDate
-    ? new Date(currentDate).toISOString().slice(0, 10)
-    : null;
+
+  // 🔥 FIX 1: Create a helper function that forces local timezone extraction
+  const getLocalYYYYMMDD = (d) => {
+    if (!d) return null;
+    const date = new Date(d);
+    return (
+      date.getFullYear() +
+      "-" +
+      String(date.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(date.getDate()).padStart(2, "0")
+    );
+  };
+
+  // 🔥 FIX 2: Use the local helper instead of .toISOString()
+  const selectedDateStr = getLocalYYYYMMDD(currentDate);
 
   useEffect(() => {
     if (currentDate) setDisplayDate(new Date(currentDate));
@@ -174,24 +190,21 @@ function MiniCalendar({ events = [], currentDate, onDateChange }) {
     return map;
   }, [events]);
 
-  // 🔥 FIX 2 – compute today’s date in LOCAL time (not UTC)
-  const now = new Date();
-  const todayLocalStr =
-    now.getFullYear() +
-    "-" +
-    String(now.getMonth() + 1).padStart(2, "0") +
-    "-" +
-    String(now.getDate()).padStart(2, "0");
+  // 🔥 FIX 3: Use the local helper for today's date
+  const todayLocalStr = getLocalYYYYMMDD(new Date());
 
   const days = [];
   for (let i = 0; i < startDay; i++) days.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const dateObj = new Date(year, month, d);
-    const dateStr = dateObj.toISOString().slice(0, 10);
+    
+    // 🔥 FIX 4: Use the local helper for the grid cells instead of .toISOString()
+    const dateStr = getLocalYYYYMMDD(dateObj);
+    
     days.push({
       day: d,
       dateStr,
-      isToday: dateStr === todayLocalStr,   // 🔥 local string comparison
+      isToday: dateStr === todayLocalStr,
       isSelected: dateStr === selectedDateStr,
       events: eventMap[dateStr],
     });
@@ -473,11 +486,15 @@ const eventColors = {
   announcement: { bg: "#bfdbfe", border: "#60a5fa", text: "#1e3a8a" },
   expiry: { bg: "#fde68a", border: "#facc15", text: "#713f12" },
   task: { bg: "#fbd38d", border: "#f6ad55", text: "#7c2d12" },
+  holiday: { bg: "#fee2e2", border: "#fca5a5", text: "#991b1b" },
+  working: { bg: "#dcfce3", border: "#86efac", text: "#166534" },
+  weekend: { bg: "#f3f4f6", border: "#d1d5db", text: "#374151" },
   default: { bg: "#e5e7eb", border: "#9ca3af", text: "#374151" },
 };
 
 function getEventStyle(event) {
-  const key = event.event_type || (event.type === "task" ? "task" : null);
+  // Fallback to event.type if event_type is missing
+  const key = event.event_type || event.type; 
   return eventColors[key] || eventColors.default;
 }
 
@@ -502,7 +519,8 @@ function CalendarView({
         const colors = getEventStyle(ev);
         return {
           id: ev.id.toString(),
-          title: ev.title,
+          // Fallback chain: title -> description -> type
+          title: ev.title || ev.description || ev.type, 
           start: ev.start_datetime || ev.date,
           end: ev.end_datetime,
           allDay: !ev.start_datetime,
@@ -575,13 +593,15 @@ function CalendarView({
         nowIndicator={true}
         dayCellClassNames={(arg) => (arg.isToday ? ["bg-blue-50"] : [])}
         eventContent={(arg) => {
-          const { event_type, priority } = arg.event.extendedProps;
+          const { event_type, type, priority } = arg.event.extendedProps;
+          const displayType = event_type || type; // Fallback to type
+          
           return (
             <div className="px-1 py-0.5 text-xs font-medium leading-tight">
-              <div>{arg.event.title}</div>
-              {event_type && (
+              <div className="capitalize">{arg.event.title}</div>
+              {displayType && (
                 <div className="text-[10px] opacity-70 capitalize">
-                  {event_type}
+                  {displayType}
                   {priority && priority !== "medium" && ` · ${priority}`}
                 </div>
               )}
@@ -607,7 +627,10 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
     start: "Start",
     expiry: "Expiry",
     announcement: "Announcement",
-  }[event.event_type] || "Event";
+    holiday: "Holiday",
+    working: "Working Day",
+    weekend: "Weekend"
+  }[event.event_type || event.type] || (event.type || "Event");
 
   const colorSets = {
     deadline: "border-red-200 bg-red-50",
@@ -615,11 +638,12 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
     expiry: "border-yellow-200 bg-yellow-50",
     announcement: "border-blue-200 bg-blue-50",
     task: "border-purple-200 bg-purple-50",
+    holiday: "border-red-200 bg-red-50",
+    working: "border-green-200 bg-green-50",
+    weekend: "border-gray-200 bg-gray-50",
     default: "border-gray-200 bg-gray-50",
   };
-  const borderColor =
-    colorSets[event.event_type] ||
-    (event.type === "task" ? colorSets.task : colorSets.default);
+  const borderColor = colorSets[event.event_type] || colorSets[event.type] || colorSets.default;
 
   const priorityColor = {
     high: "bg-red-100 text-red-700",
@@ -653,8 +677,8 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
           >
             <FiX className="h-5 w-5 text-gray-400" />
           </button>
-          <h2 className="text-xl font-semibold text-gray-900 pr-8 mb-2">
-            {event.title}
+          <h2 className="text-xl font-semibold text-gray-900 pr-8 mb-2 capitalize">
+            {event.title || event.description || event.type}
           </h2>
           {event.status === "completed" && (
             <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">
@@ -791,15 +815,43 @@ function CreateEventModal({
   staffList = [],
   userRole = "admin",
 }) {
-  // ... (same as before, no changes needed)
-  const today = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState(
-    initialData || {
+  
+  // 🔥 Helper 1: Get today's date in local time
+  const getLocalIsoDate = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+
+  // 🔥 Helper 2: Convert backend UTC string to local "YYYY-MM-DDTHH:mm" format
+  const formatLocalDatetime = (dateString, fallbackDate, defaultTime) => {
+    if (!dateString) return `${fallbackDate}T${defaultTime}`;
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return `${fallbackDate}T${defaultTime}`;
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
+  const [form, setForm] = useState(() => {
+    const todayStr = getLocalIsoDate();
+    const baseDate = initialData?.date ? String(initialData.date).split("T")[0] : todayStr;
+
+    if (initialData && initialData.id) {
+      // Editing existing event: Format securely so inputs don't crash
+      return {
+        ...initialData,
+        date: baseDate,
+        start_datetime: formatLocalDatetime(initialData.start_datetime, baseDate, "09:00"),
+        end_datetime: formatLocalDatetime(initialData.end_datetime, baseDate, "17:00"),
+        allDay: !initialData.start_datetime,
+      };
+    }
+
+    // Creating new event
+    return {
       title: "",
       description: "",
-      date: today,
-      start_datetime: `${today}T09:00`,
-      end_datetime: `${today}T17:00`,
+      date: baseDate,
+      start_datetime: `${baseDate}T09:00`,
+      end_datetime: `${baseDate}T17:00`,
       type: "task",
       event_type: "deadline",
       priority: "medium",
@@ -807,8 +859,9 @@ function CreateEventModal({
       related_service_id: null,
       assigned_to: null,
       allDay: false,
-    }
-  );
+      ...initialData, // Preserves prepopulated dates from clicking calendar cells
+    };
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1441,7 +1494,9 @@ export default function CalendarPage() {
 
   // ---------- Centres ----------
   const [centres, setCentres] = useState([]);
-  const [activeCentreId, setActiveCentreId] = useState(null);
+  
+  // FIX 1: Initialize synchronously with the token's centreId to prevent a 'null' fetch
+  const [activeCentreId, setActiveCentreId] = useState(userCentreId || null);
 
   useEffect(() => {
     if (userRole === "superadmin") {
@@ -1453,16 +1508,15 @@ export default function CalendarPage() {
         .then((res) => res.json())
         .then((data) => {
           setCentres(data);
+          // Only fallback to data[0].id if the superadmin has no assigned centre
           if (data.length > 0 && !activeCentreId) {
             setActiveCentreId(data[0].id);
           }
         })
         .catch(() => setCentres([]));
-    } else {
-      setActiveCentreId(userCentreId);
     }
-  }, [userRole, userCentreId]);
-
+    
+  }, [userRole]); 
   // ---------- Services & Staff ----------
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -1509,7 +1563,7 @@ export default function CalendarPage() {
 
   // ---------- Hook ----------
   const [hookFilters, setHookFilters] = useState({
-    centreId: activeCentreId,
+    centreId: userCentreId || null,
   });
   useEffect(() => {
     setHookFilters((prev) => ({ ...prev, centreId: activeCentreId }));
@@ -1526,7 +1580,8 @@ export default function CalendarPage() {
 
   // ---------- UI state ----------
   const [filters, setFilters] = useState({
-    type: "",
+    // 🔥 FIX: Default to "application" for upper management to prevent rendering overload
+    type: (userRole === "admin" || userRole === "superadmin") ? "application" : "",
     priority: "",
     event_type: "",
     visibility: "",
@@ -1563,9 +1618,24 @@ export default function CalendarPage() {
   const filteredEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
     return events.filter((e) => {
-      if (filters.type && e.type !== filters.type) return false;
+      
+      // Normalize visibility to catch exact matches
+      const isGlobal = e.visibility === "global" || e.visibility === "Global";
+
+      // 🔥 FIX 1: Race Condition Guard (Bypassed by Global Events)
+      if (
+        activeCentreId && 
+        e.centre_id && 
+        String(e.centre_id) !== String(activeCentreId) &&
+        !isGlobal
+      ) {
+        return false;
+      }
+
+      // 🔥 FIX 2: Allow Global events to bypass the default "Application" UI filter
+      if (filters.type && e.type !== filters.type && !isGlobal) return false;
       if (filters.priority && e.priority !== filters.priority) return false;
-      if (filters.event_type && e.event_type !== filters.event_type) return false;
+      if (filters.event_type && e.event_type !== filters.event_type && !isGlobal) return false;
       if (filters.visibility && e.visibility !== filters.visibility) return false;
       if (
         filters.service_id &&
@@ -1579,7 +1649,7 @@ export default function CalendarPage() {
       }
       return true;
     });
-  }, [events, filters, userId]);
+  }, [events, filters, userId, activeCentreId]);
 
   // ---------- CRUD handlers (with toasts) ----------
   const handleAddEvent = useCallback(
@@ -1715,7 +1785,7 @@ export default function CalendarPage() {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Top Bar with Centre Switcher */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4 shadow-sm z-30">
+      <div className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4 shadow-sm z-50">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-gray-800 tracking-tight">
             📅 Calendar

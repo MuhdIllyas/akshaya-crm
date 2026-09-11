@@ -38,30 +38,32 @@ router.use(authenticateToken);
    ROLE FILTER (CORRECTED)
 ====================================================== */
 
-const buildRoleFilter = (user) => {
-  // SUPERADMIN → ALL EVENTS
+// 1. Update the function to accept requestedCentreId
+const buildRoleFilter = (user, requestedCentreId) => {
   if (user.role === "superadmin") {
+    // FIX: Apply centre filter for superadmin if provided
+    if (requestedCentreId) {
+      return { 
+        query: "AND (e.centre_id = $1 OR e.visibility = 'global')", 
+        values: [requestedCentreId] 
+      };
+    }
+    return { query: "", values: [] };
+  }
+
+  if (user.role === "admin") {
     return {
-      query: "",
-      values: [],
+      query: `AND (e.visibility = 'global' OR (e.visibility = 'centre' AND e.centre_id = $1))`,
+      values: [user.centre_id],
     };
   }
 
-  // ADMIN + STAFF:
-  //   - GLOBAL events (visible to everyone)
-  //   - CENTRE events only if they belong to the user's centre
-  return {
-    query: `
-      AND (
-        e.visibility = 'global'
-        OR (
-          e.visibility = 'centre'
-          AND e.centre_id = $1
-        )
-      )
-    `,
-    values: [user.centre_id],
-  };
+  if (user.role === "staff") {
+    return {
+      query: `AND (e.visibility = 'global' OR (e.visibility = 'centre' AND e.centre_id = $1 AND (e.assigned_to IS NULL OR e.assigned_to = $2)))`,
+      values: [user.centre_id, user.id],
+    };
+  }
 };
 
 /* ======================================================
@@ -70,18 +72,16 @@ const buildRoleFilter = (user) => {
 
 router.get("/", async (req, res) => {
   const client = await pool.connect();
-
   try {
     const {
-      start,
-      end,
-      type,
-      event_type,
-      priority,
-      visibility,
+      start, end, type, event_type, priority, visibility, 
+      centre_id, centreId // <-- catch both formats
     } = req.query;
 
-    const roleFilter = buildRoleFilter(req.user);
+    // Standardize the target centre
+    const targetCentre = centre_id || centreId;
+
+    const roleFilter = buildRoleFilter(req.user, targetCentre);
 
     let conditions = [];
     let values = [...roleFilter.values];
@@ -143,42 +143,31 @@ router.get("/", async (req, res) => {
     const manualEventsQuery = `
       SELECT
         e.id,
-
         e.title,
         e.description,
-
         e.date,
         e.start_datetime,
         e.end_datetime,
-
         e.type,
         e.event_type,
-
         e.priority,
         e.status,
         e.visibility,
-
         e.created_at,
         e.centre_id,
-
         e.related_service_id,
         e.related_task_id,
-
         s.name AS service_name,
-
         st.name AS assigned_staff_name,
-
         'calendar_event' AS source
-
       FROM calendar_events e
-
       LEFT JOIN services s
         ON s.id = e.related_service_id
-
       LEFT JOIN staff st
         ON st.id = e.assigned_to
 
-      WHERE 1=1
+      -- FIX 1: Filter out the mirrored duplicate tasks
+      WHERE e.related_task_id IS NULL
       ${roleFilter.query}
       ${whereClause}
 
@@ -199,56 +188,43 @@ router.get("/", async (req, res) => {
     let taskValues = [];
 
     if (req.user.role === "staff") {
-      taskFilter = `
-        AND t.assigned_to = $1
-      `;
-
+      taskFilter = `AND t.assigned_to = $1`;
       taskValues.push(req.user.id);
-
     } else if (req.user.role === "admin") {
-      taskFilter = `
-        AND t.centre_id = $1
-      `;
-
+      taskFilter = `AND t.centre_id = $1`;
       taskValues.push(req.user.centre_id);
+    } else if (req.user.role === "superadmin" && targetCentre) {
+      // FIX: Apply to superadmin
+      taskFilter = `AND t.centre_id = $1`;
+      taskValues.push(targetCentre);
     }
 
     const tasksQuery = `
       SELECT
         t.id,
-
         t.title,
         t.description,
-
         t.due_date AS date,
-
         NULL AS start_datetime,
         NULL AS end_datetime,
-
         'task' AS type,
-        'deadline' AS event_type,
+
+        -- FIX 2: Stop forcing tasks to look like deadlines
+        'task' AS event_type,
 
         t.priority,
         t.status,
-
         'centre' AS visibility,
-
         t.created_at,
         t.centre_id,
-
         t.related_service_id,
-
         s.name AS service_name,
-
         st.name AS assigned_staff_name,
-
         'task' AS source
 
       FROM tasks t
-
       LEFT JOIN services s
         ON s.id = t.related_service_id
-
       LEFT JOIN staff st
         ON st.id = t.assigned_to
 
@@ -268,22 +244,20 @@ router.get("/", async (req, res) => {
     let expiryFilter = "";
     let expiryValues = [];
 
-    // STAFF → own service entries
     if (req.user.role === "staff") {
-      expiryFilter = `
-        WHERE se.staff_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE
-      `;
-
+      expiryFilter = `WHERE se.staff_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
       expiryValues.push(req.user.id);
-    }
-
-    // ADMIN → centre entries
-    else if (req.user.role === "admin") {
-      expiryFilter = `
-        WHERE sf.centre_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE
-      `;
-
+    } else if (req.user.role === "admin") {
+      expiryFilter = `WHERE sf.centre_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
       expiryValues.push(req.user.centre_id);
+    } else {
+      // FIX: Apply to superadmin
+      if (targetCentre) {
+        expiryFilter = `WHERE sf.centre_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
+        expiryValues.push(targetCentre);
+      } else {
+        expiryFilter = `WHERE se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
+      }
     }
 
     const expiryQuery = `
@@ -294,7 +268,7 @@ router.get("/", async (req, res) => {
         se.expiry_date,
         se.staff_id AS assigned_to,
         sf.name AS staff_name,
-        -- 🔥 ADD THIS LINE: Fetch the most recent tracking ID for this service entry
+        sf.centre_id, -- 🔥 FIX: Added missing centre_id so frontend can filter it!
         (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) AS tracking_id
       FROM service_entries se
       LEFT JOIN services sv ON sv.id = se.category_id
@@ -355,15 +329,16 @@ router.get("/", async (req, res) => {
       let deliveryFilter = "WHERE tr.status NOT IN ('completed', 'paid', 'delivered')";
       let deliveryValues = [];
 
-      // STAFF → assigned tracking
       if (req.user.role === "staff") {
         deliveryFilter += ` AND tr.assigned_to = $1`;
         deliveryValues.push(req.user.id);
-      }
-      // ADMIN → centre entries
-      else if (req.user.role === "admin") {
+      } else if (req.user.role === "admin") {
         deliveryFilter += ` AND sf.centre_id = $1`;
         deliveryValues.push(req.user.centre_id);
+      } else if (req.user.role === "superadmin" && targetCentre) {
+        // FIX: Apply to superadmin
+        deliveryFilter += ` AND sf.centre_id = $1`;
+        deliveryValues.push(targetCentre);
       }
 
       const deliveryQuery = `

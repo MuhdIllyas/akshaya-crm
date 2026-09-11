@@ -1416,30 +1416,41 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE sr.staff_id = $1 AND sr.is_submitted = true
       `, [staffId]),
 
-      // 3. Tasks (Unfiltered so staff never lose track of old pending tasks)
+      // 3. Tasks
       client.query(`
-        SELECT id, title, due_date
+        -- 🔥 FIX: Added 'assigned_to' so the frontend filter can read it
+        SELECT id, title, description, priority, due_date, status, assigned_to
         FROM tasks
-        WHERE assigned_to = $1 AND status = 'pending'
+        WHERE assigned_to = $1 AND status != 'completed'
         ORDER BY due_date ASC NULLS LAST
       `, [staffId]),
 
-      // 4. Events (Dynamically respects the dropdown period!)
+      // 4. Events (Sorted descending: largest dates first)
       client.query(`
         SELECT 
-          id, title, description, date, start_datetime, 
+          id, 
+          COALESCE(title, description, type, 'Event') AS title, 
+          description, 
+          date, 
+          start_datetime, 
+          type, 
+          event_type, 
           CASE 
             WHEN type ILIKE '%delivery%' OR event_type ILIKE '%delivery%' THEN 'service_delivery'
             WHEN type ILIKE '%expiry%' OR event_type ILIKE '%expiry%' THEN 'service_expiry'
-            ELSE 'task'
+            ELSE 'calendar_event'
           END as source, 
           related_service_id as tracking_id
         FROM calendar_events
-        WHERE (visibility = 'global' OR (visibility = 'centre' AND centre_id = $1))
+        WHERE related_task_id IS NULL 
+          AND (
+            visibility = 'global' 
+            OR (visibility = 'centre' AND centre_id = $1 AND (assigned_to IS NULL OR assigned_to = $2))
+          )
           ${applyEventFilter('COALESCE(date, start_datetime::date)')}
-        ORDER BY COALESCE(date, start_datetime::date) ASC
+        ORDER BY COALESCE(date, start_datetime::date) DESC
         LIMIT 50
-      `, [centreId]),
+      `, [centreId, staffId]),
 
       // 5. Recent Activity
       client.query(`
@@ -1547,8 +1558,24 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       tracking_id: row.tracking_id
     }));
 
+    // 🔥 FIX: Map actual tasks into the calendar events feed
+    const formattedTasks = tasksRes.rows
+      .filter(t => t.due_date) // Only tasks with a due date show on the calendar
+      .map(t => ({
+        id: `task-${t.id}`,
+        title: t.title,
+        description: t.description,
+        date: t.due_date,
+        type: 'task',
+        event_type: 'deadline',
+        source: 'task',
+        priority: t.priority || 'medium'
+      }));
+
+    // Combine all event streams
     const combinedEvents = [
       ...eventsRes.rows,
+      ...formattedTasks,       // 👈 Real tasks now included!
       ...formattedDeliveries,
       ...formattedExpiries
     ];
