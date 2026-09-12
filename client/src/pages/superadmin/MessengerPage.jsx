@@ -47,7 +47,7 @@ import {
   FiAlertCircle,
   FiImage,
   FiChevronRight, FiLayout,
-  FiSmartphone, 
+  FiSmartphone, FiPlayCircle
 } from "react-icons/fi";
 import { FaRegSmile, FaEllipsisH } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdClose } from "react-icons/io";
