@@ -46,8 +46,8 @@ import {
   FiRefreshCw,
   FiAlertCircle,
   FiImage,
-  FiChevronRight,
-  FiSmartphone, // Added for WhatsApp icon
+  FiChevronRight, FiLayout,
+  FiSmartphone, 
 } from "react-icons/fi";
 import { FaRegSmile, FaEllipsisH } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdClose } from "react-icons/io";
@@ -322,6 +322,7 @@ const MessengerPage = ({ user }) => {
   const [quickNoteForm, setQuickNoteForm] = useState({ title: "", content: "" });
 
   const [taskFilter, setTaskFilter] = useState("all");
+  const [taskViewMode, setTaskViewMode] = useState("list");
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
 
@@ -1758,7 +1759,8 @@ const MessengerPage = ({ user }) => {
 
   const getFilteredTasks = () => {
     switch (taskFilter) {
-      case "pending": return tasks.filter(task => task.status !== "completed");
+      case "pending": return tasks.filter(task => task.status === "pending" || !task.status);
+      case "in_progress": return tasks.filter(task => task.status === "in_progress");
       case "completed": return tasks.filter(task => task.status === "completed");
       default: return tasks;
     }
@@ -2870,34 +2872,364 @@ const MessengerPage = ({ user }) => {
     );
   };
 
-  const renderTasksView = () => {
+const renderTasksView = () => {
     const filteredTasks = getFilteredTasks();
-    const pendingCount = tasks.filter(t => t.status !== "completed").length;
+    const pendingCount = tasks.filter(t => t.status === "pending" || !t.status).length;
+    const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
     const completedCount = tasks.filter(t => t.status === "completed").length;
+
+    // --- Styling Helpers ---
+    const getPriorityStyles = (priority) => {
+      switch(priority?.toLowerCase()) {
+        case 'high': return 'bg-rose-50 text-rose-700 border-rose-200';
+        case 'medium': return 'bg-amber-50 text-amber-700 border-amber-200';
+        case 'low': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        default: return 'bg-gray-50 text-gray-700 border-gray-200';
+      }
+    };
+
+    const getStatusStyles = (status) => {
+      switch(status) {
+        case 'completed': return 'bg-emerald-100 text-emerald-700';
+        case 'in_progress': return 'bg-blue-100 text-blue-700';
+        default: return 'bg-amber-100 text-amber-700';
+      }
+    };
+
+    const columns = [
+      { id: 'pending', title: 'To Do', icon: <FiCheckSquare className="text-gray-500 h-4 w-4" /> },
+      { id: 'in_progress', title: 'In Progress', icon: <FiPlayCircle className="text-blue-500 h-4 w-4" /> },
+      { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" /> }
+    ];
+
+    // --- Drag & Drop Handlers ---
+    const updateTaskStatus = async (taskId, newStatus) => {
+      const previousTasks = [...tasks];
+      setTasks(prev => prev.map(t => String(t.id) === String(taskId) ? { ...t, status: newStatus } : t));
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        toast.success(`Task moved to ${newStatus.replace('_', ' ')}`);
+        fetchCalendarData(); // Sync calendar events
+      } catch (err) {
+        setTasks(previousTasks);
+        toast.error(`Failed to update task: ${err.message}`);
+      }
+    };
+
+    const handleDragStart = (e, taskId) => {
+      e.dataTransfer.setData('taskId', taskId);
+      e.dataTransfer.effectAllowed = 'move';
+    };
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    };
+    const handleDrop = (e, status) => {
+      e.preventDefault();
+      const taskId = e.dataTransfer.getData('taskId');
+      const task = tasks.find(t => String(t.id) === taskId);
+      if (task && task.status !== status) {
+        updateTaskStatus(taskId, status);
+      }
+    };
 
     return (
       <div className="h-full overflow-y-auto p-6 bg-gray-50">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
           <div className="flex justify-between items-center mb-6">
-            <div><h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><FiCheckSquare className="text-navy-700" />Task Management</h1><p className="text-gray-500 text-sm mt-1">Manage tasks and recurring templates</p></div>
-            <div className="flex gap-3">{canCreateRecurring() && (<button onClick={() => openTemplateModal()} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2 shadow-sm"><FiRepeat size={18} />New Template</button>)}<button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2 shadow-sm"><FiPlusCircle size={18} />New Task</button></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <FiCheckSquare className="text-navy-700" /> Task Management
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">Manage tasks and recurring templates</p>
+            </div>
+            <div className="flex gap-3">
+              {canCreateRecurring() && (
+                <button onClick={() => openTemplateModal()} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2 shadow-sm">
+                  <FiRepeat size={16} /> <span className="hidden sm:inline">New Template</span>
+                </button>
+              )}
+              <button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2 shadow-sm">
+                <FiPlusCircle size={16} /> <span className="hidden sm:inline">New Task</span>
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200"><p className="text-sm text-gray-500">Total Tasks</p><p className="text-2xl font-bold text-gray-800">{tasks.length}</p></div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200"><p className="text-sm text-gray-500">Pending</p><p className="text-2xl font-bold text-yellow-600">{pendingCount}</p></div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200"><p className="text-sm text-gray-500">Completed</p><p className="text-2xl font-bold text-green-600">{completedCount}</p></div>
+          {/* Compact Stats Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[
+              { title: 'Total Tasks', value: tasks.length, color: 'bg-gray-600', icon: FiCheckSquare },
+              { title: 'To Do', value: pendingCount, color: 'bg-amber-500', icon: FiAlertCircle },
+              { title: 'In Progress', value: inProgressCount, color: 'bg-blue-500', icon: FiPlayCircle },
+              { title: 'Completed', value: completedCount, color: 'bg-emerald-500', icon: FiCheck },
+            ].map(stat => (
+              <motion.div key={stat.title} whileHover={{ y: -2 }} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-lg transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">{stat.title}</p>
+                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  </div>
+                  <div className={`p-2.5 rounded-xl ${stat.color}`}>
+                    <stat.icon className="h-5 w-5 text-white" />
+                  </div>
+                </div>
+              </motion.div>
+            ))}
           </div>
 
-          {canCreateRecurring() && templates.length > 0 && (<div className="mb-8"><h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2"><FiRepeat className="text-purple-600" />Recurring Templates</h2><div className="space-y-3">{templates.map(template => renderTemplate(template))}</div></div>)}
+          {/* Recurring Templates (Admin Only) */}
+          {canCreateRecurring() && templates.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <FiRepeat className="text-purple-600" /> Recurring Templates
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {templates.map(template => renderTemplate(template))}
+              </div>
+            </div>
+          )}
 
-          <div className="bg-white rounded-lg p-4 mb-6 shadow-sm border border-gray-200">
-            <div className="flex items-center gap-4"><div className="flex items-center gap-2 text-gray-500"><FiFilter size={16} /><span className="text-sm">Filter:</span></div><button onClick={() => setTaskFilter("all")} className={`px-3 py-1 rounded-full text-sm transition ${taskFilter === "all" ? "bg-navy-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>All ({tasks.length})</button><button onClick={() => setTaskFilter("pending")} className={`px-3 py-1 rounded-full text-sm transition ${taskFilter === "pending" ? "bg-yellow-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Pending ({pendingCount})</button><button onClick={() => setTaskFilter("completed")} className={`px-3 py-1 rounded-full text-sm transition ${taskFilter === "completed" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Completed ({completedCount})</button></div>
+          {/* View Toggle & Filters */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto">
+              <FiFilter className="text-gray-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
+              {['all', 'pending', 'in_progress', 'completed'].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setTaskFilter(f)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-colors whitespace-nowrap ${
+                    taskFilter === f
+                      ? 'bg-navy-700 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {f.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+            <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 w-full sm:w-auto justify-center">
+              <button
+                onClick={() => setTaskViewMode('list')}
+                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  taskViewMode === 'list' ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <FiList size={14} /> List
+              </button>
+              <button
+                onClick={() => setTaskViewMode('board')}
+                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  taskViewMode === 'board' ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <FiLayout size={14} /> Board
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {loading ? (<div className="text-center py-12"><div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-navy-700 border-t-transparent"></div><p className="text-gray-500 mt-2">Loading tasks...</p></div>) : filteredTasks.length > 0 ? (<AnimatePresence>{filteredTasks.map(task => (<div key={task.id}>{renderTask(task)}</div>))}</AnimatePresence>) : (<div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300"><FiCheckSquare className="mx-auto text-gray-400 text-5xl mb-3" /><h3 className="text-lg font-medium text-gray-700 mb-2">No tasks found</h3><p className="text-gray-500 mb-4">{taskFilter === "all" ? "Get started by creating your first task" : taskFilter === "pending" ? "No pending tasks" : "No completed tasks yet"}</p><button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition inline-flex items-center gap-2"><FiPlusCircle size={16} />Create New Task</button></div>)}
-          </div>
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-navy-700 border-t-transparent"></div>
+              <p className="text-gray-500 mt-2 text-sm font-medium">Syncing tasks...</p>
+            </div>
+          ) : tasks.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 shadow-sm">
+              <FiCheckSquare className="mx-auto text-gray-300 text-5xl mb-3" />
+              <h3 className="text-lg font-bold text-gray-900 mb-1">No tasks assigned yet</h3>
+              <p className="text-gray-500 text-sm mb-4">Get started by creating your first task.</p>
+              <button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition inline-flex items-center gap-2 text-sm font-medium shadow-sm">
+                <FiPlusCircle size={16} /> Create New Task
+              </button>
+            </div>
+          ) : taskViewMode === 'board' ? (
+            
+            /* KANBAN BOARD VIEW */
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+              {columns.map(column => (
+                <div 
+                  key={column.id}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, column.id)}
+                  className="bg-gray-100/80 rounded-xl p-3 min-h-[50vh] flex flex-col border border-gray-200"
+                >
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <div className="flex items-center gap-1.5">
+                      {column.icon}
+                      <h3 className="font-bold text-gray-800 text-sm">{column.title}</h3>
+                    </div>
+                    <span className="bg-white text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-gray-200">
+                      {tasks.filter(t => (t.status || 'pending') === column.id).length}
+                    </span>
+                  </div>
+                  
+                  <div className="flex-1 space-y-2.5">
+                    <AnimatePresence>
+                      {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
+                        const assignee = staffList.find(s => s.id === task.assigned_to);
+                        return (
+                          <motion.div
+                            key={task.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, task.id)}
+                            className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:border-navy-300 hover:shadow transition-all cursor-grab active:cursor-grabbing group"
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-1.5">
+                              <h4 className={`text-sm font-bold text-gray-900 leading-tight ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                                {task.title}
+                              </h4>
+                              <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <FiTrash2 size={14} />
+                              </button>
+                            </div>
+                            {task.description && (
+                              <p className="text-xs text-gray-500 line-clamp-2 mb-2 leading-relaxed">
+                                {task.description}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                                {task.priority || 'Medium'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {task.due_date && (
+                                  <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium" title="Due Date">
+                                    <FiCalendar /> {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                  </div>
+                                )}
+                                <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-600 border border-gray-200" title={assignee?.name || 'Assigned User'}>
+                                  {assignee?.name?.charAt(0) || 'U'}
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          ) : (
+
+            /* COMPACT LIST VIEW */
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50/50">
+                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-10">Status</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">Task Name</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Assignee</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-28">Priority</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Due Date</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Stage</th>
+                      <th className="py-3 px-4 text-right text-xs font-bold text-gray-500 uppercase w-16"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    <AnimatePresence>
+                      {filteredTasks.map(task => {
+                        const assignee = staffList.find(s => s.id === task.assigned_to);
+                        return (
+                          <motion.tr 
+                            key={task.id}
+                            layout
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="hover:bg-gray-50 transition-colors group"
+                          >
+                            <td className="py-3 px-4">
+                              <button
+                                onClick={() => updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed')}
+                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                  task.status === 'completed'
+                                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                                    : 'border-2 border-gray-300 text-transparent hover:border-emerald-500'
+                                }`}
+                              >
+                                <FiCheck size={12} strokeWidth={3} />
+                              </button>
+                            </td>
+                            <td className="py-3 px-4 min-w-[200px]">
+                              <div className="flex items-center gap-2">
+                                <p className={`text-sm font-semibold text-gray-900 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                                  {task.title}
+                                </p>
+                                {task.template_id && (
+                                  <span className="text-[9px] bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded flex items-center gap-1 uppercase font-bold tracking-wider">
+                                    <FiRepeat size={8} /> Recurring
+                                  </span>
+                                )}
+                              </div>
+                              {task.description && (
+                                <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
+                                  {task.description}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+                                <div className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-100">
+                                  {assignee?.name?.charAt(0) || 'U'}
+                                </div>
+                                {assignee?.name?.split(' ')[0] || 'Unknown'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                                {task.priority || 'Medium'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              {task.due_date ? (
+                                <span className="text-xs text-gray-600 font-medium flex items-center gap-1.5">
+                                  <FiCalendar className="text-gray-400" />
+                                  {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusStyles(task.status || 'pending')}`}>
+                                {(task.status || 'pending').replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button onClick={() => deleteTask(task.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100">
+                                <FiTrash2 size={14} />
+                              </button>
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </tbody>
+                </table>
+                {filteredTasks.length === 0 && (
+                  <div className="text-center py-10">
+                    <FiList className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-gray-500">No tasks match your filter.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
