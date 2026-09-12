@@ -8,19 +8,18 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
-const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
+const StatCard = ({ title, value, icon: Icon, color }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg transition-all duration-300"
+    className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-lg transition-all duration-300"
   >
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-        <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
-        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+        <p className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">{title}</p>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
       </div>
-      <div className={`p-3 rounded-xl ${color}`}>
-        <Icon className="h-6 w-6 text-white" />
+      <div className={`p-2.5 rounded-xl ${color}`}>
+        <Icon className="h-5 w-5 text-white" />
       </div>
     </div>
   </motion.div>
@@ -31,7 +30,7 @@ const StaffTasks = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); 
-  const [viewMode, setViewMode] = useState('board'); // 'list' or 'board'
+  const [viewMode, setViewMode] = useState('list'); // Default to list for compactness
   
   const staffId = localStorage.getItem('id')?.trim();
   const token = localStorage.getItem('token');
@@ -90,7 +89,7 @@ const StaffTasks = () => {
     }
   };
 
-  // Drag and Drop Handlers
+  // --- Drag and Drop Handlers (Board Only) ---
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData('taskId', taskId);
     e.dataTransfer.effectAllowed = 'move';
@@ -112,7 +111,7 @@ const StaffTasks = () => {
   };
 
   const filteredTasks = tasks.filter(task => {
-    if (filter === 'pending') return task.status === 'pending';
+    if (filter === 'pending') return task.status === 'pending' || !task.status;
     if (filter === 'in_progress') return task.status === 'in_progress';
     if (filter === 'completed') return task.status === 'completed';
     return true;
@@ -127,85 +126,26 @@ const StaffTasks = () => {
     }
   };
 
-  const getPriorityIcon = (priority) => {
-    if (priority === 'high') return <FiAlertCircle size={12} />;
-    if (priority === 'medium') return <FiClock size={12} />;
-    return null;
+  const getStatusStyles = (status) => {
+    switch(status) {
+      case 'completed': return 'bg-emerald-100 text-emerald-700';
+      case 'in_progress': return 'bg-blue-100 text-blue-700';
+      default: return 'bg-amber-100 text-amber-700';
+    }
   };
 
   const columns = [
-    { id: 'pending', title: 'To Do', icon: <FiCheckSquare className="text-gray-500" /> },
-    { id: 'in_progress', title: 'In Progress', icon: <FiPlayCircle className="text-blue-500" /> },
-    { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500" /> }
+    { id: 'pending', title: 'To Do', icon: <FiCheckSquare className="text-gray-500 h-4 w-4" /> },
+    { id: 'in_progress', title: 'In Progress', icon: <FiPlayCircle className="text-blue-500 h-4 w-4" /> },
+    { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" /> }
   ];
-
-  const TaskCard = ({ task, isBoard }) => (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      whileHover={{ y: -2 }}
-      draggable={isBoard}
-      onDragStart={(e) => handleDragStart(e, task.id)}
-      className={`group bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all ${isBoard ? 'cursor-grab active:cursor-grabbing mb-3' : 'mb-3'}`}
-    >
-      <div className="flex items-start gap-3">
-        {!isBoard && (
-          <button
-            onClick={() => updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed')}
-            className={`mt-1 flex-shrink-0 w-5 h-5 rounded flex items-center justify-center transition-colors ${
-              task.status === 'completed'
-                ? 'bg-emerald-500 border-emerald-500 text-white'
-                : 'border-2 border-gray-300 text-transparent hover:border-emerald-500'
-            }`}
-          >
-            <FiCheck size={12} strokeWidth={3} />
-          </button>
-        )}
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-1">
-            <h4 className={`font-semibold text-gray-900 truncate ${task.status === 'completed' && !isBoard ? 'line-through text-gray-400' : ''}`}>
-              {task.title}
-            </h4>
-            <span className={`flex-shrink-0 flex items-center gap-1 text-[10px] px-2 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
-              {getPriorityIcon(task.priority)}
-              {task.priority || 'Medium'}
-            </span>
-          </div>
-          
-          {task.description && (
-            <p className="text-sm text-gray-500 line-clamp-2 mb-3 leading-relaxed">
-              {task.description}
-            </p>
-          )}
-          
-          <div className="flex flex-wrap items-center gap-3 mt-2 pt-3 border-t border-gray-50 text-xs text-gray-500 font-medium">
-            {task.due_date && (
-              <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md">
-                <FiCalendar className="text-gray-400" />
-                {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-              </div>
-            )}
-            {task.assigned_to_name && (
-              <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md">
-                <FiUser className="text-gray-400" />
-                {task.assigned_to_name.split(' ')[0]}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Syncing tasks...</p>
+          <div className="w-10 h-10 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-gray-600 font-medium text-sm">Syncing tasks...</p>
         </div>
       </div>
     );
@@ -213,42 +153,42 @@ const StaffTasks = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
-      {/* Header aligned with dashboard theme */}
+      {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shadow-sm">
                 <FiCheckSquare className="h-5 w-5 text-white" />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Task Management</h1>
-                <p className="text-gray-600 text-sm">Organize, track, and complete your assigned work</p>
+                <p className="text-gray-500 text-xs mt-0.5">Organize and track your assigned work</p>
               </div>
             </div>
             
             <div className="flex items-center gap-3">
-              <div className="flex bg-gray-100 p-1 rounded-lg">
+              <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
                     viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  <FiList size={16} /> <span className="hidden sm:inline">List</span>
+                  <FiList size={14} /> <span className="hidden sm:inline">List</span>
                 </button>
                 <button
                   onClick={() => setViewMode('board')}
-                  className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
                     viewMode === 'board' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  <FiLayout size={16} /> <span className="hidden sm:inline">Board</span>
+                  <FiLayout size={14} /> <span className="hidden sm:inline">Board</span>
                 </button>
               </div>
               <button
                 onClick={fetchTasks}
-                className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="p-1.5 bg-gray-100 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
                 title="Refresh Tasks"
               >
                 <FiRefreshCw className="h-4 w-4 text-gray-600" />
@@ -258,81 +198,86 @@ const StaffTasks = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Statistics Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <StatCard 
-            title="Total Tasks" 
-            value={tasks.length} 
-            icon={FiCheckSquare} 
-            color="bg-gray-600" 
-          />
-          <StatCard 
-            title="To Do" 
-            value={tasks.filter(t => t.status === 'pending' || !t.status).length} 
-            icon={FiAlertCircle} 
-            color="bg-amber-500" 
-          />
-          <StatCard 
-            title="In Progress" 
-            value={tasks.filter(t => t.status === 'in_progress').length} 
-            icon={FiPlayCircle} 
-            color="bg-blue-500" 
-          />
-          <StatCard 
-            title="Completed" 
-            value={tasks.filter(t => t.status === 'completed').length} 
-            icon={FiCheck} 
-            color="bg-emerald-500" 
-          />
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* Compact Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <StatCard title="Total Tasks" value={tasks.length} icon={FiCheckSquare} color="bg-gray-600" />
+          <StatCard title="To Do" value={tasks.filter(t => t.status === 'pending' || !t.status).length} icon={FiAlertCircle} color="bg-amber-500" />
+          <StatCard title="In Progress" value={tasks.filter(t => t.status === 'in_progress').length} icon={FiPlayCircle} color="bg-blue-500" />
+          <StatCard title="Completed" value={tasks.filter(t => t.status === 'completed').length} icon={FiCheck} color="bg-emerald-500" />
         </div>
 
         {error && (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-8 flex items-center gap-3 text-rose-700">
-            <FiAlertCircle size={20} />
-            <span className="font-medium text-sm">{error}</span>
-            <button onClick={fetchTasks} className="ml-auto text-sm font-bold underline">Retry</button>
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-6 flex items-center gap-2 text-rose-700 text-sm">
+            <FiAlertCircle size={16} />
+            <span className="font-medium">{error}</span>
+            <button onClick={fetchTasks} className="ml-auto font-bold underline">Retry</button>
           </div>
         )}
 
         {tasks.length === 0 ? (
-          <div className="bg-white rounded-xl border border-dashed border-gray-300 p-16 text-center shadow-sm">
-            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FiCheckSquare className="text-gray-400 text-2xl" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">You're all caught up!</h3>
-            <p className="text-gray-500 text-sm max-w-sm mx-auto">
-              There are no tasks assigned to you right now. Take a breather or check back later.
-            </p>
+          <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center shadow-sm">
+            <FiCheckSquare className="mx-auto h-10 w-10 text-gray-300 mb-3" />
+            <h3 className="text-base font-bold text-gray-900 mb-1">You're all caught up!</h3>
+            <p className="text-gray-500 text-sm">No tasks assigned to you right now.</p>
           </div>
         ) : viewMode === 'board' ? (
           
-          /* Kanban Board View */
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+          /* KANBAN BOARD VIEW (Compact) */
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
             {columns.map(column => (
               <div 
                 key={column.id}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, column.id)}
-                className="bg-gray-100/80 rounded-xl p-4 min-h-[60vh] flex flex-col border border-gray-200"
+                className="bg-gray-50 rounded-xl p-3 min-h-[50vh] flex flex-col border border-gray-200"
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-1.5">
                     {column.icon}
                     <h3 className="font-bold text-gray-800 text-sm">{column.title}</h3>
                   </div>
-                  <span className="bg-white text-gray-600 text-xs font-bold px-2 py-0.5 rounded shadow-sm border border-gray-100">
+                  <span className="bg-white text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-gray-200">
                     {tasks.filter(t => (t.status || 'pending') === column.id).length}
                   </span>
                 </div>
                 
-                <div className="flex-1 space-y-3">
+                <div className="flex-1 space-y-2.5">
                   <AnimatePresence>
-                    {tasks
-                      .filter(t => (t.status || 'pending') === column.id)
-                      .map(task => (
-                        <TaskCard key={task.id} task={task} isBoard={true} />
-                      ))}
+                    {tasks.filter(t => (t.status || 'pending') === column.id).map(task => (
+                      <motion.div
+                        key={task.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, task.id)}
+                        className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:border-indigo-300 hover:shadow transition-all cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <h4 className={`text-sm font-bold text-gray-900 leading-tight ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                            {task.title}
+                          </h4>
+                        </div>
+                        {task.description && (
+                          <p className="text-xs text-gray-500 line-clamp-2 mb-2 leading-relaxed">
+                            {task.description}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
+                           <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                            {task.priority || 'Medium'}
+                          </span>
+                          {task.due_date && (
+                            <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium">
+                              <FiCalendar />
+                              {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
                   </AnimatePresence>
                 </div>
               </div>
@@ -341,15 +286,15 @@ const StaffTasks = () => {
 
         ) : (
 
-          /* Standard List View */
+          /* COMPACT LIST VIEW (Table-Like) */
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2 p-4 border-b border-gray-100 bg-gray-50 overflow-x-auto hide-scrollbar">
-              <FiFilter className="text-gray-400 ml-2 mr-1" />
+            <div className="flex items-center gap-2 p-3 border-b border-gray-200 bg-gray-50 overflow-x-auto hide-scrollbar">
+              <FiFilter className="text-gray-400 ml-2 mr-1 h-4 w-4" />
               {['all', 'pending', 'in_progress', 'completed'].map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1 rounded-full text-xs font-bold capitalize transition-colors whitespace-nowrap ${
                     filter === f
                       ? 'bg-indigo-600 text-white shadow-sm'
                       : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
@@ -360,16 +305,79 @@ const StaffTasks = () => {
               ))}
             </div>
             
-            <div className="p-4 md:p-6">
-              <AnimatePresence>
-                {filteredTasks.map(task => (
-                  <TaskCard key={task.id} task={task} isBoard={false} />
-                ))}
-              </AnimatePresence>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50/50">
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-10">Status</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">Task Name</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-28">Priority</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Due Date</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Stage</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  <AnimatePresence>
+                    {filteredTasks.map(task => (
+                      <motion.tr 
+                        key={task.id}
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="hover:bg-gray-50 transition-colors group"
+                      >
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed')}
+                            className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                              task.status === 'completed'
+                                ? 'bg-emerald-500 border-emerald-500 text-white'
+                                : 'border-2 border-gray-300 text-transparent hover:border-emerald-500'
+                            }`}
+                          >
+                            <FiCheck size={12} strokeWidth={3} />
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 min-w-[200px]">
+                          <p className={`text-sm font-semibold text-gray-900 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                            {task.title}
+                          </p>
+                          {task.description && (
+                            <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
+                              {task.description}
+                            </p>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                            {task.priority || 'Medium'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {task.due_date ? (
+                            <span className="text-xs text-gray-600 font-medium flex items-center gap-1.5">
+                              <FiCalendar className="text-gray-400" />
+                              {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusStyles(task.status || 'pending')}`}>
+                            {(task.status || 'pending').replace('_', ' ')}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </tbody>
+              </table>
               {filteredTasks.length === 0 && (
-                <div className="text-center py-12">
-                  <FiCheckSquare className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-gray-500">No tasks found for this filter.</p>
+                <div className="text-center py-10">
+                  <FiList className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-gray-500">No tasks match your filter.</p>
                 </div>
               )}
             </div>
