@@ -2,9 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  FiCheckSquare, FiCalendar, FiInbox, FiBarChart2, FiFolder, 
-  FiTarget, FiPlus, FiMoreHorizontal, FiMoreVertical, 
-  FiSearch, FiBell, FiHelpCircle, FiX, FiPaperclip
+  FiCheckSquare, FiCalendar, FiUser, FiCheck, FiX, 
+  FiAlertCircle, FiRefreshCw, FiFilter, FiClock 
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
@@ -12,7 +11,7 @@ const StaffTasks = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedTask, setSelectedTask] = useState(null);
+  const [filter, setFilter] = useState('all'); // 'all', 'pending', 'completed'
   
   const staffId = localStorage.getItem('id')?.trim();
   const token = localStorage.getItem('token');
@@ -26,6 +25,7 @@ const StaffTasks = () => {
     }
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE_URL}/api/tasks/all?assigned_to=${staffId}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -34,6 +34,7 @@ const StaffTasks = () => {
       const data = await res.json();
       setTasks(data);
     } catch (err) {
+      console.error('Error fetching tasks:', err);
       setError(err.message);
       toast.error('Could not load tasks');
     } finally {
@@ -41,8 +42,7 @@ const StaffTasks = () => {
     }
   };
 
-  const toggleTaskStatus = async (e, taskId, currentStatus) => {
-    e.stopPropagation();
+  const toggleTaskStatus = async (taskId, currentStatus) => {
     const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
     try {
       const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
@@ -55,14 +55,13 @@ const StaffTasks = () => {
       });
       if (!res.ok) throw new Error('Failed to update task');
       
+      // Update local state
       setTasks(prev => prev.map(task =>
         task.id === taskId ? { ...task, status: newStatus } : task
       ));
-      if (selectedTask?.id === taskId) {
-        setSelectedTask(prev => ({ ...prev, status: newStatus }));
-      }
-      toast.success(`Task moved to ${newStatus === 'completed' ? 'Done' : 'To do'}`);
+      toast.success(`Task marked as ${newStatus}`);
     } catch (err) {
+      console.error('Error updating task:', err);
       toast.error('Failed to update task');
     }
   };
@@ -71,356 +70,191 @@ const StaffTasks = () => {
     fetchTasks();
   }, []);
 
-  const pendingTasks = tasks.filter(t => t.status !== 'completed');
-  const completedTasks = tasks.filter(t => t.status === 'completed');
+  const filteredTasks = tasks.filter(task => {
+    if (filter === 'pending') return task.status !== 'completed';
+    if (filter === 'completed') return task.status === 'completed';
+    return true;
+  });
 
-  // Styling helpers to match the specific screenshot tags
-  const getTagStyles = (priority) => {
-    switch(priority?.toLowerCase()) {
-      case 'high': 
-        return { num: '8', numBg: 'bg-[#FF5C5C]', pillBg: 'bg-pink-100', pillText: 'text-pink-500', label: 'Graphic Design' };
-      case 'medium': 
-        return { num: '6', numBg: 'bg-[#FFB020]', pillBg: 'bg-purple-100', pillText: 'text-purple-600', label: 'UI/UX Design' };
-      case 'low': 
-        return { num: '3', numBg: 'bg-[#00D084]', pillBg: 'bg-blue-100', pillText: 'text-blue-600', label: 'Development' };
-      default: 
-        return { num: '1', numBg: 'bg-gray-400', pillBg: 'bg-gray-100', pillText: 'text-gray-600', label: 'General' };
+  const pendingCount = tasks.filter(t => t.status !== 'completed').length;
+  const completedCount = tasks.filter(t => t.status === 'completed').length;
+
+  const getPriorityColor = (priority) => {
+    switch(priority) {
+      case 'high': return 'bg-red-100 text-red-800 border-red-200';
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'low': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getInitials = (name) => {
-    if (!name) return 'U';
-    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const getPriorityIcon = (priority) => {
+    if (priority === 'high') return <FiAlertCircle className="inline mr-1" size={12} />;
+    if (priority === 'medium') return <FiClock className="inline mr-1" size={12} />;
+    return null;
   };
-
-  const currentDate = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#F5F6F8]">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-navy-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading your tasks...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[#F5F6F8] font-sans overflow-hidden text-gray-800">
-      
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex shrink-0">
-        <div className="p-6 flex items-center gap-3">
-          <div className="grid grid-cols-2 gap-1 w-6 h-6">
-            <div className="bg-blue-600 rounded-full"></div>
-            <div className="bg-blue-600 rounded-full"></div>
-            <div className="bg-blue-600 rounded-full"></div>
-            <div className="bg-blue-600 rounded-full"></div>
-          </div>
-          <span className="font-bold text-xl tracking-tight text-gray-900">ChronoTask</span>
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <FiCheckSquare className="text-navy-700" /> My Tasks
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            View and manage tasks assigned to you
+          </p>
         </div>
-        
-        <div className="px-6 mb-8">
-          <button className="w-full flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 rounded-full py-2.5 text-sm font-medium transition-colors shadow-sm">
-            <FiPlus size={16} /> Create
-          </button>
+        <button
+          onClick={fetchTasks}
+          className="p-2 rounded-full hover:bg-gray-100 transition"
+          title="Refresh"
+        >
+          <FiRefreshCw className="text-gray-600" />
+        </button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+          <p className="text-sm text-gray-500">Total Tasks</p>
+          <p className="text-2xl font-bold text-gray-800">{tasks.length}</p>
         </div>
-
-        <nav className="flex-1 px-4 space-y-1">
-          <p className="px-4 text-[11px] font-bold text-gray-400 tracking-wider mb-2">GENERAL</p>
-          <a href="#" className="flex items-center gap-3 px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-xl text-sm font-medium">
-            <FiCheckSquare size={18} /> Home
-          </a>
-          <a href="#" className="flex items-center justify-between px-4 py-2.5 bg-gray-100 text-gray-900 rounded-xl text-sm font-medium">
-            <div className="flex items-center gap-3">
-              <FiFolder size={18} /> My Tasks
-            </div>
-            <span className="bg-white text-gray-500 text-xs py-0.5 px-2 rounded-full border border-gray-200">{tasks.length}</span>
-          </a>
-          <a href="#" className="flex items-center justify-between px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-xl text-sm font-medium">
-            <div className="flex items-center gap-3">
-              <FiInbox size={18} /> Inbox
-            </div>
-            <span className="text-gray-400 text-xs">{pendingTasks.length}</span>
-          </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-xl text-sm font-medium">
-            <FiBarChart2 size={18} /> Reporting
-          </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-xl text-sm font-medium">
-            <FiFolder size={18} /> Portfolios
-          </a>
-          <a href="#" className="flex items-center justify-between px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-xl text-sm font-medium">
-            <div className="flex items-center gap-3">
-              <FiTarget size={18} /> Goals
-            </div>
-            <span className="text-gray-400 text-xs">8</span>
-          </a>
-        </nav>
-
-        <div className="p-6">
-          <a href="#" className="flex items-center gap-3 text-gray-500 hover:text-gray-700 text-sm font-medium">
-            <FiHelpCircle size={18} /> Get help
-          </a>
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+          <p className="text-sm text-gray-500">Pending</p>
+          <p className="text-2xl font-bold text-yellow-600">{pendingCount}</p>
         </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        
-        {/* Top Header */}
-        <header className="h-16 flex items-center justify-between px-8 border-b border-gray-200/60 bg-transparent">
-          <div className="flex items-center gap-2 text-sm text-gray-600 font-medium">
-            <FiCalendar className="text-gray-400" size={16} />
-            {currentDate}
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="text-gray-400 hover:text-gray-600"><FiSearch size={20} /></button>
-            <button className="text-gray-400 hover:text-gray-600"><FiBell size={20} /></button>
-            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold shadow-sm">
-              {getInitials(staffId || 'Me')}
-            </div>
-          </div>
-        </header>
-
-        {/* Dashboard Header */}
-        <div className="px-8 pt-8 pb-4">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">My tasks</h1>
-          
-          <div className="flex items-center gap-8 border-b border-gray-200">
-            {['List', 'Board', 'Calendar', 'Files'].map((tab) => (
-              <button
-                key={tab}
-                className={`pb-3 text-sm font-medium relative ${
-                  tab === 'Board' ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab}
-                {tab === 'Board' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />
-                )}
-              </button>
-            ))}
-          </div>
+        <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+          <p className="text-sm text-gray-500">Completed</p>
+          <p className="text-2xl font-bold text-green-600">{completedCount}</p>
         </div>
+      </div>
 
-        {error && (
-          <div className="mx-8 mt-2 p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-100">
-            {error}
-          </div>
-        )}
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 mb-6 bg-white rounded-lg p-2 border border-gray-200 shadow-sm w-fit">
+        <FiFilter className="text-gray-500 ml-2" size={16} />
+        <button
+          onClick={() => setFilter('all')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+            filter === 'all'
+              ? 'bg-navy-700 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          All ({tasks.length})
+        </button>
+        <button
+          onClick={() => setFilter('pending')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+            filter === 'pending'
+              ? 'bg-yellow-500 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          Pending ({pendingCount})
+        </button>
+        <button
+          onClick={() => setFilter('completed')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+            filter === 'completed'
+              ? 'bg-green-600 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          Completed ({completedCount})
+        </button>
+      </div>
 
-        {/* Kanban Board */}
-        <div className="flex-1 overflow-x-auto p-8 pt-4 flex gap-6">
-          
-          {/* To Do Column */}
-          <div className="w-[340px] shrink-0 flex flex-col">
-            <div className="flex items-center justify-between mb-4 px-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">✏️</span>
-                <h3 className="font-bold text-gray-900">To do</h3>
-                <span className="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full font-semibold">{pendingTasks.length}</span>
-              </div>
-              <div className="flex gap-1">
-                <button className="p-1 text-gray-400 hover:bg-gray-200 rounded"><FiPlus size={18} /></button>
-                <button className="p-1 text-gray-400 hover:bg-gray-200 rounded"><FiMoreVertical size={18} /></button>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4 overflow-y-auto pb-8 custom-scrollbar">
-              <AnimatePresence>
-                {pendingTasks.map(task => (
-                  <TaskCard 
-                    key={task.id} 
-                    task={task} 
-                    onClick={() => setSelectedTask(task)}
-                    onToggle={(e) => toggleTaskStatus(e, task.id, task.status)}
-                    styles={getTagStyles(task.priority)}
-                    initials={getInitials(task.assigned_to_name)}
-                  />
-                ))}
-              </AnimatePresence>
-              <button className="flex items-center gap-2 text-gray-500 hover:text-gray-800 p-2 text-sm font-medium transition-colors">
-                <FiPlus size={16} /> Add task
-              </button>
-            </div>
-          </div>
-
-          {/* In Progress / Done Column */}
-          <div className="w-[340px] shrink-0 flex flex-col">
-            <div className="flex items-center justify-between mb-4 px-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🚀</span>
-                <h3 className="font-bold text-gray-900">Completed</h3>
-                <span className="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded-full font-semibold">{completedTasks.length}</span>
-              </div>
-              <div className="flex gap-1">
-                <button className="p-1 text-gray-400 hover:bg-gray-200 rounded"><FiPlus size={18} /></button>
-                <button className="p-1 text-gray-400 hover:bg-gray-200 rounded"><FiMoreVertical size={18} /></button>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4 overflow-y-auto pb-8 custom-scrollbar">
-              <AnimatePresence>
-                {completedTasks.map(task => (
-                  <TaskCard 
-                    key={task.id} 
-                    task={task} 
-                    onClick={() => setSelectedTask(task)}
-                    onToggle={(e) => toggleTaskStatus(e, task.id, task.status)}
-                    styles={getTagStyles(task.priority)}
-                    initials={getInitials(task.assigned_to_name)}
-                  />
-                ))}
-              </AnimatePresence>
-              <button className="flex items-center gap-2 text-gray-500 hover:text-gray-800 p-2 text-sm font-medium transition-colors">
-                <FiPlus size={16} /> Add task
-              </button>
-            </div>
-          </div>
-
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3 text-red-700">
+          <FiAlertCircle size={20} />
+          <span>{error}</span>
+          <button onClick={fetchTasks} className="ml-auto text-sm underline">Try again</button>
         </div>
+      )}
 
-        {/* Task Detail Modal Overlay */}
-        <AnimatePresence>
-          {selectedTask && (
-            <motion.div 
-              initial={{ opacity: 0, x: 400 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 400 }}
-              className="absolute top-4 right-4 bottom-4 w-[500px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-50 overflow-hidden"
+      {/* Tasks List */}
+      {filteredTasks.length === 0 ? (
+        <div className="bg-white rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
+          <FiCheckSquare className="mx-auto text-gray-400 text-5xl mb-4" />
+          <h3 className="text-lg font-medium text-gray-700 mb-2">No tasks found</h3>
+          <p className="text-gray-500">
+            {filter === 'pending' 
+              ? 'You have no pending tasks. Great job!' 
+              : filter === 'completed'
+              ? 'You have no completed tasks yet.'
+              : 'No tasks assigned to you at the moment.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredTasks.map(task => (
+            <motion.div
+              key={task.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition"
             >
-              <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                <button onClick={() => setSelectedTask(null)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full">
-                  <FiX size={20} />
+              <div className="flex items-start gap-3">
+                <button
+                  onClick={() => toggleTaskStatus(task.id, task.status)}
+                  className={`mt-1 p-1 rounded flex-shrink-0 ${
+                    task.status === 'completed'
+                      ? 'bg-navy-700 text-white'
+                      : 'border border-gray-300 text-transparent hover:border-navy-700'
+                  }`}
+                >
+                  <FiCheck size={14} />
                 </button>
-                <div className="flex gap-2">
-                  <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full"><FiMoreHorizontal size={20} /></button>
-                </div>
-              </div>
-
-              <div className="p-8 overflow-y-auto flex-1">
-                <h2 className="text-3xl font-bold text-gray-900 mb-8">{selectedTask.title}</h2>
-                
-                <div className="space-y-5 text-sm">
-                  <div className="flex items-center">
-                    <span className="w-32 text-gray-400 flex items-center gap-2"><FiTarget /> Priority</span>
-                    <div className="flex gap-2 items-center">
-                      <span className={`w-6 h-6 flex items-center justify-center rounded text-white text-xs font-bold ${getTagStyles(selectedTask.priority).numBg}`}>
-                        {getTagStyles(selectedTask.priority).num}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className={`font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>
+                      {task.title}
+                    </h4>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${getPriorityColor(task.priority)}`}>
+                      {getPriorityIcon(task.priority)}
+                      {task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || 'Medium'}
+                    </span>
+                    {task.due_date && (
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <FiCalendar size={12} />
+                        {new Date(task.due_date).toLocaleDateString()}
                       </span>
-                      <span className={`px-3 py-1 rounded-full font-bold text-xs ${getTagStyles(selectedTask.priority).pillBg} ${getTagStyles(selectedTask.priority).pillText}`}>
-                        {getTagStyles(selectedTask.priority).label}
+                    )}
+                    {task.assigned_to_name && (
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <FiUser size={12} />
+                        {task.assigned_to_name}
                       </span>
-                    </div>
+                    )}
                   </div>
-                  <div className="flex items-center">
-                    <span className="w-32 text-gray-400 flex items-center gap-2"><FiCheckSquare /> Status</span>
-                    <span className="text-gray-900 capitalize">{selectedTask.status}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="w-32 text-gray-400 flex items-center gap-2"><FiCalendar /> Due date</span>
-                    <span className="text-gray-900">{selectedTask.due_date ? new Date(selectedTask.due_date).toLocaleDateString() : 'No date'}</span>
-                  </div>
-                </div>
-
-                <div className="mt-8 pt-8 border-t border-gray-100">
-                  <p className="text-gray-600 leading-relaxed">
-                    {selectedTask.description || "No description provided for this task."}
-                  </p>
-                </div>
-
-                {/* Mock Attachments section */}
-                <div className="mt-8">
-                  <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiPaperclip className="text-gray-400" /> Attachments
-                  </h4>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl w-48">
-                      <div className="w-8 h-8 bg-red-100 text-red-500 rounded flex items-center justify-center font-bold text-xs">PDF</div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">Brief.pdf</p>
-                        <p className="text-xs text-gray-400">2.45 MB</p>
-                      </div>
-                    </div>
-                    <button className="w-12 h-[60px] border border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-50">
-                      <FiPlus size={20} />
-                    </button>
-                  </div>
+                  {task.description && (
+                    <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+                  )}
+                  {task.created_by_name && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Created by {task.created_by_name} on {new Date(task.created_at).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-
-      </main>
+          ))}
+        </div>
+      )}
     </div>
-  );
-};
-
-// Extracted Task Card Component
-const TaskCard = ({ task, onClick, onToggle, styles, initials }) => {
-  const isCompleted = task.status === 'completed';
-  const progressPercent = isCompleted ? 100 : Math.floor(Math.random() * 50) + 15; // Mock progress for pending
-  const circleCircumference = 2 * Math.PI * 10;
-  const strokeDashoffset = circleCircumference - (progressPercent / 100) * circleCircumference;
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      onClick={onClick}
-      className="bg-white p-5 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 cursor-pointer hover:shadow-md transition-shadow group"
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <span className={`w-5 h-5 flex items-center justify-center rounded text-white text-[10px] font-bold ${styles.numBg}`}>
-          {styles.num}
-        </span>
-        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${styles.pillBg} ${styles.pillText}`}>
-          {styles.label}
-        </span>
-      </div>
-      
-      <h4 className={`text-[15px] font-bold mb-2 leading-snug ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-        {task.title}
-      </h4>
-      <p className="text-sm text-gray-500 line-clamp-2 mb-4 leading-relaxed">
-        {task.description || 'No description available for this task.'}
-      </p>
-      
-      <div className="flex items-center justify-between mt-auto">
-        <div className="flex -space-x-2">
-          <div className="w-7 h-7 rounded-full bg-blue-600 border-2 border-white text-white flex items-center justify-center text-[10px] font-bold z-10">
-            {initials}
-          </div>
-          <div className="w-7 h-7 rounded-full bg-orange-400 border-2 border-white text-white flex items-center justify-center text-[10px] font-bold">
-            JD
-          </div>
-        </div>
-        
-        <div 
-          className="flex items-center gap-2 cursor-pointer group/ring"
-          onClick={onToggle}
-          title={isCompleted ? "Mark pending" : "Mark complete"}
-        >
-          <div className="relative w-6 h-6 flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" className="stroke-gray-100" strokeWidth="3" fill="none" />
-              <circle 
-                cx="12" cy="12" r="10" 
-                className={`transition-all duration-500 ${isCompleted ? 'stroke-green-500' : 'stroke-blue-500'} group-hover/ring:stroke-blue-600`}
-                strokeWidth="3" fill="none" 
-                strokeDasharray={circleCircumference}
-                strokeDashoffset={strokeDashoffset}
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-          <span className={`text-xs font-bold ${isCompleted ? 'text-green-500' : 'text-gray-400 group-hover/ring:text-blue-600'}`}>
-            {progressPercent}%
-          </span>
-        </div>
-      </div>
-    </motion.div>
   );
 };
 
