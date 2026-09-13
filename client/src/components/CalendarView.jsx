@@ -24,6 +24,9 @@ const CalendarView = ({
   const [selectedDayEvents, setSelectedDayEvents] = useState(null);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
+  
+  // 🔥 NEW: Centre filter state for Superadmin
+  const [selectedCentreFilter, setSelectedCentreFilter] = useState("all"); 
 
   const [filters, setFilters] = useState({
     working: true,
@@ -35,7 +38,7 @@ const CalendarView = ({
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
 
-  // 🔥 Safely format staff photo URLs
+  // 🔥 NEW: Safely format staff photo URLs for List View
   const getPhotoUrl = (photoPath) => {
     if (!photoPath) return null;
     if (photoPath.startsWith('http') || photoPath.startsWith('data:image')) return photoPath;
@@ -174,27 +177,17 @@ const CalendarView = ({
         <div className="flex items-start justify-between gap-1 mb-0.5">
           <div className="flex items-center space-x-1 flex-1 min-w-0">
             <Icon className="h-3 w-3 shrink-0 mt-0.5" />
-            {/* 🔥 Prioritize Title over generic Event Label */}
             <span className="truncate font-bold">
               {event.title || event.description || getEventLabel()}
             </span>
           </div>
-
-          {(event.centre_name || (event.centre_id && centresMap[event.centre_id])) && (
-            <span 
-              className="px-1.5 py-0.5 bg-black/5 rounded-full text-[8px] font-medium text-gray-700 shrink-0 max-w-[35%] truncate" 
-              title={event.centre_name || centresMap[event.centre_id] || `Centre ${event.centre_id}`}
-            >
-              {event.centre_name || centresMap[event.centre_id] || `Centre ${event.centre_id}`}
-            </span>
-          )}
 
           {!isCompact && event.type !== 'task' && (
             <FiMove className="h-2 w-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
           )}
         </div>
 
-        {event.description && (
+        {event.description && event.description !== event.title && (
           <p className="truncate text-xs mt-0.5 text-gray-600">{event.description}</p>
         )}
 
@@ -202,7 +195,6 @@ const CalendarView = ({
           <div className={`flex items-center ${isCompact ? 'mt-2' : 'mt-1 pt-1 border-t border-purple-200 border-opacity-50'}`}>
             {event.staff_name ? (
               <>
-                {/* 🔥 Use Photo if available, fallback to Initials */}
                 {event.staff_photo ? (
                   <img src={getPhotoUrl(event.staff_photo)} alt={event.staff_name} className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full object-cover mr-1 shrink-0 border border-gray-200`} />
                 ) : (
@@ -292,10 +284,11 @@ const CalendarView = ({
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 20, opacity: 0 }}
-            className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl"
+            // 🔥 FIX: Added strictly fixed height `h-[80vh]` and `flex-col` to prevent shivering
+            className="bg-white rounded-xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
               <div>
                 <h3 className="text-xl font-bold text-gray-800">
                   {formatDate(day.date)}
@@ -312,7 +305,7 @@ const CalendarView = ({
               </button>
             </div>
 
-            <div className="border-b border-gray-200 px-6 pt-4">
+            <div className="border-b border-gray-200 px-6 pt-4 shrink-0">
               <div className="flex space-x-6 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab("all")}
@@ -357,7 +350,8 @@ const CalendarView = ({
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[calc(80vh-200px)] space-y-4">
+            {/* 🔥 FIX: Changed to `flex-1` so the container fills the static height instead of resizing */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-4 custom-scrollbar">
               {filteredItems.length === 0 ? (
                 <div className="text-center py-12">
                   <FiCalendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -389,12 +383,6 @@ const CalendarView = ({
                               </p>
                             </div>
                           </div>
-                          {item.centre_name && (
-                            <span className="text-sm bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full flex items-center gap-1">
-                              <FiMapPin className="h-3 w-3" />
-                              {item.centre_name}
-                            </span>
-                          )}
                         </div>
                         {item.reason && (
                           <p className="text-sm text-yellow-700 mt-3 border-t border-yellow-200 pt-3">
@@ -419,7 +407,7 @@ const CalendarView = ({
               )}
             </div>
 
-            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
               <button
                 onClick={onClose}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium"
@@ -462,6 +450,9 @@ const CalendarView = ({
     const eventMap = {};
     for (const e of calendarData) {
       if (!filters[e.type]) continue;
+      // 🔥 NEW: Check Superadmin centre filter before adding
+      if (selectedCentreFilter !== "all" && String(e.centre_id) !== selectedCentreFilter) continue;
+      
       const d = normalizeDate(e.date);
       if (!eventMap[d]) eventMap[d] = [];
       eventMap[d].push(e);
@@ -470,18 +461,16 @@ const CalendarView = ({
     const leaveMap = {};
     for (const leave of leavesData) {
       if (leave.status !== "approved") continue;
+      // 🔥 NEW: Check Superadmin centre filter for leaves
+      if (selectedCentreFilter !== "all" && String(leave.centre_id) !== selectedCentreFilter) continue;
 
       try {
-        if (!leave.from_date || !leave.to_date) {
-          continue;
-        }
+        if (!leave.from_date || !leave.to_date) continue;
 
         let current = new Date(leave.from_date + 'T12:00:00');
         const end = new Date(leave.to_date + 'T12:00:00');
 
-        if (isNaN(current.getTime()) || isNaN(end.getTime())) {
-          continue;
-        }
+        if (isNaN(current.getTime()) || isNaN(end.getTime())) continue;
 
         while (current <= end) {
           const key = normalizeDate(current);
@@ -513,7 +502,7 @@ const CalendarView = ({
     }
 
     return days;
-  }, [currentYear, currentMonth, calendarData, leavesData, dragOverDate, filters]);
+  }, [currentYear, currentMonth, calendarData, leavesData, dragOverDate, filters, selectedCentreFilter]);
 
   const handleDayClick = (day) => {
     if (day && (day.events.length > 0 || day.leavesForDay.length > 0)) {
@@ -595,6 +584,20 @@ const CalendarView = ({
             >
               List View
             </button>
+            
+            {/* 🔥 NEW: Clean Centre Dropdown Filter specific for Superadmins */}
+            {userRole === "superadmin" && Object.keys(centresMap).length > 0 && (
+              <select
+                value={selectedCentreFilter}
+                onChange={(e) => setSelectedCentreFilter(e.target.value)}
+                className="ml-2 px-3 py-1 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm cursor-pointer hover:border-indigo-300"
+              >
+                <option value="all">All Centres</option>
+                {Object.entries(centresMap).map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="flex items-center gap-2 ml-4 flex-wrap">
@@ -693,19 +696,12 @@ const CalendarView = ({
                               }`}
                             >
                               <div className="flex items-start justify-between gap-1">
-                                {/* 🔥 Flex-1 and min-w-0 guarantee the title takes priority */}
                                 <span className="truncate flex-1 font-semibold" title={ev.title || ev.description || ev.type}>
                                   {ev.type === 'task' ? '📋' : '📅'} {ev.title || ev.description || ev.type}
                                 </span>
-                                {ev.centre_name && (
-                                  <span className="text-[8px] bg-black/5 px-1.5 py-0.5 rounded-full shrink-0 max-w-[40%] truncate" title={ev.centre_name}>
-                                    {ev.centre_name}
-                                  </span>
-                                )}
                               </div>
                               {ev.type === 'task' && ev.staff_name && (
                                 <div className="flex items-center mt-1 text-[8px] text-gray-600 gap-1">
-                                  {/* 🔥 Show Staff Photo in Month View */}
                                   {ev.staff_photo ? (
                                     <img src={getPhotoUrl(ev.staff_photo)} alt={ev.staff_name} className="w-3.5 h-3.5 rounded-full object-cover shrink-0 border border-gray-200" />
                                   ) : (
@@ -741,12 +737,6 @@ const CalendarView = ({
                                   </span>
                                 </div>
                               )}
-                              {leave.centre_name && (
-                                <div className="flex items-center mt-0.5 text-[8px] text-yellow-600">
-                                  <FiMapPin className="h-2 w-2 mr-0.5" />
-                                  <span className="truncate">{leave.centre_name}</span>
-                                </div>
-                              )}
                             </div>
                           );
                         })}
@@ -768,6 +758,8 @@ const CalendarView = ({
         <div className="space-y-3">
           {calendarData
             .filter(e => filters[e.type])
+            // 🔥 NEW: Check Superadmin centre filter for List view
+            .filter(e => selectedCentreFilter === "all" || String(e.centre_id) === selectedCentreFilter)
             .filter(e => {
               try {
                 const date = new Date(e.date);
@@ -831,17 +823,6 @@ const CalendarView = ({
                         <p className={`font-semibold ${s.text}`}>
                           {getEventLabel()}
                         </p>
-                        {ev.centre_name ? (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <FiMapPin className="h-3 w-3" />
-                            {ev.centre_name}
-                          </span>
-                        ) : ev.centre_id && centresMap && centresMap[ev.centre_id] ? (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <FiMapPin className="h-3 w-3" />
-                            {centresMap[ev.centre_id]}
-                          </span>
-                        ) : null}
                       </div>
                       <p className="text-sm text-gray-600 flex items-center gap-1">
                         <FiCalendar className="h-3 w-3" />
@@ -857,9 +838,14 @@ const CalendarView = ({
                         <div className="flex items-center mt-2">
                           {ev.staff_name ? (
                             <>
-                              <div className={`w-5 h-5 rounded-full ${getStaffColor(ev.staff_id)} flex items-center justify-center text-[10px] text-white font-medium mr-2`}>
-                                {getStaffInitials(ev.staff_name)}
-                              </div>
+                              {/* 🔥 NEW: Use Photo if available in List View */}
+                              {ev.staff_photo ? (
+                                <img src={getPhotoUrl(ev.staff_photo)} alt={ev.staff_name} className="w-6 h-6 rounded-full object-cover mr-2 shrink-0 border border-gray-200" />
+                              ) : (
+                                <div className={`w-6 h-6 rounded-full ${getStaffColor(ev.staff_id)} flex items-center justify-center text-[10px] text-white font-medium mr-2 shrink-0`}>
+                                  {getStaffInitials(ev.staff_name)}
+                                </div>
+                              )}
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-medium text-gray-700">
                                   {ev.staff_name}
@@ -954,20 +940,6 @@ const CalendarView = ({
             <span>Drag & drop to move (tasks cannot be moved)</span>
           </div>
         </div>
-
-        {userRole === "superadmin" && Object.keys(centresMap).length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <h4 className="text-sm font-medium text-gray-900 mb-3">Centres</h4>
-            <div className="flex flex-wrap gap-3">
-              {Object.entries(centresMap).map(([id, name]) => (
-                <div key={id} className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                  <span className="text-xs text-gray-600">{name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <style>{`
