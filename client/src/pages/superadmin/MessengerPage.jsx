@@ -2878,20 +2878,22 @@ const renderTasksView = () => {
     const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
     const completedCount = tasks.filter(t => t.status === "completed").length;
 
-    // --- FIX: Helper to safely get assignee, including the current user! ---
-    const getAssigneeDetails = (assignedToId) => {
-      if (!assignedToId) return null;
+    // --- FIX: Safely get assignee, prioritizing the REAL name from local storage ---
+    const getAssigneeDetails = (task) => {
+      if (!task.assigned_to) return null;
       
       // If the task belongs to the logged-in user
-      if (String(assignedToId) === String(currentUser.id)) {
+      if (String(task.assigned_to) === String(currentUser.id)) {
+        // Pull the actual name stored in localStorage instead of the JWT username fallback
+        const realName = localStorage.getItem("name") || task.assigned_to_name || currentUser.name;
         return {
-          name: `${currentUser.name} (You)`,
+          name: `${realName} (You)`,
           photo: user?.photo || localStorage.getItem('photo') || null
         };
       }
       
       // Otherwise, find them in the staff list
-      return staffList.find(s => String(s.id) === String(assignedToId));
+      return staffList.find(s => String(s.id) === String(task.assigned_to));
     };
 
     // --- Styling Helpers ---
@@ -3091,8 +3093,8 @@ const renderTasksView = () => {
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
                       {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
-                        // Apply new Helper
-                        const assignee = getAssigneeDetails(task.assigned_to);
+                        // Apply updated Helper
+                        const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
                         return (
@@ -3124,7 +3126,6 @@ const renderTasksView = () => {
                                 {task.priority || 'Medium'}
                               </span>
                               
-                              {/* Bottom Right Avatar & Date */}
                               <div className="flex items-center gap-2">
                                 {task.due_date && (
                                   <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium" title="Due Date">
@@ -3169,8 +3170,8 @@ const renderTasksView = () => {
                   <tbody className="divide-y divide-gray-100">
                     <AnimatePresence>
                       {filteredTasks.map(task => {
-                        // Apply new Helper
-                        const assignee = getAssigneeDetails(task.assigned_to);
+                        // Apply updated Helper
+                        const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
                         return (
