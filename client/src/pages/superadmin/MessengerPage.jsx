@@ -2904,7 +2904,7 @@ const renderTasksView = () => {
 
     // --- Drag & Drop Handlers ---
     const updateTaskStatus = async (taskId, newStatus) => {
-      const previousTasks = [...tasks];
+      // Optimistic UI update
       setTasks(prev => prev.map(t => String(t.id) === String(taskId) ? { ...t, status: newStatus } : t));
       try {
         const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
@@ -2915,12 +2915,12 @@ const renderTasksView = () => {
           },
           body: JSON.stringify({ status: newStatus })
         });
-        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        if (!res.ok) throw new Error();
         toast.success(`Task moved to ${newStatus.replace('_', ' ')}`);
-        fetchCalendarData(); // Sync calendar events
+        fetchCalendarData(); // Refresh calendar sync
       } catch (err) {
-        setTasks(previousTasks);
-        toast.error(`Failed to update task: ${err.message}`);
+        fetchTasks(); // Revert on failure
+        toast.error("Failed to update task");
       }
     };
 
@@ -2944,8 +2944,9 @@ const renderTasksView = () => {
     return (
       <div className="h-full overflow-y-auto p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto">
+          
           {/* Header */}
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                 <FiCheckSquare className="text-navy-700" /> Task Management
@@ -2954,11 +2955,11 @@ const renderTasksView = () => {
             </div>
             <div className="flex gap-3">
               {canCreateRecurring() && (
-                <button onClick={() => openTemplateModal()} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2 shadow-sm">
+                <button onClick={() => openTemplateModal()} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2 shadow-sm text-sm font-medium">
                   <FiRepeat size={16} /> <span className="hidden sm:inline">New Template</span>
                 </button>
               )}
-              <button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2 shadow-sm">
+              <button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2 shadow-sm text-sm font-medium">
                 <FiPlusCircle size={16} /> <span className="hidden sm:inline">New Task</span>
               </button>
             </div>
@@ -2972,11 +2973,11 @@ const renderTasksView = () => {
               { title: 'In Progress', value: inProgressCount, color: 'bg-blue-500', icon: FiPlayCircle },
               { title: 'Completed', value: completedCount, color: 'bg-emerald-500', icon: FiCheck },
             ].map(stat => (
-              <motion.div key={stat.title} whileHover={{ y: -2 }} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-lg transition-all duration-300">
+              <motion.div key={stat.title} whileHover={{ y: -2 }} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">{stat.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                    <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">{stat.title}</p>
+                    <p className="text-2xl font-black text-gray-900">{stat.value}</p>
                   </div>
                   <div className={`p-2.5 rounded-xl ${stat.color}`}>
                     <stat.icon className="h-5 w-5 text-white" />
@@ -2986,7 +2987,7 @@ const renderTasksView = () => {
             ))}
           </div>
 
-          {/* Recurring Templates (Admin Only) */}
+          {/* Recurring Templates (Admins Only) */}
           {canCreateRecurring() && templates.length > 0 && (
             <div className="mb-8">
               <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -2998,8 +2999,8 @@ const renderTasksView = () => {
             </div>
           )}
 
-          {/* View Toggle & Filters */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+          {/* Filters & View Toggle */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-white p-2.5 rounded-xl border border-gray-200 shadow-sm">
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto">
               <FiFilter className="text-gray-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
               {['all', 'pending', 'in_progress', 'completed'].map(f => (
@@ -3039,7 +3040,7 @@ const renderTasksView = () => {
           {loading ? (
             <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-navy-700 border-t-transparent"></div>
-              <p className="text-gray-500 mt-2 text-sm font-medium">Syncing tasks...</p>
+              <p className="text-gray-500 mt-2 text-sm font-medium">Loading tasks...</p>
             </div>
           ) : tasks.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 shadow-sm">
@@ -3053,7 +3054,7 @@ const renderTasksView = () => {
           ) : taskViewMode === 'board' ? (
             
             /* KANBAN BOARD VIEW */
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
               {columns.map(column => (
                 <div 
                   key={column.id}
@@ -3074,7 +3075,10 @@ const renderTasksView = () => {
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
                       {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
-                        const assignee = staffList.find(s => s.id === task.assigned_to);
+                        // Safely Map Staff ID to Fix "Unknown" Bug
+                        const assignee = staffList.find(s => String(s.id) === String(task.assigned_to));
+                        const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
+
                         return (
                           <motion.div
                             key={task.id}
@@ -3084,13 +3088,13 @@ const renderTasksView = () => {
                             exit={{ opacity: 0, scale: 0.95 }}
                             draggable
                             onDragStart={(e) => handleDragStart(e, task.id)}
-                            className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:border-navy-300 hover:shadow transition-all cursor-grab active:cursor-grabbing group"
+                            className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:border-navy-300 hover:shadow transition-all cursor-grab active:cursor-grabbing group"
                           >
                             <div className="flex items-start justify-between gap-2 mb-1.5">
                               <h4 className={`text-sm font-bold text-gray-900 leading-tight ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
                                 {task.title}
                               </h4>
-                              <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 <FiTrash2 size={14} />
                               </button>
                             </div>
@@ -3103,14 +3107,20 @@ const renderTasksView = () => {
                               <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
                                 {task.priority || 'Medium'}
                               </span>
+                              
+                              {/* Bottom Right Avatar & Date */}
                               <div className="flex items-center gap-2">
                                 {task.due_date && (
                                   <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium" title="Due Date">
                                     <FiCalendar /> {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                   </div>
                                 )}
-                                <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-600 border border-gray-200" title={assignee?.name || 'Assigned User'}>
-                                  {assignee?.name?.charAt(0) || 'U'}
+                                <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-100 overflow-hidden shadow-sm shrink-0" title={assignee?.name || 'Unassigned'}>
+                                  {assigneePhoto ? (
+                                    <img src={assigneePhoto} alt="Assignee" className="w-full h-full object-cover" />
+                                  ) : (
+                                    assignee?.name?.charAt(0) || 'U'
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -3131,19 +3141,22 @@ const renderTasksView = () => {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50/50">
-                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-10">Status</th>
-                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase">Task Name</th>
-                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Assignee</th>
-                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-28">Priority</th>
-                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Due Date</th>
-                      <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase w-32">Stage</th>
-                      <th className="py-3 px-4 text-right text-xs font-bold text-gray-500 uppercase w-16"></th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-10">Status</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Task Name</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-40">Assignee</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">Priority</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-28">Due Date</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-28">Stage</th>
+                      <th className="py-3 px-4 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-12"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     <AnimatePresence>
                       {filteredTasks.map(task => {
-                        const assignee = staffList.find(s => s.id === task.assigned_to);
+                        // Safely Map Staff ID to Fix "Unknown" Bug
+                        const assignee = staffList.find(s => String(s.id) === String(task.assigned_to));
+                        const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
+
                         return (
                           <motion.tr 
                             key={task.id}
@@ -3183,15 +3196,19 @@ const renderTasksView = () => {
                               )}
                             </td>
                             <td className="py-3 px-4">
-                              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                                <div className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-100">
-                                  {assignee?.name?.charAt(0) || 'U'}
+                              <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
+                                <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-100 overflow-hidden shrink-0 shadow-sm">
+                                  {assigneePhoto ? (
+                                    <img src={assigneePhoto} alt="Assignee" className="w-full h-full object-cover" />
+                                  ) : (
+                                    assignee?.name?.charAt(0) || 'U'
+                                  )}
                                 </div>
-                                {assignee?.name?.split(' ')[0] || 'Unknown'}
+                                <span className="truncate max-w-[120px]">{assignee?.name || 'Unassigned'}</span>
                               </div>
                             </td>
                             <td className="py-3 px-4">
-                              <span className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                              <span className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
                                 {task.priority || 'Medium'}
                               </span>
                             </td>
@@ -3206,7 +3223,7 @@ const renderTasksView = () => {
                               )}
                             </td>
                             <td className="py-3 px-4">
-                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusStyles(task.status || 'pending')}`}>
+                              <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider ${getStatusStyles(task.status || 'pending')}`}>
                                 {(task.status || 'pending').replace('_', ' ')}
                               </span>
                             </td>
