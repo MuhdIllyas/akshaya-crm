@@ -322,7 +322,7 @@ const MessengerPage = ({ user }) => {
   const [quickNoteForm, setQuickNoteForm] = useState({ title: "", content: "" });
 
   const [taskFilter, setTaskFilter] = useState("all");
-  const [taskViewMode, setTaskViewMode] = useState("list");
+  const [taskViewMode, setTaskViewMode] = useState("board");
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
 
@@ -3037,20 +3037,20 @@ const renderTasksView = () => {
             </div>
             <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 w-full sm:w-auto justify-center">
               <button
-                onClick={() => setTaskViewMode('list')}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  taskViewMode === 'list' ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <FiList size={14} /> List
-              </button>
-              <button
                 onClick={() => setTaskViewMode('board')}
                 className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
                   taskViewMode === 'board' ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <FiLayout size={14} /> Board
+              </button>
+              <button
+                onClick={() => setTaskViewMode('list')}
+                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  taskViewMode === 'list' ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <FiList size={14} /> List
               </button>
             </div>
           </div>
