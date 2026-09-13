@@ -30,7 +30,7 @@ const StaffTasks = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all'); 
-  const [viewMode, setViewMode] = useState('list'); // Default to list for compactness
+  const [viewMode, setViewMode] = useState('board'); // Default to board for compactness
   
   const staffId = localStorage.getItem('id')?.trim();
   const token = localStorage.getItem('token');
@@ -170,20 +170,20 @@ const StaffTasks = () => {
             <div className="flex items-center gap-3">
               <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
                 <button
-                  onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <FiList size={14} /> <span className="hidden sm:inline">List</span>
-                </button>
-                <button
                   onClick={() => setViewMode('board')}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
                     viewMode === 'board' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   <FiLayout size={14} /> <span className="hidden sm:inline">Board</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <FiList size={14} /> <span className="hidden sm:inline">List</span>
                 </button>
               </div>
               <button
