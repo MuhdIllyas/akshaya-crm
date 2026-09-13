@@ -2878,6 +2878,22 @@ const renderTasksView = () => {
     const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
     const completedCount = tasks.filter(t => t.status === "completed").length;
 
+    // --- FIX: Helper to safely get assignee, including the current user! ---
+    const getAssigneeDetails = (assignedToId) => {
+      if (!assignedToId) return null;
+      
+      // If the task belongs to the logged-in user
+      if (String(assignedToId) === String(currentUser.id)) {
+        return {
+          name: `${currentUser.name} (You)`,
+          photo: user?.photo || localStorage.getItem('photo') || null
+        };
+      }
+      
+      // Otherwise, find them in the staff list
+      return staffList.find(s => String(s.id) === String(assignedToId));
+    };
+
     // --- Styling Helpers ---
     const getPriorityStyles = (priority) => {
       switch(priority?.toLowerCase()) {
@@ -3040,7 +3056,7 @@ const renderTasksView = () => {
           {loading ? (
             <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-navy-700 border-t-transparent"></div>
-              <p className="text-gray-500 mt-2 text-sm font-medium">Loading tasks...</p>
+              <p className="text-gray-500 mt-2 text-sm font-medium">Syncing tasks...</p>
             </div>
           ) : tasks.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 shadow-sm">
@@ -3075,8 +3091,8 @@ const renderTasksView = () => {
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
                       {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
-                        // Safely Map Staff ID to Fix "Unknown" Bug
-                        const assignee = staffList.find(s => String(s.id) === String(task.assigned_to));
+                        // Apply new Helper
+                        const assignee = getAssigneeDetails(task.assigned_to);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
                         return (
@@ -3153,8 +3169,8 @@ const renderTasksView = () => {
                   <tbody className="divide-y divide-gray-100">
                     <AnimatePresence>
                       {filteredTasks.map(task => {
-                        // Safely Map Staff ID to Fix "Unknown" Bug
-                        const assignee = staffList.find(s => String(s.id) === String(task.assigned_to));
+                        // Apply new Helper
+                        const assignee = getAssigneeDetails(task.assigned_to);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
                         return (
