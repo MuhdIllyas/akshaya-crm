@@ -35,6 +35,13 @@ const CalendarView = ({
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
 
+  // 🔥 Safely format staff photo URLs
+  const getPhotoUrl = (photoPath) => {
+    if (!photoPath) return null;
+    if (photoPath.startsWith('http') || photoPath.startsWith('data:image')) return photoPath;
+    return `${import.meta.env.VITE_API_URL || ''}${photoPath}`;
+  };
+
   const colorMapping = {
     holiday: { background: 'bg-red-50', border: 'border-red-200', text: 'text-red-800' },
     deadline: { background: 'bg-red-50', border: 'border-red-200', text: 'text-red-800' },
@@ -164,16 +171,20 @@ const CalendarView = ({
         whileTap={!isCompact ? { scale: 0.98 } : {}}
         className={`${isCompact ? 'p-3' : 'p-1.5'} rounded text-xs border ${!isCompact && event.type !== 'task' ? 'cursor-move' : ''} ${colors[event.type] || colors.default} group relative`}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-1 mb-0.5">
           <div className="flex items-center space-x-1 flex-1 min-w-0">
-            <Icon className="h-3 w-3 shrink-0" />
-            <span className="truncate font-medium">
-              {getEventLabel()}
+            <Icon className="h-3 w-3 shrink-0 mt-0.5" />
+            {/* 🔥 FIX: Prioritize Title over generic Event Label */}
+            <span className="truncate font-bold">
+              {event.title || event.description || getEventLabel()}
             </span>
           </div>
 
           {(event.centre_name || (event.centre_id && centresMap[event.centre_id])) && (
-            <span className="ml-1 px-1.5 py-0.5 bg-white/80 rounded-full text-[8px] font-medium text-gray-700 border border-gray-200 shrink-0">
+            <span 
+              className="px-1.5 py-0.5 bg-black/5 rounded-full text-[8px] font-medium text-gray-700 shrink-0 max-w-[35%] truncate" 
+              title={event.centre_name || centresMap[event.centre_id] || `Centre ${event.centre_id}`}
+            >
               {event.centre_name || centresMap[event.centre_id] || `Centre ${event.centre_id}`}
             </span>
           )}
@@ -676,20 +687,26 @@ const CalendarView = ({
                                 'bg-blue-100 text-blue-800 border-blue-200'
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <span className="truncate">
-                                  {ev.type === 'task' ? '📋' : '📅'} {ev.description || ev.type}
+                              <div className="flex items-start justify-between gap-1">
+                                {/* 🔥 Flex-1 and min-w-0 guarantee the title takes priority */}
+                                <span className="truncate flex-1 font-semibold" title={ev.title || ev.description || ev.type}>
+                                  {ev.type === 'task' ? '📋' : '📅'} {ev.title || ev.description || ev.type}
                                 </span>
                                 {ev.centre_name && (
-                                  <span className="ml-1 text-[8px] bg-white/50 px-1 rounded-full shrink-0">
+                                  <span className="text-[8px] bg-black/5 px-1.5 py-0.5 rounded-full shrink-0 max-w-[40%] truncate" title={ev.centre_name}>
                                     {ev.centre_name}
                                   </span>
                                 )}
                               </div>
                               {ev.type === 'task' && ev.staff_name && (
-                                <div className="flex items-center mt-0.5 text-[8px] text-gray-600">
-                                  <FiUser className="h-2 w-2 mr-0.5" />
-                                  <span className="truncate">{ev.staff_name}</span>
+                                <div className="flex items-center mt-1 text-[8px] text-gray-600 gap-1">
+                                  {/* 🔥 Show Staff Photo in Month View */}
+                                  {ev.staff_photo ? (
+                                    <img src={getPhotoUrl(ev.staff_photo)} alt={ev.staff_name} className="w-3.5 h-3.5 rounded-full object-cover shrink-0 border border-gray-200" />
+                                  ) : (
+                                    <FiUser className="h-2.5 w-2.5 shrink-0" />
+                                  )}
+                                  <span className="truncate font-medium">{ev.staff_name}</span>
                                 </div>
                               )}
                             </div>
