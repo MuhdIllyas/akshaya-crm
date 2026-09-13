@@ -2878,13 +2878,13 @@ const renderTasksView = () => {
     const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
     const completedCount = tasks.filter(t => t.status === "completed").length;
 
-    // --- FIX: Safely get assignee, prioritizing the REAL name from local storage ---
+    // --- Safely get assignee, prioritizing the REAL name from local storage ---
     const getAssigneeDetails = (task) => {
       if (!task.assigned_to) return null;
       
       // If the task belongs to the logged-in user
       if (String(task.assigned_to) === String(currentUser.id)) {
-        // Pull the actual name stored in localStorage instead of the JWT username fallback
+        // Pull the actual name stored in localStorage
         const realName = localStorage.getItem("name") || task.assigned_to_name || currentUser.name;
         return {
           name: `${realName} (You)`,
@@ -3093,7 +3093,7 @@ const renderTasksView = () => {
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
                       {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
-                        // Apply updated Helper
+                        // Safely Map Staff details
                         const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
@@ -3116,30 +3116,42 @@ const renderTasksView = () => {
                                 <FiTrash2 size={14} />
                               </button>
                             </div>
+                            
                             {task.description && (
-                              <p className="text-xs text-gray-500 line-clamp-2 mb-2 leading-relaxed">
+                              <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">
                                 {task.description}
                               </p>
                             )}
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
-                                {task.priority || 'Medium'}
-                              </span>
+
+                            {/* Board Card Footer: Stacked Date/Priority & User Pill */}
+                            <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-50">
                               
-                              <div className="flex items-center gap-2">
+                              {/* Left Side: Priority & Date Stacked */}
+                              <div className="flex flex-col gap-1.5">
+                                <span className={`w-fit text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                                  {task.priority || 'Medium'}
+                                </span>
                                 {task.due_date && (
                                   <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium" title="Due Date">
                                     <FiCalendar /> {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                   </div>
                                 )}
-                                <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-100 overflow-hidden shadow-sm shrink-0" title={assignee?.name || 'Unassigned'}>
+                              </div>
+                              
+                              {/* Right Side: Photo + Name Pill */}
+                              <div className="flex items-center gap-1.5 bg-gray-50 pl-1 pr-2 py-1 rounded-full border border-gray-100 shadow-sm" title={assignee?.name || 'Unassigned'}>
+                                <div className="w-5 h-5 rounded-full bg-indigo-50 flex items-center justify-center text-[9px] font-bold text-indigo-700 border border-indigo-100 overflow-hidden shrink-0">
                                   {assigneePhoto ? (
                                     <img src={assigneePhoto} alt="Assignee" className="w-full h-full object-cover" />
                                   ) : (
                                     assignee?.name?.charAt(0) || 'U'
                                   )}
                                 </div>
+                                <span className="text-[10px] font-bold text-gray-700 truncate max-w-[65px]">
+                                  {assignee?.name?.split(' ')[0] || 'Unassigned'}
+                                </span>
                               </div>
+
                             </div>
                           </motion.div>
                         );
@@ -3170,7 +3182,7 @@ const renderTasksView = () => {
                   <tbody className="divide-y divide-gray-100">
                     <AnimatePresence>
                       {filteredTasks.map(task => {
-                        // Apply updated Helper
+                        // Apply mapped staff details
                         const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
