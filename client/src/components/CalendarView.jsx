@@ -202,9 +202,14 @@ const CalendarView = ({
           <div className={`flex items-center ${isCompact ? 'mt-2' : 'mt-1 pt-1 border-t border-purple-200 border-opacity-50'}`}>
             {event.staff_name ? (
               <>
-                <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full ${getStaffColor(event.staff_id)} flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 shrink-0`}>
-                  {getStaffInitials(event.staff_name)}
-                </div>
+                {/* 🔥 Use Photo if available, fallback to Initials */}
+                {event.staff_photo ? (
+                  <img src={getPhotoUrl(event.staff_photo)} alt={event.staff_name} className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full object-cover mr-1 shrink-0 border border-gray-200`} />
+                ) : (
+                  <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full ${getStaffColor(event.staff_id)} flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 shrink-0`}>
+                    {getStaffInitials(event.staff_name)}
+                  </div>
+                )}
                 <span className={`${isCompact ? 'text-xs' : 'text-[8px]'} text-gray-700 font-medium truncate`}>
                   {event.staff_name}
                 </span>
