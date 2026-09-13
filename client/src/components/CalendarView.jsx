@@ -174,7 +174,7 @@ const CalendarView = ({
         <div className="flex items-start justify-between gap-1 mb-0.5">
           <div className="flex items-center space-x-1 flex-1 min-w-0">
             <Icon className="h-3 w-3 shrink-0 mt-0.5" />
-            {/* 🔥 FIX: Prioritize Title over generic Event Label */}
+            {/* 🔥 Prioritize Title over generic Event Label */}
             <span className="truncate font-bold">
               {event.title || event.description || getEventLabel()}
             </span>
