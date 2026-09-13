@@ -17,7 +17,7 @@ router.get("/", async (req, res) => {
     let centreFilter = "WHERE ce.related_task_id IS NULL";
     let values = [];
 
-    // FIX 3: Allow global visibility at the database level for all roles
+    // Allow global visibility at the database level for all roles
     if (req.user.role === "superadmin") {
       if (targetCentre) {
         centreFilter += " AND (ce.centre_id = $1 OR ce.visibility = 'global')";
@@ -31,7 +31,6 @@ router.get("/", async (req, res) => {
       values.push(req.user.centre_id, req.user.id);
     }
 
-    // FIX 4: Select the visibility column so the frontend can read it!
     const eventsQuery = `
       SELECT 
         ce.id,
@@ -43,7 +42,8 @@ router.get("/", async (req, res) => {
         c.name AS centre_name,
         ce.assigned_to AS staff_id,
         s.name AS staff_name,
-        s.role AS staff_role
+        s.role AS staff_role,
+        s.photo AS staff_photo -- 🔥 FIX: Added staff photo
       FROM calendar_events ce
       JOIN centres c ON ce.centre_id = c.id
       LEFT JOIN staff s ON ce.assigned_to = s.id
@@ -52,14 +52,11 @@ router.get("/", async (req, res) => {
 
     const eventsRes = await client.query(eventsQuery, values);
 
-    // 2️⃣ Task due dates with staff information
+    // Task due dates with staff information
     let taskFilter = "";
     let taskValues = [];
-    // If superadmin provided a centre, $1 is used. Otherwise for admin/staff, it's also $1.
-    // We must track the index dynamically.
 
     if (req.user.role === "superadmin") {
-      // FIX: Apply filter for superadmin tasks
       if (targetCentre) {
         taskFilter = "AND t.centre_id = $1";
         taskValues.push(targetCentre);
@@ -82,7 +79,8 @@ router.get("/", async (req, res) => {
         c.name AS centre_name,
         t.assigned_to AS staff_id,
         s.name AS staff_name,
-        s.role AS staff_role
+        s.role AS staff_role,
+        s.photo AS staff_photo -- 🔥 FIX: Added staff photo
       FROM tasks t
       JOIN centres c ON t.centre_id = c.id
       LEFT JOIN staff s ON t.assigned_to = s.id
@@ -114,7 +112,8 @@ router.get("/", async (req, res) => {
    CREATE OPERATION EVENT
 ========================================== */
 router.post("/", authMiddleware(["admin", "superadmin"]), async (req, res) => {
-  const { date, type, description, centre_id } = req.body;
+  // 🔥 RESTORED FIX: Include visibility in the destructuring
+  const { date, type, description, centre_id, visibility } = req.body;
   const client = await pool.connect();
 
   try {
@@ -127,14 +126,17 @@ router.post("/", authMiddleware(["admin", "superadmin"]), async (req, res) => {
       return res.status(400).json({ error: "Centre ID required" });
     }
 
+    const eventVisibility = visibility || 'centre';
+
+    // 🔥 RESTORED FIX: Insert visibility into the database
     const result = await client.query(
       `
       INSERT INTO calendar_events
-      (date, type, description, centre_id, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
+      (date, type, description, centre_id, visibility, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
       RETURNING *
       `,
-      [date, type, description, centreId]
+      [date, type, description, centreId, eventVisibility]
     );
 
     res.status(201).json(result.rows[0]);
