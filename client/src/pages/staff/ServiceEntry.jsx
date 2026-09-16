@@ -1796,9 +1796,9 @@ const ServiceEntry = () => {
                                   onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
                                   className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm"
                                 >
-                                  <option value="low">Low Priority</option>
-                                  <option value="medium">Medium Priority</option>
-                                  <option value="high">High Priority</option>
+                                  <option value="low">Low</option>
+                                  <option value="medium">Medium</option>
+                                  <option value="high">High</option>
                                 </select>
                               </div>
                             </div>
