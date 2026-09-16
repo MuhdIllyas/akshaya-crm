@@ -6,13 +6,23 @@ import {
   FiChevronDown, FiPlus, FiTrash2, FiCalendar, FiClock, FiEye, FiLink, 
   FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
   FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip,
-  FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck, FiTarget
+  FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck, FiTarget,
+  FiTruck
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { MentionsInput, Mention } from 'react-mentions';
-import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry, getStaff } from '/src/services/serviceService';
-import { updateTrackingEntry } from '/src/services/serviceService';
+import { 
+  getCategories, 
+  getWallets, 
+  getServiceEntries, 
+  createServiceEntry, 
+  getTokenById, 
+  updateServiceEntry, 
+  getStaff,
+  updateTrackingEntry, // <-- Ensure this is imported
+  getTrackingEntries   // <-- NEW: Required to fix the 404 race condition
+} from '/src/services/serviceService';
 import { createNote } from '/src/services/noteService';
 import api from '@/services/serviceService';
 import { jsPDF } from 'jspdf';
@@ -30,7 +40,7 @@ const createEmptyService = () => ({
   initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
   showNoteArea: false,
   
-  // --- NEW TRACKING FIELDS ---
+  // --- TRACKING FIELDS ---
   applicationNumber: '',
   estimatedDelivery: '',
   priority: 'medium',
@@ -876,7 +886,12 @@ const ServiceEntry = () => {
                 taskTitle: '', 
                 taskAssignee: '', 
                 taskDueDate: null,
-                showNoteArea: false
+                showNoteArea: false,
+                applicationNumber: '',
+                estimatedDelivery: '',
+                priority: 'medium',
+                assignedTo: '',
+                currentStep: 'Submitted'
               }]
             };
 
@@ -940,7 +955,12 @@ const ServiceEntry = () => {
                 taskTitle: '', 
                 taskAssignee: '', 
                 taskDueDate: null,
-                showNoteArea: false
+                showNoteArea: false,
+                applicationNumber: '',
+                estimatedDelivery: '',
+                priority: 'medium',
+                assignedTo: '',
+                currentStep: 'Submitted'
               }]
             }));
 
@@ -993,7 +1013,7 @@ const ServiceEntry = () => {
     setDaysRemaining(days);
   };
 
-  // 🔥 CATCH ADMIN EDIT FROM SERVICE LOGS (FIXED: removed undefined reverseStatusMap)
+  // 🔥 CATCH ADMIN EDIT FROM SERVICE LOGS
   useEffect(() => {
     if (location.state && location.state.adminEditEntry && categories.length > 0) {
       const adminEntry = location.state.adminEditEntry;
@@ -1121,7 +1141,7 @@ const ServiceEntry = () => {
         .filter((_, i) => i !== index && _.status === 'received')
         .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
 
-      const maxAllowed = grandTotal - otherReceived; // 🔥 Changed to grandTotal
+      const maxAllowed = grandTotal - otherReceived; 
 
       if (entered > maxAllowed) {
         toast.error(`Amount exceeds remaining balance (₹${maxAllowed})`);
@@ -1237,131 +1257,151 @@ const ServiceEntry = () => {
     };
 
     const executeFinalSubmit = async () => {
-    try {
-      if (editingEntryId) {
-        // Single Edit Mode Logic
-        const editPayload = {
-           ...payload,
-           categoryId: payload.services[0].categoryId,
-           subcategoryId: payload.services[0].subcategoryId,
-           serviceCharge: payload.services[0].serviceCharge,
-           departmentCharge: payload.services[0].departmentCharge,
-           totalCharge: payload.services[0].totalCharge,
-           serviceWalletId: payload.services[0].serviceWalletId,
-           hasExpiry: payload.services[0].hasExpiry,
-           expiryDate: payload.services[0].expiryDate,
-        };
-        delete editPayload.payments;
-        delete editPayload.services;
+      try {
+        if (editingEntryId) {
+          // Single Edit Mode Logic
+          const editPayload = {
+             ...payload,
+             categoryId: payload.services[0].categoryId,
+             subcategoryId: payload.services[0].subcategoryId,
+             serviceCharge: payload.services[0].serviceCharge,
+             departmentCharge: payload.services[0].departmentCharge,
+             totalCharge: payload.services[0].totalCharge,
+             serviceWalletId: payload.services[0].serviceWalletId,
+             hasExpiry: payload.services[0].hasExpiry,
+             expiryDate: payload.services[0].expiryDate,
+          };
+          delete editPayload.payments;
+          delete editPayload.services;
 
-        // 🔥 when admin edits: Remove the logged-in admin's ID so the backend preserves the original staff member
-        delete editPayload.staffId;
+          delete editPayload.staffId;
 
-        await updateServiceEntry(editingEntryId, editPayload);
-        toast.success('Service entry updated successfully!');
-      } else {
-        // 🔥 SEND CART TO BULK ROUTE
-        const response = await api.post('/entry/bulk', payload);
-        const createdServices = response.data.createdServices || [];
+          await updateServiceEntry(editingEntryId, editPayload);
+          toast.success('Service entry updated successfully!');
+        } else {
+          // 🔥 SEND CART TO BULK ROUTE
+          const response = await api.post('/entry/bulk', payload);
+          const createdServices = response.data.createdServices || [];
 
-        // 🔥 LOOP THROUGH THE RESPONSE TO CREATE TRACKING ENTRIES, NOTES & TASKS
-        for (let i = 0; i < createdServices.length; i++) {
-          const svc = createdServices[i];
-          const svcFormData = formData.services[i]; // Retrieve corresponding front-end data for tracking fields
-
-          // 1. Submit Tracking Details Instantly
-          if (svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || (svcFormData.priority && svcFormData.priority !== 'medium')) {
-            try {
-              // Ensure we fallback to serviceEntryId if trackingId isn't explicitly returned yet
-              const trackingIdToUpdate = svc.trackingId || svc.serviceEntryId || svc.id; 
-              
-              await updateTrackingEntry(trackingIdToUpdate, {
-                applicationNumber: svcFormData.applicationNumber || null,
-                assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
-                estimatedDelivery: svcFormData.estimatedDelivery || null,
-                priority: svcFormData.priority || 'medium',
-                currentStep: 'Submitted',
-                progress: 25 // Default starting progress
-              });
-            } catch (trackErr) {
-              console.error(`❌ Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
-              toast.warn('Service created, but tracking details failed to attach.');
-            }
+          // 🔥 FIX 404 RACE CONDITION: Wait a moment for DB triggers to complete
+          await new Promise(resolve => setTimeout(resolve, 1500)); 
+          
+          let recentTrackingRecords = [];
+          try {
+             // Fetch the very latest tracking rows created by the backend
+             const trackRes = await getTrackingEntries({ limit: 100 });
+             recentTrackingRecords = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
+          } catch (err) {
+             console.warn("Could not fetch tracking entries to map IDs", err);
           }
 
-          // 2. Save Note & Task
-          if (svc.initialNote && svc.initialNote.trim() !== '') {
-            try {
-              // Save Note
-              const noteRes = await createNote({
-                title: 'Initial Note',
-                content: svc.initialNote.trim(),
-                visibility: svc.initialNoteVisibility,
-                related_service_entry_id: svc.serviceEntryId || svc.id,
-                mentions: svc.initialNoteMentions 
-              });
-              
-              const savedNoteId = noteRes?.data?.id || noteRes?.id;
+          // 🔥 LOOP THROUGH THE RESPONSE TO MAP AND CREATE TRACKING/NOTES
+          for (let i = 0; i < createdServices.length; i++) {
+            const svc = createdServices[i];
+            const svcFormData = formData.services[i]; 
 
-              // Save Task
-              if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
-                const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+            // 1. Submit Tracking Details Safely
+            if (svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || (svcFormData.priority && svcFormData.priority !== 'medium')) {
+              try {
+                const serviceEntryId = svc.serviceEntryId || svc.id;
                 
-                await api.post('/add', {
-                  title: svc.taskTitle.trim(),
-                  description: svc.initialNote.trim(),
-                  assigned_to: parseInt(svc.taskAssignee),
-                  due_date: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
-                  priority: 'medium',
-                  related_service_entry_id: svc.serviceEntryId || svc.id,
-                  note_id: savedNoteId
-                }, { baseURL: taskBaseUrl });
+                // Match the frontend's Service Entry ID to the backend's automatically generated Tracking Row
+                const trackingRecord = recentTrackingRecords.find(t => 
+                  Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
+                );
+
+                if (trackingRecord) {
+                  await updateTrackingEntry(trackingRecord.id, {
+                    applicationNumber: svcFormData.applicationNumber || null,
+                    assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
+                    estimatedDelivery: svcFormData.estimatedDelivery || null,
+                    priority: svcFormData.priority || 'medium',
+                    currentStep: 'Submitted',
+                    progress: 25 
+                  });
+                } else {
+                  console.warn(`Tracking row not found for Service Entry ${serviceEntryId}. Check if backend automatically creates it.`);
+                  toast.warn(`Tracking details for Service ${i + 1} couldn't be saved (Row not found).`);
+                }
+              } catch (trackErr) {
+                console.error(`❌ Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
+                toast.warn(`Service created, but tracking details failed to attach.`);
               }
-            } catch (noteErr) {
-              console.error(`❌ Failed to save note/task for Entry ${svc.serviceEntryId || svc.id}:`, noteErr);
-              toast.warn(`Service created, but failed to attach note/task.`);
+            }
+
+            // 2. Save Note & Task
+            if (svc.initialNote && svc.initialNote.trim() !== '') {
+              try {
+                // Save Note
+                const noteRes = await createNote({
+                  title: 'Initial Note',
+                  content: svc.initialNote.trim(),
+                  visibility: svc.initialNoteVisibility,
+                  related_service_entry_id: svc.serviceEntryId || svc.id,
+                  mentions: svc.initialNoteMentions 
+                });
+                
+                const savedNoteId = noteRes?.data?.id || noteRes?.id;
+
+                // Save Task
+                if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
+                  const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+                  
+                  await api.post('/add', {
+                    title: svc.taskTitle.trim(),
+                    description: svc.initialNote.trim(),
+                    assigned_to: parseInt(svc.taskAssignee),
+                    due_date: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
+                    priority: 'medium',
+                    related_service_entry_id: svc.serviceEntryId || svc.id,
+                    note_id: savedNoteId
+                  }, { baseURL: taskBaseUrl });
+                }
+              } catch (noteErr) {
+                console.error(`❌ Failed to save note/task for Entry ${svc.serviceEntryId || svc.id}:`, noteErr);
+                toast.warn(`Service created, but failed to attach note/task.`);
+              }
             }
           }
+          
+          toast.success('Services successfully created and paid!');
         }
         
-        toast.success('Services successfully created and paid!');
-      }
-      
-      // --- 1. Fetch updated entries so the table shows the new submission immediately ---
-      try {
-        const entriesRes = await getServiceEntries(true, null, 500);
-        setServiceEntries(entriesRes.data || []);
-      } catch (fetchErr) {
-        console.error("Failed to refresh table", fetchErr);
-      }
+        // --- 1. Fetch updated entries so the table shows the new submission immediately ---
+        try {
+          const entriesRes = await getServiceEntries(true, null, 500);
+          setServiceEntries(entriesRes.data || []);
+        } catch (fetchErr) {
+          console.error("Failed to refresh table", fetchErr);
+        }
 
-      // --- 2. Clear the form instead of navigating away ---
-      setFormData({
-        tokenId: '',
-        customerName: '',
-        phone: '',
-        status: 'pending',
-        payments: [],
-        services: [{
-          id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
-          departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-          hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-          initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
-          
-          // 🔥 Reset the new tracking fields
-          applicationNumber: '',
-          estimatedDelivery: '',
-          priority: 'medium',
-          assignedTo: '',
-          currentStep: 'Submitted'
-        }]
-      });
-      setEditingEntryId(null);
-      
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to submit service entries');
-    }
-  };
+        // --- 2. Clear the form completely ---
+        setFormData({
+          tokenId: '',
+          customerName: '',
+          phone: '',
+          status: 'pending',
+          payments: [],
+          services: [{
+            id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
+            departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
+            hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
+            initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
+            
+            // 🔥 Reset tracking fields
+            applicationNumber: '',
+            estimatedDelivery: '',
+            priority: 'medium',
+            assignedTo: '',
+            currentStep: 'Submitted'
+          }]
+        });
+        setEditingEntryId(null);
+        
+      } catch (err) {
+        toast.error(err.response?.data?.error || 'Failed to submit service entries');
+      }
+    };
 
     const allWallets = [...wallets.offline, ...wallets.online];
     const personalWalletUsed = [...formData.payments.map(p => parseInt(p.wallet)), ...formData.services.map(s => parseInt(s.serviceWalletId))]
@@ -1648,7 +1688,32 @@ const ServiceEntry = () => {
                             </div>
                           </div>
 
-                          {/* Row 2: Financials (Strictly 3 Columns) */}
+                          {/* Row 2: Docs & Web (PROMINENT UI) */}
+                          {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                            <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                              {website && (
+                                <div className="flex items-center gap-1.5">
+                                  <FiLink className="text-blue-500 shrink-0" />
+                                  <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
+                                </div>
+                              )}
+                              {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                <div className="flex items-start gap-1.5">
+                                  <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
+                                  <div className="flex flex-wrap gap-2">
+                                    <span className="font-semibold text-gray-700 mr-1">Required Docs:</span>
+                                    {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
+                                      <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                        <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Row 3: Financials (Strictly 3 Columns) */}
                           <div className="grid grid-cols-3 gap-3">
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
@@ -1664,7 +1729,7 @@ const ServiceEntry = () => {
                             </div>
                           </div>
 
-                          {/* Row 2.5: Expiry Date */}
+                          {/* Row 3.5: Expiry Date */}
                           {svc.hasExpiry && (
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
@@ -1691,54 +1756,28 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* Row 3: Docs & Web */}
-                          {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
-                            <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
-                              {website && (
-                                <div className="flex items-center gap-1.5">
-                                  <FiLink className="text-blue-500 shrink-0" />
-                                  <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
-                                </div>
-                              )}
-                              {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
-                                <div className="flex items-start gap-1.5">
-                                  <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
-                                  <div className="flex flex-wrap gap-2">
-                                    <span className="font-semibold text-gray-700 mr-1">Docs:</span>
-                                    {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
-                                      <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
-                                        <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Row 3.5: Inline Tracking Details */}
-                          <div className="pt-4 border-t border-gray-100">
-                            <div className="flex items-center gap-2 mb-3">
-                              <FiTarget className="h-4 w-4 text-indigo-500" />
-                              <h5 className="text-sm font-semibold text-gray-800">Tracking & Processing (Optional)</h5>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          {/* 🔥 NEW UI: FULFILLMENT & TRACKING BLOCK 🔥 */}
+                          <div className="mt-4 bg-indigo-50/40 border border-indigo-100 rounded-lg p-4">
+                            <h4 className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                              <FiTruck className="text-indigo-500" /> Processing & Tracking Details
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
                                 <input 
                                   type="text" 
-                                  placeholder="Application Number"
+                                  placeholder="Application No..."
                                   value={svc.applicationNumber}
                                   onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
-                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm"
                                 />
                               </div>
                               <div>
                                 <select 
                                   value={svc.assignedTo}
                                   onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
-                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm"
                                 >
-                                  <option value="">Assign Staff (Unassigned)</option>
+                                  <option value="">Unassigned Staff</option>
                                   {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
                                 </select>
                               </div>
@@ -1747,7 +1786,7 @@ const ServiceEntry = () => {
                                   type="date" 
                                   value={svc.estimatedDelivery}
                                   onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
-                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors text-gray-600"
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm text-gray-600"
                                   title="Estimated Delivery Date"
                                 />
                               </div>
@@ -1755,7 +1794,7 @@ const ServiceEntry = () => {
                                 <select 
                                   value={svc.priority}
                                   onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
-                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm"
                                 >
                                   <option value="low">Low Priority</option>
                                   <option value="medium">Medium Priority</option>
@@ -2008,7 +2047,9 @@ const ServiceEntry = () => {
                     id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
                     departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
                     hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-                    initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false
+                    initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
+                    // Reset tracking fields
+                    applicationNumber: '', estimatedDelivery: '', priority: 'medium', assignedTo: '', currentStep: 'Submitted'
                   }]
                 });
                 setEditingEntryId(null);
@@ -2087,12 +2128,10 @@ const ServiceEntry = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  {/* 🔥 ADDED SERIAL NUMBER HEADER */}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                   
-                  {/* 🔥 CONDITIONALLY SHOW STAFF HEADER FOR ADMINS */}
                   {(userRole === 'admin' || userRole === 'superadmin') && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
                   )}
@@ -2105,7 +2144,6 @@ const ServiceEntry = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {/* 🔥 ADDED 'index' FOR SERIAL NUMBER */}
                 {serviceEntries.map((entry, index) => {
                   const deptTx = entry.departmentChargeTransaction;
                   const serviceTx = entry.serviceChargeTransaction;
@@ -2113,7 +2151,6 @@ const ServiceEntry = () => {
                   
                   return (
                     <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                      {/* 🔥 RENDER SERIAL NUMBER */}
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
                         {index + 1}
                       </td>
@@ -2122,7 +2159,6 @@ const ServiceEntry = () => {
                         {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
                       </td>
 
-                      {/* 🔥 WRAPPED CUSTOMER NAME: Removed 'whitespace-nowrap' from td, added 'whitespace-normal break-words' to span */}
                       <td className="px-6 py-4 text-sm text-gray-900">
                         <div className="font-medium flex items-center gap-2">
                           <span className="whitespace-normal break-words max-w-[150px] sm:max-w-[200px]">
@@ -2142,7 +2178,6 @@ const ServiceEntry = () => {
                         <div className="text-gray-500 mt-0.5">{entry.phone}</div>
                       </td>
 
-                      {/* 🔥 CONDITIONALLY RENDER STAFF NAME FOR ADMINS */}
                       {(userRole === 'admin' || userRole === 'superadmin') && (
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
                           {entry.staffName || 'Unknown'}
@@ -2238,7 +2273,6 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* 🔥 SAFETY: Use filtered payments (latest non-reversal only) */}
                           {safePayments.map((payment, idx) => {
                             const status = correctionStatus[payment.transaction_id || payment.id];
                             const hasBeenCorrected = status?.corrections_used > 0;
@@ -2264,14 +2298,9 @@ const ServiceEntry = () => {
                                   >
                                     <FiHistory className="h-3.5 w-3.5" />
                                   </button>
-                                  {/* 🔥 CRITICAL FIX: Using wallet_transactions.id */}
                                   {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
                                     <button
                                       onClick={() => {
-                                        console.log("🔍 Correcting Payment - TX ID:", correctionId, 
-                                          "| Amount:", payment.amount, 
-                                          "| Wallet:", payment.wallet,
-                                          "| is_reversal:", payment.is_reversal);
                                         openCorrectionModal(payment, entry, 'payment');
                                       }}
                                       className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
@@ -2300,7 +2329,6 @@ const ServiceEntry = () => {
                         >
                           <FiEye className="h-5 w-5" />
                         </button>
-                        {/* 🔥 FIXED: Admin can always edit, staff can only edit if it hasn't been edited yet */}
                         {isToday(entry.created_at) && (!entry.is_edited || userRole === 'admin' || userRole === 'superadmin') && (
                           <button
                             onClick={() => handleEditEntry(entry)}
@@ -2315,7 +2343,6 @@ const ServiceEntry = () => {
                             Edited
                           </span>
                         )}
-                        {/* 🔥 NEW DELETE BUTTON FOR ADMINS ONLY */}
                         {(userRole === 'admin' || userRole === 'superadmin') && (
                           <button
                             onClick={() => setDeleteDialog({ isOpen: true, entryId: entry.id, loading: false })}
