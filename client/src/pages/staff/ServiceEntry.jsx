@@ -12,6 +12,7 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { MentionsInput, Mention } from 'react-mentions';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry, getStaff } from '/src/services/serviceService';
+import { updateTrackingEntry } from '/src/services/serviceService';
 import { createNote } from '/src/services/noteService';
 import api from '@/services/serviceService';
 import { jsPDF } from 'jspdf';
@@ -22,11 +23,19 @@ import 'react-datepicker/dist/react-datepicker.css';
 import axios from 'axios';
 
 const createEmptyService = () => ({
-  id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
+  id: crypto.randomUUID(), 
+  category: '', subcategory: '', serviceCharge: '', 
   departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
   hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
   initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
-  showNoteArea: false, // <-- Added this to collapse the UI by default
+  showNoteArea: false,
+  
+  // --- NEW TRACKING FIELDS ---
+  applicationNumber: '',
+  estimatedDelivery: '',
+  priority: 'medium',
+  assignedTo: '',
+  currentStep: 'Submitted'
 });
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
@@ -1228,100 +1237,131 @@ const ServiceEntry = () => {
     };
 
     const executeFinalSubmit = async () => {
-      try {
-        if (editingEntryId) {
-          // Single Edit Mode Logic
-          const editPayload = {
-             ...payload,
-             categoryId: payload.services[0].categoryId,
-             subcategoryId: payload.services[0].subcategoryId,
-             serviceCharge: payload.services[0].serviceCharge,
-             departmentCharge: payload.services[0].departmentCharge,
-             totalCharge: payload.services[0].totalCharge,
-             serviceWalletId: payload.services[0].serviceWalletId,
-             hasExpiry: payload.services[0].hasExpiry,
-             expiryDate: payload.services[0].expiryDate,
-          };
-          delete editPayload.payments;
-          delete editPayload.services;
+    try {
+      if (editingEntryId) {
+        // Single Edit Mode Logic
+        const editPayload = {
+           ...payload,
+           categoryId: payload.services[0].categoryId,
+           subcategoryId: payload.services[0].subcategoryId,
+           serviceCharge: payload.services[0].serviceCharge,
+           departmentCharge: payload.services[0].departmentCharge,
+           totalCharge: payload.services[0].totalCharge,
+           serviceWalletId: payload.services[0].serviceWalletId,
+           hasExpiry: payload.services[0].hasExpiry,
+           expiryDate: payload.services[0].expiryDate,
+        };
+        delete editPayload.payments;
+        delete editPayload.services;
 
-          // 🔥 when admin edits: Remove the logged-in admin's ID so the backend preserves the original staff member
-          delete editPayload.staffId;
+        // 🔥 when admin edits: Remove the logged-in admin's ID so the backend preserves the original staff member
+        delete editPayload.staffId;
 
-          await updateServiceEntry(editingEntryId, editPayload);
-          toast.success('Service entry updated successfully!');
-        } else {
-          // 🔥 SEND CART TO BULK ROUTE
-          const response = await api.post('/entry/bulk', payload);
-          const createdServices = response.data.createdServices || [];
+        await updateServiceEntry(editingEntryId, editPayload);
+        toast.success('Service entry updated successfully!');
+      } else {
+        // 🔥 SEND CART TO BULK ROUTE
+        const response = await api.post('/entry/bulk', payload);
+        const createdServices = response.data.createdServices || [];
 
-          // 🔥 LOOP THROUGH THE RESPONSE TO CREATE NOTES & TASKS
-          for (const svc of createdServices) {
-            if (svc.initialNote && svc.initialNote.trim() !== '') {
-              try {
-                // 1. Save Note
-                const noteRes = await createNote({
-                  title: 'Initial Note',
-                  content: svc.initialNote.trim(),
-                  visibility: svc.initialNoteVisibility,
-                  related_service_entry_id: svc.serviceEntryId,
-                  mentions: svc.initialNoteMentions 
-                });
-                
-                const savedNoteId = noteRes?.data?.id || noteRes?.id;
+        // 🔥 LOOP THROUGH THE RESPONSE TO CREATE TRACKING ENTRIES, NOTES & TASKS
+        for (let i = 0; i < createdServices.length; i++) {
+          const svc = createdServices[i];
+          const svcFormData = formData.services[i]; // Retrieve corresponding front-end data for tracking fields
 
-                // 2. Save Task
-                if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
-                  const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-                  
-                  await api.post('/add', {
-                    title: svc.taskTitle.trim(),
-                    description: svc.initialNote.trim(),
-                    assigned_to: parseInt(svc.taskAssignee),
-                    due_date: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
-                    priority: 'medium',
-                    related_service_entry_id: svc.serviceEntryId,
-                    note_id: savedNoteId
-                  }, { baseURL: taskBaseUrl });
-                }
-              } catch (noteErr) {
-                console.error(`❌ Failed to save note/task for Entry ${svc.serviceEntryId}:`, noteErr);
-                toast.warn(`Service created, but failed to attach note/task.`);
-              }
+          // 1. Submit Tracking Details Instantly
+          if (svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || (svcFormData.priority && svcFormData.priority !== 'medium')) {
+            try {
+              // Ensure we fallback to serviceEntryId if trackingId isn't explicitly returned yet
+              const trackingIdToUpdate = svc.trackingId || svc.serviceEntryId || svc.id; 
+              
+              await updateTrackingEntry(trackingIdToUpdate, {
+                applicationNumber: svcFormData.applicationNumber || null,
+                assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
+                estimatedDelivery: svcFormData.estimatedDelivery || null,
+                priority: svcFormData.priority || 'medium',
+                currentStep: 'Submitted',
+                progress: 25 // Default starting progress
+              });
+            } catch (trackErr) {
+              console.error(`❌ Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
+              toast.warn('Service created, but tracking details failed to attach.');
             }
           }
-          
-          toast.success('Services successfully created and paid!');
-        }
-        
-        // --- 1. Fetch updated entries so the table shows the new submission immediately ---
-        try {
-          const entriesRes = await getServiceEntries(true, null, 500);
-          setServiceEntries(entriesRes.data || []);
-        } catch (fetchErr) {
-          console.error("Failed to refresh table", fetchErr);
-        }
 
-        // --- 2. Clear the form instead of navigating away ---
-        setFormData({
-          tokenId: '',
-          customerName: '',
-          phone: '',
-          status: 'pending',
-          payments: [],
-          services: [{
-            id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
-            departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-            hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-            initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false
-          }]
-        });
-        setEditingEntryId(null);
+          // 2. Save Note & Task
+          if (svc.initialNote && svc.initialNote.trim() !== '') {
+            try {
+              // Save Note
+              const noteRes = await createNote({
+                title: 'Initial Note',
+                content: svc.initialNote.trim(),
+                visibility: svc.initialNoteVisibility,
+                related_service_entry_id: svc.serviceEntryId || svc.id,
+                mentions: svc.initialNoteMentions 
+              });
+              
+              const savedNoteId = noteRes?.data?.id || noteRes?.id;
+
+              // Save Task
+              if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
+                const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+                
+                await api.post('/add', {
+                  title: svc.taskTitle.trim(),
+                  description: svc.initialNote.trim(),
+                  assigned_to: parseInt(svc.taskAssignee),
+                  due_date: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
+                  priority: 'medium',
+                  related_service_entry_id: svc.serviceEntryId || svc.id,
+                  note_id: savedNoteId
+                }, { baseURL: taskBaseUrl });
+              }
+            } catch (noteErr) {
+              console.error(`❌ Failed to save note/task for Entry ${svc.serviceEntryId || svc.id}:`, noteErr);
+              toast.warn(`Service created, but failed to attach note/task.`);
+            }
+          }
+        }
         
-      } catch (err) {
-        toast.error(err.response?.data?.error || 'Failed to submit service entries');
+        toast.success('Services successfully created and paid!');
       }
-    };
+      
+      // --- 1. Fetch updated entries so the table shows the new submission immediately ---
+      try {
+        const entriesRes = await getServiceEntries(true, null, 500);
+        setServiceEntries(entriesRes.data || []);
+      } catch (fetchErr) {
+        console.error("Failed to refresh table", fetchErr);
+      }
+
+      // --- 2. Clear the form instead of navigating away ---
+      setFormData({
+        tokenId: '',
+        customerName: '',
+        phone: '',
+        status: 'pending',
+        payments: [],
+        services: [{
+          id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
+          departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
+          hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
+          initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
+          
+          // 🔥 Reset the new tracking fields
+          applicationNumber: '',
+          estimatedDelivery: '',
+          priority: 'medium',
+          assignedTo: '',
+          currentStep: 'Submitted'
+        }]
+      });
+      setEditingEntryId(null);
+      
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to submit service entries');
+    }
+  };
 
     const allWallets = [...wallets.offline, ...wallets.online];
     const personalWalletUsed = [...formData.payments.map(p => parseInt(p.wallet)), ...formData.services.map(s => parseInt(s.serviceWalletId))]
@@ -1675,6 +1715,55 @@ const ServiceEntry = () => {
                               )}
                             </div>
                           )}
+
+                          {/* Row 3.5: Inline Tracking Details */}
+                          <div className="pt-4 border-t border-gray-100">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FiTarget className="h-4 w-4 text-indigo-500" />
+                              <h5 className="text-sm font-semibold text-gray-800">Tracking & Processing (Optional)</h5>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                              <div>
+                                <input 
+                                  type="text" 
+                                  placeholder="Application Number"
+                                  value={svc.applicationNumber}
+                                  onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                />
+                              </div>
+                              <div>
+                                <select 
+                                  value={svc.assignedTo}
+                                  onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                >
+                                  <option value="">Assign Staff (Unassigned)</option>
+                                  {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <input 
+                                  type="date" 
+                                  value={svc.estimatedDelivery}
+                                  onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors text-gray-600"
+                                  title="Estimated Delivery Date"
+                                />
+                              </div>
+                              <div>
+                                <select 
+                                  value={svc.priority}
+                                  onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                >
+                                  <option value="low">Low Priority</option>
+                                  <option value="medium">Medium Priority</option>
+                                  <option value="high">High Priority</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
 
                           {/* Row 4: Collapsible Notes & Tasks */}
                           {!isEditMode && (
