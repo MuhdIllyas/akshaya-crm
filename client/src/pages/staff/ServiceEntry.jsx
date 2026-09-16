@@ -12,7 +12,7 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { MentionsInput, Mention } from 'react-mentions';
 import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry, getStaff } from '/src/services/serviceService';
-import { updateTrackingEntry, getTrackingEntries } from '/src/services/serviceService';
+import { updateTrackingEntry } from '/src/services/serviceService';
 import { createNote } from '/src/services/noteService';
 import api from '@/services/serviceService';
 import { jsPDF } from 'jspdf';
@@ -30,8 +30,7 @@ const createEmptyService = () => ({
   initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
   showNoteArea: false,
   
-  // --- NEW: Tab State & Tracking Fields ---
-  activeTab: 'details', // 'details', 'tracking', or 'notes'
+  // --- NEW TRACKING FIELDS ---
   applicationNumber: '',
   estimatedDelivery: '',
   priority: 'medium',
@@ -1237,7 +1236,7 @@ const ServiceEntry = () => {
       }))
     };
 
-const executeFinalSubmit = async () => {
+    const executeFinalSubmit = async () => {
     try {
       if (editingEntryId) {
         // Single Edit Mode Logic
@@ -1265,46 +1264,25 @@ const executeFinalSubmit = async () => {
         const response = await api.post('/entry/bulk', payload);
         const createdServices = response.data.createdServices || [];
 
-        // 🔥 FIX 404: Wait a tiny fraction of a second for the DB to commit, 
-        // then fetch the newly created tracking records to get their real primary keys.
-        await new Promise(resolve => setTimeout(resolve, 500)); 
-        
-        let recentTrackingRecords = [];
-        try {
-           const trackRes = await getTrackingEntries({ limit: 50 });
-           recentTrackingRecords = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
-        } catch (err) {
-           console.warn("Could not fetch tracking entries to map IDs", err);
-        }
-
         // 🔥 LOOP THROUGH THE RESPONSE TO CREATE TRACKING ENTRIES, NOTES & TASKS
         for (let i = 0; i < createdServices.length; i++) {
           const svc = createdServices[i];
-          const svcFormData = formData.services[i]; // Retrieve corresponding front-end data
+          const svcFormData = formData.services[i]; // Retrieve corresponding front-end data for tracking fields
 
-          // 1. Submit Tracking Details using the REAL Tracking ID
+          // 1. Submit Tracking Details Instantly
           if (svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || (svcFormData.priority && svcFormData.priority !== 'medium')) {
             try {
-              const serviceEntryId = svc.serviceEntryId || svc.id;
+              // Ensure we fallback to serviceEntryId if trackingId isn't explicitly returned yet
+              const trackingIdToUpdate = svc.trackingId || svc.serviceEntryId || svc.id; 
               
-              // Find the matching tracking record using the serviceEntryId
-              const trackingRecord = recentTrackingRecords.find(t => 
-                Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
-              );
-
-              if (trackingRecord) {
-                await updateTrackingEntry(trackingRecord.id, {
-                  applicationNumber: svcFormData.applicationNumber || null,
-                  assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
-                  estimatedDelivery: svcFormData.estimatedDelivery || null,
-                  priority: svcFormData.priority || 'medium',
-                  currentStep: 'Submitted',
-                  progress: 25 // Default starting progress
-                });
-              } else {
-                console.warn(`Could not find a tracking ID for service entry ${serviceEntryId}. Ensure the backend automatically generates tracking rows.`);
-                toast.warn(`Tracking details for Service ${i + 1} could not be saved automatically.`);
-              }
+              await updateTrackingEntry(trackingIdToUpdate, {
+                applicationNumber: svcFormData.applicationNumber || null,
+                assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
+                estimatedDelivery: svcFormData.estimatedDelivery || null,
+                priority: svcFormData.priority || 'medium',
+                currentStep: 'Submitted',
+                progress: 25 // Default starting progress
+              });
             } catch (trackErr) {
               console.error(`❌ Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
               toast.warn('Service created, but tracking details failed to attach.');
@@ -1370,8 +1348,7 @@ const executeFinalSubmit = async () => {
           hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
           initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
           
-          // 🔥 Reset the new tab state and tracking fields
-          activeTab: 'details',
+          // 🔥 Reset the new tracking fields
           applicationNumber: '',
           estimatedDelivery: '',
           priority: 'medium',
@@ -1646,178 +1623,210 @@ const executeFinalSubmit = async () => {
                         </div>
 
                         {/* Body Content */}
-                        <div className="flex flex-col">
-                          {/* Tabs Header */}
-                          <div className="flex border-b border-gray-200 bg-gray-50/50 px-4 pt-2">
-                            <button
-                              type="button"
-                              onClick={() => handleCartChange(index, 'activeTab', 'details')}
-                              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${svc.activeTab === 'details' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                            >
-                              Service Details
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleCartChange(index, 'activeTab', 'tracking')}
-                              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${svc.activeTab === 'tracking' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                            >
-                              Tracking 
-                              {(!svc.applicationNumber && !svc.assignedTo) && <span className="w-2 h-2 rounded-full bg-amber-500" title="Tracking details pending"></span>}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleCartChange(index, 'activeTab', 'notes')}
-                              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${svc.activeTab === 'notes' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                            >
-                              Notes & Tasks
-                            </button>
+                        <div className="p-4 space-y-4">
+                          {/* Row 1: Selectors */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                              <div className="relative">
+                                <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
+                                  <option value="">Select Category</option>
+                                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
+                              <div className="relative">
+                                <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
+                                  <option value="">Select Subcategory</option>
+                                  {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="p-4 space-y-4">
-                            {/* TAB 1: SERVICE DETAILS */}
-                            {svc.activeTab === 'details' && (
-                              <div className="space-y-4 animate-in fade-in duration-200">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
-                                    <div className="relative">
-                                      <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
-                                        <option value="">Select Category</option>
-                                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                      </select>
-                                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
-                                    <div className="relative">
-                                      <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
-                                        <option value="">Select Subcategory</option>
-                                        {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                      </select>
-                                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
-                                    </div>
-                                  </div>
-                                </div>
+                          {/* Row 2: Financials (Strictly 3 Columns) */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
+                              <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Dept (₹)</label>
+                              <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Total (₹)</label>
+                              <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 rounded-lg text-sm" />
+                            </div>
+                          </div>
 
-                                <div className="grid grid-cols-3 gap-3">
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
-                                    <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Dept (₹)</label>
-                                    <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Total (₹)</label>
-                                    <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 rounded-lg text-sm" />
-                                  </div>
+                          {/* Row 2.5: Expiry Date */}
+                          {svc.hasExpiry && (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
+                              <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                  <FiCalendar className="h-4 w-4 text-gray-400" />
                                 </div>
-
-                                {svc.hasExpiry && (
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
-                                    <div className="relative">
-                                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <FiCalendar className="h-4 w-4 text-gray-400" />
-                                      </div>
-                                      <input type="date" value={svc.expiryDate} onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} required className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" />
-                                    </div>
-                                  </div>
-                                )}
+                                <input 
+                                  type="date" 
+                                  value={svc.expiryDate} 
+                                  onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} 
+                                  required 
+                                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                                />
                               </div>
-                            )}
+                              {svc.expiryDate && (
+                                <p className={`text-xs mt-1.5 font-medium ${
+                                  Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) < 30 ? 'text-amber-600' : 'text-emerald-600'
+                                }`}>
+                                  <FiClock className="inline mr-1" />
+                                  {Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))} days remaining
+                                </p>
+                              )}
+                            </div>
+                          )}
 
-                            {/* TAB 2: TRACKING SETUP */}
-                            {svc.activeTab === 'tracking' && (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Application Number</label>
-                                  <input 
-                                    type="text" 
-                                    value={svc.applicationNumber}
-                                    onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
-                                    placeholder="Enter App No..."
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                  />
+                          {/* Row 3: Docs & Web */}
+                          {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                            <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                              {website && (
+                                <div className="flex items-center gap-1.5">
+                                  <FiLink className="text-blue-500 shrink-0" />
+                                  <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
                                 </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Assign Staff</label>
-                                  <select 
-                                    value={svc.assignedTo}
-                                    onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                  >
-                                    <option value="">Unassigned</option>
-                                    {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
-                                  </select>
+                              )}
+                              {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                <div className="flex items-start gap-1.5">
+                                  <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
+                                  <div className="flex flex-wrap gap-2">
+                                    <span className="font-semibold text-gray-700 mr-1">Docs:</span>
+                                    {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
+                                      <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                        <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Estimated Delivery</label>
-                                  <input 
-                                    type="date" 
-                                    value={svc.estimatedDelivery}
-                                    onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Priority</label>
-                                  <select 
-                                    value={svc.priority}
-                                    onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                  >
-                                    <option value="low">Low Priority</option>
-                                    <option value="medium">Medium Priority</option>
-                                    <option value="high">High Priority</option>
-                                  </select>
-                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Row 3.5: Inline Tracking Details */}
+                          <div className="pt-4 border-t border-gray-100">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FiTarget className="h-4 w-4 text-indigo-500" />
+                              <h5 className="text-sm font-semibold text-gray-800">Tracking & Processing (Optional)</h5>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                              <div>
+                                <input 
+                                  type="text" 
+                                  placeholder="Application Number"
+                                  value={svc.applicationNumber}
+                                  onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                />
                               </div>
-                            )}
-
-                            {/* TAB 3: NOTES & TASKS */}
-                            {svc.activeTab === 'notes' && (
-                              <div className="animate-in fade-in duration-200">
-                                <MentionsInput
-                                  value={svc.initialNote}
-                                  onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
-                                  className="mentions-input text-sm"
-                                  placeholder="Write a note... Type @ to assign staff members"
-                                  style={{
-                                    control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px' },
-                                    input: { padding: '0.65rem', border: 'none', outline: 'none' }
-                                  }}
+                              <div>
+                                <select 
+                                  value={svc.assignedTo}
+                                  onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
                                 >
-                                  <Mention trigger="@" data={fetchStaffSuggestions} displayTransform={(id, d) => `@${d}`} />
-                                </MentionsInput>
-
-                                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                                  <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)} className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700">
-                                    <option value="centre">🏢 Centre View</option>
-                                    <option value="private">🔒 Private</option>
-                                    <option value="mentioned_only">👥 Mentions Only</option>
-                                  </select>
-                                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 px-3 py-1.5 rounded hover:bg-indigo-50 transition">
-                                    <input type="checkbox" checked={svc.createTask} onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)} className="rounded text-indigo-600" />
-                                    Convert to Task
-                                  </label>
-                                </div>
-
-                                {svc.createTask && (
-                                  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-                                    <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" className="px-3 py-2 text-sm border border-gray-300 rounded-md" />
-                                    <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} className="px-3 py-2 text-sm border border-gray-300 rounded-md">
-                                      <option value="">Assign To *</option>
-                                      {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
-                                    </select>
-                                    <DatePicker selected={svc.taskDueDate} onChange={(date) => handleCartChange(index, 'taskDueDate', date)} placeholderText="Due Date" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
-                                  </div>
-                                )}
+                                  <option value="">Assign Staff (Unassigned)</option>
+                                  {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                </select>
                               </div>
-                            )}
+                              <div>
+                                <input 
+                                  type="date" 
+                                  value={svc.estimatedDelivery}
+                                  onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors text-gray-600"
+                                  title="Estimated Delivery Date"
+                                />
+                              </div>
+                              <div>
+                                <select 
+                                  value={svc.priority}
+                                  onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 bg-gray-50 hover:bg-white transition-colors"
+                                >
+                                  <option value="low">Low Priority</option>
+                                  <option value="medium">Medium Priority</option>
+                                  <option value="high">High Priority</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
+
+                          {/* Row 4: Collapsible Notes & Tasks */}
+                          {!isEditMode && (
+                            <div className="pt-2 border-t border-gray-100">
+                              {!svc.showNoteArea ? (
+                                <button type="button" onClick={() => handleCartChange(index, 'showNoteArea', true)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition">
+                                  <FiMessageCircle className="h-4 w-4" /> Add Note or Task for this Service
+                                </button>
+                              ) : (
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 shadow-inner">
+                                  <div className="flex justify-between items-center mb-3">
+                                    <label className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                                      <FiMessageCircle className="text-indigo-500 h-4 w-4"/> Note & Task Assignment
+                                    </label>
+                                    <button type="button" onClick={() => { handleCartChange(index, 'showNoteArea', false); handleCartChange(index, 'initialNote', ''); handleCartChange(index, 'createTask', false); }} className="text-xs text-gray-500 hover:text-rose-500 flex items-center gap-1">
+                                      <FiX className="h-3 w-3" /> Cancel
+                                    </button>
+                                  </div>
+
+                                  <MentionsInput
+                                    value={svc.initialNote}
+                                    onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
+                                    className="mentions-input text-sm"
+                                    placeholder="Write a note... Type @ to assign staff members"
+                                    style={{
+                                      control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
+                                      highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
+                                      input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
+                                      suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
+                                    }}
+                                  >
+                                    <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`} renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
+                                  </MentionsInput>
+
+                                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                                    <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)} className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
+                                      <option value="centre">🏢 Centre View</option>
+                                      <option value="private">🔒 Private</option>
+                                      <option value="mentioned_only">👥 Mentions Only</option>
+                                    </select>
+                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 px-3 py-1.5 rounded shadow-sm hover:bg-indigo-50 transition">
+                                      <input type="checkbox" checked={svc.createTask} onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)} className="rounded text-indigo-600" />
+                                      Convert to Task
+                                    </label>
+                                  </div>
+
+                                  {/* Task Expansion */}
+                                  {svc.createTask && (
+                                    <div className="mt-3 bg-white p-3 rounded-lg border border-indigo-100 shadow-sm space-y-3">
+                                      <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500" />
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} required className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
+                                          <option value="">Assign To *</option>
+                                          {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                        </select>
+                                        <DatePicker selected={svc.taskDueDate} onChange={(date) => handleCartChange(index, 'taskDueDate', date)} placeholderText="Due Date" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </motion.div>
                     );
