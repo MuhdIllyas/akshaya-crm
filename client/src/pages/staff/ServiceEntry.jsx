@@ -5,9 +5,9 @@ import {
   FiUser, FiPhone, FiCreditCard, FiDollarSign, FiCheck, FiX, FiCheckCircle, 
   FiChevronDown, FiPlus, FiTrash2, FiCalendar, FiClock, FiEye, FiLink, 
   FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
-  FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip,
+  FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip, FiPackage,
   FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck, FiTarget,
-  FiTruck, FiMail, FiFlag, FiActivity
+  FiMail, FiFlag, FiActivity
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -40,7 +40,7 @@ const createEmptyService = () => ({
   hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
   initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
   showNoteArea: false,
-  activeTab: 'service',        // which tab this card shows
+  activeTab: 'service',        // NEW: which tab this card shows
 
   // --- TRACKING FIELDS ---
   applicationNumber: '',
@@ -1608,7 +1608,7 @@ const ServiceEntry = () => {
 
                     const tabDefs = [
                       { id: 'service',  label: 'Service',  icon: FiCreditCard, badge: null },
-                      { id: 'tracking', label: 'Tracking', icon: FiTruck,      badge: trackingFilledCount || null, dot: statusIsActive },
+                      { id: 'tracking', label: 'Tracking', icon: FiPackage,      badge: trackingFilledCount || null, dot: statusIsActive },
                       ...(!isEditMode ? [{ id: 'notes', label: 'Notes', icon: FiMessageCircle, badge: svc.initialNote ? 1 : null }] : [])
                     ];
 
@@ -1664,8 +1664,8 @@ const ServiceEntry = () => {
                           })}
                         </div>
 
-                        {/* ===== TAB CONTENT (fixed min-height so payment panel stays put) ===== */}
-                        <div className="p-4 min-h-[340px]">
+                        {/* ===== TAB CONTENT ===== */}
+                        <div className="p-4">
 
                           {/* ---------- SERVICE TAB (default) ---------- */}
                           {activeTab === 'service' && (
@@ -1766,7 +1766,7 @@ const ServiceEntry = () => {
                                   onClick={() => handleCartChange(index, 'activeTab', 'tracking')}
                                   className="w-full text-left text-xs text-gray-400 hover:text-indigo-600 flex items-center justify-center gap-1 py-1 transition-colors"
                                 >
-                                  <FiTruck className="h-3 w-3" />
+                                  <FiPackage className="h-3 w-3" />
                                   <span>Optional: add tracking / fulfillment details →</span>
                                 </button>
                               )}
