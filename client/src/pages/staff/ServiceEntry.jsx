@@ -1253,7 +1253,7 @@ const ServiceEntry = () => {
       }))
     };
 
-    const executeFinalSubmit = async () => {
+const executeFinalSubmit = async () => {
       try {
         if (editingEntryId) {
           const editPayload = {
@@ -1273,124 +1273,128 @@ const ServiceEntry = () => {
 
           await updateServiceEntry(editingEntryId, editPayload);
           toast.success('Service entry updated successfully!');
+          
+          // Refresh table
+          const entriesRes = await getServiceEntries(true, null, 500);
+          setServiceEntries(entriesRes.data || []);
+          
+          // Clear edit mode
+          setFormData({
+            tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
+            services: [createEmptyService()]
+          });
+          setEditingEntryId(null);
+          
         } else {
+          // 1. SNAPSHOT THE FORM DATA BEFORE CLEARING IT
+          const submittedServicesData = [...formData.services];
+
+          // 2. SEND CART TO BULK ROUTE
           const response = await api.post('/entry/bulk', payload);
           const createdServices = response.data.createdServices || [];
 
-          // 🔥 FIX 404 RACE CONDITION: Wait a moment for DB triggers to complete
-          await new Promise(resolve => setTimeout(resolve, 1500)); 
-          
-          let recentTrackingRecords = [];
-          try {
-             const trackRes = await getTrackingEntries({ limit: 100 });
-             recentTrackingRecords = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
-          } catch (err) {
-             console.warn("Could not fetch tracking entries to map IDs", err);
-          }
-
-          // 🔥 LOOP THROUGH THE RESPONSE TO MAP AND CREATE TRACKING/NOTES
-          for (let i = 0; i < createdServices.length; i++) {
-            const svc = createdServices[i];
-            const svcFormData = formData.services[i]; 
-
-            // 1. Submit Tracking Details Safely
-            // NEW: Expanded trigger to include aadhaar, email, avg time, remarks
-            const hasTrackingData = 
-              svcFormData.applicationNumber || 
-              svcFormData.assignedTo || 
-              svcFormData.estimatedDelivery || 
-              svcFormData.aadhaar || 
-              svcFormData.email || 
-              svcFormData.averageTime || 
-              svcFormData.customerRemarks ||
-              (svcFormData.priority && svcFormData.priority !== 'medium');
-
-            if (hasTrackingData) {
-              try {
-                const serviceEntryId = svc.serviceEntryId || svc.id;
-                
-                const trackingRecord = recentTrackingRecords.find(t => 
-                  Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
-                );
-
-                if (trackingRecord) {
-                  await updateTrackingEntry(trackingRecord.id, {
-                    applicationNumber: svcFormData.applicationNumber || null,
-                    assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
-                    estimatedDelivery: svcFormData.estimatedDelivery || null,
-                    averageTime: svcFormData.averageTime || '7 days',
-                    notes: svcFormData.customerRemarks || null,
-                    aadhaar: svcFormData.aadhaar || null,
-                    email: svcFormData.email || null,
-                    priority: svcFormData.priority || 'medium',
-                    currentStep: svcFormData.currentStep || 'Submitted',
-                    progress: 25 
-                  });
-                } else {
-                  console.warn(`Tracking row not found for Service Entry ${serviceEntryId}. Check if backend automatically creates it.`);
-                  toast.warn(`Tracking details for Service ${i + 1} couldn't be saved (Row not found).`);
-                }
-              } catch (trackErr) {
-                console.error(`❌ Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
-                toast.warn(`Service created, but tracking details failed to attach.`);
-              }
-            }
-
-            // 2. Save Note & Task
-            if (svc.initialNote && svc.initialNote.trim() !== '') {
-              try {
-                const noteRes = await createNote({
-                  title: 'Initial Note',
-                  content: svc.initialNote.trim(),
-                  visibility: svc.initialNoteVisibility,
-                  related_service_entry_id: svc.serviceEntryId || svc.id,
-                  mentions: svc.initialNoteMentions 
-                });
-                
-                const savedNoteId = noteRes?.data?.id || noteRes?.id;
-
-                if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
-                  const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-                  
-                  await api.post('/add', {
-                    title: svc.taskTitle.trim(),
-                    description: svc.initialNote.trim(),
-                    assigned_to: parseInt(svc.taskAssignee),
-                    due_date: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
-                    priority: 'medium',
-                    related_service_entry_id: svc.serviceEntryId || svc.id,
-                    note_id: savedNoteId
-                  }, { baseURL: taskBaseUrl });
-                }
-              } catch (noteErr) {
-                console.error(`❌ Failed to save note/task for Entry ${svc.serviceEntryId || svc.id}:`, noteErr);
-                toast.warn(`Service created, but failed to attach note/task.`);
-              }
-            }
-          }
-          
+          // 3. INSTANT UI FEEDBACK (Make it feel fast!)
           toast.success('Services successfully created and paid!');
-        }
-        
-        // --- 1. Fetch updated entries so the table shows the new submission immediately ---
-        try {
-          const entriesRes = await getServiceEntries(true, null, 500);
-          setServiceEntries(entriesRes.data || []);
-        } catch (fetchErr) {
-          console.error("Failed to refresh table", fetchErr);
-        }
+          
+          // Clear the form completely so staff can start the next customer immediately
+          setFormData({
+            tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
+            services: [createEmptyService()]
+          });
+          setEditingEntryId(null);
 
-        // --- 2. Clear the form completely ---
-        setFormData({
-          tokenId: '',
-          customerName: '',
-          phone: '',
-          status: 'pending',
-          payments: [],
-          services: [createEmptyService()]
-        });
-        setEditingEntryId(null);
-        
+          // 4. FIRE AND FORGET: PROCESS TRACKING & NOTES IN THE BACKGROUND
+          const processBackgroundTasks = async () => {
+            try {
+              // Wait 1.5s for DB triggers to complete
+              await new Promise(resolve => setTimeout(resolve, 1500)); 
+              
+              // Fetch the newly created tracking rows
+              let recentTrackingRecords = [];
+              try {
+                 const trackRes = await getTrackingEntries({ limit: 100 });
+                 recentTrackingRecords = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
+              } catch (err) {
+                 console.warn("Could not fetch tracking entries to map IDs", err);
+              }
+
+              // Run all API updates concurrently to save time
+              const backgroundPromises = createdServices.map(async (svc, i) => {
+                const svcFormData = submittedServicesData[i]; 
+
+                // A. Submit Tracking Details
+                const hasTrackingData = 
+                  svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || 
+                  svcFormData.aadhaar || svcFormData.email || svcFormData.averageTime || svcFormData.customerRemarks ||
+                  (svcFormData.priority && svcFormData.priority !== 'medium');
+
+                if (hasTrackingData) {
+                  try {
+                    const serviceEntryId = svc.serviceEntryId || svc.id;
+                    const trackingRecord = recentTrackingRecords.find(t => 
+                      Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
+                    );
+
+                    if (trackingRecord) {
+                      await updateTrackingEntry(trackingRecord.id, {
+                        applicationNumber: svcFormData.applicationNumber || null,
+                        assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
+                        estimatedDelivery: svcFormData.estimatedDelivery || null,
+                        averageTime: svcFormData.averageTime || '7 days',
+                        notes: svcFormData.customerRemarks || null,
+                        aadhaar: svcFormData.aadhaar || null,
+                        email: svcFormData.email || null,
+                        priority: svcFormData.priority || 'medium',
+                        currentStep: svcFormData.currentStep || 'Submitted',
+                        progress: 25 
+                      });
+                    } else {
+                      console.warn(`Tracking row not found for Service Entry ${serviceEntryId}.`);
+                    }
+                  } catch (trackErr) {
+                    console.error(`Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
+                  }
+                }
+
+                // B. Save Note & Task
+                if (svcFormData.initialNote && svcFormData.initialNote.trim() !== '') {
+                  try {
+                    const noteRes = await createNote({
+                      title: 'Initial Note', content: svcFormData.initialNote.trim(), visibility: svcFormData.initialNoteVisibility,
+                      related_service_entry_id: svc.serviceEntryId || svc.id, mentions: svcFormData.initialNoteMentions 
+                    });
+                    
+                    const savedNoteId = noteRes?.data?.id || noteRes?.id;
+
+                    if (svcFormData.createTask && svcFormData.taskTitle && svcFormData.taskAssignee && savedNoteId) {
+                      const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+                      await api.post('/add', {
+                        title: svcFormData.taskTitle.trim(), description: svcFormData.initialNote.trim(), assigned_to: parseInt(svcFormData.taskAssignee),
+                        due_date: svcFormData.taskDueDate ? new Date(svcFormData.taskDueDate).toISOString().split('T')[0] : null,
+                        priority: 'medium', related_service_entry_id: svc.serviceEntryId || svc.id, note_id: savedNoteId
+                      }, { baseURL: taskBaseUrl });
+                    }
+                  } catch (noteErr) {
+                    console.error(`Failed to save note/task for Entry:`, noteErr);
+                  }
+                }
+              });
+
+              // Wait for all background tasks to finish concurrently
+              await Promise.allSettled(backgroundPromises);
+
+              // Finally, softly refresh the table so the new entry appears in the list below
+              const entriesRes = await getServiceEntries(true, null, 500);
+              setServiceEntries(entriesRes.data || []);
+
+            } catch (err) {
+              console.error("Background task execution failed:", err);
+            }
+          };
+
+          // Execute the background tasks WITHOUT awaiting them
+          processBackgroundTasks();
+        }
       } catch (err) {
         toast.error(err.response?.data?.error || 'Failed to submit service entries');
       }
