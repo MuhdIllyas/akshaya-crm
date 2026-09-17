@@ -7,7 +7,7 @@ import {
   FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
   FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip,
   FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck, FiTarget,
-  FiTruck
+  FiTruck, FiMail, FiFlag
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -20,8 +20,8 @@ import {
   getTokenById, 
   updateServiceEntry, 
   getStaff,
-  updateTrackingEntry, // <-- Ensure this is imported
-  getTrackingEntries   // <-- NEW: Required to fix the 404 race condition
+  updateTrackingEntry,
+  getTrackingEntries
 } from '/src/services/serviceService';
 import { createNote } from '/src/services/noteService';
 import api from '@/services/serviceService';
@@ -43,9 +43,13 @@ const createEmptyService = () => ({
   // --- TRACKING FIELDS ---
   applicationNumber: '',
   estimatedDelivery: '',
+  averageTime: '',
   priority: 'medium',
   assignedTo: '',
-  currentStep: 'Submitted'
+  currentStep: 'Submitted',
+  aadhaar: '',            // NEW: Aadhaar feed
+  email: '',              // NEW: Customer email
+  customerRemarks: ''     // NEW: WhatsApp-visible remarks (maps to `notes` in tracking)
 });
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
@@ -244,6 +248,16 @@ const ServiceEntry = () => {
         initialNote: '', initialNoteMentions: [], initialNoteVisibility: 'private',
         createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
         showNoteArea: false,
+        // NEW: Preserve tracking fields on edit
+        applicationNumber: entry.applicationNumber || '',
+        estimatedDelivery: entry.estimatedDelivery || '',
+        averageTime: entry.averageTime || '',
+        priority: entry.priority || 'medium',
+        assignedTo: entry.assignedTo || '',
+        currentStep: entry.currentStep || 'Submitted',
+        aadhaar: entry.aadhaar || '',
+        email: entry.email || '',
+        customerRemarks: entry.customerRemarks || entry.notes || ''
       }]
     });
 
@@ -293,9 +307,7 @@ const ServiceEntry = () => {
     }
   };
 
-  // 🔥 FIXED: Use transaction_id (wallet_transactions.id) for correction
   const openCorrectionModal = async (transaction, entry, type) => {
-    // Determine the correct ID: use transaction_id if available, else fallback to id
     const correctionId = transaction.transaction_id || transaction.id;
     
     console.log("🔍 Opening correction modal for:", {
@@ -309,7 +321,6 @@ const ServiceEntry = () => {
       correction_group_id: transaction.correction_group_id
     });
     
-    // 🔥 SAFETY: Block if transaction is a reversal
     if (transaction.is_reversal) {
       toast.error('Cannot correct a reversal transaction');
       return;
@@ -331,7 +342,7 @@ const ServiceEntry = () => {
       isOpen: true,
       transaction: {
         ...transaction,
-        id: correctionId, // CRUCIAL: Override with wallet_transactions.id
+        id: correctionId,
         serviceEntryId: entry.id,
         originalAmount: transaction.amount,
         wallet_id: transaction.wallet || transaction.wallet_id,
@@ -345,13 +356,11 @@ const ServiceEntry = () => {
     });
   };
 
-  // 🔥 FIXED: Only send changed fields, with safety verification
   const submitCorrection = async () => {
     const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
     
-    // 🔥 CRITICAL DEBUG: Log what we're about to correct
     console.log("🚀 Submitting correction for:", {
-      id: transaction.id, // Now wallet_transactions.id
+      id: transaction.id,
       type: transactionType,
       originalAmount: transaction.originalAmount,
       newAmount: newAmount,
@@ -360,14 +369,12 @@ const ServiceEntry = () => {
       wallet_id: transaction.wallet_id
     });
     
-    // Validate amount
     const parsedAmount = parseFloat(newAmount);
     if (isNaN(parsedAmount) || parsedAmount < 0) {
       toast.error('Please enter a valid amount (can be 0 to cancel the charge)');
       return;
     }
     
-    // Validate wallet
     const parsedWalletId = parseInt(newWalletId);
     if (!parsedWalletId || isNaN(parsedWalletId)) {
       toast.error('Please select a wallet');
@@ -379,29 +386,24 @@ const ServiceEntry = () => {
       return;
     }
 
-    // Build payload (only changed fields)
     const payload = {
       reason: reason.trim()
     };
     
-    // Only include amount if it changed (with small tolerance for floating point)
     const originalAmount = parseFloat(transaction.originalAmount);
     if (Math.abs(parsedAmount - originalAmount) > 0.001) {
       payload.new_amount = parsedAmount;
     }
     
-    // Only include wallet if it changed
     const originalWalletId = transaction.wallet_id || transaction.wallet;
     if (parsedWalletId !== parseInt(originalWalletId)) {
       payload.new_wallet_id = parsedWalletId;
     }
     
-    // 🔥 SAFETY: Send correction_group_id for backend verification
     if (transaction.correction_group_id) {
       payload.correction_group_id = transaction.correction_group_id;
     }
 
-    // Prepare the actual API call
     const executeCorrectionApi = async () => {
       setCorrectionModal(prev => ({ ...prev, loading: true }));
       try {
@@ -440,7 +442,6 @@ const ServiceEntry = () => {
       }
     };
 
-    // 🛑 Personal wallet check with modal
     const allWallets = [...wallets.offline, ...wallets.online];
     const targetWallet = allWallets.find(w => w.id === parsedWalletId);
     
@@ -457,7 +458,6 @@ const ServiceEntry = () => {
       return;
     }
 
-    // No personal wallet involved – execute immediately
     executeCorrectionApi();
   };
 
@@ -495,12 +495,9 @@ const ServiceEntry = () => {
     }
   };
 
-  // 🔥 Check if transaction can be corrected
   const canCorrectTransaction = (transaction, entry, type) => {
-    // 🔥 SAFETY: Never allow correcting reversal transactions
     if (transaction.is_reversal) return false;
     
-    // Staff can only correct today's entries
     if (userRole === 'staff') {
       return isToday(entry.created_at);
     }
@@ -549,13 +546,11 @@ const ServiceEntry = () => {
       const response = await api.delete(`/entry/${entryId}/force`);
       toast.success(response.data.message || 'Service entry deleted successfully');
 
-      // Remove the deleted entry from the UI without refreshing
       setServiceEntries(prev => prev.filter(entry => entry.id !== entryId));
       
       setDeleteDialog({ isOpen: false, entryId: null, loading: false });
     } catch (err) {
       console.error('Delete error:', err);
-      // This will show the error message we wrote in the backend (e.g., if money is collected)
       toast.error(err.response?.data?.error || 'Failed to delete service entry', {
         autoClose: 7000
       });
@@ -565,11 +560,10 @@ const ServiceEntry = () => {
 
   // ========== INVOICE GENERATOR FUNCTIONS ==========
   const openInvoiceModal = () => {
-    // Build default items from the dynamic Services Cart
     const items = [];
 
     (formData.services || []).forEach((svc) => {
-      if (!svc.category) return; // Skip empty rows
+      if (!svc.category) return;
 
       const catName = getCategoryName(svc.category);
       const subName = getSubcategoryName(svc.category, svc.subcategory);
@@ -583,7 +577,6 @@ const ServiceEntry = () => {
       }
     });
 
-    // Fallback if the cart is somehow totally empty
     if (items.length === 0) {
       items.push({ description: 'Service Charge', amount: '0' });
     }
@@ -602,15 +595,12 @@ const ServiceEntry = () => {
     const navy = '#0F172A';        
     const textDark = '#333333';
     const textLight = '#666666';
-    const rightMargin = 196; // 210mm width - 14mm margin
+    const rightMargin = 196;
 
-    // ---- HEADER BAND (LIGHT THEME) ----
-    // ⚠️ CRITICAL: There is no doc.rect() here. The background is pure white.
-    doc.setDrawColor(226, 232, 240); // Light slate gray (#E2E8F0)
+    doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.5);
-    doc.line(14, 42, rightMargin, 42); // Subtle separator line
+    doc.line(14, 42, rightMargin, 42);
 
-    // ---- DYNAMIC LOGO HANDLING (LEFT) ----
     try {
       if (centreDetails.logo) {
         const fullLogoUrl = centreDetails.logo.startsWith('http') 
@@ -618,28 +608,24 @@ const ServiceEntry = () => {
           : `${import.meta.env.VITE_API_URL}${centreDetails.logo}`;
         
         const base64Img = await getBase64ImageFromUrl(fullLogoUrl);
-        // Logo will now sit beautifully on the white paper
         doc.addImage(base64Img, 'PNG', 14, 10, 26, 26); 
       } else {
         throw new Error("No logo available"); 
       }
     } catch (e) {
       console.warn("Could not load invoice logo:", e);
-      // Fallback: If no logo exists or it fails to load, print the text on the left
       doc.setTextColor(navy);
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.text(centreDetails.name || 'Akshaya e Centre', 14, 24);
     }
 
-    // ---- DYNAMIC CENTRE DETAILS (RIGHT ALIGNED) ----
-    // Changed text to dark navy/gray so it is visible on the white paper
     doc.setTextColor(navy);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text(centreDetails.name || 'Akshaya e Centre', rightMargin, 16, { align: 'right' });
     
-    doc.setTextColor('#475569'); // Slate gray for address
+    doc.setTextColor('#475569');
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     
@@ -657,8 +643,6 @@ const ServiceEntry = () => {
       doc.text(`Phone: ${centreDetails.phone}`, rightMargin, 32, { align: 'right' });
     }
 
-    // ---- TWO-COLUMN INFO SECTION ----
-    // LEFT COLUMN: BILL TO
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(textLight);
@@ -672,7 +656,6 @@ const ServiceEntry = () => {
     doc.setFont('helvetica', 'normal');
     doc.text(`Phone: ${invoiceData.phone}`, 14, 64);
 
-    // RIGHT COLUMN: INVOICE META
     doc.setFontSize(22);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(navy);
@@ -686,7 +669,6 @@ const ServiceEntry = () => {
     const staffName = localStorage.getItem('name') || 'Staff';
     doc.text(`Served by: ${staffName}`, rightMargin, 66, { align: 'right' });
 
-    // ---- SERVICES RENDERED (FULL WIDTH ROW) ----
     const serviceNamesList = (formData.services || [])
       .filter(svc => svc.category)
       .map(svc => {
@@ -703,7 +685,6 @@ const ServiceEntry = () => {
     doc.setFont('helvetica', 'normal');
     doc.text(displayServiceName, 14, 84);
 
-    // ---- STYLED ITEMS TABLE ----
     const tableBody = invoiceData.items.map((item, idx) => [
       idx + 1,
       item.description,
@@ -723,17 +704,17 @@ const ServiceEntry = () => {
         cellPadding: 5 
       },
       headStyles: { 
-        fillColor: navy, // Table header remains dark blue
+        fillColor: navy,
         textColor: '#FFFFFF', 
         fontStyle: 'bold' 
       },
       footStyles: { 
-        fillColor: '#E2E8F0', // Light slate gray background for the total
+        fillColor: '#E2E8F0',
         textColor: navy, 
         fontStyle: 'bold' 
       },
       alternateRowStyles: {
-        fillColor: '#F8FAFC' // Very faint blue-gray for alternating rows
+        fillColor: '#F8FAFC'
       },
       columnStyles: { 
         0: { cellWidth: 12 }, 
@@ -742,7 +723,6 @@ const ServiceEntry = () => {
       },
     });
 
-    // ---- NOTES & FOOTER ----
     let finalY = doc.lastAutoTable.finalY + 12;
 
     if (invoiceData.notes) {
@@ -815,10 +795,8 @@ const ServiceEntry = () => {
         }
 
         try {
-          // Fetch dynamic centre details for invoices
           const centreId = localStorage.getItem('centre_id');
           if (centreId) {
-            // FIX: Use standard axios to hit the correct /api/centres endpoint directly
             const centreRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/${centreId}`, {
               headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
@@ -867,7 +845,6 @@ const ServiceEntry = () => {
                 amount: String(p.amount || ''),
                 status: p.status || 'pending',
               })) : [],
-              // 🔥 PROPERLY INITIALIZING THE CART ARRAY
               services: [{
                 id: crypto.randomUUID(),
                 category: tokenData.category_id ? String(tokenData.category_id) : '',
@@ -889,9 +866,13 @@ const ServiceEntry = () => {
                 showNoteArea: false,
                 applicationNumber: '',
                 estimatedDelivery: '',
+                averageTime: '',
                 priority: 'medium',
                 assignedTo: '',
-                currentStep: 'Submitted'
+                currentStep: 'Submitted',
+                aadhaar: tokenData.aadhaar || '',
+                email: tokenData.email || '',
+                customerRemarks: ''
               }]
             };
 
@@ -936,7 +917,6 @@ const ServiceEntry = () => {
               tokenId: null,
               customerName: booking.customer_name || '',
               phone: booking.phone || '',
-              // 🔥 PROPERLY INITIALIZING THE CART ARRAY
               services: [{
                 id: crypto.randomUUID(),
                 category: booking.service_id ? String(booking.service_id) : '',
@@ -958,9 +938,13 @@ const ServiceEntry = () => {
                 showNoteArea: false,
                 applicationNumber: '',
                 estimatedDelivery: '',
+                averageTime: '',
                 priority: 'medium',
                 assignedTo: '',
-                currentStep: 'Submitted'
+                currentStep: 'Submitted',
+                aadhaar: booking.aadhaar || '',
+                email: booking.email || '',
+                customerRemarks: ''
               }]
             }));
 
@@ -1020,9 +1004,7 @@ const ServiceEntry = () => {
       
       console.log("Catching Admin Edit Entry:", adminEntry);
 
-      // Map the ServiceLogs data format to match what ServiceEntry expects
       const mappedEntry = {
-        // Critical: ServiceLogs uses serviceEntryId, but ServiceEntry expects id
         id: adminEntry.serviceEntryId || adminEntry.id, 
         tokenId: adminEntry.tokenId || '',
         customerName: adminEntry.customerName || '',
@@ -1032,7 +1014,6 @@ const ServiceEntry = () => {
         serviceCharge: adminEntry.serviceCharge || 0,
         departmentCharge: adminEntry.departmentCharge || 0,
         totalCharge: adminEntry.totalCharge || 0,
-        // Normalize the status string – fallback to 'pending' if unrecognised
         status: adminEntry.status?.toLowerCase() === 'completed' ? 'completed' : 
                 adminEntry.status?.toLowerCase() === 'pending' ? 'pending' : 'pending',
         expiryDate: adminEntry.expiryDate && adminEntry.expiryDate !== 'Not set' 
@@ -1040,15 +1021,23 @@ const ServiceEntry = () => {
         payments: adminEntry.payments || [],
         serviceWalletId: adminEntry.serviceWalletId || null,
         requiresWallet: adminEntry.requiresWallet || false,
+        // NEW: Include tracking fields
+        applicationNumber: adminEntry.applicationNumber || '',
+        estimatedDelivery: adminEntry.estimatedDelivery || '',
+        averageTime: adminEntry.averageTime || '',
+        priority: adminEntry.priority || 'medium',
+        assignedTo: adminEntry.assignedTo || '',
+        currentStep: adminEntry.currentStep || 'Submitted',
+        aadhaar: adminEntry.aadhaar || '',
+        email: adminEntry.email || '',
+        customerRemarks: adminEntry.customerRemarks || adminEntry.notes || ''
       };
 
-      // Slight delay to ensure wallets and categories have finished rendering
       setTimeout(() => {
         handleEditEntry(mappedEntry);
         toast.info("Admin Override Mode Activated", { icon: "🔓" });
       }, 500);
       
-      // Clear the router state so it doesn't get stuck in a loop if the page refreshes
       window.history.replaceState({}, document.title);
     }
   }, [location.state, categories.length]);
@@ -1066,6 +1055,11 @@ const ServiceEntry = () => {
   };
 
   const handleCartChange = (index, field, value) => {
+    // NEW: Aadhaar validation (strip non-digits, max 12)
+    if (field === 'aadhaar') {
+      value = String(value).replace(/\D/g, '').slice(0, 12);
+    }
+
     setFormData(prev => {
       const updated = [...prev.services];
       const svc = { ...updated[index], [field]: value };
@@ -1210,6 +1204,9 @@ const ServiceEntry = () => {
       if (svc.requiresWallet && (!svc.serviceWalletId || isNaN(parseInt(svc.serviceWalletId)))) errors.push(`${prefix}Requires a wallet assignment`);
       if (svc.hasExpiry && (!svc.expiryDate || isNaN(Date.parse(svc.expiryDate)))) errors.push(`${prefix}Expiry date required`);
       if (svc.createTask && (!svc.taskTitle || !svc.taskAssignee)) errors.push(`${prefix}Task Title & Assignee required`);
+      // NEW: Aadhaar/email validation (only if filled)
+      if (svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)) errors.push(`${prefix}Aadhaar must be exactly 12 digits`);
+      if (svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email)) errors.push(`${prefix}Please enter a valid email address`);
     });
 
     if (formData.payments.length === 0) errors.push('At least one payment is required');
@@ -1259,7 +1256,6 @@ const ServiceEntry = () => {
     const executeFinalSubmit = async () => {
       try {
         if (editingEntryId) {
-          // Single Edit Mode Logic
           const editPayload = {
              ...payload,
              categoryId: payload.services[0].categoryId,
@@ -1273,13 +1269,11 @@ const ServiceEntry = () => {
           };
           delete editPayload.payments;
           delete editPayload.services;
-
           delete editPayload.staffId;
 
           await updateServiceEntry(editingEntryId, editPayload);
           toast.success('Service entry updated successfully!');
         } else {
-          // 🔥 SEND CART TO BULK ROUTE
           const response = await api.post('/entry/bulk', payload);
           const createdServices = response.data.createdServices || [];
 
@@ -1288,7 +1282,6 @@ const ServiceEntry = () => {
           
           let recentTrackingRecords = [];
           try {
-             // Fetch the very latest tracking rows created by the backend
              const trackRes = await getTrackingEntries({ limit: 100 });
              recentTrackingRecords = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
           } catch (err) {
@@ -1301,11 +1294,21 @@ const ServiceEntry = () => {
             const svcFormData = formData.services[i]; 
 
             // 1. Submit Tracking Details Safely
-            if (svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || (svcFormData.priority && svcFormData.priority !== 'medium')) {
+            // NEW: Expanded trigger to include aadhaar, email, avg time, remarks
+            const hasTrackingData = 
+              svcFormData.applicationNumber || 
+              svcFormData.assignedTo || 
+              svcFormData.estimatedDelivery || 
+              svcFormData.aadhaar || 
+              svcFormData.email || 
+              svcFormData.averageTime || 
+              svcFormData.customerRemarks ||
+              (svcFormData.priority && svcFormData.priority !== 'medium');
+
+            if (hasTrackingData) {
               try {
                 const serviceEntryId = svc.serviceEntryId || svc.id;
                 
-                // Match the frontend's Service Entry ID to the backend's automatically generated Tracking Row
                 const trackingRecord = recentTrackingRecords.find(t => 
                   Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
                 );
@@ -1315,8 +1318,12 @@ const ServiceEntry = () => {
                     applicationNumber: svcFormData.applicationNumber || null,
                     assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
                     estimatedDelivery: svcFormData.estimatedDelivery || null,
+                    averageTime: svcFormData.averageTime || '7 days',
+                    notes: svcFormData.customerRemarks || null,
+                    aadhaar: svcFormData.aadhaar || null,
+                    email: svcFormData.email || null,
                     priority: svcFormData.priority || 'medium',
-                    currentStep: 'Submitted',
+                    currentStep: svcFormData.currentStep || 'Submitted',
                     progress: 25 
                   });
                 } else {
@@ -1332,7 +1339,6 @@ const ServiceEntry = () => {
             // 2. Save Note & Task
             if (svc.initialNote && svc.initialNote.trim() !== '') {
               try {
-                // Save Note
                 const noteRes = await createNote({
                   title: 'Initial Note',
                   content: svc.initialNote.trim(),
@@ -1343,7 +1349,6 @@ const ServiceEntry = () => {
                 
                 const savedNoteId = noteRes?.data?.id || noteRes?.id;
 
-                // Save Task
                 if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
                   const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
                   
@@ -1382,19 +1387,7 @@ const ServiceEntry = () => {
           phone: '',
           status: 'pending',
           payments: [],
-          services: [{
-            id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
-            departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-            hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-            initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
-            
-            // 🔥 Reset tracking fields
-            applicationNumber: '',
-            estimatedDelivery: '',
-            priority: 'medium',
-            assignedTo: '',
-            currentStep: 'Submitted'
-          }]
+          services: [createEmptyService()]
         });
         setEditingEntryId(null);
         
@@ -1572,9 +1565,7 @@ const ServiceEntry = () => {
           {/* MAIN 2-COLUMN GRID */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* ======================================================== */}
-            {/* LEFT COLUMN: CUSTOMER INFO & CART                        */}
-            {/* ======================================================== */}
+            {/* LEFT COLUMN: CUSTOMER INFO & CART */}
             <div className="space-y-6">
               
               {/* 1. Customer Information */}
@@ -1756,51 +1747,173 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* 🔥 NEW UI: FULFILLMENT & TRACKING BLOCK 🔥 */}
-                          <div className="mt-4 bg-indigo-50/40 border border-indigo-100 rounded-lg p-4">
-                            <h4 className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
-                              <FiTruck className="text-indigo-500" /> Processing & Tracking Details
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {/* 🔥 UPGRADED: FULFILLMENT & TRACKING BLOCK (matches TrackServicePage style) */}
+                          <div className="mt-4 bg-gradient-to-br from-indigo-50/70 to-purple-50/40 border border-indigo-100 rounded-xl p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                                <div className="bg-indigo-100 p-1.5 rounded-lg">
+                                  <FiTruck className="text-indigo-600 h-4 w-4" />
+                                </div>
+                                Processing & Tracking Details
+                              </h4>
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-100">
+                                Optional
+                              </span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {/* Application Number */}
                               <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
                                 <input 
                                   type="text" 
-                                  placeholder="Application No..."
+                                  placeholder="e.g., APP12345"
                                   value={svc.applicationNumber}
                                   onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm"
+                                  maxLength="50"
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
                                 />
                               </div>
+
+                              {/* Aadhaar Feed */}
                               <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Aadhaar</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiCreditCard className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="text" 
+                                    inputMode="numeric"
+                                    placeholder="12-digit Aadhaar"
+                                    value={svc.aadhaar}
+                                    onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
+                                    maxLength="12"
+                                    className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                      svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                    }`}
+                                  />
+                                  <span className={`absolute inset-y-0 right-2 flex items-center text-[10px] font-medium ${
+                                    svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
+                                  }`}>
+                                    {svc.aadhaar?.length || 0}/12
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Email */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiMail className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="email" 
+                                    placeholder="customer@email.com"
+                                    value={svc.email}
+                                    onChange={(e) => handleCartChange(index, 'email', e.target.value)}
+                                    className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                      svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Assign To */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Assign To</label>
                                 <select 
                                   value={svc.assignedTo}
                                   onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm"
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
                                 >
                                   <option value="">Unassigned Staff</option>
                                   {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
                                 </select>
                               </div>
+
+                              {/* Estimated Delivery */}
                               <div>
-                                <input 
-                                  type="date" 
-                                  value={svc.estimatedDelivery}
-                                  onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm text-gray-600"
-                                  title="Estimated Delivery Date"
-                                />
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="date" 
+                                    value={svc.estimatedDelivery}
+                                    onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
+                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm text-gray-700"
+                                  />
+                                </div>
                               </div>
+
+                              {/* Average Time */}
                               <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Avg. Time</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiClock className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="text" 
+                                    placeholder="e.g., 7 days"
+                                    value={svc.averageTime}
+                                    onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
+                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Priority */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                  <FiFlag className="h-3 w-3" /> Priority
+                                </label>
                                 <select 
                                   value={svc.priority}
                                   onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-indigo-500 bg-white shadow-sm"
+                                  className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium ${
+                                    svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                                    svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                    'border-amber-200 bg-amber-50 text-amber-700'
+                                  }`}
                                 >
                                   <option value="low">Low</option>
                                   <option value="medium">Medium</option>
                                   <option value="high">High</option>
                                 </select>
                               </div>
+
+                              {/* Current Step */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Current Step</label>
+                                <select 
+                                  value={svc.currentStep}
+                                  onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
+                                >
+                                  <option value="Submitted">Submitted</option>
+                                  <option value="Initial Review">Initial Review</option>
+                                  <option value="Document Verification">Document Verification</option>
+                                  <option value="Final Approval">Final Approval</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Customer Remarks - full width */}
+                            <div className="mt-3">
+                              <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-gray-400 normal-case font-normal">(sent via WhatsApp)</span>
+                              </label>
+                              <textarea 
+                                rows="2"
+                                placeholder="Remarks visible to customer..."
+                                value={svc.customerRemarks}
+                                onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
+                                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm resize-none"
+                              />
                             </div>
                           </div>
 
@@ -1809,13 +1922,13 @@ const ServiceEntry = () => {
                             <div className="pt-2 border-t border-gray-100">
                               {!svc.showNoteArea ? (
                                 <button type="button" onClick={() => handleCartChange(index, 'showNoteArea', true)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition">
-                                  <FiMessageCircle className="h-4 w-4" /> Add Note or Task for this Service
+                                  <FiMessageCircle className="h-4 w-4" /> Add Internal Note or Task for this Service
                                 </button>
                               ) : (
                                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 shadow-inner">
                                   <div className="flex justify-between items-center mb-3">
                                     <label className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                                      <FiMessageCircle className="text-indigo-500 h-4 w-4"/> Note & Task Assignment
+                                      <FiMessageCircle className="text-indigo-500 h-4 w-4"/> Internal Note & Task Assignment
                                     </label>
                                     <button type="button" onClick={() => { handleCartChange(index, 'showNoteArea', false); handleCartChange(index, 'initialNote', ''); handleCartChange(index, 'createTask', false); }} className="text-xs text-gray-500 hover:text-rose-500 flex items-center gap-1">
                                       <FiX className="h-3 w-3" /> Cancel
@@ -1826,7 +1939,7 @@ const ServiceEntry = () => {
                                     value={svc.initialNote}
                                     onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
                                     className="mentions-input text-sm"
-                                    placeholder="Write a note... Type @ to assign staff members"
+                                    placeholder="Write an internal note... Type @ to assign staff members"
                                     style={{
                                       control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
                                       highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
@@ -1879,11 +1992,9 @@ const ServiceEntry = () => {
                   </button>
                 )}
               </div>
-            </div> {/* <-- END OF LEFT COLUMN */}
+            </div>
 
-            {/* ======================================================== */}
-            {/* RIGHT COLUMN: PAYMENT DETAILS                            */}
-            {/* ======================================================== */}
+            {/* RIGHT COLUMN: PAYMENT DETAILS */}
             <div>
               <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 h-full flex flex-col">
                 <div className="flex justify-between items-center mb-5">
@@ -2028,9 +2139,9 @@ const ServiceEntry = () => {
                   <div className="bg-rose-50 -m-4 p-4 rounded-r-xl border-l border-rose-100 flex flex-col justify-center"><p className="text-xs text-rose-600 uppercase tracking-wider font-semibold">Balance Due</p><p className="text-2xl font-black text-rose-600">₹{balanceAmount.toFixed(2)}</p></div>
                 </div>
               </div>
-            </div> {/* <-- END OF RIGHT COLUMN */}
+            </div>
             
-          </div> {/* <-- END OF MAIN 2-COLUMN GRID */}
+          </div>
 
           {/* ACTION BUTTONS */}
           <div className="flex justify-end mt-2 gap-4">
@@ -2043,14 +2154,7 @@ const ServiceEntry = () => {
                   phone: '',
                   status: 'pending',
                   payments: [],
-                  services: [{
-                    id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
-                    departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-                    hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-                    initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
-                    // Reset tracking fields
-                    applicationNumber: '', estimatedDelivery: '', priority: 'medium', assignedTo: '', currentStep: 'Submitted'
-                  }]
+                  services: [createEmptyService()]
                 });
                 setEditingEntryId(null);
               }}
@@ -2199,7 +2303,6 @@ const ServiceEntry = () => {
                        </td>
                       <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
                         <div className="space-y-2">
-                          {/* Department Charge Row */}
                           {deptTx && deptTx.id && !deptTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -2236,7 +2339,6 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* Service Charge Row */}
                           {serviceTx && serviceTx.id && !serviceTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -2391,7 +2493,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== UPGRADED ENTRY DETAILS MODAL with better notes section ========== */}
+      {/* ========== UPGRADED ENTRY DETAILS MODAL ========== */}
       {selectedEntry && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-40">
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -2420,6 +2522,12 @@ const ServiceEntry = () => {
                   </span>
                 </p>
                 <p><strong>Expiry Date:</strong> {selectedEntry.expiryDate || 'N/A'}</p>
+                {/* NEW: Tracking fields */}
+                {selectedEntry.aadhaar && <p><strong>Aadhaar:</strong> {selectedEntry.aadhaar}</p>}
+                {selectedEntry.email && <p><strong>Email:</strong> {selectedEntry.email}</p>}
+                {selectedEntry.applicationNumber && <p><strong>Application No:</strong> {selectedEntry.applicationNumber}</p>}
+                {selectedEntry.estimatedDelivery && <p><strong>Est. Delivery:</strong> {selectedEntry.estimatedDelivery}</p>}
+                {selectedEntry.averageTime && <p><strong>Avg. Time:</strong> {selectedEntry.averageTime}</p>}
               </div>
               <div>
                 <strong className="block mb-2">Payments:</strong>
@@ -2430,7 +2538,6 @@ const ServiceEntry = () => {
                 </ul>
               </div>
             </div>
-            {/* UPGRADED NOTES PANEL WITH BETTER VISIBILITY */}
             <div className="mt-6 border-t border-gray-200 pt-5">
               <div className="flex items-center gap-2 mb-3">
                 <FiMessageCircle className="h-4 w-4 text-indigo-500" />
@@ -2452,7 +2559,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL ========== */}
       {correctionModal.isOpen && correctionModal.transaction && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
@@ -2608,7 +2715,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== UNIFIED TRANSACTION HISTORY MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== UNIFIED TRANSACTION HISTORY MODAL ========== */}
       {historyModal.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
@@ -2730,7 +2837,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== INVOICE GENERATOR MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== INVOICE GENERATOR MODAL ========== */}
       {invoiceModalOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
@@ -2745,7 +2852,6 @@ const ServiceEntry = () => {
             </div>
 
             <div className="space-y-4">
-              {/* Customer details */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2775,7 +2881,6 @@ const ServiceEntry = () => {
                 </div>
               </div>
 
-              {/* Editable line items */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Invoice Items
@@ -2832,7 +2937,6 @@ const ServiceEntry = () => {
                 </button>
               </div>
 
-              {/* Total displayed */}
               <div className="bg-gray-50 p-3 rounded-lg flex justify-between">
                 <span className="font-medium">Total</span>
                 <span className="font-bold text-indigo-700">
@@ -2843,7 +2947,6 @@ const ServiceEntry = () => {
                 </span>
               </div>
 
-              {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notes (optional)
@@ -2879,7 +2982,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== DELETE CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== DELETE CONFIRMATION MODAL ========== */}
       {deleteDialog.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[70]">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
