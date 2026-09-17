@@ -41,15 +41,16 @@ const createEmptyService = () => ({
   showNoteArea: false,
   
   // --- TRACKING FIELDS ---
+  showTracking: false,       // NEW: collapse by default
   applicationNumber: '',
   estimatedDelivery: '',
   averageTime: '',
   priority: 'medium',
   assignedTo: '',
   currentStep: 'Submitted',
-  aadhaar: '',            // NEW: Aadhaar feed
-  email: '',              // NEW: Customer email
-  customerRemarks: ''     // NEW: WhatsApp-visible remarks (maps to `notes` in tracking)
+  aadhaar: '',
+  email: '',
+  customerRemarks: ''
 });
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
@@ -248,7 +249,12 @@ const ServiceEntry = () => {
         initialNote: '', initialNoteMentions: [], initialNoteVisibility: 'private',
         createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
         showNoteArea: false,
-        // NEW: Preserve tracking fields on edit
+        // NEW: auto-open tracking panel if data exists
+        showTracking: Boolean(
+          entry.applicationNumber || entry.assignedTo || entry.aadhaar || 
+          entry.email || entry.estimatedDelivery || entry.averageTime ||
+          entry.customerRemarks || (entry.priority && entry.priority !== 'medium')
+        ),
         applicationNumber: entry.applicationNumber || '',
         estimatedDelivery: entry.estimatedDelivery || '',
         averageTime: entry.averageTime || '',
@@ -864,6 +870,7 @@ const ServiceEntry = () => {
                 taskAssignee: '', 
                 taskDueDate: null,
                 showNoteArea: false,
+                showTracking: false,
                 applicationNumber: '',
                 estimatedDelivery: '',
                 averageTime: '',
@@ -936,6 +943,7 @@ const ServiceEntry = () => {
                 taskAssignee: '', 
                 taskDueDate: null,
                 showNoteArea: false,
+                showTracking: false,
                 applicationNumber: '',
                 estimatedDelivery: '',
                 averageTime: '',
@@ -1021,7 +1029,6 @@ const ServiceEntry = () => {
         payments: adminEntry.payments || [],
         serviceWalletId: adminEntry.serviceWalletId || null,
         requiresWallet: adminEntry.requiresWallet || false,
-        // NEW: Include tracking fields
         applicationNumber: adminEntry.applicationNumber || '',
         estimatedDelivery: adminEntry.estimatedDelivery || '',
         averageTime: adminEntry.averageTime || '',
@@ -1294,7 +1301,6 @@ const ServiceEntry = () => {
             const svcFormData = formData.services[i]; 
 
             // 1. Submit Tracking Details Safely
-            // NEW: Expanded trigger to include aadhaar, email, avg time, remarks
             const hasTrackingData = 
               svcFormData.applicationNumber || 
               svcFormData.assignedTo || 
@@ -1704,7 +1710,7 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* Row 3: Financials (Strictly 3 Columns) */}
+                          {/* Row 3: Financials */}
                           <div className="grid grid-cols-3 gap-3">
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
@@ -1747,174 +1753,177 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* 🔥 UPGRADED: FULFILLMENT & TRACKING BLOCK (matches TrackServicePage style) */}
-                          <div className="mt-4 bg-gradient-to-br from-indigo-50/70 to-purple-50/40 border border-indigo-100 rounded-xl p-4">
-                            <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
-                                <div className="bg-indigo-100 p-1.5 rounded-lg">
-                                  <FiTruck className="text-indigo-600 h-4 w-4" />
-                                </div>
-                                Processing & Tracking Details
-                              </h4>
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-100">
-                                Optional
-                              </span>
-                            </div>
+                          {/* ===== COMPACT COLLAPSIBLE TRACKING SECTION ===== */}
+                          <div className="mt-3 border border-indigo-100 rounded-xl overflow-hidden bg-gradient-to-r from-indigo-50/60 to-purple-50/30">
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {/* Application Number */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="e.g., APP12345"
-                                  value={svc.applicationNumber}
-                                  onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
-                                  maxLength="50"
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
-                                />
-                              </div>
-
-                              {/* Aadhaar Feed */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Aadhaar</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiCreditCard className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="text" 
-                                    inputMode="numeric"
-                                    placeholder="12-digit Aadhaar"
-                                    value={svc.aadhaar}
-                                    onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
-                                    maxLength="12"
-                                    className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
-                                      svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
-                                    }`}
-                                  />
-                                  <span className={`absolute inset-y-0 right-2 flex items-center text-[10px] font-medium ${
-                                    svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
-                                  }`}>
-                                    {svc.aadhaar?.length || 0}/12
+                            {/* Slim header bar — always visible */}
+                            <button
+                              type="button"
+                              onClick={() => handleCartChange(index, 'showTracking', !svc.showTracking)}
+                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-indigo-50/60 transition-colors"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FiTruck className="text-indigo-600 h-4 w-4 shrink-0" />
+                                <span className="text-xs font-semibold text-indigo-900 whitespace-nowrap">
+                                  Tracking & Fulfillment
+                                </span>
+                                <span className="text-[10px] text-indigo-500 bg-white/70 px-1.5 py-0.5 rounded-full border border-indigo-100 shrink-0">
+                                  optional
+                                </span>
+                                
+                                {/* Smart summary when collapsed */}
+                                {!svc.showTracking && (svc.applicationNumber || svc.aadhaar || svc.assignedTo || svc.priority !== 'medium') && (
+                                  <span className="text-[10px] text-indigo-700/80 font-medium truncate">
+                                    •&nbsp;
+                                    {[
+                                      svc.applicationNumber && `App: ${svc.applicationNumber}`,
+                                      svc.aadhaar && `Aadhaar: ••••${svc.aadhaar.slice(-4)}`,
+                                      svc.assignedTo && `→ ${staffList.find(s => String(s.id) === String(svc.assignedTo))?.display || 'Staff'}`,
+                                      svc.priority !== 'medium' && svc.priority.toUpperCase()
+                                    ].filter(Boolean).join(' · ')}
                                   </span>
-                                </div>
+                                )}
                               </div>
-
-                              {/* Email */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiMail className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="email" 
-                                    placeholder="customer@email.com"
-                                    value={svc.email}
-                                    onChange={(e) => handleCartChange(index, 'email', e.target.value)}
-                                    className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
-                                      svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
-                                    }`}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Assign To */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Assign To</label>
-                                <select 
-                                  value={svc.assignedTo}
-                                  onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                                >
-                                  <option value="">Unassigned Staff</option>
-                                  {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
-                                </select>
-                              </div>
-
-                              {/* Estimated Delivery */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="date" 
-                                    value={svc.estimatedDelivery}
-                                    onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
-                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm text-gray-700"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Average Time */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Avg. Time</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiClock className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="text" 
-                                    placeholder="e.g., 7 days"
-                                    value={svc.averageTime}
-                                    onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
-                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Priority */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
-                                  <FiFlag className="h-3 w-3" /> Priority
-                                </label>
-                                <select 
-                                  value={svc.priority}
-                                  onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
-                                  className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium ${
-                                    svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
-                                    svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                                    'border-amber-200 bg-amber-50 text-amber-700'
-                                  }`}
-                                >
-                                  <option value="low">Low</option>
-                                  <option value="medium">Medium</option>
-                                  <option value="high">High</option>
-                                </select>
-                              </div>
-
-                              {/* Current Step */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Current Step</label>
-                                <select 
-                                  value={svc.currentStep}
-                                  onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                                >
-                                  <option value="Submitted">Submitted</option>
-                                  <option value="Initial Review">Initial Review</option>
-                                  <option value="Document Verification">Document Verification</option>
-                                  <option value="Final Approval">Final Approval</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            {/* Customer Remarks - full width */}
-                            <div className="mt-3">
-                              <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
-                                <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-gray-400 normal-case font-normal">(sent via WhatsApp)</span>
-                              </label>
-                              <textarea 
-                                rows="2"
-                                placeholder="Remarks visible to customer..."
-                                value={svc.customerRemarks}
-                                onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
-                                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm resize-none"
+                              <FiChevronDown 
+                                className={`h-4 w-4 text-indigo-500 shrink-0 transition-transform duration-200 ${svc.showTracking ? 'rotate-180' : ''}`} 
                               />
-                            </div>
+                            </button>
+
+                            {/* Expanded body */}
+                            {svc.showTracking && (
+                              <div className="px-3 pb-3 pt-1 space-y-2 border-t border-indigo-100/70">
+
+                                {/* Row 1 */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                  <div className="relative">
+                                    <FiFileText className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <input
+                                      type="text"
+                                      value={svc.applicationNumber}
+                                      onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
+                                      maxLength="50"
+                                      placeholder="App No."
+                                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                                    />
+                                  </div>
+
+                                  <div className="relative">
+                                    <FiCreditCard className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={svc.aadhaar}
+                                      onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
+                                      maxLength="12"
+                                      placeholder="Aadhaar (12 digits)"
+                                      className={`w-full pl-7 pr-2 py-1.5 text-xs border rounded-md bg-white focus:ring-2 shadow-sm ${
+                                        svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)
+                                          ? 'border-rose-300 focus:ring-rose-400'
+                                          : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
+                                      }`}
+                                    />
+                                  </div>
+
+                                  <div className="relative">
+                                    <FiMail className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <input
+                                      type="email"
+                                      value={svc.email}
+                                      onChange={(e) => handleCartChange(index, 'email', e.target.value)}
+                                      placeholder="Email"
+                                      className={`w-full pl-7 pr-2 py-1.5 text-xs border rounded-md bg-white focus:ring-2 shadow-sm ${
+                                        svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email)
+                                          ? 'border-rose-300 focus:ring-rose-400'
+                                          : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
+                                      }`}
+                                    />
+                                  </div>
+
+                                  <div className="relative">
+                                    <FiUserCheck className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <select
+                                      value={svc.assignedTo}
+                                      onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
+                                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none"
+                                    >
+                                      <option value="">Unassigned</option>
+                                      {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                    </select>
+                                  </div>
+                                </div>
+
+                                {/* Row 2 */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                  <div className="relative">
+                                    <FiCalendar className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <input
+                                      type="date"
+                                      value={svc.estimatedDelivery}
+                                      onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
+                                      title="Estimated delivery"
+                                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 text-gray-700 shadow-sm"
+                                    />
+                                  </div>
+
+                                  <div className="relative">
+                                    <FiClock className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <input
+                                      type="text"
+                                      value={svc.averageTime}
+                                      onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
+                                      placeholder="Avg time (7 days)"
+                                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                                    />
+                                  </div>
+
+                                  <div className="relative">
+                                    <FiFlag className={`absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none z-10 ${
+                                      svc.priority === 'high' ? 'text-rose-500' : svc.priority === 'low' ? 'text-emerald-500' : 'text-amber-500'
+                                    }`} />
+                                    <select
+                                      value={svc.priority}
+                                      onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
+                                      className={`w-full pl-7 pr-2 py-1.5 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium appearance-none ${
+                                        svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                                        svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                        'border-amber-200 bg-amber-50 text-amber-700'
+                                      }`}
+                                    >
+                                      <option value="low">Low</option>
+                                      <option value="medium">Medium</option>
+                                      <option value="high">High</option>
+                                    </select>
+                                  </div>
+
+                                  <div className="relative">
+                                    <FiTarget className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <select
+                                      value={svc.currentStep}
+                                      onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
+                                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 shadow-sm appearance-none"
+                                    >
+                                      <option value="Submitted">Submitted</option>
+                                      <option value="Initial Review">Initial Review</option>
+                                      <option value="Document Verification">Document Verification</option>
+                                      <option value="Final Approval">Final Approval</option>
+                                    </select>
+                                  </div>
+                                </div>
+
+                                {/* Remarks — single compact line */}
+                                <div className="relative">
+                                  <FiMessageCircle className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                  <input
+                                    type="text"
+                                    value={svc.customerRemarks}
+                                    onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
+                                    placeholder="Customer remarks (sent via WhatsApp)…"
+                                    className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                                  />
+                                </div>
+
+                              </div>
+                            )}
                           </div>
 
                           {/* Row 4: Collapsible Notes & Tasks */}
@@ -2464,7 +2473,7 @@ const ServiceEntry = () => {
         )}
       </div>
 
-      {/* ========== CUSTOM CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== CUSTOM CONFIRMATION MODAL ========== */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[60]">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
@@ -2522,7 +2531,6 @@ const ServiceEntry = () => {
                   </span>
                 </p>
                 <p><strong>Expiry Date:</strong> {selectedEntry.expiryDate || 'N/A'}</p>
-                {/* NEW: Tracking fields */}
                 {selectedEntry.aadhaar && <p><strong>Aadhaar:</strong> {selectedEntry.aadhaar}</p>}
                 {selectedEntry.email && <p><strong>Email:</strong> {selectedEntry.email}</p>}
                 {selectedEntry.applicationNumber && <p><strong>Application No:</strong> {selectedEntry.applicationNumber}</p>}
