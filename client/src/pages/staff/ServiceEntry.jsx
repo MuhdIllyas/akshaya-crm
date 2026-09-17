@@ -47,29 +47,39 @@ const createEmptyService = () => ({
   priority: 'medium',
   assignedTo: '',
   currentStep: 'Submitted',
-  aadhaar: '',
-  email: '',
-  customerRemarks: ''
+  aadhaar: '',            // NEW: Aadhaar feed
+  email: '',              // NEW: Customer email
+  customerRemarks: ''     // NEW: WhatsApp-visible remarks (maps to `notes` in tracking)
 });
 
+// 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
 const getLatestTransactions = (transactions) => {
   if (!Array.isArray(transactions)) return [];
+  
   const map = new Map();
+  
   transactions.forEach((tx, index) => {
+    // Skip reversal transactions entirely
     if (tx.is_reversal) return;
+    
+    // Safely grab the ID (checking transaction_id, then id, then falling back to index)
     const txId = tx.transaction_id || tx.id || `fallback-${index}`;
     const groupId = tx.correction_group_id || `direct-${txId}`;
+    
     const existing = map.get(groupId);
+    
     if (!existing || new Date(tx.created_at) > new Date(existing.created_at)) {
       map.set(groupId, tx);
     }
   });
+  
   return Array.from(map.values());
 };
 
 const getBase64ImageFromUrl = (imageUrl) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // This allows fetching from your backend without CORS blocking the canvas
     img.crossOrigin = 'Anonymous'; 
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -77,7 +87,8 @@ const getBase64ImageFromUrl = (imageUrl) => {
       canvas.height = img.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
+      const dataURL = canvas.toDataURL('image/png');
+      resolve(dataURL);
     };
     img.onerror = error => reject(error);
     img.src = imageUrl;
@@ -89,34 +100,56 @@ const ServiceEntry = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // ========== TRACKING MODAL STATE (NEW) ==========
-  const [trackingModal, setTrackingModal] = useState({ isOpen: false, serviceIndex: null });
-  
-  // ========== EXISTING MODAL STATES ==========
+  // ========== STATE FOR TRANSACTION CORRECTION (UNIFIED) ==========
   const [correctionModal, setCorrectionModal] = useState({
-    isOpen: false, transaction: null, loading: false,
-    newAmount: '', newWalletId: '', reason: '', transactionType: ''
+    isOpen: false,
+    transaction: null,
+    loading: false,
+    newAmount: '',
+    newWalletId: '',
+    reason: '',
+    transactionType: ''
   });
+  
   const [historyModal, setHistoryModal] = useState({
-    isOpen: false, transactionId: null, history: [], loading: false, transactionType: ''
+    isOpen: false,
+    transactionId: null,
+    history: [],
+    loading: false,
+    transactionType: ''
   });
+
   const [confirmDialog, setConfirmDialog] = useState({
-    isOpen: false, title: '', message: '', onConfirm: null
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null
   });
+  
   const [correctionStatus, setCorrectionStatus] = useState({});
   
   const [formData, setFormData] = useState({
     tokenId: tokenId || '',
-    customerName: '', phone: '', status: 'pending',
-    payments: [], services: [createEmptyService()]
+    customerName: '',
+    phone: '',
+    status: 'pending',
+    payments: [],
+    services: [createEmptyService()]
   });
 
   const [wallets, setWallets] = useState({ offline: [], online: [] });
   const [categories, setCategories] = useState([]);
+  const [filteredSubcategories, setFilteredSubcategories] = useState([]);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+  const [selectedCategoryDocuments, setSelectedCategoryDocuments] = useState([]);
+  const [selectedSubcategoryDocuments, setSelectedSubcategoryDocuments] = useState([]);
+  const [selectedWebsite, setSelectedWebsite] = useState(null);
+  const [totalCharge, setTotalCharge] = useState(0);
   const [grandTotal, setGrandTotal] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
   const [pendingAmount, setPendingAmount] = useState(0);
   const [balanceAmount, setBalanceAmount] = useState(0);
+  const [daysRemaining, setDaysRemaining] = useState(null);
   const [serviceEntries, setServiceEntries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -126,17 +159,27 @@ const ServiceEntry = () => {
   const [staffList, setStaffList] = useState([]);
 
   const [centreDetails, setCentreDetails] = useState({
-    name: 'Akshaya e Centre', address: '', district: '', state: '',
-    pincode: '', phone: '', logo: '/logo-light.png'
+    name: 'Akshaya e Centre',
+    address: '',
+    district: '',
+    state: '',
+    pincode: '',
+    phone: '',
+    logo: '/logo-light.png'
   });
 
+  // --- MENTIONS LOGIC FOR INITIAL NOTE ---
   useEffect(() => {
     const loadStaffForMentions = async () => {
       try {
         const centreId = localStorage.getItem('centre_id');
         if (!centreId) return;
         const response = await getStaff(centreId);
-        const formattedStaff = response.data.map(staff => ({ id: staff.id, display: staff.name }));
+        
+        const formattedStaff = response.data.map(staff => ({
+          id: staff.id,
+          display: staff.name
+        }));
         setStaffList(formattedStaff);
       } catch (error) {
         console.error('Failed to load staff for mentions', error);
@@ -147,21 +190,44 @@ const ServiceEntry = () => {
 
   const fetchStaffSuggestions = (query, callback) => {
     if (query.length === 0) return callback(staffList);
-    const filtered = staffList.filter(s => s.display.toLowerCase().includes(query.toLowerCase()));
+    const filtered = staffList.filter(s => 
+      s.display.toLowerCase().includes(query.toLowerCase())
+    );
     callback(filtered);
   };
 
+  const handleInitialNoteMentionChange = (event, newValue, newPlainTextValue, mentionsArray) => {
+    const mentionedIds = mentionsArray.map(m => parseInt(m.id));
+    setFormData(prev => ({
+      ...prev,
+      initialNote: newValue,
+      initialNoteMentions: mentionedIds
+    }));
+  };
+  // ----------------------------------------
+  
+  // ========== INVOICE GENERATOR STATE ==========
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [invoiceData, setInvoiceData] = useState({
-    customerName: '', phone: '', items: [{ description: '', amount: '' }], notes: ''
+    customerName: '',
+    phone: '',
+    items: [{ description: '', amount: '' }],
+    notes: '',
   });
 
-  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, entryId: null, loading: false });
+  // ========== DELETE MODAL STATE ==========
+  const [deleteDialog, setDeleteDialog] = useState({
+    isOpen: false,
+    entryId: null,
+    loading: false,
+  });
   
   const userRole = localStorage.getItem('role') || 'staff';
+  const userId = localStorage.getItem('id');
 
   const handleEditEntry = (entry) => {
     setEditingEntryId(entry.id);
+
     setFormData({
       tokenId: entry.tokenId || '',
       customerName: entry.customerName || '',
@@ -182,6 +248,7 @@ const ServiceEntry = () => {
         initialNote: '', initialNoteMentions: [], initialNoteVisibility: 'private',
         createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
         showNoteArea: false,
+        // NEW: Preserve tracking fields on edit
         applicationNumber: entry.applicationNumber || '',
         estimatedDelivery: entry.estimatedDelivery || '',
         averageTime: entry.averageTime || '',
@@ -193,12 +260,13 @@ const ServiceEntry = () => {
         customerRemarks: entry.customerRemarks || entry.notes || ''
       }]
     });
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const paymentStatusOptions = [
-    { id: 'received', name: 'Received' },
-    { id: 'pending', name: 'Pending' },
+    { id: 'received', name: 'Received', color: 'bg-emerald-100 text-emerald-800' },
+    { id: 'pending', name: 'Pending', color: 'bg-amber-100 text-amber-800' },
   ];
 
   const getServiceStatusDisplay = (status) => {
@@ -223,11 +291,15 @@ const ServiceEntry = () => {
     return d.getTime() === t.getTime();
   };
 
-  // ========== CORRECTION FUNCTIONS (unchanged) ==========
+  // ========== UNIFIED TRANSACTION CORRECTION FUNCTIONS ==========
+  
   const checkCorrectionStatus = async (transactionId) => {
     try {
       const response = await api.get(`/transactions/${transactionId}/correction-status`);
-      setCorrectionStatus(prev => ({ ...prev, [transactionId]: response.data }));
+      setCorrectionStatus(prev => ({
+        ...prev,
+        [transactionId]: response.data
+      }));
       return response.data;
     } catch (err) {
       console.error('Error checking correction status:', err);
@@ -237,55 +309,133 @@ const ServiceEntry = () => {
 
   const openCorrectionModal = async (transaction, entry, type) => {
     const correctionId = transaction.transaction_id || transaction.id;
-    if (transaction.is_reversal) { toast.error('Cannot correct a reversal transaction'); return; }
+    
+    console.log("🔍 Opening correction modal for:", {
+      providedId: transaction.id,
+      transactionId: transaction.transaction_id,
+      correctionId,
+      type: type,
+      amount: transaction.amount,
+      is_reversal: transaction.is_reversal,
+      wallet_id: transaction.wallet || transaction.wallet_id,
+      correction_group_id: transaction.correction_group_id
+    });
+    
+    if (transaction.is_reversal) {
+      toast.error('Cannot correct a reversal transaction');
+      return;
+    }
+    
     const status = await checkCorrectionStatus(correctionId);
-    if (!status) { toast.error('Unable to check correction status'); return; }
+    
+    if (!status) {
+      toast.error('Unable to check correction status');
+      return;
+    }
+    
     if (!status.can_correct) {
       toast.error(`Correction limit reached (max ${status.max_corrections_staff} corrections). Please contact admin.`);
       return;
     }
+    
     setCorrectionModal({
       isOpen: true,
-      transaction: { ...transaction, id: correctionId, serviceEntryId: entry.id,
+      transaction: {
+        ...transaction,
+        id: correctionId,
+        serviceEntryId: entry.id,
         originalAmount: transaction.amount,
         wallet_id: transaction.wallet || transaction.wallet_id,
-        correction_group_id: transaction.correction_group_id },
-      loading: false, newAmount: transaction.amount,
+        correction_group_id: transaction.correction_group_id
+      },
+      loading: false,
+      newAmount: transaction.amount,
       newWalletId: transaction.wallet || transaction.wallet_id,
-      reason: '', transactionType: type
+      reason: '',
+      transactionType: type
     });
   };
 
   const submitCorrection = async () => {
     const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
+    
+    console.log("🚀 Submitting correction for:", {
+      id: transaction.id,
+      type: transactionType,
+      originalAmount: transaction.originalAmount,
+      newAmount: newAmount,
+      is_reversal: transaction.is_reversal,
+      correction_group_id: transaction.correction_group_id,
+      wallet_id: transaction.wallet_id
+    });
+    
     const parsedAmount = parseFloat(newAmount);
-    if (isNaN(parsedAmount) || parsedAmount < 0) { toast.error('Please enter a valid amount (can be 0 to cancel the charge)'); return; }
+    if (isNaN(parsedAmount) || parsedAmount < 0) {
+      toast.error('Please enter a valid amount (can be 0 to cancel the charge)');
+      return;
+    }
+    
     const parsedWalletId = parseInt(newWalletId);
-    if (!parsedWalletId || isNaN(parsedWalletId)) { toast.error('Please select a wallet'); return; }
-    if (!reason || reason.trim().length < 5) { toast.error('Please provide a reason (at least 5 characters)'); return; }
+    if (!parsedWalletId || isNaN(parsedWalletId)) {
+      toast.error('Please select a wallet');
+      return;
+    }
+    
+    if (!reason || reason.trim().length < 5) {
+      toast.error('Please provide a reason (at least 5 characters)');
+      return;
+    }
 
-    const payload = { reason: reason.trim() };
+    const payload = {
+      reason: reason.trim()
+    };
+    
     const originalAmount = parseFloat(transaction.originalAmount);
-    if (Math.abs(parsedAmount - originalAmount) > 0.001) payload.new_amount = parsedAmount;
+    if (Math.abs(parsedAmount - originalAmount) > 0.001) {
+      payload.new_amount = parsedAmount;
+    }
+    
     const originalWalletId = transaction.wallet_id || transaction.wallet;
-    if (parsedWalletId !== parseInt(originalWalletId)) payload.new_wallet_id = parsedWalletId;
-    if (transaction.correction_group_id) payload.correction_group_id = transaction.correction_group_id;
+    if (parsedWalletId !== parseInt(originalWalletId)) {
+      payload.new_wallet_id = parsedWalletId;
+    }
+    
+    if (transaction.correction_group_id) {
+      payload.correction_group_id = transaction.correction_group_id;
+    }
 
     const executeCorrectionApi = async () => {
       setCorrectionModal(prev => ({ ...prev, loading: true }));
       try {
+        console.log('📤 Correction API Payload:', payload);
+        console.log('📤 Correcting Transaction ID:', transaction.id);
+        
         await api.put(`/transactions/${transaction.id}/correct`, payload);
+        
         toast.success(`${getTransactionTypeLabel(transactionType)} corrected successfully!`);
+        
         const entriesRes = await getServiceEntries(true, null, 500);
         setServiceEntries(entriesRes.data);
+        
         setCorrectionStatus(prev => {
           const updated = { ...prev };
           delete updated[transaction.id];
           return updated;
         });
-        setCorrectionModal({ isOpen: false, transaction: null, loading: false,
-          newAmount: '', newWalletId: '', reason: '', transactionType: '' });
+        
+        setCorrectionModal({ 
+          isOpen: false, 
+          transaction: null, 
+          loading: false, 
+          newAmount: '', 
+          newWalletId: '', 
+          reason: '',
+          transactionType: '' 
+        });
       } catch (err) {
+        console.error('❌ Correction error:', err);
+        console.error('❌ Error response:', err.response?.data);
+        console.error('❌ Transaction ID used:', transaction.id);
         toast.error(err.response?.data?.error || 'Failed to correct transaction');
       } finally {
         setCorrectionModal(prev => ({ ...prev, loading: false }));
@@ -294,26 +444,52 @@ const ServiceEntry = () => {
 
     const allWallets = [...wallets.offline, ...wallets.online];
     const targetWallet = allWallets.find(w => w.id === parsedWalletId);
+    
     if (targetWallet && targetWallet.is_shared === false && targetWallet.assigned_staff_id !== null) {
       setConfirmDialog({
-        isOpen: true, title: 'Correction Verification',
+        isOpen: true,
+        title: 'Correction Verification',
         message: `You are processing this correction using a personal wallet (${targetWallet.name}). Do you want to proceed?`,
-        onConfirm: () => { setConfirmDialog(prev => ({ ...prev, isOpen: false })); executeCorrectionApi(); }
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          executeCorrectionApi();
+        }
       });
       return;
     }
+
     executeCorrectionApi();
   };
 
   const viewTransactionHistory = async (transactionId, type) => {
-    setHistoryModal({ isOpen: true, transactionId, history: [], loading: true, transactionType: type });
+    console.log("📜 Fetching transaction history for ID:", transactionId);
+    
+    setHistoryModal({ 
+      isOpen: true, 
+      transactionId, 
+      history: [], 
+      loading: true,
+      transactionType: type 
+    });
+    
     try {
       const response = await api.get(`/transactions/${transactionId}/history`);
+      console.log('Transaction history response:', response.data);
+      
       let historyData = [];
-      if (Array.isArray(response.data)) historyData = response.data;
-      else if (response.data && typeof response.data === 'object') historyData = [response.data];
-      setHistoryModal(prev => ({ ...prev, history: historyData, loading: false }));
+      if (Array.isArray(response.data)) {
+        historyData = response.data;
+      } else if (response.data && typeof response.data === 'object') {
+        historyData = [response.data];
+      }
+      
+      setHistoryModal(prev => ({
+        ...prev,
+        history: historyData,
+        loading: false
+      }));
     } catch (err) {
+      console.error('Error fetching transaction history:', err);
       toast.error('Failed to load transaction history');
       setHistoryModal(prev => ({ ...prev, history: [], loading: false }));
     }
@@ -321,7 +497,11 @@ const ServiceEntry = () => {
 
   const canCorrectTransaction = (transaction, entry, type) => {
     if (transaction.is_reversal) return false;
-    if (userRole === 'staff') return isToday(entry.created_at);
+    
+    if (userRole === 'staff') {
+      return isToday(entry.created_at);
+    }
+    
     return userRole === 'admin' || userRole === 'superadmin';
   };
 
@@ -340,9 +520,15 @@ const ServiceEntry = () => {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return 'Invalid Date';
       return date.toLocaleString('en-IN', {
-        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
-    } catch { return 'Invalid Date'; }
+    } catch {
+      return 'Invalid Date';
+    }
   };
 
   const formatAmount = (amount) => {
@@ -350,34 +536,57 @@ const ServiceEntry = () => {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  // ========== HANDLE DELETION ==========
   const handleDeleteEntry = async () => {
     const entryId = deleteDialog.entryId;
     if (!entryId) return;
+
     setDeleteDialog(prev => ({ ...prev, loading: true }));
     try {
       const response = await api.delete(`/entry/${entryId}/force`);
       toast.success(response.data.message || 'Service entry deleted successfully');
+
       setServiceEntries(prev => prev.filter(entry => entry.id !== entryId));
+      
       setDeleteDialog({ isOpen: false, entryId: null, loading: false });
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to delete service entry', { autoClose: 7000 });
+      console.error('Delete error:', err);
+      toast.error(err.response?.data?.error || 'Failed to delete service entry', {
+        autoClose: 7000
+      });
       setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
   };
 
-  // ========== INVOICE FUNCTIONS (unchanged) ==========
+  // ========== INVOICE GENERATOR FUNCTIONS ==========
   const openInvoiceModal = () => {
     const items = [];
+
     (formData.services || []).forEach((svc) => {
       if (!svc.category) return;
+
       const catName = getCategoryName(svc.category);
       const subName = getSubcategoryName(svc.category, svc.subcategory);
       const name = subName !== 'N/A' ? `${catName} - ${subName}` : catName;
-      if (parseFloat(svc.serviceCharge) > 0) items.push({ description: `${name} (Service)`, amount: String(svc.serviceCharge) });
-      if (parseFloat(svc.departmentCharge) > 0) items.push({ description: `${name} (Dept)`, amount: String(svc.departmentCharge) });
+
+      if (parseFloat(svc.serviceCharge) > 0) {
+        items.push({ description: `${name} (Service)`, amount: String(svc.serviceCharge) });
+      }
+      if (parseFloat(svc.departmentCharge) > 0) {
+        items.push({ description: `${name} (Dept)`, amount: String(svc.departmentCharge) });
+      }
     });
-    if (items.length === 0) items.push({ description: 'Service Charge', amount: '0' });
-    setInvoiceData({ customerName: formData.customerName, phone: formData.phone, items, notes: '' });
+
+    if (items.length === 0) {
+      items.push({ description: 'Service Charge', amount: '0' });
+    }
+
+    setInvoiceData({
+      customerName: formData.customerName,
+      phone: formData.phone,
+      items,
+      notes: '',
+    });
     setInvoiceModalOpen(true);
   };
 
@@ -397,10 +606,14 @@ const ServiceEntry = () => {
         const fullLogoUrl = centreDetails.logo.startsWith('http') 
           ? centreDetails.logo 
           : `${import.meta.env.VITE_API_URL}${centreDetails.logo}`;
+        
         const base64Img = await getBase64ImageFromUrl(fullLogoUrl);
         doc.addImage(base64Img, 'PNG', 14, 10, 26, 26); 
-      } else { throw new Error("No logo available"); }
+      } else {
+        throw new Error("No logo available"); 
+      }
     } catch (e) {
+      console.warn("Could not load invoice logo:", e);
       doc.setTextColor(navy);
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
@@ -415,19 +628,30 @@ const ServiceEntry = () => {
     doc.setTextColor('#475569');
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
+    
     const addrParts = [centreDetails.address, centreDetails.district].filter(Boolean);
-    if (addrParts.length > 0) doc.text(addrParts.join(', '), rightMargin, 22, { align: 'right' });
+    if (addrParts.length > 0) {
+      doc.text(addrParts.join(', '), rightMargin, 22, { align: 'right' });
+    }
+    
     const stateParts = [centreDetails.state, centreDetails.pincode ? `Pin - ${centreDetails.pincode}` : null].filter(Boolean);
-    if (stateParts.length > 0) doc.text(stateParts.join(', '), rightMargin, 27, { align: 'right' });
-    if (centreDetails.phone) doc.text(`Phone: ${centreDetails.phone}`, rightMargin, 32, { align: 'right' });
+    if (stateParts.length > 0) {
+      doc.text(stateParts.join(', '), rightMargin, 27, { align: 'right' });
+    }
+    
+    if (centreDetails.phone) {
+      doc.text(`Phone: ${centreDetails.phone}`, rightMargin, 32, { align: 'right' });
+    }
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(textLight);
     doc.text('BILL TO:', 14, 52);
+    
     doc.setTextColor(textDark);
     doc.setFontSize(12);
     doc.text(invoiceData.customerName, 14, 58);
+    
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Phone: ${invoiceData.phone}`, 14, 64);
@@ -436,18 +660,23 @@ const ServiceEntry = () => {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(navy);
     doc.text('INVOICE', rightMargin, 52, { align: 'right' });
+    
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(textDark);
     doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, rightMargin, 60, { align: 'right' });
+    
     const staffName = localStorage.getItem('name') || 'Staff';
     doc.text(`Served by: ${staffName}`, rightMargin, 66, { align: 'right' });
 
-    const serviceNamesList = (formData.services || []).filter(svc => svc.category).map(svc => {
-      const catName = getCategoryName(svc.category);
-      const subName = getSubcategoryName(svc.category, svc.subcategory);
-      return subName !== 'N/A' ? `${catName} (${subName})` : catName;
-    });
+    const serviceNamesList = (formData.services || [])
+      .filter(svc => svc.category)
+      .map(svc => {
+        const catName = getCategoryName(svc.category);
+        const subName = getSubcategoryName(svc.category, svc.subcategory);
+        return subName !== 'N/A' ? `${catName} (${subName})` : catName;
+      });
+
     const serviceName = serviceNamesList.length > 0 ? serviceNamesList.join(', ') : 'General Service';
     const displayServiceName = serviceName.length > 80 ? serviceName.substring(0, 77) + '...' : serviceName;
 
@@ -457,48 +686,75 @@ const ServiceEntry = () => {
     doc.text(displayServiceName, 14, 84);
 
     const tableBody = invoiceData.items.map((item, idx) => [
-      idx + 1, item.description,
+      idx + 1,
+      item.description,
       `Rs. ${parseFloat(item.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
     ]);
     const total = invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0);
 
     autoTable(doc, {
-      startY: 92, head: [['#', 'Description', 'Amount (Rs.)']], body: tableBody,
+      startY: 92,  
+      head: [['#', 'Description', 'Amount (Rs.)']],
+      body: tableBody,
       foot: [['', 'Total Amount', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
       theme: 'striped',
-      styles: { font: 'helvetica', fontSize: 10, cellPadding: 5 },
-      headStyles: { fillColor: navy, textColor: '#FFFFFF', fontStyle: 'bold' },
-      footStyles: { fillColor: '#E2E8F0', textColor: navy, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: '#F8FAFC' },
-      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 'auto' }, 2: { halign: 'right', cellWidth: 40 } },
+      styles: { 
+        font: 'helvetica', 
+        fontSize: 10, 
+        cellPadding: 5 
+      },
+      headStyles: { 
+        fillColor: navy,
+        textColor: '#FFFFFF', 
+        fontStyle: 'bold' 
+      },
+      footStyles: { 
+        fillColor: '#E2E8F0',
+        textColor: navy, 
+        fontStyle: 'bold' 
+      },
+      alternateRowStyles: {
+        fillColor: '#F8FAFC'
+      },
+      columnStyles: { 
+        0: { cellWidth: 12 }, 
+        1: { cellWidth: 'auto' }, 
+        2: { halign: 'right', cellWidth: 40 } 
+      },
     });
 
     let finalY = doc.lastAutoTable.finalY + 12;
+
     if (invoiceData.notes) {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(textDark);
       doc.text('Notes:', 14, finalY);
+      
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(textLight);
       doc.text(invoiceData.notes, 14, finalY + 6);
       finalY += 16;
     }
+
     doc.setFontSize(8);
     doc.setTextColor('#94A3B8');
     doc.text(`Thank you for your visit — ${centreDetails.name}`, 105, finalY + 10, { align: 'center' });
+
     doc.save(`invoice_${Date.now()}.pdf`);
     setInvoiceModalOpen(false);
   };
 
-  // ========== DATA FETCH ==========
+  // ========== useEffect HOOKS ==========
+  
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const staffId = localStorage.getItem('id')?.trim();
         const centreId = localStorage.getItem('centre_id')?.trim();
+        console.log('ServiceEntry.jsx: Logged-in staffId:', staffId, 'centreId:', centreId);
         if (!staffId || isNaN(parseInt(staffId)) || !centreId) {
           setError('Staff ID or Centre ID missing or invalid in localStorage. Please log in again.');
           toast.error('Staff ID or Centre ID missing or invalid. Please log in again.');
@@ -508,28 +764,34 @@ const ServiceEntry = () => {
         let categoriesData = [];
         try {
           const categoriesRes = await getCategories();
+          console.log('ServiceEntry.jsx: Categories response:', JSON.stringify(categoriesRes.data, null, 2));
           categoriesData = categoriesRes.data || [];
           setCategories(categoriesData);
         } catch (err) {
+          console.error('ServiceEntry.jsx: Failed to fetch categories:', err.response?.data || err.message);
           toast.error(`Failed to fetch categories: ${err.response?.data?.error || err.message}`);
         }
 
         try {
           const walletsRes = await getWallets();
+          console.log('ServiceEntry.jsx: Wallets response:', JSON.stringify(walletsRes.data, null, 2));
           const offlineWallets = walletsRes.data.filter(w => w.wallet_type === 'cash' && w.centre_id === parseInt(centreId));
           const onlineWallets = walletsRes.data.filter(w => ['digital', 'bank', 'card'].includes(w.wallet_type) && w.status === 'online' && w.centre_id === parseInt(centreId));
           setWallets({ offline: offlineWallets, online: onlineWallets });
           if (offlineWallets.length === 0) toast.warn('No offline wallets available for your centre.');
           if (onlineWallets.length === 0) toast.warn('No online wallets available for your centre.');
         } catch (err) {
+          console.error('ServiceEntry.jsx: Failed to fetch wallets:', err.response?.data || err.message);
           toast.error(`Failed to fetch wallets: ${err.response?.data?.error || err.message}`);
         }
 
         try {
           const entriesRes = await getServiceEntries(true, null, 500);
+          console.log('ServiceEntry.jsx: Today\'s service entries response:', JSON.stringify(entriesRes.data, null, 2));
           setServiceEntries(entriesRes.data);
         } catch (err) {
-          toast.error(`Failed to fetch today's service entries: ${err.response?.data?.error || err.message}`);
+          console.error('ServiceEntry.jsx: Failed to fetch today\'s service entries:', err.response?.data || err.message);
+          toast.error(`Failed to fetch today\'s service entries: ${err.response?.data?.error || err.message}`);
         }
 
         try {
@@ -538,6 +800,7 @@ const ServiceEntry = () => {
             const centreRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/${centreId}`, {
               headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
+            
             if (centreRes.data) {
               setCentreDetails({
                 name: centreRes.data.name || 'Akshaya e Centre',
@@ -558,11 +821,13 @@ const ServiceEntry = () => {
           try {
             const tokenRes = await getTokenById(tokenId);
             const tokenData = tokenRes.data;
+            console.log('ServiceEntry.jsx: Token data response:', JSON.stringify(tokenData, null, 2));
             if (!tokenData || (String(tokenData.staff_id) !== String(staffId) && tokenData.staff_id)) {
               setError('Token not found or not assigned to this staff');
               toast.error('Token not found or not assigned to this staff');
               return;
             }
+
             const category = tokenData.category_id ? categoriesData.find(cat => cat.id === parseInt(tokenData.category_id)) : null;
             const subcategory = category && tokenData.subcategory_id ? category.subcategories?.find(sub => sub.id === parseInt(tokenData.subcategory_id)) : null;
             const serviceCharge = parseFloat(subcategory?.service_charges || tokenData.service_charges || 0);
@@ -570,31 +835,64 @@ const ServiceEntry = () => {
             const totalCharge = serviceCharge + departmentCharge;
 
             const newFormData = {
-              tokenId, customerName: tokenData.customer_name || '', phone: tokenData.phone || '',
+              tokenId,
+              customerName: tokenData.customer_name || '',
+              phone: tokenData.phone || '',
               status: tokenData.status === 'done' ? 'completed' : tokenData.status || 'pending',
               payments: tokenData.payments?.length > 0 ? tokenData.payments.map(p => ({
-                wallet: String(p.wallet || ''), method: p.method || 'cash',
-                amount: String(p.amount || ''), status: p.status || 'pending',
+                wallet: String(p.wallet || ''),
+                method: p.method || 'cash',
+                amount: String(p.amount || ''),
+                status: p.status || 'pending',
               })) : [],
               services: [{
                 id: crypto.randomUUID(),
                 category: tokenData.category_id ? String(tokenData.category_id) : '',
                 subcategory: tokenData.subcategory_id ? String(tokenData.subcategory_id) : '',
-                serviceCharge: String(serviceCharge), departmentCharge: String(departmentCharge),
+                serviceCharge: String(serviceCharge),
+                departmentCharge: String(departmentCharge),
                 totalCharge: String(totalCharge),
                 serviceWalletId: tokenData.service_wallet_id ? parseInt(tokenData.service_wallet_id) : category?.wallet_id ? parseInt(category.wallet_id) : null,
                 requiresWallet: category?.requires_wallet || subcategory?.requires_wallet || tokenData.requires_wallet || false,
                 hasExpiry: category?.has_expiry || tokenData.has_expiry || false,
                 expiryDate: tokenData.expiry_date || '',
-                initialNote: '', initialNoteMentions: [], initialNoteVisibility: 'centre',
-                createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
-                applicationNumber: '', estimatedDelivery: '', averageTime: '', priority: 'medium',
-                assignedTo: '', currentStep: 'Submitted',
-                aadhaar: tokenData.aadhaar || '', email: tokenData.email || '', customerRemarks: ''
+                initialNote: '', 
+                initialNoteMentions: [], 
+                initialNoteVisibility: 'centre', 
+                createTask: false, 
+                taskTitle: '', 
+                taskAssignee: '', 
+                taskDueDate: null,
+                showNoteArea: false,
+                applicationNumber: '',
+                estimatedDelivery: '',
+                averageTime: '',
+                priority: 'medium',
+                assignedTo: '',
+                currentStep: 'Submitted',
+                aadhaar: tokenData.aadhaar || '',
+                email: tokenData.email || '',
+                customerRemarks: ''
               }]
             };
+
             setFormData(newFormData);
+
+            console.log('ServiceEntry.jsx: Set formData from token:', JSON.stringify(newFormData, null, 2));
+
+            if (!tokenData.customer_name) toast.warn('Token is missing customer name. Please enter manually.');
+            if (!tokenData.category_id) toast.warn('Token is missing category. Please select manually.');
+            if (!tokenData.subcategory_id) toast.warn('Token is missing subcategory. Please select manually.');
+            if (!category) toast.warn('Category not found in categories data. Please ensure categories are loaded.');
+            if (category && !subcategory) toast.warn('Subcategory not found for the selected category. Please select manually.');
+            if ((category?.requires_wallet || subcategory?.requires_wallet || tokenData.requires_wallet) && !tokenData.service_wallet_id && !category?.wallet_id) {
+              toast.warn('Selected service requires a wallet but none is assigned. Please contact admin.');
+            }
+            if (serviceCharge === 0 || departmentCharge === 0) {
+              toast.warn('Service or department charges are not defined. Please enter manually or contact admin.');
+            }
           } catch (err) {
+            console.error('ServiceEntry.jsx: Error fetching token data:', err.response?.data || err.message);
             setError('Failed to load token data.');
             toast.error(`Failed to load token data: ${err.response?.data?.error || err.message}`);
           }
@@ -604,36 +902,58 @@ const ServiceEntry = () => {
           try {
             const bookingRes = await api.get(`/customer-services/${customerServiceId}`);
             const booking = bookingRes.data;
+
             const category = categoriesData.find(cat => cat.id === parseInt(booking.service_id));
-            const subcategory = category?.subcategories?.find(sub => sub.id === parseInt(booking.subcategory_id));
+            const subcategory = category?.subcategories?.find(
+              sub => sub.id === parseInt(booking.subcategory_id)
+            );
+
             const serviceCharge = parseFloat(subcategory?.service_charges || 0);
             const departmentCharge = parseFloat(subcategory?.department_charges || 0);
             const totalCharge = serviceCharge + departmentCharge;
 
             setFormData(prev => ({
-              ...prev, tokenId: null,
-              customerName: booking.customer_name || '', phone: booking.phone || '',
+              ...prev,
+              tokenId: null,
+              customerName: booking.customer_name || '',
+              phone: booking.phone || '',
               services: [{
                 id: crypto.randomUUID(),
                 category: booking.service_id ? String(booking.service_id) : '',
                 subcategory: booking.subcategory_id ? String(booking.subcategory_id) : '',
-                serviceCharge: String(serviceCharge), departmentCharge: String(departmentCharge),
+                serviceCharge: String(serviceCharge),
+                departmentCharge: String(departmentCharge),
                 totalCharge: String(totalCharge),
                 serviceWalletId: category?.wallet_id ? parseInt(category.wallet_id) : null,
                 requiresWallet: category?.requires_wallet || subcategory?.requires_wallet || false,
-                hasExpiry: category?.has_expiry || false, expiryDate: '',
-                initialNote: '', initialNoteMentions: [], initialNoteVisibility: 'centre',
-                createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false,
-                applicationNumber: '', estimatedDelivery: '', averageTime: '', priority: 'medium',
-                assignedTo: '', currentStep: 'Submitted',
-                aadhaar: booking.aadhaar || '', email: booking.email || '', customerRemarks: ''
+                hasExpiry: category?.has_expiry || false,
+                expiryDate: '',
+                initialNote: '', 
+                initialNoteMentions: [], 
+                initialNoteVisibility: 'centre', 
+                createTask: false, 
+                taskTitle: '', 
+                taskAssignee: '', 
+                taskDueDate: null,
+                showNoteArea: false,
+                applicationNumber: '',
+                estimatedDelivery: '',
+                averageTime: '',
+                priority: 'medium',
+                assignedTo: '',
+                currentStep: 'Submitted',
+                aadhaar: booking.aadhaar || '',
+                email: booking.email || '',
+                customerRemarks: ''
               }]
             }));
+
           } catch (err) {
             toast.error("Failed to load online booking details");
           }
         }          
       } catch (err) {
+        console.error('ServiceEntry.jsx: Error fetching data:', err);
         setError(`Failed to load data: ${err.message}`);
         toast.error(`Failed to load data: ${err.message}`);
       } finally {
@@ -644,22 +964,46 @@ const ServiceEntry = () => {
   }, [tokenId, customerServiceId]);
 
   useEffect(() => {
-    const newGrandTotal = formData.services.reduce((sum, svc) => sum + (parseFloat(svc.totalCharge) || 0), 0);
+    const newGrandTotal = formData.services.reduce((sum, svc) => {
+      return sum + (parseFloat(svc.totalCharge) || 0);
+    }, 0);
     setGrandTotal(newGrandTotal);
+
     const received = formData.payments.filter(p => p.status === 'received').reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
     const pending = formData.payments.filter(p => p.status === 'pending').reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
     setPaidAmount(received);
     setPendingAmount(pending);
     setBalanceAmount(newGrandTotal - received);
+
     if (!isEditMode) {
-      if (received >= newGrandTotal && newGrandTotal > 0) setFormData(prev => ({ ...prev, status: 'completed' }));
-      else setFormData(prev => ({ ...prev, status: 'pending' }));
+      if (received >= newGrandTotal && newGrandTotal > 0) {
+        setFormData(prev => ({ ...prev, status: 'completed' }));
+      } else {
+        setFormData(prev => ({ ...prev, status: 'pending' }));
+      }
     }
   }, [formData.services, formData.payments, isEditMode]);
 
+  const calculateDaysRemaining = (dateString) => {
+    if (!dateString) {
+      setDaysRemaining(null);
+      return;
+    }
+    const expiryDate = new Date(dateString);
+    const today = new Date();
+    const timeDiff = expiryDate - today;
+    const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+    setDaysRemaining(days);
+  };
+
+  // 🔥 CATCH ADMIN EDIT FROM SERVICE LOGS
   useEffect(() => {
     if (location.state && location.state.adminEditEntry && categories.length > 0) {
       const adminEntry = location.state.adminEditEntry;
+      
+      console.log("Catching Admin Edit Entry:", adminEntry);
+
       const mappedEntry = {
         id: adminEntry.serviceEntryId || adminEntry.id, 
         tokenId: adminEntry.tokenId || '',
@@ -670,11 +1014,14 @@ const ServiceEntry = () => {
         serviceCharge: adminEntry.serviceCharge || 0,
         departmentCharge: adminEntry.departmentCharge || 0,
         totalCharge: adminEntry.totalCharge || 0,
-        status: adminEntry.status?.toLowerCase() === 'completed' ? 'completed' : 'pending',
-        expiryDate: adminEntry.expiryDate && adminEntry.expiryDate !== 'Not set' ? adminEntry.expiryDate.split('T')[0] : '',
+        status: adminEntry.status?.toLowerCase() === 'completed' ? 'completed' : 
+                adminEntry.status?.toLowerCase() === 'pending' ? 'pending' : 'pending',
+        expiryDate: adminEntry.expiryDate && adminEntry.expiryDate !== 'Not set' 
+                    ? adminEntry.expiryDate.split('T')[0] : '',
         payments: adminEntry.payments || [],
         serviceWalletId: adminEntry.serviceWalletId || null,
         requiresWallet: adminEntry.requiresWallet || false,
+        // NEW: Include tracking fields
         applicationNumber: adminEntry.applicationNumber || '',
         estimatedDelivery: adminEntry.estimatedDelivery || '',
         averageTime: adminEntry.averageTime || '',
@@ -685,10 +1032,12 @@ const ServiceEntry = () => {
         email: adminEntry.email || '',
         customerRemarks: adminEntry.customerRemarks || adminEntry.notes || ''
       };
+
       setTimeout(() => {
         handleEditEntry(mappedEntry);
         toast.info("Admin Override Mode Activated", { icon: "🔓" });
       }, 500);
+      
       window.history.replaceState({}, document.title);
     }
   }, [location.state, categories.length]);
@@ -706,7 +1055,11 @@ const ServiceEntry = () => {
   };
 
   const handleCartChange = (index, field, value) => {
-    if (field === 'aadhaar') value = String(value).replace(/\D/g, '').slice(0, 12);
+    // NEW: Aadhaar validation (strip non-digits, max 12)
+    if (field === 'aadhaar') {
+      value = String(value).replace(/\D/g, '').slice(0, 12);
+    }
+
     setFormData(prev => {
       const updated = [...prev.services];
       const svc = { ...updated[index], [field]: value };
@@ -721,6 +1074,7 @@ const ServiceEntry = () => {
             const exp = new Date(); exp.setDate(exp.getDate() + 90);
             svc.expiryDate = exp.toISOString().split('T')[0];
           } else if (!cat.has_expiry) svc.expiryDate = '';
+          
           if (cat.subcategories && cat.subcategories.length > 0) {
             const firstSub = cat.subcategories[0];
             svc.subcategory = String(firstSub.id);
@@ -732,6 +1086,7 @@ const ServiceEntry = () => {
           }
         }
       }
+
       if (field === 'subcategory') {
         const cat = categories.find(c => c.id === parseInt(svc.category));
         if (cat && cat.subcategories) {
@@ -743,9 +1098,11 @@ const ServiceEntry = () => {
           }
         }
       }
+
       if (['serviceCharge', 'departmentCharge', 'category', 'subcategory'].includes(field)) {
         svc.totalCharge = String((parseFloat(svc.serviceCharge) || 0) + (parseFloat(svc.departmentCharge) || 0));
       }
+
       updated[index] = svc;
       return { ...prev, services: updated };
     });
@@ -763,19 +1120,29 @@ const ServiceEntry = () => {
   const updatePaymentState = (index, field, value) => {
     const updatedPayments = [...formData.payments];
     updatedPayments[index] = { ...updatedPayments[index], [field]: value };
+
     if (field === 'method') {
       const availableWallets = value === 'cash' ? wallets.offline : wallets.online;
       updatedPayments[index].wallet = availableWallets.length > 0 ? String(availableWallets[0].id) : '';
-      if (availableWallets.length === 0) toast.warn(`No ${value === 'cash' ? 'cash' : 'digital'} wallets available for your centre.`);
+      if (availableWallets.length === 0) {
+        toast.warn(`No ${value === 'cash' ? 'cash' : 'digital'} wallets available for your centre.`);
+      }
     }
+
     if (field === 'amount') {
       const entered = parseFloat(value) || 0;
       const otherReceived = formData.payments
         .filter((_, i) => i !== index && _.status === 'received')
         .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
       const maxAllowed = grandTotal - otherReceived; 
-      if (entered > maxAllowed) { toast.error(`Amount exceeds remaining balance (₹${maxAllowed})`); return; }
+
+      if (entered > maxAllowed) {
+        toast.error(`Amount exceeds remaining balance (₹${maxAllowed})`);
+        return;
+      }
     }
+
     setFormData(prev => ({ ...prev, payments: updatedPayments }));
   };
 
@@ -785,9 +1152,13 @@ const ServiceEntry = () => {
       const selectedWallet = allWallets.find(w => w.id === parseInt(value));
       if (selectedWallet && selectedWallet.is_shared === false && selectedWallet.assigned_staff_id !== null) {
         setConfirmDialog({
-          isOpen: true, title: 'Personal Wallet Selected',
+          isOpen: true,
+          title: 'Personal Wallet Selected',
           message: `You are selecting a personal wallet (${selectedWallet.name}). Do you want to proceed?`,
-          onConfirm: () => { setConfirmDialog(prev => ({ ...prev, isOpen: false })); updatePaymentState(index, field, value); }
+          onConfirm: () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            updatePaymentState(index, field, value);
+          }
         });
         return;
       }
@@ -798,9 +1169,11 @@ const ServiceEntry = () => {
   const addPayment = () => {
     const remaining = Math.max(0, balanceAmount);
     if (remaining === 0) return toast.warn('Total amount already covered.');
+
     const defaultMethod = wallets.offline.length > 0 ? 'cash' : 'wallet';
     const defaultWallet = wallets.offline.length > 0 ? String(wallets.offline[0].id) : wallets.online.length > 0 ? String(wallets.online[0].id) : '';
     if (!defaultWallet) return toast.error('No wallets available for your centre.');
+
     setFormData(prev => ({
       ...prev,
       payments: [...prev.payments, { method: defaultMethod, wallet: defaultWallet, amount: String(remaining), status: 'received' }],
@@ -818,6 +1191,7 @@ const ServiceEntry = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const errors = [];
+
     if (!formData.customerName.trim()) errors.push('Customer name is required');
     if (!formData.phone.trim()) errors.push('Phone number is required');
 
@@ -830,6 +1204,7 @@ const ServiceEntry = () => {
       if (svc.requiresWallet && (!svc.serviceWalletId || isNaN(parseInt(svc.serviceWalletId)))) errors.push(`${prefix}Requires a wallet assignment`);
       if (svc.hasExpiry && (!svc.expiryDate || isNaN(Date.parse(svc.expiryDate)))) errors.push(`${prefix}Expiry date required`);
       if (svc.createTask && (!svc.taskTitle || !svc.taskAssignee)) errors.push(`${prefix}Task Title & Assignee required`);
+      // NEW: Aadhaar/email validation (only if filled)
       if (svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)) errors.push(`${prefix}Aadhaar must be exactly 12 digits`);
       if (svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email)) errors.push(`${prefix}Please enter a valid email address`);
     });
@@ -841,7 +1216,10 @@ const ServiceEntry = () => {
     const staffId = localStorage.getItem('id')?.trim();
     if (!staffId) errors.push('Staff ID missing. Please log in again.');
 
-    if (errors.length > 0) { errors.forEach(err => toast.error(err, { autoClose: 5000 })); return; }
+    if (errors.length > 0) {
+      errors.forEach(err => toast.error(err, { autoClose: 5000 }));
+      return;
+    }
 
     const payload = {
       tokenId: formData.tokenId || null,
@@ -868,8 +1246,10 @@ const ServiceEntry = () => {
         taskDueDate: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
       })),
       payments: formData.payments.map(p => ({
-        wallet: parseInt(p.wallet), method: p.method,
-        amount: parseFloat(p.amount), status: p.status,
+        wallet: parseInt(p.wallet),
+        method: p.method,
+        amount: parseFloat(p.amount),
+        status: p.status,
       }))
     };
 
@@ -890,12 +1270,14 @@ const ServiceEntry = () => {
           delete editPayload.payments;
           delete editPayload.services;
           delete editPayload.staffId;
+
           await updateServiceEntry(editingEntryId, editPayload);
           toast.success('Service entry updated successfully!');
         } else {
           const response = await api.post('/entry/bulk', payload);
           const createdServices = response.data.createdServices || [];
 
+          // 🔥 FIX 404 RACE CONDITION: Wait a moment for DB triggers to complete
           await new Promise(resolve => setTimeout(resolve, 1500)); 
           
           let recentTrackingRecords = [];
@@ -906,21 +1288,31 @@ const ServiceEntry = () => {
              console.warn("Could not fetch tracking entries to map IDs", err);
           }
 
+          // 🔥 LOOP THROUGH THE RESPONSE TO MAP AND CREATE TRACKING/NOTES
           for (let i = 0; i < createdServices.length; i++) {
             const svc = createdServices[i];
             const svcFormData = formData.services[i]; 
 
+            // 1. Submit Tracking Details Safely
+            // NEW: Expanded trigger to include aadhaar, email, avg time, remarks
             const hasTrackingData = 
-              svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || 
-              svcFormData.aadhaar || svcFormData.email || svcFormData.averageTime || 
-              svcFormData.customerRemarks || (svcFormData.priority && svcFormData.priority !== 'medium');
+              svcFormData.applicationNumber || 
+              svcFormData.assignedTo || 
+              svcFormData.estimatedDelivery || 
+              svcFormData.aadhaar || 
+              svcFormData.email || 
+              svcFormData.averageTime || 
+              svcFormData.customerRemarks ||
+              (svcFormData.priority && svcFormData.priority !== 'medium');
 
             if (hasTrackingData) {
               try {
                 const serviceEntryId = svc.serviceEntryId || svc.id;
+                
                 const trackingRecord = recentTrackingRecords.find(t => 
                   Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
                 );
+
                 if (trackingRecord) {
                   await updateTrackingEntry(trackingRecord.id, {
                     applicationNumber: svcFormData.applicationNumber || null,
@@ -935,15 +1327,16 @@ const ServiceEntry = () => {
                     progress: 25 
                   });
                 } else {
-                  console.warn(`Tracking row not found for Service Entry ${serviceEntryId}.`);
+                  console.warn(`Tracking row not found for Service Entry ${serviceEntryId}. Check if backend automatically creates it.`);
                   toast.warn(`Tracking details for Service ${i + 1} couldn't be saved (Row not found).`);
                 }
               } catch (trackErr) {
-                console.error(`❌ Failed to link tracking data:`, trackErr);
+                console.error(`❌ Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
                 toast.warn(`Service created, but tracking details failed to attach.`);
               }
             }
 
+            // 2. Save Note & Task
             if (svc.initialNote && svc.initialNote.trim() !== '') {
               try {
                 const noteRes = await createNote({
@@ -953,9 +1346,12 @@ const ServiceEntry = () => {
                   related_service_entry_id: svc.serviceEntryId || svc.id,
                   mentions: svc.initialNoteMentions 
                 });
+                
                 const savedNoteId = noteRes?.data?.id || noteRes?.id;
+
                 if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
                   const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+                  
                   await api.post('/add', {
                     title: svc.taskTitle.trim(),
                     description: svc.initialNote.trim(),
@@ -967,14 +1363,16 @@ const ServiceEntry = () => {
                   }, { baseURL: taskBaseUrl });
                 }
               } catch (noteErr) {
-                console.error(`❌ Failed to save note/task:`, noteErr);
+                console.error(`❌ Failed to save note/task for Entry ${svc.serviceEntryId || svc.id}:`, noteErr);
                 toast.warn(`Service created, but failed to attach note/task.`);
               }
             }
           }
+          
           toast.success('Services successfully created and paid!');
         }
         
+        // --- 1. Fetch updated entries so the table shows the new submission immediately ---
         try {
           const entriesRes = await getServiceEntries(true, null, 500);
           setServiceEntries(entriesRes.data || []);
@@ -982,11 +1380,17 @@ const ServiceEntry = () => {
           console.error("Failed to refresh table", fetchErr);
         }
 
+        // --- 2. Clear the form completely ---
         setFormData({
-          tokenId: '', customerName: '', phone: '', status: 'pending',
-          payments: [], services: [createEmptyService()]
+          tokenId: '',
+          customerName: '',
+          phone: '',
+          status: 'pending',
+          payments: [],
+          services: [createEmptyService()]
         });
         setEditingEntryId(null);
+        
       } catch (err) {
         toast.error(err.response?.data?.error || 'Failed to submit service entries');
       }
@@ -1002,12 +1406,17 @@ const ServiceEntry = () => {
 
     if (personalWalletUsed) {
       setConfirmDialog({
-        isOpen: true, title: 'Personal Wallet Verification',
+        isOpen: true,
+        title: 'Personal Wallet Verification',
         message: 'A personal wallet is currently selected. Are you sure you want to proceed?',
-        onConfirm: () => { setConfirmDialog(prev => ({ ...prev, isOpen: false })); executeFinalSubmit(); }
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          executeFinalSubmit();
+        }
       });
       return;
     }
+
     executeFinalSubmit();
   };
 
@@ -1025,51 +1434,58 @@ const ServiceEntry = () => {
     return 'N/A';
   };
 
-  const formatPayments = (payments = []) => {
+  const formatPayments = (payments = [], totalCharge = 0) => {
     const walletSummary = {};
+
     payments.forEach(p => {
       const walletId = String(p.wallet);
-      if (!walletSummary[walletId]) walletSummary[walletId] = { received: 0, pending: 0, method: p.method };
-      if (p.status === 'received') walletSummary[walletId].received += Number(p.amount) || 0;
-      if (p.status === 'pending') walletSummary[walletId].pending += Number(p.amount) || 0;
+
+      if (!walletSummary[walletId]) {
+        walletSummary[walletId] = {
+          received: 0,
+          pending: 0,
+          method: p.method,
+        };
+      }
+
+      if (p.status === 'received') {
+        walletSummary[walletId].received += Number(p.amount) || 0;
+      }
+
+      if (p.status === 'pending') {
+        walletSummary[walletId].pending += Number(p.amount) || 0;
+      }
     });
+
     const output = [];
+
     Object.entries(walletSummary).forEach(([walletId, data]) => {
       let walletName = 'Counter';
-      const wallet = data.method === 'cash' 
-        ? wallets.offline.find(w => w.id === parseInt(walletId))
-        : wallets.online.find(w => w.id === parseInt(walletId));
-      if (wallet) walletName = wallet.name;
-      if (data.received > 0) output.push(`${walletName}: ₹${data.received} (received)`);
-      if (data.pending > 0) output.push(`${walletName}: ₹${data.pending} (pending)`);
+
+      const wallet =
+        data.method === 'cash'
+          ? wallets.offline.find(w => w.id === parseInt(walletId))
+          : wallets.online.find(w => w.id === parseInt(walletId));
+
+      if (wallet) {
+        walletName = wallet.name;
+      }
+
+      if (data.received > 0) {
+        output.push(`${walletName}: ₹${data.received} (received)`);
+      }
+
+      if (data.pending > 0) {
+        output.push(`${walletName}: ₹${data.pending} (pending)`);
+      }
     });
+
     return output.join(', ');
   };
 
   const getWalletName = (walletId) => {
     const wallet = [...wallets.offline, ...wallets.online].find(w => w.id === parseInt(walletId));
     return wallet ? wallet.name : 'Unknown Wallet';
-  };
-
-  // Helper: has this service got any tracking info filled?
-  const hasAnyTrackingData = (svc) => Boolean(
-    svc.applicationNumber || svc.assignedTo || svc.estimatedDelivery || 
-    svc.aadhaar || svc.email || svc.averageTime || svc.customerRemarks ||
-    (svc.priority && svc.priority !== 'medium')
-  );
-
-  // Helper: count how many fields are filled
-  const countTrackingFields = (svc) => {
-    let count = 0;
-    if (svc.applicationNumber) count++;
-    if (svc.assignedTo) count++;
-    if (svc.estimatedDelivery) count++;
-    if (svc.aadhaar) count++;
-    if (svc.email) count++;
-    if (svc.averageTime) count++;
-    if (svc.customerRemarks) count++;
-    if (svc.priority && svc.priority !== 'medium') count++;
-    return count;
   };
 
   if (loading) {
@@ -1090,17 +1506,16 @@ const ServiceEntry = () => {
           <div className="text-rose-600 text-4xl mb-3">⚠️</div>
           <h3 className="text-lg font-medium text-rose-800 mb-2">Data Loading Error</h3>
           <p className="text-gray-600">{error}</p>
-          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors">
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors"
+          >
             Try Again
           </button>
         </div>
       </div>
     );
   }
-
-  const trackingService = trackingModal.isOpen && trackingModal.serviceIndex !== null
-    ? formData.services[trackingModal.serviceIndex]
-    : null;
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -1120,11 +1535,14 @@ const ServiceEntry = () => {
               {tokenId ? `Processing token #${tokenId}` : 'Create a new service entry'}
             </p>
           </div>
+          
           {tokenId && (
             <div className="bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100">
               <div className="flex items-center gap-2">
                 <span className="text-indigo-800 font-medium">Token ID</span>
-                <span className="bg-indigo-100 text-indigo-800 font-bold px-2.5 py-0.5 rounded-md">#{tokenId}</span>
+                <span className="bg-indigo-100 text-indigo-800 font-bold px-2.5 py-0.5 rounded-md">
+                  #{tokenId}
+                </span>
               </div>
             </div>
           )}
@@ -1144,41 +1562,66 @@ const ServiceEntry = () => {
             </div>
           )}
 
+          {/* MAIN 2-COLUMN GRID */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* LEFT COLUMN */}
+            {/* LEFT COLUMN: CUSTOMER INFO & CART */}
             <div className="space-y-6">
               
-              {/* Customer Information */}
+              {/* 1. Customer Information */}
               <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
                 <div className="flex items-center gap-2 mb-5">
-                  <div className="bg-indigo-100 p-2 rounded-lg"><FiUser className="h-5 w-5 text-indigo-600" /></div>
+                  <div className="bg-indigo-100 p-2 rounded-lg">
+                    <FiUser className="h-5 w-5 text-indigo-600" />
+                  </div>
                   <h3 className="text-lg font-semibold text-gray-800">Customer Information</h3>
                 </div>
+                
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Customer Name <span className="text-rose-500">*</span></label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Customer Name <span className="text-rose-500">*</span>
+                    </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><FiUser className="h-5 w-5 text-gray-400" /></div>
-                      <input type="text" name="customerName" value={formData.customerName} onChange={handleTopLevelChange} required
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <FiUser className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        name="customerName"
+                        value={formData.customerName}
+                        onChange={handleTopLevelChange}
+                        required
                         className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="Full name" />
+                        placeholder="Full name"
+                      />
                     </div>
                   </div>
+                  
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number <span className="text-rose-500">*</span></label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Phone Number <span className="text-rose-500">*</span>
+                    </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><FiPhone className="h-5 w-5 text-gray-400" /></div>
-                      <input type="tel" name="phone" value={formData.phone} onChange={handleTopLevelChange} required
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <FiPhone className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleTopLevelChange}
+                        required
                         pattern="\+?[1-9]\d{1,14}"
                         className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="+91 XXXXXXXXXX" />
+                        placeholder="+91 XXXXXXXXXX"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
                   
-              {/* SERVICE CART */}
+              {/* 2. DYNAMIC SERVICES ARRAY (THE CART) */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="bg-indigo-100 p-2 rounded-lg"><FiCreditCard className="h-5 w-5 text-indigo-600" /></div>
@@ -1192,14 +1635,10 @@ const ServiceEntry = () => {
                     const subcategoryDocs = categories.find(c => c.id === parseInt(svc.category))?.subcategories?.find(s => s.id === parseInt(svc.subcategory))?.required_documents || [];
                     const website = categories.find(c => c.id === parseInt(svc.category))?.website || null;
 
-                    const trackingFilledCount = countTrackingFields(svc);
-                    const hasTracking = trackingFilledCount > 0;
-
                     return (
-                      <motion.div key={svc.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative">
+                      <motion.div key={svc.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative">
                         
-                        {/* Header */}
+                        {/* Compact Header */}
                         <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
                           <div className="flex items-center gap-3">
                             <span className="bg-indigo-600 text-white h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shadow-sm">{index + 1}</span>
@@ -1208,22 +1647,20 @@ const ServiceEntry = () => {
                             </h4>
                           </div>
                           {!isEditMode && formData.services.length > 1 && (
-                            <button type="button" onClick={() => removeServiceFromCart(index)}
-                              className="text-gray-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded transition">
+                            <button type="button" onClick={() => removeServiceFromCart(index)} className="text-gray-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded transition">
                               <FiTrash2 className="h-4 w-4" />
                             </button>
                           )}
                         </div>
 
-                        {/* Body */}
+                        {/* Body Content */}
                         <div className="p-4 space-y-4">
-                          {/* Selectors */}
+                          {/* Row 1: Selectors */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
                               <div className="relative">
-                                <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
+                                <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
                                   <option value="">Select Category</option>
                                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
@@ -1233,8 +1670,7 @@ const ServiceEntry = () => {
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
                               <div className="relative">
-                                <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
+                                <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
                                   <option value="">Select Subcategory</option>
                                   {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
@@ -1243,7 +1679,7 @@ const ServiceEntry = () => {
                             </div>
                           </div>
 
-                          {/* Docs & Web */}
+                          {/* Row 2: Docs & Web (PROMINENT UI) */}
                           {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
                             <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
                               {website && (
@@ -1268,7 +1704,7 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* Financials */}
+                          {/* Row 3: Financials (Strictly 3 Columns) */}
                           <div className="grid grid-cols-3 gap-3">
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
@@ -1284,7 +1720,7 @@ const ServiceEntry = () => {
                             </div>
                           </div>
 
-                          {/* Expiry */}
+                          {/* Row 3.5: Expiry Date */}
                           {svc.hasExpiry && (
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
@@ -1292,77 +1728,230 @@ const ServiceEntry = () => {
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                   <FiCalendar className="h-4 w-4 text-gray-400" />
                                 </div>
-                                <input type="date" value={svc.expiryDate} onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} required
-                                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                                <input 
+                                  type="date" 
+                                  value={svc.expiryDate} 
+                                  onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} 
+                                  required 
+                                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                                />
                               </div>
+                              {svc.expiryDate && (
+                                <p className={`text-xs mt-1.5 font-medium ${
+                                  Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) < 30 ? 'text-amber-600' : 'text-emerald-600'
+                                }`}>
+                                  <FiClock className="inline mr-1" />
+                                  {Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))} days remaining
+                                </p>
+                              )}
                             </div>
                           )}
 
-                          {/* ===== SLIM TRACKING TRIGGER BUTTON ===== */}
-                          <button
-                            type="button"
-                            onClick={() => setTrackingModal({ isOpen: true, serviceIndex: index })}
-                            className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border transition-all text-left
-                              ${hasTracking
-                                ? 'bg-indigo-50/70 border-indigo-200 hover:bg-indigo-100/70'
-                                : 'bg-gray-50 border-dashed border-gray-300 hover:bg-indigo-50 hover:border-indigo-300'
-                              }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <FiTruck className={`h-4 w-4 shrink-0 ${hasTracking ? 'text-indigo-600' : 'text-gray-400'}`} />
-                              <span className={`text-xs font-semibold ${hasTracking ? 'text-indigo-900' : 'text-gray-600'}`}>
-                                {hasTracking ? 'Tracking Details' : 'Add Tracking Details'}
+                          {/* 🔥 UPGRADED: FULFILLMENT & TRACKING BLOCK (matches TrackServicePage style) */}
+                          <div className="mt-4 bg-gradient-to-br from-indigo-50/70 to-purple-50/40 border border-indigo-100 rounded-xl p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                                <div className="bg-indigo-100 p-1.5 rounded-lg">
+                                  <FiTruck className="text-indigo-600 h-4 w-4" />
+                                </div>
+                                Processing & Tracking Details
+                              </h4>
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-100">
+                                Optional
                               </span>
-                              {hasTracking && (
-                                <span className="inline-flex items-center gap-1 bg-white text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200 shrink-0">
-                                  <FiCheckCircle className="h-2.5 w-2.5" /> {trackingFilledCount}
-                                </span>
-                              )}
-                              {hasTracking && (
-                                <span className="text-[10px] text-gray-500 truncate">
-                                  {svc.applicationNumber || (svc.aadhaar ? `Aadhaar ••••${svc.aadhaar.slice(-4)}` : '')}
-                                  {svc.priority !== 'medium' && ` · ${svc.priority.toUpperCase()}`}
-                                </span>
-                              )}
                             </div>
-                            <FiEdit3 className={`h-3.5 w-3.5 shrink-0 ${hasTracking ? 'text-indigo-600' : 'text-gray-400'}`} />
-                          </button>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {/* Application Number */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
+                                <input 
+                                  type="text" 
+                                  placeholder="e.g., APP12345"
+                                  value={svc.applicationNumber}
+                                  onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
+                                  maxLength="50"
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
+                                />
+                              </div>
 
-                          {/* Notes toggle (unchanged) */}
+                              {/* Aadhaar Feed */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Aadhaar</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiCreditCard className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="text" 
+                                    inputMode="numeric"
+                                    placeholder="12-digit Aadhaar"
+                                    value={svc.aadhaar}
+                                    onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
+                                    maxLength="12"
+                                    className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                      svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                    }`}
+                                  />
+                                  <span className={`absolute inset-y-0 right-2 flex items-center text-[10px] font-medium ${
+                                    svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
+                                  }`}>
+                                    {svc.aadhaar?.length || 0}/12
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Email */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiMail className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="email" 
+                                    placeholder="customer@email.com"
+                                    value={svc.email}
+                                    onChange={(e) => handleCartChange(index, 'email', e.target.value)}
+                                    className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                      svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Assign To */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Assign To</label>
+                                <select 
+                                  value={svc.assignedTo}
+                                  onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
+                                >
+                                  <option value="">Unassigned Staff</option>
+                                  {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                </select>
+                              </div>
+
+                              {/* Estimated Delivery */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="date" 
+                                    value={svc.estimatedDelivery}
+                                    onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
+                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm text-gray-700"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Average Time */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Avg. Time</label>
+                                <div className="relative">
+                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                    <FiClock className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                  <input 
+                                    type="text" 
+                                    placeholder="e.g., 7 days"
+                                    value={svc.averageTime}
+                                    onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
+                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Priority */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                  <FiFlag className="h-3 w-3" /> Priority
+                                </label>
+                                <select 
+                                  value={svc.priority}
+                                  onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
+                                  className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium ${
+                                    svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                                    svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                    'border-amber-200 bg-amber-50 text-amber-700'
+                                  }`}
+                                >
+                                  <option value="low">Low</option>
+                                  <option value="medium">Medium</option>
+                                  <option value="high">High</option>
+                                </select>
+                              </div>
+
+                              {/* Current Step */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Current Step</label>
+                                <select 
+                                  value={svc.currentStep}
+                                  onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
+                                >
+                                  <option value="Submitted">Submitted</option>
+                                  <option value="Initial Review">Initial Review</option>
+                                  <option value="Document Verification">Document Verification</option>
+                                  <option value="Final Approval">Final Approval</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Customer Remarks - full width */}
+                            <div className="mt-3">
+                              <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-gray-400 normal-case font-normal">(sent via WhatsApp)</span>
+                              </label>
+                              <textarea 
+                                rows="2"
+                                placeholder="Remarks visible to customer..."
+                                value={svc.customerRemarks}
+                                onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
+                                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm resize-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Row 4: Collapsible Notes & Tasks */}
                           {!isEditMode && (
                             <div className="pt-2 border-t border-gray-100">
                               {!svc.showNoteArea ? (
-                                <button type="button" onClick={() => handleCartChange(index, 'showNoteArea', true)}
-                                  className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition">
-                                  <FiMessageCircle className="h-4 w-4" /> Add Internal Note or Task
+                                <button type="button" onClick={() => handleCartChange(index, 'showNoteArea', true)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition">
+                                  <FiMessageCircle className="h-4 w-4" /> Add Internal Note or Task for this Service
                                 </button>
                               ) : (
                                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 shadow-inner">
                                   <div className="flex justify-between items-center mb-3">
                                     <label className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                                      <FiMessageCircle className="text-indigo-500 h-4 w-4"/> Internal Note & Task
+                                      <FiMessageCircle className="text-indigo-500 h-4 w-4"/> Internal Note & Task Assignment
                                     </label>
-                                    <button type="button" onClick={() => { handleCartChange(index, 'showNoteArea', false); handleCartChange(index, 'initialNote', ''); handleCartChange(index, 'createTask', false); }}
-                                      className="text-xs text-gray-500 hover:text-rose-500 flex items-center gap-1">
+                                    <button type="button" onClick={() => { handleCartChange(index, 'showNoteArea', false); handleCartChange(index, 'initialNote', ''); handleCartChange(index, 'createTask', false); }} className="text-xs text-gray-500 hover:text-rose-500 flex items-center gap-1">
                                       <FiX className="h-3 w-3" /> Cancel
                                     </button>
                                   </div>
-                                  <MentionsInput value={svc.initialNote}
+
+                                  <MentionsInput
+                                    value={svc.initialNote}
                                     onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
                                     className="mentions-input text-sm"
-                                    placeholder="Write an internal note... Type @ to assign staff"
+                                    placeholder="Write an internal note... Type @ to assign staff members"
                                     style={{
                                       control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
                                       highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
                                       input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
                                       suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
-                                    }}>
-                                    <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`}
-                                      renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
+                                    }}
+                                  >
+                                    <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`} renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
                                   </MentionsInput>
+
                                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                                    <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)}
-                                      className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
+                                    <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)} className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
                                       <option value="centre">🏢 Centre View</option>
                                       <option value="private">🔒 Private</option>
                                       <option value="mentioned_only">👥 Mentions Only</option>
@@ -1372,6 +1961,8 @@ const ServiceEntry = () => {
                                       Convert to Task
                                     </label>
                                   </div>
+
+                                  {/* Task Expansion */}
                                   {svc.createTask && (
                                     <div className="mt-3 bg-white p-3 rounded-lg border border-indigo-100 shadow-sm space-y-3">
                                       <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500" />
@@ -1394,33 +1985,48 @@ const ServiceEntry = () => {
                   })}
                 </AnimatePresence>
 
+                {/* ADD ANOTHER SERVICE BUTTON */}
                 {!isEditMode && (
-                  <button type="button" onClick={addServiceToCart}
-                    className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-semibold hover:bg-indigo-50 hover:border-indigo-300 transition flex items-center justify-center gap-2 shadow-sm">
+                  <button type="button" onClick={addServiceToCart} className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-semibold hover:bg-indigo-50 hover:border-indigo-300 transition flex items-center justify-center gap-2 shadow-sm">
                     <FiPlus className="h-5 w-5" /> Add Another Service for this Customer
                   </button>
                 )}
               </div>
             </div>
 
-            {/* RIGHT COLUMN: PAYMENT */}
+            {/* RIGHT COLUMN: PAYMENT DETAILS */}
             <div>
               <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 h-full flex flex-col">
                 <div className="flex justify-between items-center mb-5">
                   <div className="flex items-center gap-2">
-                    <div className="bg-indigo-100 p-2 rounded-lg"><FiDollarSign className="h-5 w-5 text-indigo-600" /></div>
+                    <div className="bg-indigo-100 p-2 rounded-lg">
+                      <FiDollarSign className="h-5 w-5 text-indigo-600" />
+                    </div>
                     <h3 className="text-lg font-semibold text-gray-800">Payment Details</h3>
                   </div>
-                  <button type="button" onClick={addPayment} disabled={isEditMode}
-                    className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${isEditMode ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
-                    <FiPlus className="h-4 w-4" /> Add Payment
+                  <button
+                    type="button"
+                    onClick={addPayment}
+                    disabled={isEditMode}
+                    className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors
+                      ${isEditMode
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'}
+                    `}
+                  >
+                    <FiPlus className="h-4 w-4" />
+                    Add Payment
                   </button>
                 </div>
-                {isEditMode && (
-                  <div className="mb-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                    ⚠️ Payments are locked during edit to protect accounting records.
-                  </div>
-                )}
+                
+                <div>
+                  {isEditMode && (
+                    <div className="mb-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      ⚠️ Payments are locked during edit to protect accounting records.
+                    </div>
+                  )}
+                </div>
+                
                 <div className="flex-grow space-y-4">
                   {formData.payments.length === 0 ? (
                     <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl p-8 text-center h-full flex flex-col justify-center">
@@ -1432,43 +2038,92 @@ const ServiceEntry = () => {
                     (formData.payments || []).map((payment, index) => (
                       <div key={index} className="bg-white p-4 rounded-xl border border-gray-200 relative">
                         <div className="absolute top-3 right-3">
-                          <button type="button" onClick={() => removePayment(index)} disabled={isEditMode}
-                            className={`transition-colors ${isEditMode ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-rose-500'}`}>
+                          <button
+                            type="button"
+                            onClick={() => removePayment(index)}
+                            disabled={isEditMode}
+                            className={`transition-colors
+                              ${isEditMode
+                                ? 'text-gray-300 cursor-not-allowed'
+                                : 'text-gray-400 hover:text-rose-500'}
+                            `}
+                          >
                             <FiTrash2 className="h-5 w-5" />
                           </button>
                         </div>
+                        
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method <span className="text-rose-500">*</span></label>
-                            <select value={payment.method} disabled={isEditMode} onChange={(e) => handlePaymentChange(index, 'method', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Payment Method <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              value={payment.method}
+                              disabled={isEditMode}
+                              onChange={(e) => handlePaymentChange(index, 'method', e.target.value)}
+                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                            >
                               <option value="cash">Cash</option>
                               <option value="wallet">Digital Wallet</option>
                             </select>
                           </div>
+                          
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Wallet <span className="text-rose-500">*</span></label>
-                            <select value={payment.wallet} disabled={isEditMode} onChange={(e) => handlePaymentChange(index, 'wallet', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Wallet <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              value={payment.wallet}
+                              disabled={isEditMode}
+                              onChange={(e) => handlePaymentChange(index, 'wallet', e.target.value)}
+                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                            >
                               <option value="">Select wallet</option>
                               {(payment.method === 'cash' ? wallets.offline : wallets.online).map(wallet => (
-                                <option key={wallet.id} value={String(wallet.id)}>{wallet.name} (₹{wallet.balance})</option>
+                                <option key={wallet.id} value={String(wallet.id)}>
+                                  {wallet.name} (₹{wallet.balance})
+                                </option>
                               ))}
                             </select>
                           </div>
+                          
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Amount (₹) <span className="text-rose-500">*</span></label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Amount (₹) <span className="text-rose-500">*</span>
+                            </label>
                             <div className="relative">
-                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><FiDollarSign className="h-4 w-4 text-gray-400" /></div>
-                              <input type="number" value={payment.amount} disabled={isEditMode} onChange={(e) => handlePaymentChange(index, 'amount', e.target.value)}
-                                required min="0" step="0.01" className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="0.00" />
+                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <FiDollarSign className="h-4 w-4 text-gray-400" />
+                              </div>
+                              <input
+                                type="number"
+                                value={payment.amount}
+                                disabled={isEditMode}
+                                onChange={(e) => handlePaymentChange(index, 'amount', e.target.value)}
+                                required
+                                min="0"
+                                step="0.01"
+                                className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                placeholder="0.00"
+                              />
                             </div>
                           </div>
+                          
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Status <span className="text-rose-500">*</span></label>
-                            <select value={payment.status} disabled={isEditMode} onChange={(e) => handlePaymentChange(index, 'status', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-                              {paymentStatusOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Status <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              value={payment.status}
+                              disabled={isEditMode}
+                              onChange={(e) => handlePaymentChange(index, 'status', e.target.value)}
+                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                            >
+                              {paymentStatusOptions.map(option => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
                             </select>
                           </div>
                         </div>
@@ -1476,6 +2131,7 @@ const ServiceEntry = () => {
                     ))
                   )}
                 </div>
+                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
                   <div className="space-y-1"><p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Grand Total</p><p className="text-2xl font-black text-gray-900">₹{grandTotal.toFixed(2)}</p></div>
                   <div className="space-y-1"><p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Paid Amount</p><p className="text-2xl font-black text-emerald-600">₹{paidAmount.toFixed(2)}</p></div>
@@ -1484,48 +2140,83 @@ const ServiceEntry = () => {
                 </div>
               </div>
             </div>
+            
           </div>
 
           {/* ACTION BUTTONS */}
           <div className="flex justify-end mt-2 gap-4">
-            <button type="button" onClick={() => {
-              setFormData({ tokenId: '', customerName: '', phone: '', status: 'pending', payments: [], services: [createEmptyService()] });
-              setEditingEntryId(null);
-            }} className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2">
-              <FiX className="h-5 w-5" /> Cancel
+            <button
+              type="button"
+              onClick={() => {
+                setFormData({
+                  tokenId: '',
+                  customerName: '',
+                  phone: '',
+                  status: 'pending',
+                  payments: [],
+                  services: [createEmptyService()]
+                });
+                setEditingEntryId(null);
+              }}
+              className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2"
+            >
+              <FiX className="h-5 w-5" />
+              Cancel
             </button>
-            <button type="button" onClick={openInvoiceModal} className="px-4 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 flex items-center gap-2 shadow-md">
-              <FiFileText className="h-5 w-5" /> Preview Invoice
+            <button
+              type="button"
+              onClick={openInvoiceModal}
+              className="px-4 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 flex items-center gap-2 shadow-md"
+            >
+              <FiFileText className="h-5 w-5" />
+              Preview Invoice
             </button>
-            <button type="submit" className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg">
-              <FiCheckCircle className="h-5 w-5" /> {editingEntryId ? 'Update Service Entry' : 'Submit Service Entry'}
+            <button
+              type="submit"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
+            >
+              <FiCheckCircle className="h-5 w-5" />
+              {editingEntryId ? 'Update Service Entry' : 'Submit Service Entry'}
             </button>
           </div>
         </form>
       </motion.div>
 
-      {/* EDIT MODE NOTES */}
+      {/* ========== UPGRADED NOTES SECTION (EDIT MODE ONLY) ========== */}
       {isEditMode && editingEntryId && (
         <div className="mb-8 transition-all duration-300">
           <div className="bg-gradient-to-r from-indigo-50 to-white rounded-xl p-5 border border-indigo-100 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
-              <div className="bg-indigo-100 p-2 rounded-lg"><FiMessageCircle className="h-5 w-5 text-indigo-600" /></div>
+              <div className="bg-indigo-100 p-2 rounded-lg">
+                <FiMessageCircle className="h-5 w-5 text-indigo-600" />
+              </div>
               <h3 className="text-lg font-semibold text-gray-800">Service Notes & Comments</h3>
-              <span className="ml-auto text-xs text-gray-400 bg-white px-2 py-1 rounded-full shadow-sm">Real-time updates</span>
+              <span className="ml-auto text-xs text-gray-400 bg-white px-2 py-1 rounded-full shadow-sm">
+                Real-time updates
+              </span>
             </div>
-            <NotesPanel contextType="service_entry" contextId={editingEntryId} embedded={true} showHeader={false} />
+            <NotesPanel
+              contextType="service_entry"
+              contextId={editingEntryId}
+              embedded={true}
+              showHeader={false}
+            />
           </div>
         </div>
       )}
 
-      {/* TODAY'S TABLE */}
+      {/* ========== TODAY'S SERVICE ENTRIES TABLE ========== */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
         <div className="flex justify-between items-center mb-5">
           <h3 className="text-lg font-semibold text-gray-900">Today's Service Entries</h3>
           <div className="flex items-center gap-4">
             <div className="text-sm text-gray-500">{serviceEntries.length} records</div>
-            <Link to="/dashboard/staff/all-entries" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-2">
-              <FiLink className="h-4 w-4" /> View All Entries
+            <Link
+              to="/dashboard/staff/all-entries"
+              className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-2"
+            >
+              <FiLink className="h-4 w-4" />
+              View All Entries
             </Link>
           </div>
         </div>
@@ -1544,9 +2235,11 @@ const ServiceEntry = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                  
                   {(userRole === 'admin' || userRole === 'superadmin') && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
                   )}
+                  
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
@@ -1562,79 +2255,126 @@ const ServiceEntry = () => {
                   
                   return (
                     <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">{index + 1}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{entry.tokenId ? `#${entry.tokenId}` : 'N/A'}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                        {index + 1}
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
+                      </td>
+
                       <td className="px-6 py-4 text-sm text-gray-900">
                         <div className="font-medium flex items-center gap-2">
-                          <span className="whitespace-normal break-words max-w-[150px] sm:max-w-[200px]">{entry.customerName}</span>
+                          <span className="whitespace-normal break-words max-w-[150px] sm:max-w-[200px]">
+                            {entry.customerName}
+                          </span>
+                          
                           {entry.notes_count > 0 && (
-                            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-100 flex-shrink-0 cursor-help transition-all hover:bg-indigo-100"
-                              title={`${entry.notes_count} note(s) attached.`}>
-                              <FiMessageCircle className="h-3 w-3" />{entry.notes_count}
+                            <span 
+                              className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-100 flex-shrink-0 cursor-help transition-all hover:bg-indigo-100"
+                              title={`${entry.notes_count} note(s) attached. Click details to view.`}
+                            >
+                              <FiMessageCircle className="h-3 w-3" />
+                              {entry.notes_count}
                             </span>
                           )}
                         </div>
                         <div className="text-gray-500 mt-0.5">{entry.phone}</div>
                       </td>
+
                       {(userRole === 'admin' || userRole === 'superadmin') && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">{entry.staffName || 'Unknown'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                          {entry.staffName || 'Unknown'}
+                        </td>
                       )}
+
                       <td className="px-6 py-4 text-sm">
                         <div className="font-semibold text-gray-900">{getCategoryName(entry.category)}</div>
                         <div className="text-gray-500 mb-1.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
                         {entry.expiryDate && entry.expiryDate !== 'N/A' && (
                           <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
-                            <FiCalendar className="h-3 w-3" /> Exp: {new Date(entry.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            <FiCalendar className="h-3 w-3" /> 
+                            Exp: {new Date(entry.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">₹{entry.totalCharge.toFixed(2)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ₹{entry.totalCharge.toFixed(2)}
+                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
                         <div className="space-y-2">
                           {deptTx && deptTx.id && !deptTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-rose-600"><FiTrendingDown className="inline h-3 w-3 mr-1" />Dept: ₹{Number(deptTx.amount).toFixed(2)}</span>
+                                <span className="text-rose-600">
+                                  <FiTrendingDown className="inline h-3 w-3 mr-1" />
+                                  Dept: ₹{Number(deptTx.amount).toFixed(2)}
+                                </span>
                                 {correctionStatus[deptTx.id]?.corrections_used > 0 && (
                                   <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
-                                    <FiRotateCcw className="h-3 w-3" /> Edited
+                                    <FiRotateCcw className="h-3 w-3" />
+                                    Edited
                                   </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-1">
-                                <button onClick={() => viewTransactionHistory(deptTx.id, 'department_charge')} className="text-gray-400 hover:text-indigo-600 p-0.5 rounded" title="View correction history">
+                                <button
+                                  onClick={() => viewTransactionHistory(deptTx.id, 'department_charge')}
+                                  className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                  title="View correction history"
+                                >
                                   <FiHistory className="h-3.5 w-3.5" />
                                 </button>
                                 {canCorrectTransaction(deptTx, entry, 'department_charge') && (
-                                  <button onClick={() => openCorrectionModal(deptTx, entry, 'department_charge')} className="text-amber-500 hover:text-amber-700 p-0.5 rounded" title="Correct department charge" disabled={deptTx.is_reversal}>
+                                  <button
+                                    onClick={() => openCorrectionModal(deptTx, entry, 'department_charge')}
+                                    className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
+                                    title="Correct department charge"
+                                    disabled={deptTx.is_reversal}
+                                  >
                                     <FiEdit3 className="h-3.5 w-3.5" />
                                   </button>
                                 )}
                               </div>
                             </div>
                           )}
+
                           {serviceTx && serviceTx.id && !serviceTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-rose-600"><FiTrendingDown className="inline h-3 w-3 mr-1" />Service: ₹{Number(serviceTx.amount).toFixed(2)}</span>
+                                <span className="text-rose-600">
+                                  <FiTrendingDown className="inline h-3 w-3 mr-1" />
+                                  Service: ₹{Number(serviceTx.amount).toFixed(2)}
+                                </span>
                                 {correctionStatus[serviceTx.id]?.corrections_used > 0 && (
                                   <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
-                                    <FiRotateCcw className="h-3 w-3" /> Edited
+                                    <FiRotateCcw className="h-3 w-3" />
+                                    Edited
                                   </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-1">
-                                <button onClick={() => viewTransactionHistory(serviceTx.id, 'service_charge')} className="text-gray-400 hover:text-indigo-600 p-0.5 rounded" title="View correction history">
+                                <button
+                                  onClick={() => viewTransactionHistory(serviceTx.id, 'service_charge')}
+                                  className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                  title="View correction history"
+                                >
                                   <FiHistory className="h-3.5 w-3.5" />
                                 </button>
                                 {canCorrectTransaction(serviceTx, entry, 'service_charge') && (
-                                  <button onClick={() => openCorrectionModal(serviceTx, entry, 'service_charge')} className="text-amber-500 hover:text-amber-700 p-0.5 rounded" title="Correct service charge" disabled={serviceTx.is_reversal}>
+                                  <button
+                                    onClick={() => openCorrectionModal(serviceTx, entry, 'service_charge')}
+                                    className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
+                                    title="Correct service charge"
+                                    disabled={serviceTx.is_reversal}
+                                  >
                                     <FiEdit3 className="h-3.5 w-3.5" />
                                   </button>
                                 )}
                               </div>
                             </div>
                           )}
+
                           {safePayments.map((payment, idx) => {
                             const status = correctionStatus[payment.transaction_id || payment.id];
                             const hasBeenCorrected = status?.corrections_used > 0;
@@ -1642,19 +2382,33 @@ const ServiceEntry = () => {
                             return (
                               <div key={idx} className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span>{getWalletName(payment.wallet)}: ₹{Number(payment.amount).toFixed(2)} ({payment.status})</span>
+                                  <span>
+                                    {getWalletName(payment.wallet)}: ₹{Number(payment.amount).toFixed(2)} ({payment.status})
+                                  </span>
                                   {hasBeenCorrected && (
                                     <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5">
-                                      <FiRotateCcw className="h-3 w-3" /> Edited
+                                      <FiRotateCcw className="h-3 w-3" />
+                                      Edited
                                     </span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <button onClick={() => viewTransactionHistory(correctionId, 'payment')} className="text-gray-400 hover:text-indigo-600 p-0.5 rounded" title="View correction history">
+                                  <button
+                                    onClick={() => viewTransactionHistory(correctionId, 'payment')}
+                                    className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                    title="View correction history"
+                                  >
                                     <FiHistory className="h-3.5 w-3.5" />
                                   </button>
                                   {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
-                                    <button onClick={() => openCorrectionModal(payment, entry, 'payment')} className="text-amber-500 hover:text-amber-700 p-0.5 rounded" title="Correct this payment" disabled={payment.is_reversal}>
+                                    <button
+                                      onClick={() => {
+                                        openCorrectionModal(payment, entry, 'payment');
+                                      }}
+                                      className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
+                                      title="Correct this payment"
+                                      disabled={payment.is_reversal}
+                                    >
                                       <FiEdit3 className="h-3.5 w-3.5" />
                                     </button>
                                   )}
@@ -1663,29 +2417,40 @@ const ServiceEntry = () => {
                             );
                           })}
                         </div>
-                      </td>
+                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${getServiceStatusDisplay(entry.status).color}`}>
                           {getServiceStatusDisplay(entry.status).name}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-2">
-                        <button onClick={() => setSelectedEntry(entry)} className="text-indigo-600 hover:text-indigo-900 p-1.5 rounded-lg hover:bg-indigo-50" title="View details">
+                        <button
+                          onClick={() => setSelectedEntry(entry)}
+                          className="text-indigo-600 hover:text-indigo-900 p-1.5 rounded-lg hover:bg-indigo-50"
+                          title="View details"
+                        >
                           <FiEye className="h-5 w-5" />
                         </button>
                         {isToday(entry.created_at) && (!entry.is_edited || userRole === 'admin' || userRole === 'superadmin') && (
-                          <button onClick={() => handleEditEntry(entry)}
+                          <button
+                            onClick={() => handleEditEntry(entry)}
                             className={`p-1.5 rounded-lg ${entry.is_edited ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
-                            title={entry.is_edited ? "Admin Override Edit" : "Edit this entry (once only)"}>
+                            title={entry.is_edited ? "Admin Override Edit" : "Edit this entry (once only)"}
+                          >
                             ✏️
                           </button>
                         )}
                         {isToday(entry.created_at) && entry.is_edited && userRole === 'staff' && (
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700">Edited</span>
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700">
+                            Edited
+                          </span>
                         )}
                         {(userRole === 'admin' || userRole === 'superadmin') && (
-                          <button onClick={() => setDeleteDialog({ isOpen: true, entryId: entry.id, loading: false })}
-                            className="text-rose-600 hover:text-rose-900 p-1.5 rounded-lg hover:bg-rose-50" title="Delete this entry completely">
+                          <button
+                            onClick={() => setDeleteDialog({ isOpen: true, entryId: entry.id, loading: false })}
+                            className="text-rose-600 hover:text-rose-900 p-1.5 rounded-lg hover:bg-rose-50"
+                            title="Delete this entry completely"
+                          >
                             <FiTrash2 className="h-5 w-5" />
                           </button>
                         )}
@@ -1699,281 +2464,43 @@ const ServiceEntry = () => {
         )}
       </div>
 
-      {/* ========== TRACKING MODAL (NEW DESIGN) ========== */}
-      {trackingModal.isOpen && trackingService && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[55] p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-          >
-            {/* Header */}
-            <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
-              <div className="flex items-center gap-3">
-                <div className="bg-white/20 p-2 rounded-lg">
-                  <FiTruck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold">Tracking & Fulfillment</h2>
-                  <p className="text-xs text-indigo-100">
-                    Service {trackingModal.serviceIndex + 1}: {getCategoryName(trackingService.category) || 'Untitled'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setTrackingModal({ isOpen: false, serviceIndex: null })}
-                className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
-              >
-                <FiX className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 space-y-5">
-
-              {/* Row 1: App No + Aadhaar */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Application Number</label>
-                  <div className="relative">
-                    <FiFileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={trackingService.applicationNumber}
-                      onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'applicationNumber', e.target.value)}
-                      maxLength="50"
-                      placeholder="e.g., APP12345"
-                      className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Aadhaar Number</label>
-                  <div className="relative">
-                    <FiCreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={trackingService.aadhaar}
-                      onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'aadhaar', e.target.value)}
-                      maxLength="12"
-                      placeholder="12-digit Aadhaar"
-                      className={`w-full pl-10 pr-14 py-2.5 text-sm border rounded-lg focus:ring-2 bg-white ${
-                        trackingService.aadhaar && !/^\d{12}$/.test(trackingService.aadhaar)
-                          ? 'border-rose-300 focus:ring-rose-400'
-                          : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
-                      }`}
-                    />
-                    <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium ${
-                      trackingService.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
-                    }`}>
-                      {trackingService.aadhaar?.length || 0}/12
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2: Email + Assigned To */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Email Address</label>
-                  <div className="relative">
-                    <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="email"
-                      value={trackingService.email}
-                      onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'email', e.target.value)}
-                      placeholder="customer@email.com"
-                      className={`w-full pl-10 pr-3 py-2.5 text-sm border rounded-lg focus:ring-2 bg-white ${
-                        trackingService.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trackingService.email)
-                          ? 'border-rose-300 focus:ring-rose-400'
-                          : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
-                      }`}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Assigned Staff</label>
-                  <div className="relative">
-                    <FiUserCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <select
-                      value={trackingService.assignedTo}
-                      onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'assignedTo', e.target.value)}
-                      className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white appearance-none"
-                    >
-                      <option value="">Unassigned</option>
-                      {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 3: Estimated Delivery + Avg Time */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Estimated Delivery</label>
-                  <div className="relative">
-                    <FiCalendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="date"
-                      value={trackingService.estimatedDelivery}
-                      onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'estimatedDelivery', e.target.value)}
-                      className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-gray-700"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Average Time</label>
-                  <div className="relative">
-                    <FiClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={trackingService.averageTime}
-                      onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'averageTime', e.target.value)}
-                      placeholder="e.g., 7 days"
-                      className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 4: Priority + Current Step */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Priority</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { value: 'low', label: 'Low', active: 'bg-emerald-100 text-emerald-700 border-emerald-300', icon: '🟢' },
-                      { value: 'medium', label: 'Medium', active: 'bg-amber-100 text-amber-700 border-amber-300', icon: '🟡' },
-                      { value: 'high', label: 'High', active: 'bg-rose-100 text-rose-700 border-rose-300', icon: '🔴' }
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handleCartChange(trackingModal.serviceIndex, 'priority', opt.value)}
-                        className={`py-2 px-3 text-xs font-semibold rounded-lg border-2 transition-all ${
-                          trackingService.priority === opt.value
-                            ? opt.active + ' shadow-sm'
-                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        {opt.icon} {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Current Step</label>
-                  <div className="relative">
-                    <FiTarget className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                    <select
-                      value={trackingService.currentStep}
-                      onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'currentStep', e.target.value)}
-                      className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white appearance-none"
-                    >
-                      <option value="Submitted">Submitted</option>
-                      <option value="Initial Review">Initial Review</option>
-                      <option value="Document Verification">Document Verification</option>
-                      <option value="Final Approval">Final Approval</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 5: Customer Remarks */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide flex items-center gap-1.5">
-                  <FiMessageCircle className="h-3 w-3" />
-                  Customer Remarks
-                  <span className="text-gray-400 normal-case font-normal">— sent via WhatsApp</span>
-                </label>
-                <textarea
-                  rows="3"
-                  value={trackingService.customerRemarks}
-                  onChange={(e) => handleCartChange(trackingModal.serviceIndex, 'customerRemarks', e.target.value)}
-                  placeholder="Remarks visible to customer on WhatsApp notifications..."
-                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white resize-none"
-                />
-              </div>
-
-              {/* Info Banner */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-                <FiAlertCircle className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-blue-800">
-                  All fields are <strong>optional</strong>. Fill in whatever is applicable — you can always edit these from the Tracking module later.
-                </p>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-between items-center rounded-b-2xl">
-              <button
-                type="button"
-                onClick={() => {
-                  // Clear all tracking fields for this service
-                  const idx = trackingModal.serviceIndex;
-                  ['applicationNumber','estimatedDelivery','averageTime','assignedTo','aadhaar','email','customerRemarks'].forEach(f => {
-                    handleCartChange(idx, f, '');
-                  });
-                  handleCartChange(idx, 'priority', 'medium');
-                  handleCartChange(idx, 'currentStep', 'Submitted');
-                  toast.info('Tracking fields cleared');
-                }}
-                className="text-xs text-gray-500 hover:text-rose-600 font-medium px-3 py-2 rounded-lg hover:bg-rose-50 transition-colors flex items-center gap-1.5"
-              >
-                <FiTrash2 className="h-3.5 w-3.5" /> Clear All
-              </button>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTrackingModal({ isOpen: false, serviceIndex: null })}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTrackingModal({ isOpen: false, serviceIndex: null });
-                    toast.success('Tracking details saved');
-                  }}
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm shadow-sm flex items-center gap-2"
-                >
-                  <FiCheck className="h-4 w-4" /> Save Details
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* ========== CONFIRM MODAL ========== */}
+      {/* ========== CUSTOM CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
             <div className="flex items-center gap-3 mb-4">
-              <div className="bg-amber-100 p-2 rounded-full"><FiAlertCircle className="h-6 w-6 text-amber-600" /></div>
+              <div className="bg-amber-100 p-2 rounded-full">
+                <FiAlertCircle className="h-6 w-6 text-amber-600" />
+              </div>
               <h3 className="text-lg font-bold text-gray-900">{confirmDialog.title}</h3>
             </div>
             <p className="text-gray-600 text-sm mb-6">{confirmDialog.message}</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm">Cancel</button>
-              <button onClick={confirmDialog.onConfirm}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium text-sm shadow-sm">Proceed</button>
+              <button
+                onClick={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDialog.onConfirm}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium text-sm shadow-sm"
+              >
+                Proceed
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== ENTRY DETAILS MODAL ========== */}
+      {/* ========== UPGRADED ENTRY DETAILS MODAL ========== */}
       {selectedEntry && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-40">
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2 border-b">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <FiFileText className="h-5 w-5 text-indigo-600" /> Service Entry Details
+                <FiFileText className="h-5 w-5 text-indigo-600" />
+                Service Entry Details
               </h2>
               <button onClick={() => setSelectedEntry(null)} className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100">
                 <FiX className="h-5 w-5" />
@@ -1982,22 +2509,23 @@ const ServiceEntry = () => {
             <div className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <p><strong>Token ID:</strong> {selectedEntry.tokenId ? `#${selectedEntry.tokenId}` : 'N/A'}</p>
-                <p><strong>Customer:</strong> {selectedEntry.customerName}</p>
+                <p><strong>Customer Name:</strong> {selectedEntry.customerName}</p>
                 <p><strong>Phone:</strong> {selectedEntry.phone}</p>
                 <p><strong>Service:</strong> {getCategoryName(selectedEntry.category)}</p>
                 <p><strong>Subcategory:</strong> {getSubcategoryName(selectedEntry.category, selectedEntry.subcategory)}</p>
                 <p><strong>Service Charge:</strong> ₹{selectedEntry.serviceCharge.toFixed(2)}</p>
                 <p><strong>Department Charge:</strong> ₹{selectedEntry.departmentCharge.toFixed(2)}</p>
-                <p><strong>Total:</strong> ₹{selectedEntry.totalCharge.toFixed(2)}</p>
-                <p><strong>Status:</strong>
+                <p><strong>Total Charge:</strong> ₹{selectedEntry.totalCharge.toFixed(2)}</p>
+                <p><strong>Status:</strong> 
                   <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getServiceStatusDisplay(selectedEntry.status).color}`}>
                     {getServiceStatusDisplay(selectedEntry.status).name}
                   </span>
                 </p>
-                <p><strong>Expiry:</strong> {selectedEntry.expiryDate || 'N/A'}</p>
+                <p><strong>Expiry Date:</strong> {selectedEntry.expiryDate || 'N/A'}</p>
+                {/* NEW: Tracking fields */}
                 {selectedEntry.aadhaar && <p><strong>Aadhaar:</strong> {selectedEntry.aadhaar}</p>}
                 {selectedEntry.email && <p><strong>Email:</strong> {selectedEntry.email}</p>}
-                {selectedEntry.applicationNumber && <p><strong>App No:</strong> {selectedEntry.applicationNumber}</p>}
+                {selectedEntry.applicationNumber && <p><strong>Application No:</strong> {selectedEntry.applicationNumber}</p>}
                 {selectedEntry.estimatedDelivery && <p><strong>Est. Delivery:</strong> {selectedEntry.estimatedDelivery}</p>}
                 {selectedEntry.averageTime && <p><strong>Avg. Time:</strong> {selectedEntry.averageTime}</p>}
               </div>
@@ -2015,16 +2543,23 @@ const ServiceEntry = () => {
                 <FiMessageCircle className="h-4 w-4 text-indigo-500" />
                 <h4 className="font-semibold text-gray-800">Notes & Comments</h4>
                 {selectedEntry.notes_count > 0 && (
-                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{selectedEntry.notes_count} note(s)</span>
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                    {selectedEntry.notes_count} note(s)
+                  </span>
                 )}
               </div>
-              <NotesPanel contextType="service_entry" contextId={selectedEntry.id} embedded={true} showHeader={false} />
+              <NotesPanel 
+                contextType="service_entry" 
+                contextId={selectedEntry.id} 
+                embedded={true} 
+                showHeader={false}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== CORRECTION MODAL ========== */}
+      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL ========== */}
       {correctionModal.isOpen && correctionModal.transaction && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
@@ -2033,18 +2568,30 @@ const ServiceEntry = () => {
                 <FiRotateCcw className="h-5 w-5 text-amber-600" />
                 Correct {getTransactionTypeLabel(correctionModal.transactionType)}
               </h2>
-              <button onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
-                className="text-gray-500 hover:text-gray-700"><FiX className="h-6 w-6" /></button>
+              <button 
+                onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="h-6 w-6" />
+              </button>
             </div>
+            
             <div className="space-y-4">
               <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                <p className="text-sm text-amber-800 font-medium mb-2">Original {getTransactionTypeLabel(correctionModal.transactionType)}</p>
-                <p className="text-gray-700"><strong>Amount:</strong> ₹{formatAmount(correctionModal.transaction.amount)}</p>
-                <p className="text-gray-700"><strong>Wallet:</strong> {getWalletName(correctionModal.transaction.wallet_id || correctionModal.transaction.wallet)}</p>
+                <p className="text-sm text-amber-800 font-medium mb-2">
+                  Original {getTransactionTypeLabel(correctionModal.transactionType)}
+                </p>
+                <p className="text-gray-700">
+                  <strong>Amount:</strong> ₹{formatAmount(correctionModal.transaction.amount)}
+                </p>
+                <p className="text-gray-700">
+                  <strong>Wallet:</strong> {getWalletName(correctionModal.transaction.wallet_id || correctionModal.transaction.wallet)}
+                </p>
                 <p className="text-gray-700 text-xs mt-1">
                   <strong>Type:</strong> {correctionModal.transactionType === 'payment' ? 'Credit (Money In)' : 'Debit (Money Out)'}
                 </p>
               </div>
+              
               {userRole === 'staff' && correctionStatus[correctionModal.transaction.id] && (
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-800">
@@ -2053,74 +2600,122 @@ const ServiceEntry = () => {
                   </p>
                 </div>
               )}
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">New Amount (₹) <span className="text-rose-500">*</span></label>
-                <input type="number" value={correctionModal.newAmount}
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Amount (₹) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={correctionModal.newAmount}
                   onChange={(e) => setCorrectionModal(prev => ({ ...prev, newAmount: e.target.value }))}
-                  min="0.01" step="0.01"
+                  min="0.01"
+                  step="0.01"
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter new amount" />
+                  placeholder="Enter new amount"
+                />
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">New Wallet <span className="text-rose-500">*</span></label>
-                <select value={correctionModal.newWalletId}
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Wallet <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={correctionModal.newWalletId}
                   onChange={(e) => {
-                    const value = e.target.value;
-                    if (value) {
-                      const allWallets = [...wallets.offline, ...wallets.online];
-                      const selectedWallet = allWallets.find(w => w.id === parseInt(value));
-                      if (selectedWallet && selectedWallet.is_shared === false && selectedWallet.assigned_staff_id !== null) {
-                        setConfirmDialog({
-                          isOpen: true, title: 'Personal Wallet Selected',
-                          message: `You are selecting a personal wallet (${selectedWallet.name}). Do you want to use it for this correction?`,
-                          onConfirm: () => { setConfirmDialog(prev => ({ ...prev, isOpen: false })); setCorrectionModal(prev => ({ ...prev, newWalletId: value })); }
-                        });
-                        return;
-                      }
+                  const value = e.target.value;
+                  if (value) {
+                    const allWallets = [...wallets.offline, ...wallets.online];
+                    const selectedWallet = allWallets.find(w => w.id === parseInt(value));
+                    
+                    if (selectedWallet && selectedWallet.is_shared === false && selectedWallet.assigned_staff_id !== null) {
+                      setConfirmDialog({
+                        isOpen: true,
+                        title: 'Personal Wallet Selected',
+                        message: `You are selecting a personal wallet (${selectedWallet.name}). Do you want to use it for this correction?`,
+                        onConfirm: () => {
+                          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                          setCorrectionModal(prev => ({ ...prev, newWalletId: value }));
+                        }
+                      });
+                      return;
                     }
-                    setCorrectionModal(prev => ({ ...prev, newWalletId: value }));
-                  }}
-                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  }
+                  setCorrectionModal(prev => ({ ...prev, newWalletId: value }));
+                }}
+                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
                   <option value="">Select wallet</option>
                   <optgroup label="Cash Wallets">
-                    {wallets.offline.map(w => <option key={w.id} value={String(w.id)}>{w.name} (₹{w.balance})</option>)}
+                    {wallets.offline.map(w => (
+                      <option key={w.id} value={String(w.id)}>
+                        {w.name} (₹{w.balance})
+                      </option>
+                    ))}
                   </optgroup>
                   <optgroup label="Digital Wallets">
-                    {wallets.online.map(w => <option key={w.id} value={String(w.id)}>{w.name} (₹{w.balance})</option>)}
+                    {wallets.online.map(w => (
+                      <option key={w.id} value={String(w.id)}>
+                        {w.name} (₹{w.balance})
+                      </option>
+                    ))}
                   </optgroup>
                 </select>
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Correction Reason <span className="text-rose-500">*</span></label>
-                <textarea value={correctionModal.reason}
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Correction Reason <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={correctionModal.reason}
                   onChange={(e) => setCorrectionModal(prev => ({ ...prev, reason: e.target.value }))}
                   rows={3}
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Explain why this transaction needs correction..." />
+                  placeholder="Explain why this transaction needs correction..."
+                />
                 <p className="text-xs text-gray-500 mt-1">Minimum 5 characters</p>
               </div>
+              
               <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
                 <p className="text-xs text-gray-600">
                   <FiAlertCircle className="inline mr-1 text-amber-600" />
-                  <strong>Note:</strong> This will reverse the original transaction and create a new corrected one. All changes are logged for audit purposes.
+                  <strong>Note:</strong> This will reverse the original transaction and create a new corrected one. 
+                  All changes are logged for audit purposes.
                 </p>
               </div>
             </div>
+            
             <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">Cancel</button>
-              <button onClick={submitCorrection} disabled={correctionModal.loading}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2 disabled:opacity-50">
+              <button
+                onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitCorrection}
+                disabled={correctionModal.loading}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
                 {correctionModal.loading ? (
-                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Processing...</>
-                ) : (<><FiCheck className="h-4 w-4" />Confirm Correction</>)}
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <FiCheck className="h-4 w-4" />
+                    Confirm Correction
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== HISTORY MODAL ========== */}
+      {/* ========== UNIFIED TRANSACTION HISTORY MODAL ========== */}
       {historyModal.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
@@ -2129,11 +2724,18 @@ const ServiceEntry = () => {
                 <FiHistory className="h-5 w-5 text-indigo-600" />
                 {getTransactionTypeLabel(historyModal.transactionType)} Correction History
               </h2>
-              <button onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
-                className="text-gray-500 hover:text-gray-700"><FiX className="h-6 w-6" /></button>
+              <button 
+                onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="h-6 w-6" />
+              </button>
             </div>
+            
             {historyModal.loading ? (
-              <div className="flex justify-center py-8"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div></div>
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
             ) : !Array.isArray(historyModal.history) || historyModal.history.length === 0 ? (
               <p className="text-gray-500 text-center py-8">No correction history found</p>
             ) : (
@@ -2142,37 +2744,57 @@ const ServiceEntry = () => {
                   <span>Showing all versions (oldest first)</span>
                   <span className="flex-1 h-px bg-gray-200"></span>
                 </div>
-                {[...historyModal.history].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                
+                {[...historyModal.history]
+                  .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
                   .map((entry, idx, arr) => {
                     const nonReversal = arr.filter(t => !t.is_reversal);
                     const oldest = nonReversal[0];
                     let type = "correction";
                     if (entry.id === oldest?.id) type = "original";
                     else if (entry.is_reversal) type = "reversal";
+                
                     const getEntryStyles = (type) => {
                       switch (type) {
-                        case 'original': return { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-200 text-blue-700', icon: '💳', label: 'Original' };
-                        case 'reversal': return { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-200 text-rose-700', icon: '↩️', label: 'Reversal' };
-                        default: return { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-200 text-emerald-700', icon: '✅', label: 'Correction' };
+                        case 'original':
+                          return { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-200 text-blue-700', icon: '💳', label: 'Original' };
+                        case 'reversal':
+                          return { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-200 text-rose-700', icon: '↩️', label: 'Reversal' };
+                        default:
+                          return { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-200 text-emerald-700', icon: '✅', label: 'Correction' };
                       }
                     };
+                
                     const styles = getEntryStyles(type);
                     const latestNonReversal = [...nonReversal].pop();
                     const isLatest = entry.id === latestNonReversal?.id;
+                
                     return (
                       <div key={idx} className="relative">
-                        {idx < arr.length - 1 && (<div className="absolute left-5 top-12 bottom-0 w-0.5 bg-gray-300 -mb-4"></div>)}
+                        {idx < arr.length - 1 && (
+                          <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-gray-300 -mb-4"></div>
+                        )}
+                
                         <div className={`p-4 rounded-lg border ${styles.bg} ${styles.border} relative ml-2`}>
                           <div className={`absolute -left-[13px] top-5 w-3 h-3 rounded-full ${
-                            type === 'original' ? 'bg-blue-500' : type === 'reversal' ? 'bg-rose-500' : 'bg-emerald-500'
+                            type === 'original' ? 'bg-blue-500' :
+                            type === 'reversal' ? 'bg-rose-500' : 'bg-emerald-500'
                           } border-2 border-white`}></div>
+                
                           <div className="flex justify-between items-start mb-2">
                             <div className="flex items-center gap-2">
-                              <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${styles.badge}`}>{styles.icon} {styles.label}</span>
-                              {isLatest && type !== 'original' && (<span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Current</span>)}
+                              <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${styles.badge}`}>
+                                {styles.icon} {styles.label}
+                              </span>
+                              {isLatest && type !== 'original' && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                  Current
+                                </span>
+                              )}
                             </div>
                             <span className="text-xs text-gray-500">{formatDate(entry.created_at)}</span>
                           </div>
+                
                           <div className="ml-1 space-y-1.5">
                             <p className="text-sm font-medium">
                               Amount: <span className="font-semibold">₹{formatAmount(entry.amount)}</span>
@@ -2191,7 +2813,8 @@ const ServiceEntry = () => {
                             )}
                             {entry.staff_name && (
                               <p className="text-xs text-gray-500 flex items-center gap-1">
-                                <FiUser className="h-3 w-3" />Corrected by: {entry.staff_name}
+                                <FiUser className="h-3 w-3" />
+                                Corrected by: {entry.staff_name}
                               </p>
                             )}
                           </div>
@@ -2201,114 +2824,198 @@ const ServiceEntry = () => {
                   })}
               </div>
             )}
+            
             <div className="flex justify-end mt-6 pt-3 border-t border-gray-200">
-              <button onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========== INVOICE MODAL ========== */}
-      {invoiceModalOpen && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Edit Invoice</h2>
-              <button onClick={() => setInvoiceModalOpen(false)} className="text-gray-500 hover:text-gray-700"><FiX className="h-6 w-6" /></button>
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-                  <input type="text" value={invoiceData.customerName}
-                    onChange={(e) => setInvoiceData({ ...invoiceData, customerName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input type="text" value={invoiceData.phone}
-                    onChange={(e) => setInvoiceData({ ...invoiceData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Invoice Items</label>
-                {invoiceData.items.map((item, idx) => (
-                  <div key={idx} className="flex gap-2 mb-3 items-center">
-                    <input type="text" placeholder="Description" value={item.description}
-                      onChange={(e) => {
-                        const newItems = [...invoiceData.items];
-                        newItems[idx].description = e.target.value;
-                        setInvoiceData({ ...invoiceData, items: newItems });
-                      }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md" />
-                    <input type="number" placeholder="Amount" value={item.amount}
-                      onChange={(e) => {
-                        const newItems = [...invoiceData.items];
-                        newItems[idx].amount = e.target.value;
-                        setInvoiceData({ ...invoiceData, items: newItems });
-                      }}
-                      className="w-28 px-3 py-2 border border-gray-300 rounded-md" />
-                    {invoiceData.items.length > 1 && (
-                      <button type="button" onClick={() => {
-                        const newItems = invoiceData.items.filter((_, i) => i !== idx);
-                        setInvoiceData({ ...invoiceData, items: newItems });
-                      }} className="text-rose-500 hover:text-rose-700">
-                        <FiTrash2 className="h-5 w-5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button type="button" onClick={() => setInvoiceData({ ...invoiceData, items: [...invoiceData.items, { description: '', amount: '' }] })}
-                  className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                  <FiPlus className="h-4 w-4" /> Add Item
-                </button>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg flex justify-between">
-                <span className="font-medium">Total</span>
-                <span className="font-bold text-indigo-700">
-                  ₹{invoiceData.items.reduce((sum, it) => sum + parseFloat(it.amount || 0), 0).toFixed(2)}
-                </span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
-                <textarea value={invoiceData.notes}
-                  onChange={(e) => setInvoiceData({ ...invoiceData, notes: e.target.value })}
-                  rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="Any additional remarks…" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => setInvoiceModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md">Cancel</button>
-              <button onClick={generateInvoicePDF}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center gap-2">
-                <FiFileText className="h-4 w-4" /> Download Invoice PDF
+              <button
+                onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== DELETE MODAL ========== */}
+      {/* ========== INVOICE GENERATOR MODAL ========== */}
+      {invoiceModalOpen && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Edit Invoice</h2>
+              <button
+                onClick={() => setInvoiceModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <FiX className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer Name
+                  </label>
+                  <input
+                    type="text"
+                    value={invoiceData.customerName}
+                    onChange={(e) =>
+                      setInvoiceData({ ...invoiceData, customerName: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={invoiceData.phone}
+                    onChange={(e) =>
+                      setInvoiceData({ ...invoiceData, phone: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Invoice Items
+                </label>
+                {invoiceData.items.map((item, idx) => (
+                  <div key={idx} className="flex gap-2 mb-3 items-center">
+                    <input
+                      type="text"
+                      placeholder="Description"
+                      value={item.description}
+                      onChange={(e) => {
+                        const newItems = [...invoiceData.items];
+                        newItems[idx].description = e.target.value;
+                        setInvoiceData({ ...invoiceData, items: newItems });
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Amount"
+                      value={item.amount}
+                      onChange={(e) => {
+                        const newItems = [...invoiceData.items];
+                        newItems[idx].amount = e.target.value;
+                        setInvoiceData({ ...invoiceData, items: newItems });
+                      }}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                    {invoiceData.items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newItems = invoiceData.items.filter((_, i) => i !== idx);
+                          setInvoiceData({ ...invoiceData, items: newItems });
+                        }}
+                        className="text-rose-500 hover:text-rose-700"
+                      >
+                        <FiTrash2 className="h-5 w-5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInvoiceData({
+                      ...invoiceData,
+                      items: [...invoiceData.items, { description: '', amount: '' }],
+                    })
+                  }
+                  className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                >
+                  <FiPlus className="h-4 w-4" /> Add Item
+                </button>
+              </div>
+
+              <div className="bg-gray-50 p-3 rounded-lg flex justify-between">
+                <span className="font-medium">Total</span>
+                <span className="font-bold text-indigo-700">
+                  ₹
+                  {invoiceData.items
+                    .reduce((sum, it) => sum + parseFloat(it.amount || 0), 0)
+                    .toFixed(2)}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes (optional)
+                </label>
+                <textarea
+                  value={invoiceData.notes}
+                  onChange={(e) =>
+                    setInvoiceData({ ...invoiceData, notes: e.target.value })
+                  }
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="Any additional remarks…"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setInvoiceModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generateInvoicePDF}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center gap-2"
+              >
+                <FiFileText className="h-4 w-4" />
+                Download Invoice PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== DELETE CONFIRMATION MODAL ========== */}
       {deleteDialog.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[70]">
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
             <div className="flex items-center gap-3 mb-4">
-              <div className="bg-rose-100 p-2 rounded-full"><FiAlertCircle className="h-6 w-6 text-rose-600" /></div>
+              <div className="bg-rose-100 p-2 rounded-full">
+                <FiAlertCircle className="h-6 w-6 text-rose-600" />
+              </div>
               <h3 className="text-lg font-bold text-gray-900">Delete Service Entry?</h3>
             </div>
             <p className="text-gray-600 text-sm mb-6">
-              Are you sure you want to permanently delete this service entry?<br/><br/>
+              Are you sure you want to permanently delete this service entry?
+              <br/><br/>
               <strong>Note:</strong> You cannot delete an entry if payments have already been collected. You must reverse the payments first.
             </p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteDialog({ isOpen: false, entryId: null, loading: false })} disabled={deleteDialog.loading}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm">Cancel</button>
-              <button onClick={handleDeleteEntry} disabled={deleteDialog.loading}
-                className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors font-medium text-sm shadow-sm flex items-center gap-2 disabled:opacity-50">
-                {deleteDialog.loading ? (<><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Deleting...</>) : 'Yes, Delete'}
+              <button
+                onClick={() => setDeleteDialog({ isOpen: false, entryId: null, loading: false })}
+                disabled={deleteDialog.loading}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteEntry}
+                disabled={deleteDialog.loading}
+                className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors font-medium text-sm shadow-sm flex items-center gap-2 disabled:opacity-50"
+              >
+                {deleteDialog.loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Deleting...
+                  </>
+                ) : 'Yes, Delete'}
               </button>
             </div>
           </div>
