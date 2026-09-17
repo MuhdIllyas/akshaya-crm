@@ -40,7 +40,8 @@ const createEmptyService = () => ({
   hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
   initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
   showNoteArea: false,
-  
+  activeTab: 'service',        // NEW: which tab this card shows
+
   // --- TRACKING FIELDS ---
   applicationNumber: '',
   estimatedDelivery: '',
@@ -48,10 +49,10 @@ const createEmptyService = () => ({
   priority: 'medium',
   assignedTo: '',
   currentStep: 'Submitted',
-  trackingStatus: 'pending',   // NEW
-  aadhaar: '',            // NEW: Aadhaar feed
-  email: '',              // NEW: Customer email
-  customerRemarks: ''     // NEW: WhatsApp-visible remarks (maps to `notes` in tracking)
+  trackingStatus: 'pending',
+  aadhaar: '',
+  email: '',
+  customerRemarks: ''
 });
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
@@ -61,15 +62,10 @@ const getLatestTransactions = (transactions) => {
   const map = new Map();
   
   transactions.forEach((tx, index) => {
-    // Skip reversal transactions entirely
     if (tx.is_reversal) return;
-    
-    // Safely grab the ID (checking transaction_id, then id, then falling back to index)
     const txId = tx.transaction_id || tx.id || `fallback-${index}`;
     const groupId = tx.correction_group_id || `direct-${txId}`;
-    
     const existing = map.get(groupId);
-    
     if (!existing || new Date(tx.created_at) > new Date(existing.created_at)) {
       map.set(groupId, tx);
     }
@@ -81,7 +77,6 @@ const getLatestTransactions = (transactions) => {
 const getBase64ImageFromUrl = (imageUrl) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    // This allows fetching from your backend without CORS blocking the canvas
     img.crossOrigin = 'Anonymous'; 
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -97,7 +92,7 @@ const getBase64ImageFromUrl = (imageUrl) => {
   });
 };
 
-// NEW: Tracking status options (label ↔ API value) + dot colors for visual feedback
+// Tracking status options (label ↔ API value) + dot colors for visual feedback
 const TRACKING_STATUS_OPTIONS = [
   { value: 'pending',     label: 'Pending',     dot: 'bg-amber-500' },
   { value: 'in_progress', label: 'In Progress', dot: 'bg-blue-500' },
@@ -125,28 +120,16 @@ const ServiceEntry = () => {
   
   // ========== STATE FOR TRANSACTION CORRECTION (UNIFIED) ==========
   const [correctionModal, setCorrectionModal] = useState({
-    isOpen: false,
-    transaction: null,
-    loading: false,
-    newAmount: '',
-    newWalletId: '',
-    reason: '',
-    transactionType: ''
+    isOpen: false, transaction: null, loading: false,
+    newAmount: '', newWalletId: '', reason: '', transactionType: ''
   });
   
   const [historyModal, setHistoryModal] = useState({
-    isOpen: false,
-    transactionId: null,
-    history: [],
-    loading: false,
-    transactionType: ''
+    isOpen: false, transactionId: null, history: [], loading: false, transactionType: ''
   });
 
   const [confirmDialog, setConfirmDialog] = useState({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: null
+    isOpen: false, title: '', message: '', onConfirm: null
   });
   
   const [correctionStatus, setCorrectionStatus] = useState({});
@@ -183,12 +166,7 @@ const ServiceEntry = () => {
 
   const [centreDetails, setCentreDetails] = useState({
     name: 'Akshaya e Centre',
-    address: '',
-    district: '',
-    state: '',
-    pincode: '',
-    phone: '',
-    logo: '/logo-light.png'
+    address: '', district: '', state: '', pincode: '', phone: '', logo: '/logo-light.png'
   });
 
   // --- MENTIONS LOGIC FOR INITIAL NOTE ---
@@ -232,17 +210,12 @@ const ServiceEntry = () => {
   // ========== INVOICE GENERATOR STATE ==========
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [invoiceData, setInvoiceData] = useState({
-    customerName: '',
-    phone: '',
-    items: [{ description: '', amount: '' }],
-    notes: '',
+    customerName: '', phone: '', items: [{ description: '', amount: '' }], notes: ''
   });
 
   // ========== DELETE MODAL STATE ==========
   const [deleteDialog, setDeleteDialog] = useState({
-    isOpen: false,
-    entryId: null,
-    loading: false,
+    isOpen: false, entryId: null, loading: false,
   });
   
   const userRole = localStorage.getItem('role') || 'staff';
@@ -271,14 +244,15 @@ const ServiceEntry = () => {
         initialNote: '', initialNoteMentions: [], initialNoteVisibility: 'private',
         createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
         showNoteArea: false,
-        // NEW: Preserve tracking fields on edit
+        activeTab: 'service',
+        // Preserve tracking fields on edit
         applicationNumber: entry.applicationNumber || '',
         estimatedDelivery: entry.estimatedDelivery || '',
         averageTime: entry.averageTime || '',
         priority: entry.priority || 'medium',
         assignedTo: entry.assignedTo || '',
         currentStep: entry.currentStep || 'Submitted',
-        trackingStatus: entry.trackingStatus || entry.tracking_status || 'pending',   // NEW
+        trackingStatus: entry.trackingStatus || entry.tracking_status || 'pending',
         aadhaar: entry.aadhaar || '',
         email: entry.email || '',
         customerRemarks: entry.customerRemarks || entry.notes || ''
@@ -448,13 +422,8 @@ const ServiceEntry = () => {
         });
         
         setCorrectionModal({ 
-          isOpen: false, 
-          transaction: null, 
-          loading: false, 
-          newAmount: '', 
-          newWalletId: '', 
-          reason: '',
-          transactionType: '' 
+          isOpen: false, transaction: null, loading: false, 
+          newAmount: '', newWalletId: '', reason: '', transactionType: '' 
         });
       } catch (err) {
         console.error('❌ Correction error:', err);
@@ -489,11 +458,7 @@ const ServiceEntry = () => {
     console.log("📜 Fetching transaction history for ID:", transactionId);
     
     setHistoryModal({ 
-      isOpen: true, 
-      transactionId, 
-      history: [], 
-      loading: true,
-      transactionType: type 
+      isOpen: true, transactionId, history: [], loading: true, transactionType: type 
     });
     
     try {
@@ -507,11 +472,7 @@ const ServiceEntry = () => {
         historyData = [response.data];
       }
       
-      setHistoryModal(prev => ({
-        ...prev,
-        history: historyData,
-        loading: false
-      }));
+      setHistoryModal(prev => ({ ...prev, history: historyData, loading: false }));
     } catch (err) {
       console.error('Error fetching transaction history:', err);
       toast.error('Failed to load transaction history');
@@ -521,11 +482,7 @@ const ServiceEntry = () => {
 
   const canCorrectTransaction = (transaction, entry, type) => {
     if (transaction.is_reversal) return false;
-    
-    if (userRole === 'staff') {
-      return isToday(entry.created_at);
-    }
-    
+    if (userRole === 'staff') return isToday(entry.created_at);
     return userRole === 'admin' || userRole === 'superadmin';
   };
 
@@ -544,15 +501,9 @@ const ServiceEntry = () => {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return 'Invalid Date';
       return date.toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
       });
-    } catch {
-      return 'Invalid Date';
-    }
+    } catch { return 'Invalid Date'; }
   };
 
   const formatAmount = (amount) => {
@@ -722,29 +673,11 @@ const ServiceEntry = () => {
       body: tableBody,
       foot: [['', 'Total Amount', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
       theme: 'striped',
-      styles: { 
-        font: 'helvetica', 
-        fontSize: 10, 
-        cellPadding: 5 
-      },
-      headStyles: { 
-        fillColor: navy,
-        textColor: '#FFFFFF', 
-        fontStyle: 'bold' 
-      },
-      footStyles: { 
-        fillColor: '#E2E8F0',
-        textColor: navy, 
-        fontStyle: 'bold' 
-      },
-      alternateRowStyles: {
-        fillColor: '#F8FAFC'
-      },
-      columnStyles: { 
-        0: { cellWidth: 12 }, 
-        1: { cellWidth: 'auto' }, 
-        2: { halign: 'right', cellWidth: 40 } 
-      },
+      styles: { font: 'helvetica', fontSize: 10, cellPadding: 5 },
+      headStyles: { fillColor: navy, textColor: '#FFFFFF', fontStyle: 'bold' },
+      footStyles: { fillColor: '#E2E8F0', textColor: navy, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: '#F8FAFC' },
+      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 'auto' }, 2: { halign: 'right', cellWidth: 40 } },
     });
 
     let finalY = doc.lastAutoTable.finalY + 12;
@@ -888,6 +821,7 @@ const ServiceEntry = () => {
                 taskAssignee: '', 
                 taskDueDate: null,
                 showNoteArea: false,
+                activeTab: 'service',
                 applicationNumber: '',
                 estimatedDelivery: '',
                 averageTime: '',
@@ -961,6 +895,7 @@ const ServiceEntry = () => {
                 taskAssignee: '', 
                 taskDueDate: null,
                 showNoteArea: false,
+                activeTab: 'service',
                 applicationNumber: '',
                 estimatedDelivery: '',
                 averageTime: '',
@@ -1047,7 +982,6 @@ const ServiceEntry = () => {
         payments: adminEntry.payments || [],
         serviceWalletId: adminEntry.serviceWalletId || null,
         requiresWallet: adminEntry.requiresWallet || false,
-        // NEW: Include tracking fields
         applicationNumber: adminEntry.applicationNumber || '',
         estimatedDelivery: adminEntry.estimatedDelivery || '',
         averageTime: adminEntry.averageTime || '',
@@ -1082,7 +1016,7 @@ const ServiceEntry = () => {
   };
 
   const handleCartChange = (index, field, value) => {
-    // NEW: Aadhaar validation (strip non-digits, max 12)
+    // Aadhaar validation (strip non-digits, max 12)
     if (field === 'aadhaar') {
       value = String(value).replace(/\D/g, '').slice(0, 12);
     }
@@ -1231,7 +1165,6 @@ const ServiceEntry = () => {
       if (svc.requiresWallet && (!svc.serviceWalletId || isNaN(parseInt(svc.serviceWalletId)))) errors.push(`${prefix}Requires a wallet assignment`);
       if (svc.hasExpiry && (!svc.expiryDate || isNaN(Date.parse(svc.expiryDate)))) errors.push(`${prefix}Expiry date required`);
       if (svc.createTask && (!svc.taskTitle || !svc.taskAssignee)) errors.push(`${prefix}Task Title & Assignee required`);
-      // NEW: Aadhaar/email validation (only if filled)
       if (svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)) errors.push(`${prefix}Aadhaar must be exactly 12 digits`);
       if (svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email)) errors.push(`${prefix}Please enter a valid email address`);
     });
@@ -1301,11 +1234,9 @@ const ServiceEntry = () => {
           await updateServiceEntry(editingEntryId, editPayload);
           toast.success('Service entry updated successfully!');
           
-          // Refresh table
           const entriesRes = await getServiceEntries(true, null, 500);
           setServiceEntries(entriesRes.data || []);
           
-          // Clear edit mode
           setFormData({
             tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
             services: [createEmptyService()]
@@ -1313,30 +1244,23 @@ const ServiceEntry = () => {
           setEditingEntryId(null);
           
         } else {
-          // 1. SNAPSHOT THE FORM DATA BEFORE CLEARING IT
           const submittedServicesData = [...formData.services];
 
-          // 2. SEND CART TO BULK ROUTE
           const response = await api.post('/entry/bulk', payload);
           const createdServices = response.data.createdServices || [];
 
-          // 3. INSTANT UI FEEDBACK (Make it feel fast!)
           toast.success('Services successfully created and paid!');
           
-          // Clear the form completely so staff can start the next customer immediately
           setFormData({
             tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
             services: [createEmptyService()]
           });
           setEditingEntryId(null);
 
-          // 4. FIRE AND FORGET: PROCESS TRACKING & NOTES IN THE BACKGROUND
           const processBackgroundTasks = async () => {
             try {
-              // Wait 1.5s for DB triggers to complete
               await new Promise(resolve => setTimeout(resolve, 1500)); 
               
-              // Fetch the newly created tracking rows
               let recentTrackingRecords = [];
               try {
                  const trackRes = await getTrackingEntries({ limit: 100 });
@@ -1345,11 +1269,9 @@ const ServiceEntry = () => {
                  console.warn("Could not fetch tracking entries to map IDs", err);
               }
 
-              // Run all API updates concurrently to save time
               const backgroundPromises = createdServices.map(async (svc, i) => {
                 const svcFormData = submittedServicesData[i]; 
 
-                // A. Submit Tracking Details
                 const hasTrackingData = 
                   svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || 
                   svcFormData.aadhaar || svcFormData.email || svcFormData.averageTime || svcFormData.customerRemarks ||
@@ -1378,7 +1300,6 @@ const ServiceEntry = () => {
                         progress: 25 
                       });
 
-                      // NEW: Update tracking status if it differs from the default
                       if (svcFormData.trackingStatus && svcFormData.trackingStatus !== 'pending') {
                         try {
                           await updateTrackingStatus(trackingRecord.id, svcFormData.trackingStatus);
@@ -1394,7 +1315,6 @@ const ServiceEntry = () => {
                   }
                 }
 
-                // B. Save Note & Task
                 if (svcFormData.initialNote && svcFormData.initialNote.trim() !== '') {
                   try {
                     const noteRes = await createNote({
@@ -1418,10 +1338,8 @@ const ServiceEntry = () => {
                 }
               });
 
-              // Wait for all background tasks to finish concurrently
               await Promise.allSettled(backgroundPromises);
 
-              // Finally, softly refresh the table so the new entry appears in the list below
               const entriesRes = await getServiceEntries(true, null, 500);
               setServiceEntries(entriesRes.data || []);
 
@@ -1430,7 +1348,6 @@ const ServiceEntry = () => {
             }
           };
 
-          // Execute the background tasks WITHOUT awaiting them
           processBackgroundTasks();
         }
       } catch (err) {
@@ -1483,11 +1400,7 @@ const ServiceEntry = () => {
       const walletId = String(p.wallet);
 
       if (!walletSummary[walletId]) {
-        walletSummary[walletId] = {
-          received: 0,
-          pending: 0,
-          method: p.method,
-        };
+        walletSummary[walletId] = { received: 0, pending: 0, method: p.method };
       }
 
       if (p.status === 'received') {
@@ -1677,9 +1590,32 @@ const ServiceEntry = () => {
                     const subcategoryDocs = categories.find(c => c.id === parseInt(svc.category))?.subcategories?.find(s => s.id === parseInt(svc.subcategory))?.required_documents || [];
                     const website = categories.find(c => c.id === parseInt(svc.category))?.website || null;
 
+                    // ===== Tab state & counters =====
+                    const activeTab = svc.activeTab || 'service';
+                    const trackingFilledCount = [
+                      svc.applicationNumber,
+                      svc.aadhaar,
+                      svc.email,
+                      svc.assignedTo,
+                      svc.estimatedDelivery,
+                      svc.averageTime,
+                      svc.priority !== 'medium' ? 1 : null,
+                      svc.currentStep !== 'Submitted' ? 1 : null,
+                      svc.trackingStatus !== 'pending' ? 1 : null,
+                      svc.customerRemarks
+                    ].filter(Boolean).length;
+                    const statusIsActive = svc.trackingStatus && svc.trackingStatus !== 'pending';
+
+                    const tabDefs = [
+                      { id: 'service',  label: 'Service',  icon: FiCreditCard, badge: null },
+                      { id: 'tracking', label: 'Tracking', icon: FiTruck,      badge: trackingFilledCount || null, dot: statusIsActive },
+                      ...(!isEditMode ? [{ id: 'notes', label: 'Notes', icon: FiMessageCircle, badge: svc.initialNote ? 1 : null }] : [])
+                    ];
+
                     return (
-                      <motion.div key={svc.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative">
-                        
+                      <motion.div key={svc.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative">
+
                         {/* Compact Header */}
                         <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
                           <div className="flex items-center gap-3">
@@ -1695,350 +1631,367 @@ const ServiceEntry = () => {
                           )}
                         </div>
 
-                        {/* Body Content */}
-                        <div className="p-4 space-y-4">
-                          {/* Row 1: Selectors */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
-                              <div className="relative">
-                                <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
-                                  <option value="">Select Category</option>
-                                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
-                              <div className="relative">
-                                <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
-                                  <option value="">Select Subcategory</option>
-                                  {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Row 2: Docs & Web (PROMINENT UI) */}
-                          {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
-                            <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
-                              {website && (
-                                <div className="flex items-center gap-1.5">
-                                  <FiLink className="text-blue-500 shrink-0" />
-                                  <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
-                                </div>
-                              )}
-                              {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
-                                <div className="flex items-start gap-1.5">
-                                  <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
-                                  <div className="flex flex-wrap gap-2">
-                                    <span className="font-semibold text-gray-700 mr-1">Required Docs:</span>
-                                    {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
-                                      <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
-                                        <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Row 3: Financials (Strictly 3 Columns) */}
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
-                              <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Dept (₹)</label>
-                              <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Total (₹)</label>
-                              <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 rounded-lg text-sm" />
-                            </div>
-                          </div>
-
-                          {/* Row 3.5: Expiry Date */}
-                          {svc.hasExpiry && (
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
-                              <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                  <FiCalendar className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input 
-                                  type="date" 
-                                  value={svc.expiryDate} 
-                                  onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} 
-                                  required 
-                                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" 
-                                />
-                              </div>
-                              {svc.expiryDate && (
-                                <p className={`text-xs mt-1.5 font-medium ${
-                                  Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) < 30 ? 'text-amber-600' : 'text-emerald-600'
-                                }`}>
-                                  <FiClock className="inline mr-1" />
-                                  {Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))} days remaining
-                                </p>
-                              )}
-                            </div>
-                          )}
-
-                          {/* 🔥 UPGRADED: FULFILLMENT & TRACKING BLOCK (matches TrackServicePage style) */}
-                          <div className="mt-4 bg-gradient-to-br from-indigo-50/70 to-purple-50/40 border border-indigo-100 rounded-xl p-4">
-                            <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
-                                <div className="bg-indigo-100 p-1.5 rounded-lg">
-                                  <FiTruck className="text-indigo-600 h-4 w-4" />
-                                </div>
-                                Processing & Tracking Details
-                              </h4>
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-100">
-                                Optional
-                              </span>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {/* Application Number */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
-                                <input 
-                                  type="text" 
-                                  placeholder="e.g., APP12345"
-                                  value={svc.applicationNumber}
-                                  onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
-                                  maxLength="50"
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
-                                />
-                              </div>
-
-                              {/* Aadhaar Feed */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Aadhaar</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiCreditCard className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="text" 
-                                    inputMode="numeric"
-                                    placeholder="12-digit Aadhaar"
-                                    value={svc.aadhaar}
-                                    onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
-                                    maxLength="12"
-                                    className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
-                                      svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
-                                    }`}
-                                  />
-                                  <span className={`absolute inset-y-0 right-2 flex items-center text-[10px] font-medium ${
-                                    svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
+                        {/* ===== TABS ===== */}
+                        <div className="flex border-b border-gray-200 bg-white">
+                          {tabDefs.map(tab => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === tab.id;
+                            return (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => handleCartChange(index, 'activeTab', tab.id)}
+                                className={`relative flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors border-b-2 ${
+                                  isActive
+                                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40'
+                                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                                }`}
+                              >
+                                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-indigo-600' : ''}`} />
+                                <span>{tab.label}</span>
+                                {tab.badge && (
+                                  <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold ${
+                                    isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
                                   }`}>
-                                    {svc.aadhaar?.length || 0}/12
+                                    {tab.badge}
                                   </span>
-                                </div>
-                              </div>
+                                )}
+                                {tab.dot && !tab.badge && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
 
-                              {/* Email */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiMail className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="email" 
-                                    placeholder="customer@email.com"
-                                    value={svc.email}
-                                    onChange={(e) => handleCartChange(index, 'email', e.target.value)}
-                                    className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
-                                      svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
-                                    }`}
-                                  />
-                                </div>
-                              </div>
+                        {/* ===== TAB CONTENT ===== */}
+                        <div className="p-4">
 
-                              {/* Assign To */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Assign To</label>
-                                <select 
-                                  value={svc.assignedTo}
-                                  onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                                >
-                                  <option value="">Unassigned Staff</option>
-                                  {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
-                                </select>
-                              </div>
-
-                              {/* Estimated Delivery */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="date" 
-                                    value={svc.estimatedDelivery}
-                                    onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
-                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm text-gray-700"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Average Time */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Avg. Time</label>
-                                <div className="relative">
-                                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                    <FiClock className="h-3.5 w-3.5 text-gray-400" />
-                                  </div>
-                                  <input 
-                                    type="text" 
-                                    placeholder="e.g., 7 days"
-                                    value={svc.averageTime}
-                                    onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
-                                    className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Priority */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
-                                  <FiFlag className="h-3 w-3" /> Priority
-                                </label>
-                                <select 
-                                  value={svc.priority}
-                                  onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
-                                  className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium ${
-                                    svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
-                                    svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-                                    'border-amber-200 bg-amber-50 text-amber-700'
-                                  }`}
-                                >
-                                  <option value="low">Low</option>
-                                  <option value="medium">Medium</option>
-                                  <option value="high">High</option>
-                                </select>
-                              </div>
-
-                              {/* Current Step */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Current Step</label>
-                                <select 
-                                  value={svc.currentStep}
-                                  onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                                >
-                                  <option value="Submitted">Submitted</option>
-                                  <option value="Initial Review">Initial Review</option>
-                                  <option value="Document Verification">Document Verification</option>
-                                  <option value="Final Approval">Final Approval</option>
-                                </select>
-                              </div>
-
-                              {/* ✨ NEW: Tracking Status */}
-                              <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
-                                  <FiActivity className="h-3 w-3" /> Status
-                                </label>
-                                <div className="relative">
-                                  <span className={`absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none z-10 ${
-                                    TRACKING_STATUS_OPTIONS.find(o => o.value === svc.trackingStatus)?.dot || 'bg-amber-500'
-                                  }`} />
-                                  <select 
-                                    value={svc.trackingStatus}
-                                    onChange={(e) => handleCartChange(index, 'trackingStatus', e.target.value)}
-                                    className={`w-full pl-7 pr-8 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium appearance-none ${getTrackingStatusStyle(svc.trackingStatus)}`}
-                                  >
-                                    {TRACKING_STATUS_OPTIONS.map(opt => (
-                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                  </select>
-                                  <FiChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Customer Remarks - full width */}
-                            <div className="mt-3">
-                              <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
-                                <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-gray-400 normal-case font-normal">(sent via WhatsApp)</span>
-                              </label>
-                              <textarea 
-                                rows="2"
-                                placeholder="Remarks visible to customer..."
-                                value={svc.customerRemarks}
-                                onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
-                                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm resize-none"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Row 4: Collapsible Notes & Tasks */}
-                          {!isEditMode && (
-                            <div className="pt-2 border-t border-gray-100">
-                              {!svc.showNoteArea ? (
-                                <button type="button" onClick={() => handleCartChange(index, 'showNoteArea', true)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition">
-                                  <FiMessageCircle className="h-4 w-4" /> Add Internal Note or Task for this Service
-                                </button>
-                              ) : (
-                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 shadow-inner">
-                                  <div className="flex justify-between items-center mb-3">
-                                    <label className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                                      <FiMessageCircle className="text-indigo-500 h-4 w-4"/> Internal Note & Task Assignment
-                                    </label>
-                                    <button type="button" onClick={() => { handleCartChange(index, 'showNoteArea', false); handleCartChange(index, 'initialNote', ''); handleCartChange(index, 'createTask', false); }} className="text-xs text-gray-500 hover:text-rose-500 flex items-center gap-1">
-                                      <FiX className="h-3 w-3" /> Cancel
-                                    </button>
-                                  </div>
-
-                                  <MentionsInput
-                                    value={svc.initialNote}
-                                    onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
-                                    className="mentions-input text-sm"
-                                    placeholder="Write an internal note... Type @ to assign staff members"
-                                    style={{
-                                      control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
-                                      highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
-                                      input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
-                                      suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
-                                    }}
-                                  >
-                                    <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`} renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
-                                  </MentionsInput>
-
-                                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                                    <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)} className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
-                                      <option value="centre">🏢 Centre View</option>
-                                      <option value="private">🔒 Private</option>
-                                      <option value="mentioned_only">👥 Mentions Only</option>
+                          {/* ---------- SERVICE TAB (default) ---------- */}
+                          {activeTab === 'service' && (
+                            <div className="space-y-4">
+                              {/* Selectors */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                                  <div className="relative">
+                                    <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
+                                      <option value="">Select Category</option>
+                                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
-                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 px-3 py-1.5 rounded shadow-sm hover:bg-indigo-50 transition">
-                                      <input type="checkbox" checked={svc.createTask} onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)} className="rounded text-indigo-600" />
-                                      Convert to Task
-                                    </label>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
                                   </div>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
+                                  <div className="relative">
+                                    <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
+                                      <option value="">Select Subcategory</option>
+                                      {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
+                                  </div>
+                                </div>
+                              </div>
 
-                                  {/* Task Expansion */}
-                                  {svc.createTask && (
-                                    <div className="mt-3 bg-white p-3 rounded-lg border border-indigo-100 shadow-sm space-y-3">
-                                      <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500" />
-                                      <div className="grid grid-cols-2 gap-2">
-                                        <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} required className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
-                                          <option value="">Assign To *</option>
-                                          {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
-                                        </select>
-                                        <DatePicker selected={svc.taskDueDate} onChange={(date) => handleCartChange(index, 'taskDueDate', date)} placeholderText="Due Date" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
+                              {/* Docs & Web */}
+                              {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                                  {website && (
+                                    <div className="flex items-center gap-1.5">
+                                      <FiLink className="text-blue-500 shrink-0" />
+                                      <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
+                                    </div>
+                                  )}
+                                  {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                    <div className="flex items-start gap-1.5">
+                                      <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
+                                      <div className="flex flex-wrap gap-2">
+                                        <span className="font-semibold text-gray-700 mr-1">Required Docs:</span>
+                                        {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
+                                          <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                            <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
+                                          </span>
+                                        ))}
                                       </div>
                                     </div>
                                   )}
+                                </div>
+                              )}
+
+                              {/* Financials */}
+                              <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
+                                  <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Dept (₹)</label>
+                                  <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Total (₹)</label>
+                                  <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 rounded-lg text-sm" />
+                                </div>
+                              </div>
+
+                              {/* Expiry */}
+                              {svc.hasExpiry && (
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                      <FiCalendar className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                    <input type="date" value={svc.expiryDate} onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} required
+                                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                                  </div>
+                                  {svc.expiryDate && (
+                                    <p className={`text-xs mt-1.5 font-medium ${
+                                      Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) < 30 ? 'text-amber-600' : 'text-emerald-600'
+                                    }`}>
+                                      <FiClock className="inline mr-1" />
+                                      {Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))} days remaining
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Tab hint when empty */}
+                              {trackingFilledCount === 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCartChange(index, 'activeTab', 'tracking')}
+                                  className="w-full text-left text-xs text-gray-400 hover:text-indigo-600 flex items-center justify-center gap-1 py-1 transition-colors"
+                                >
+                                  <FiTruck className="h-3 w-3" />
+                                  <span>Optional: add tracking / fulfillment details →</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ---------- TRACKING TAB ---------- */}
+                          {activeTab === 'tracking' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {/* Application No */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
+                                  <input type="text" placeholder="e.g., APP12345"
+                                    value={svc.applicationNumber}
+                                    onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
+                                    maxLength="50"
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm" />
+                                </div>
+
+                                {/* Aadhaar */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Aadhaar</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiCreditCard className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="text" inputMode="numeric" placeholder="12-digit Aadhaar"
+                                      value={svc.aadhaar}
+                                      onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
+                                      maxLength="12"
+                                      className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                        svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                      }`} />
+                                    <span className={`absolute inset-y-0 right-2 flex items-center text-[10px] font-medium ${
+                                      svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
+                                    }`}>{svc.aadhaar?.length || 0}/12</span>
+                                  </div>
+                                </div>
+
+                                {/* Email */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiMail className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="email" placeholder="customer@email.com"
+                                      value={svc.email}
+                                      onChange={(e) => handleCartChange(index, 'email', e.target.value)}
+                                      className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                        svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                      }`} />
+                                  </div>
+                                </div>
+
+                                {/* Assign To */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Assign To</label>
+                                  <select value={svc.assignedTo}
+                                    onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm">
+                                    <option value="">Unassigned Staff</option>
+                                    {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                  </select>
+                                </div>
+
+                                {/* Est Delivery */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="date" value={svc.estimatedDelivery}
+                                      onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
+                                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm text-gray-700" />
+                                  </div>
+                                </div>
+
+                                {/* Avg Time */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Avg. Time</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiClock className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="text" placeholder="e.g., 7 days"
+                                      value={svc.averageTime}
+                                      onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
+                                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm" />
+                                  </div>
+                                </div>
+
+                                {/* Priority */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                    <FiFlag className="h-3 w-3" /> Priority
+                                  </label>
+                                  <select value={svc.priority}
+                                    onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
+                                    className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium ${
+                                      svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                                      svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                      'border-amber-200 bg-amber-50 text-amber-700'
+                                    }`}>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                  </select>
+                                </div>
+
+                                {/* Current Step */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Current Step</label>
+                                  <select value={svc.currentStep}
+                                    onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm">
+                                    <option value="Submitted">Submitted</option>
+                                    <option value="Initial Review">Initial Review</option>
+                                    <option value="Document Verification">Document Verification</option>
+                                    <option value="Final Approval">Final Approval</option>
+                                  </select>
+                                </div>
+
+                                {/* Status */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                    <FiActivity className="h-3 w-3" /> Status
+                                  </label>
+                                  <div className="relative">
+                                    <span className={`absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none z-10 ${
+                                      TRACKING_STATUS_OPTIONS.find(o => o.value === svc.trackingStatus)?.dot || 'bg-amber-500'
+                                    }`} />
+                                    <select value={svc.trackingStatus}
+                                      onChange={(e) => handleCartChange(index, 'trackingStatus', e.target.value)}
+                                      className={`w-full pl-7 pr-8 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium appearance-none ${getTrackingStatusStyle(svc.trackingStatus)}`}>
+                                      {TRACKING_STATUS_OPTIONS.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                      ))}
+                                    </select>
+                                    <FiChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Customer Remarks */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                  <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-gray-400 normal-case font-normal">(sent via WhatsApp)</span>
+                                </label>
+                                <textarea rows="2" placeholder="Remarks visible to customer..."
+                                  value={svc.customerRemarks}
+                                  onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm resize-none" />
+                              </div>
+
+                              {/* Quick "Clear all" link */}
+                              {trackingFilledCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    ['applicationNumber','estimatedDelivery','averageTime','assignedTo','aadhaar','email','customerRemarks'].forEach(f => handleCartChange(index, f, ''));
+                                    handleCartChange(index, 'priority', 'medium');
+                                    handleCartChange(index, 'currentStep', 'Submitted');
+                                    handleCartChange(index, 'trackingStatus', 'pending');
+                                  }}
+                                  className="text-[11px] text-gray-400 hover:text-rose-600 flex items-center gap-1 transition-colors"
+                                >
+                                  <FiTrash2 className="h-3 w-3" /> Clear all tracking fields
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ---------- NOTES TAB (hidden in edit mode) ---------- */}
+                          {activeTab === 'notes' && !isEditMode && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <FiMessageCircle className="text-indigo-500 h-4 w-4" />
+                                <span className="text-sm font-semibold text-gray-800">Internal Note & Task</span>
+                              </div>
+
+                              <MentionsInput
+                                value={svc.initialNote}
+                                onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
+                                className="mentions-input text-sm"
+                                placeholder="Write an internal note... Type @ to assign staff members"
+                                style={{
+                                  control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
+                                  highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
+                                  input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
+                                  suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
+                                }}
+                              >
+                                <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`}
+                                  renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
+                              </MentionsInput>
+
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)}
+                                  className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
+                                  <option value="centre">🏢 Centre View</option>
+                                  <option value="private">🔒 Private</option>
+                                  <option value="mentioned_only">👥 Mentions Only</option>
+                                </select>
+                                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 px-3 py-1.5 rounded shadow-sm hover:bg-indigo-50 transition">
+                                  <input type="checkbox" checked={svc.createTask} onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)} className="rounded text-indigo-600" />
+                                  Convert to Task
+                                </label>
+                              </div>
+
+                              {svc.createTask && (
+                                <div className="bg-indigo-50/40 p-3 rounded-lg border border-indigo-100 space-y-3">
+                                  <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500" />
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} required
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
+                                      <option value="">Assign To *</option>
+                                      {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                    </select>
+                                    <DatePicker selected={svc.taskDueDate} onChange={(date) => handleCartChange(index, 'taskDueDate', date)} placeholderText="Due Date"
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -2528,7 +2481,7 @@ const ServiceEntry = () => {
         )}
       </div>
 
-      {/* ========== CUSTOM CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== CUSTOM CONFIRMATION MODAL ========== */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[60]">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
@@ -2586,7 +2539,6 @@ const ServiceEntry = () => {
                   </span>
                 </p>
                 <p><strong>Expiry Date:</strong> {selectedEntry.expiryDate || 'N/A'}</p>
-                {/* NEW: Tracking fields */}
                 {selectedEntry.aadhaar && <p><strong>Aadhaar:</strong> {selectedEntry.aadhaar}</p>}
                 {selectedEntry.email && <p><strong>Email:</strong> {selectedEntry.email}</p>}
                 {selectedEntry.applicationNumber && <p><strong>Application No:</strong> {selectedEntry.applicationNumber}</p>}
