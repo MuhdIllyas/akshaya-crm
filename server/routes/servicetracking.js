@@ -10,6 +10,17 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 
 const router = express.Router();
 
+// Helper to format DB Dates reliably to YYYY-MM-DD
+const formatYMD = (date) => {
+  if (!date) return null;
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // ==========================================
 // CENTRAL COMMUNICATION ENGINE INTEGRATION
 // ==========================================
@@ -243,7 +254,7 @@ const fetchTrackingEntries = async (client, req, query, values) => {
       assigned_to_name: entry.assigned_to_name,
       status: entry.status,
       current_step: entry.current_step,
-      estimated_delivery: entry.estimated_delivery ? entry.estimated_delivery.toISOString() : null,
+      estimated_delivery: formatYMD(entry.estimated_delivery),
       average_time: entry.average_time,
       notes: entry.notes,
       progress: entry.progress,
@@ -672,6 +683,7 @@ const {
     const dataQuery = `
       SELECT 
         st.*,
+        se.created_at,
         se.customer_name, se.phone, se.service_charges, se.department_charges, se.total_charges,
         se.expiry_date, se.category_id, se.subcategory_id, se.customer_service_id, se.work_source,
         s.name AS service_name, sub.name AS subcategory_name,
@@ -709,9 +721,15 @@ const {
     const dataValues = [...queryValues, parseInt(limit), offset];
     const result = await client.query(dataQuery, dataValues);
 
+    // Apply formatting to estimated_delivery
+    const formattedData = result.rows.map(row => ({
+      ...row,
+      estimated_delivery: formatYMD(row.estimated_delivery)
+    }));
+
     // Return payload wrapping data and pagination metadata
     res.json({
-      data: result.rows,
+      data: formattedData,
       pagination: { 
         totalRecords, 
         totalPages, 
@@ -1907,104 +1925,55 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // Update steps for currentStep
     if (currentStep) {
-      const stepOrderMap = {
-        'Submitted': 1,
-        'Initial Review': 2,
-        'Document Verification': 3,
-        'Final Approval': 4
-      };
-      const estimatedDaysMap = {
-        'Submitted': 1,
-        'Initial Review': 3,
-        'Document Verification': 5,
-        'Final Approval': 2
-      };
-
+      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+      const estimatedDaysMap = { 'Submitted': 1, 'Initial Review': 3, 'Document Verification': 5, 'Final Approval': 2 };
       const currentStepOrder = stepOrderMap[currentStep] || 1;
 
-      // Update only the current step
+      // Update current step to true AND record exactly when it changed
       await client.query(
-        `INSERT INTO service_tracking_steps (
-          service_tracking_id, name, completed, date, created_at, step_order, estimated_days
-        ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6)
-        ON CONFLICT (service_tracking_id, name)
-        DO UPDATE SET
-          completed = EXCLUDED.completed,
-          date = CASE 
-            WHEN service_tracking_steps.completed = false AND EXCLUDED.completed = true 
-            THEN EXCLUDED.date 
-            ELSE service_tracking_steps.date 
-          END,
-          step_order = EXCLUDED.step_order,
-          estimated_days = EXCLUDED.estimated_days
-        RETURNING id, name, completed, date, created_at, step_order, estimated_days`,
-        [
-          parseInt(id),
-          currentStep,
-          true,
-          new Date(),
-          currentStepOrder,
-          estimatedDaysMap[currentStep]
-        ]
+        `INSERT INTO service_tracking_steps (service_tracking_id, name, completed, date, created_at, step_order, estimated_days) 
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4, $5)
+         ON CONFLICT (service_tracking_id, name)
+         DO UPDATE SET
+           completed = EXCLUDED.completed,
+           date = CASE 
+             WHEN service_tracking_steps.completed = false AND EXCLUDED.completed = true THEN CURRENT_TIMESTAMP 
+             ELSE service_tracking_steps.date 
+           END,
+           step_order = EXCLUDED.step_order, estimated_days = EXCLUDED.estimated_days`,
+        [parseInt(id), currentStep, true, currentStepOrder, estimatedDaysMap[currentStep]]
       );
 
-      // Ensure previous steps are completed but preserve their original dates
-      const previousSteps = Object.entries(stepOrderMap)
-        .filter(([_, order]) => order < currentStepOrder)
-        .map(([name]) => name);
-
+      // Past steps set to true (only gives them a timestamp if they were previously false)
+      const previousSteps = Object.entries(stepOrderMap).filter(([_, order]) => order < currentStepOrder).map(([name]) => name);
       for (const stepName of previousSteps) {
         await client.query(
-          `INSERT INTO service_tracking_steps (
-            service_tracking_id, name, completed, date, created_at, step_order, estimated_days
-          ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6)
-          ON CONFLICT (service_tracking_id, name)
-          DO UPDATE SET
-            completed = EXCLUDED.completed,
-            date = CASE 
-              WHEN service_tracking_steps.completed = false AND EXCLUDED.completed = true 
-              THEN EXCLUDED.date 
-              ELSE service_tracking_steps.date 
-            END,
-            step_order = EXCLUDED.step_order,
-            estimated_days = EXCLUDED.estimated_days
-          RETURNING id, name, completed, date, created_at, step_order, estimated_days`,
-          [
-            parseInt(id),
-            stepName,
-            true,
-            null,
-            stepOrderMap[stepName],
-            estimatedDaysMap[stepName]
-          ]
+          `INSERT INTO service_tracking_steps (service_tracking_id, name, completed, date, created_at, step_order, estimated_days) 
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4, $5)
+           ON CONFLICT (service_tracking_id, name)
+           DO UPDATE SET
+             completed = EXCLUDED.completed,
+             date = CASE 
+               WHEN service_tracking_steps.completed = false AND EXCLUDED.completed = true THEN CURRENT_TIMESTAMP 
+               ELSE service_tracking_steps.date 
+             END,
+             step_order = EXCLUDED.step_order, estimated_days = EXCLUDED.estimated_days`,
+          [parseInt(id), stepName, true, stepOrderMap[stepName], estimatedDaysMap[stepName]]
         );
       }
 
-      // Ensure future steps are not completed
-      const futureSteps = Object.entries(stepOrderMap)
-        .filter(([_, order]) => order > currentStepOrder)
-        .map(([name]) => name);
-
+      // Future steps set to false (keeps date NULL)
+      const futureSteps = Object.entries(stepOrderMap).filter(([_, order]) => order > currentStepOrder).map(([name]) => name);
       for (const stepName of futureSteps) {
         await client.query(
-          `INSERT INTO service_tracking_steps (
-            service_tracking_id, name, completed, date, created_at, step_order, estimated_days
-          ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6)
-          ON CONFLICT (service_tracking_id, name)
-          DO UPDATE SET
-            completed = EXCLUDED.completed,
-            date = EXCLUDED.date,
-            step_order = EXCLUDED.step_order,
-            estimated_days = EXCLUDED.estimated_days
-          RETURNING id, name, completed, date, created_at, step_order, estimated_days`,
-          [
-            parseInt(id),
-            stepName,
-            false,
-            null,
-            stepOrderMap[stepName],
-            estimatedDaysMap[stepName]
-          ]
+          `INSERT INTO service_tracking_steps (service_tracking_id, name, completed, date, created_at, step_order, estimated_days) 
+           VALUES ($1, $2, $3, NULL, CURRENT_TIMESTAMP, $4, $5)
+           ON CONFLICT (service_tracking_id, name)
+           DO UPDATE SET
+             completed = EXCLUDED.completed,
+             date = NULL,
+             step_order = EXCLUDED.step_order, estimated_days = EXCLUDED.estimated_days`,
+          [parseInt(id), stepName, false, stepOrderMap[stepName], estimatedDaysMap[stepName]]
         );
       }
     }
@@ -2430,6 +2399,7 @@ router.get('/', authenticateToken, async (req, res) => {
         st.priority,
         se.expiry_date,
         st.updated_at,
+        se.created_at, 
         se.customer_service_id
       FROM service_tracking st
       JOIN service_entries se ON st.service_entry_id = se.id
