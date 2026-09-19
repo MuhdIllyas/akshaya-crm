@@ -139,6 +139,9 @@ const TrackServicePage = () => {
   const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
+  // Default to this month to prevent huge initial loading times
+  const [timeRange, setTimeRange] = useState('month'); 
+
   // Auto-reset subcategory when service changes
   useEffect(() => {
     setSubcategoryFilter('all');
@@ -198,6 +201,7 @@ const TrackServicePage = () => {
     setDateFilter('');
     setServiceFilter('all');
     setSubcategoryFilter('all');
+    setTimeRange('month'); // Reset time range to default too
   };
 
   const [activeTab, setActiveTab] = useState('overview');
@@ -213,8 +217,6 @@ const TrackServicePage = () => {
     priority: 'medium'
   });
   
-  // Default to all to prevent data from being hidden
-  const [timeRange, setTimeRange] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
@@ -883,7 +885,7 @@ const TrackServicePage = () => {
             </div>
             <div className="flex space-x-2 mt-4 lg:mt-0">
               <button
-                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
                 onClick={() => handleNotifyCustomer(selectedService)}
               >
                 <FiMessageSquare className="h-4 w-4" />
@@ -1544,6 +1546,20 @@ const TrackServicePage = () => {
               className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
             >
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Data Range</label>
+                <select 
+                  className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" 
+                  value={timeRange} 
+                  onChange={(e) => setTimeRange(e.target.value)}
+                >
+                  <option value="week">Last 7 Days</option>
+                  <option value="month">This Month</option>
+                  <option value="year">This Year</option>
+                  <option value="all">All Time</option>
+                </select>
+              </div>
+
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                 <div className="relative">
                   <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -1700,18 +1716,9 @@ const TrackServicePage = () => {
                     <span>Back to List</span>
                   </button>
                 )}
-                <select 
-                  className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                  value={timeRange}
-                  onChange={(e) => setTimeRange(e.target.value)}
-                >
-                  <option value="all">All Time</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                  <option value="year">This Year</option>
-                </select>
+                
                 <button
-                  className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all duration-200 shadow-sm"
+                  className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
                   onClick={() => window.location.reload()}
                 >
                   <FiRefreshCw className="h-4 w-4" />
