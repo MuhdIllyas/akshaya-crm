@@ -1287,6 +1287,7 @@ const ServiceEntry = () => {
                     );
 
                     if (trackingRecord) {
+                      // 🔥 COMBINED API CALL: Send the status here to prevent Double-WhatsApp messages
                       await updateTrackingEntry(trackingRecord.id, {
                         applicationNumber: svcFormData.applicationNumber || null,
                         assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
@@ -1297,16 +1298,10 @@ const ServiceEntry = () => {
                         email: svcFormData.email || null,
                         priority: svcFormData.priority || 'medium',
                         currentStep: svcFormData.currentStep || 'Submitted',
+                        status: svcFormData.trackingStatus || 'pending', // <-- Added Status Here
                         progress: 25 
                       });
 
-                      if (svcFormData.trackingStatus && svcFormData.trackingStatus !== 'pending') {
-                        try {
-                          await updateTrackingStatus(trackingRecord.id, svcFormData.trackingStatus);
-                        } catch (statusErr) {
-                          console.warn('Failed to update tracking status:', statusErr);
-                        }
-                      }
                     } else {
                       console.warn(`Tracking row not found for Service Entry ${serviceEntryId}.`);
                     }
@@ -1608,7 +1603,7 @@ const ServiceEntry = () => {
 
                     const tabDefs = [
                       { id: 'service',  label: 'Service',  icon: FiCreditCard, badge: null },
-                      { id: 'tracking', label: 'Tracking', icon: FiPackage,      badge: trackingFilledCount || null, dot: statusIsActive },
+                      ...(!isEditMode ? [{ id: 'tracking', label: 'Tracking', icon: FiPackage, badge: trackingFilledCount || null, dot: statusIsActive }] : []),
                       ...(!isEditMode ? [{ id: 'notes', label: 'Notes', icon: FiMessageCircle, badge: svc.initialNote ? 1 : null }] : [])
                     ];
 
