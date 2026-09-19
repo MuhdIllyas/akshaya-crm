@@ -115,7 +115,7 @@ const TrackServicePage = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
-  const [categories, setCategories] = useState([]);   // <-- Moved UP before useMemo
+  const [categories, setCategories] = useState([]);
 
   const getSavedFilters = () => {
     try {
@@ -139,7 +139,7 @@ const TrackServicePage = () => {
   const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-// Auto-reset subcategory when service changes
+  // Auto-reset subcategory when service changes
   useEffect(() => {
     setSubcategoryFilter('all');
   }, [serviceFilter]);
@@ -212,7 +212,9 @@ const TrackServicePage = () => {
     email: '',
     priority: 'medium'
   });
-  const [timeRange, setTimeRange] = useState('week');
+  
+  // Default to all to prevent data from being hidden
+  const [timeRange, setTimeRange] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
@@ -377,55 +379,6 @@ const TrackServicePage = () => {
     }
   };
 
-  const fetchPaymentDetails = async (serviceEntryId, serviceEntries) => {
-    try {
-      const serviceEntry = serviceEntries.find(entry => Number(entry.id) === Number(serviceEntryId));
-      
-      if (!serviceEntry) {
-        return { 
-          payments: [], 
-          totalCharge: 0, 
-          paymentStatus: 'Not Applicable', 
-          paymentDetails: 'No payments recorded' 
-        };
-      }
-
-      const payments = Array.isArray(serviceEntry.payments) ? serviceEntry.payments : [];
-      const totalCharge = parseFloat(serviceEntry.totalCharge || serviceEntry.total_charges || 0);
-      const totalReceived = payments
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + (parseFloat(p.amount || 0)), 0);
-
-      let paymentStatus;
-      if (totalCharge <= 0) {
-        paymentStatus = 'Not Applicable';
-      } else if (totalReceived >= totalCharge) {
-        paymentStatus = 'Received';
-      } else if (totalReceived > 0) {
-        paymentStatus = 'Partial';
-      } else {
-        paymentStatus = 'Pending';
-      }
-
-      const paymentDetails = formatPayments(payments);
-
-      return {
-        payments,
-        totalCharge,
-        paymentStatus,
-        paymentDetails
-      };
-    } catch (err) {
-      console.error('Error processing payment details:', err);
-      return { 
-        payments: [], 
-        totalCharge: 0, 
-        paymentStatus: 'Pending', 
-        paymentDetails: 'Error fetching payments' 
-      };
-    }
-  };
-
   // Transform backend data (Instantly process using pre-calculated backend data)
   const transformBackendData = async (trackingData) => {
     return trackingData.map((trackingEntry) => {
@@ -519,7 +472,7 @@ const TrackServicePage = () => {
   const fetchStats = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
     const data = await getTrackingStats({ 
-        timeRange, 
+        timeRange: timeRange === 'all' ? undefined : timeRange, 
         date: dateFilter || undefined,
         service: serviceFilter === 'all' ? undefined : serviceFilter,
         subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
@@ -541,7 +494,6 @@ const TrackServicePage = () => {
                       Array.isArray(staffResponse?.data) ? staffResponse.data : [];
       setStaffList(staffData);
       
-      // 🔥 FIX: No longer downloading the database here
       const transformed = await transformBackendData([response]);
       
       if (transformed.length > 0) {
@@ -586,10 +538,12 @@ const TrackServicePage = () => {
       const params = {
         page: currentPage,
         limit: limit,
-        timeRange: timeRange,
+        timeRange: timeRange === 'all' ? undefined : timeRange,
         date: dateFilter || undefined,
         service: serviceFilter === 'all' ? undefined : serviceFilter,
+        categoryId: serviceFilter === 'all' ? undefined : serviceFilter, 
         subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+        subcategoryId: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
         status: statusFilter === 'all' ? undefined : apiStatus,
         staff: staffFilter === 'all' ? undefined : staffFilter,
         expiry: expiryFilter === 'all' ? undefined : expiryFilter,
@@ -597,7 +551,6 @@ const TrackServicePage = () => {
         aadhaar: debouncedAadhaar || undefined
       };
 
-      // 🔥 FIX: Removed getServiceEntries() to prevent full DB download
       const [trackingResponse, staffResponse, categoriesResponse] = await Promise.all([
         getTrackingEntries(params),
         getStaff(),
@@ -619,8 +572,16 @@ const TrackServicePage = () => {
       setStaffList(staffData);
       setCategories(categoriesData);
 
-      // 🔥 FIX: Transform directly uses backend data
-      const transformedServices = await transformBackendData(trackingData);
+      let transformedServices = await transformBackendData(trackingData);
+
+      // Explicit local fallback for category & subcategory filtering to enforce selection
+      if (serviceFilter !== 'all') {
+        transformedServices = transformedServices.filter(s => String(s.categoryId) === String(serviceFilter));
+      }
+      if (subcategoryFilter !== 'all') {
+        transformedServices = transformedServices.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+      }
+
       setServices(transformedServices);
       setIsSidebarVisible(true);
       
@@ -675,7 +636,8 @@ const TrackServicePage = () => {
     expiryFilter,
     timeRange,
     dateFilter,
-    serviceFilter
+    serviceFilter,
+    subcategoryFilter
   ]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
@@ -1039,17 +1001,18 @@ const TrackServicePage = () => {
     );
   };
 
-  // Add this new helper function to fetch all filtered data for export:
   const fetchAllFilteredDataForExport = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
     
     const params = {
       page: 1,
       limit: totalRecords > 0 ? totalRecords : 10000, 
-      timeRange: timeRange,
+      timeRange: timeRange === 'all' ? undefined : timeRange,
       date: dateFilter || undefined,
       service: serviceFilter === 'all' ? undefined : serviceFilter,
+      categoryId: serviceFilter === 'all' ? undefined : serviceFilter,
       subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+      subcategoryId: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
       status: statusFilter === 'all' ? undefined : apiStatus,
       staff: staffFilter === 'all' ? undefined : staffFilter,
       expiry: expiryFilter === 'all' ? undefined : expiryFilter,
@@ -1063,8 +1026,16 @@ const TrackServicePage = () => {
         ? trackingResponse.data 
         : Array.isArray(trackingResponse) ? trackingResponse : [];
 
-      // 🔥 FIX: No longer requires the local entryServices array
-      const transformedData = await transformBackendData(trackingData);
+      let transformedData = await transformBackendData(trackingData);
+
+      // Explicit local fallback for category & subcategory filtering
+      if (serviceFilter !== 'all') {
+        transformedData = transformedData.filter(s => String(s.categoryId) === String(serviceFilter));
+      }
+      if (subcategoryFilter !== 'all') {
+        transformedData = transformedData.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+      }
+
       return transformedData;
     } catch (error) {
       console.error('Error fetching export data:', error);
@@ -1081,7 +1052,6 @@ const TrackServicePage = () => {
       
       toast.info("Preparing Excel file... This might take a moment.", { autoClose: 2000 });
       
-      // Fetch ALL filtered data instead of using local state
       const fullDataset = await fetchAllFilteredDataForExport();
 
       const exportData = fullDataset.map(s => ({
@@ -1123,7 +1093,6 @@ const TrackServicePage = () => {
       
       toast.info("Generating PDF... This might take a moment.", { autoClose: 2000 });
       
-      // Fetch ALL filtered data instead of using local state
       const fullDataset = await fetchAllFilteredDataForExport();
       
       const doc = new jsPDF('landscape');
@@ -1157,7 +1126,7 @@ const TrackServicePage = () => {
         body: tableRows,
         startY: 28,
         styles: { fontSize: 8 },
-        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600 to match your UI
+        headStyles: { fillColor: [79, 70, 229] },
         alternateRowStyles: { fillColor: [249, 250, 251] }
       });
 
@@ -1503,14 +1472,12 @@ const TrackServicePage = () => {
         </div>
       </div>
       
-      {/* Note: Changed grid-cols-4 to grid-cols-5 to accommodate the extra button */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
           <FiPlus className="h-5 w-5 mb-1" />
           <span className="text-xs font-medium">New</span>
         </button>
         
-        {/* NEW: Excel Export Button */}
         <button 
           onClick={handleExportExcel}
           className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
@@ -1518,7 +1485,6 @@ const TrackServicePage = () => {
           <span className="text-xs font-medium">Excel</span>
         </button>
         
-        {/* NEW: PDF Export Button */}
         <button 
           onClick={handleExportPDF}
           className="p-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors flex flex-col items-center justify-center">
@@ -1735,13 +1701,14 @@ const TrackServicePage = () => {
                   </button>
                 )}
                 <select 
-                  className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   value={timeRange}
                   onChange={(e) => setTimeRange(e.target.value)}
                 >
-                  <option value="week">Last 7 days</option>
-                  <option value="month">Last 30 days</option>
-                  <option value="quarter">Last quarter</option>
+                  <option value="all">All Time</option>
+                  <option value="week">This Week</option>
+                  <option value="month">This Month</option>
+                  <option value="year">This Year</option>
                 </select>
                 <button
                   className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all duration-200 shadow-sm"
