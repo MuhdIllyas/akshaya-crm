@@ -33,27 +33,32 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import axios from 'axios';
 
-const createEmptyService = () => ({
-  id: crypto.randomUUID(), 
-  category: '', subcategory: '', serviceCharge: '', 
-  departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-  hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-  initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
-  showNoteArea: false,
-  activeTab: 'service',        // NEW: which tab this card shows
+// 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
+const createEmptyService = () => {
+  const currentStaffId = typeof window !== 'undefined' ? localStorage.getItem('id') : '';
+  
+  return {
+    id: crypto.randomUUID(), 
+    category: '', subcategory: '', serviceCharge: '', 
+    departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
+    hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
+    initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
+    showNoteArea: false,
+    activeTab: 'service',        
 
-  // --- TRACKING FIELDS ---
-  applicationNumber: '',
-  estimatedDelivery: '',
-  averageTime: '',
-  priority: 'medium',
-  assignedTo: '',
-  currentStep: 'Submitted',
-  trackingStatus: 'pending',
-  aadhaar: '',
-  email: '',
-  customerRemarks: ''
-});
+    // --- TRACKING FIELDS ---
+    applicationNumber: '',
+    estimatedDelivery: '',
+    averageTime: '',
+    priority: 'medium',
+    assignedTo: currentStaffId || '', // <-- DEFAULT TO LOGGED-IN STAFF
+    currentStep: 'Submitted',
+    trackingStatus: 'pending',
+    aadhaar: '',
+    email: '',
+    customerRemarks: ''
+  };
+};
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
 const getLatestTransactions = (transactions) => {
@@ -511,7 +516,6 @@ const ServiceEntry = () => {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
-  // ========== HANDLE DELETION ==========
   const handleDeleteEntry = async () => {
     const entryId = deleteDialog.entryId;
     if (!entryId) return;
@@ -533,7 +537,6 @@ const ServiceEntry = () => {
     }
   };
 
-  // ========== INVOICE GENERATOR FUNCTIONS ==========
   const openInvoiceModal = () => {
     const items = [];
 
@@ -703,8 +706,6 @@ const ServiceEntry = () => {
     setInvoiceModalOpen(false);
   };
 
-  // ========== useEffect HOOKS ==========
-  
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -826,7 +827,7 @@ const ServiceEntry = () => {
                 estimatedDelivery: '',
                 averageTime: '',
                 priority: 'medium',
-                assignedTo: '',
+                assignedTo: staffId || '', // <-- DEFAULT TO LOGGED-IN STAFF
                 currentStep: 'Submitted',
                 trackingStatus: 'pending',
                 aadhaar: tokenData.aadhaar || '',
@@ -900,7 +901,7 @@ const ServiceEntry = () => {
                 estimatedDelivery: '',
                 averageTime: '',
                 priority: 'medium',
-                assignedTo: '',
+                assignedTo: staffId || '', // <-- DEFAULT TO LOGGED-IN STAFF
                 currentStep: 'Submitted',
                 trackingStatus: 'pending',
                 aadhaar: booking.aadhaar || '',
@@ -958,7 +959,6 @@ const ServiceEntry = () => {
     setDaysRemaining(days);
   };
 
-  // 🔥 CATCH ADMIN EDIT FROM SERVICE LOGS
   useEffect(() => {
     if (location.state && location.state.adminEditEntry && categories.length > 0) {
       const adminEntry = location.state.adminEditEntry;
@@ -1016,7 +1016,6 @@ const ServiceEntry = () => {
   };
 
   const handleCartChange = (index, field, value) => {
-    // Aadhaar validation (strip non-digits, max 12)
     if (field === 'aadhaar') {
       value = String(value).replace(/\D/g, '').slice(0, 12);
     }
@@ -1298,10 +1297,9 @@ const ServiceEntry = () => {
                         email: svcFormData.email || null,
                         priority: svcFormData.priority || 'medium',
                         currentStep: svcFormData.currentStep || 'Submitted',
-                        status: svcFormData.trackingStatus || 'pending', // <-- Added Status Here
+                        status: svcFormData.trackingStatus || 'pending', 
                         progress: 25 
                       });
-
                     } else {
                       console.warn(`Tracking row not found for Service Entry ${serviceEntryId}.`);
                     }
@@ -1601,6 +1599,7 @@ const ServiceEntry = () => {
                     ].filter(Boolean).length;
                     const statusIsActive = svc.trackingStatus && svc.trackingStatus !== 'pending';
 
+                    // 🔥 UI UPDATE: Hide the specific tabs during Edit mode
                     const tabDefs = [
                       { id: 'service',  label: 'Service',  icon: FiCreditCard, badge: null },
                       ...(!isEditMode ? [{ id: 'tracking', label: 'Tracking', icon: FiPackage, badge: trackingFilledCount || null, dot: statusIsActive }] : []),
@@ -1755,7 +1754,7 @@ const ServiceEntry = () => {
                               )}
 
                               {/* Tab hint when empty */}
-                              {trackingFilledCount === 0 && (
+                              {(!isEditMode && trackingFilledCount === 0) && (
                                 <button
                                   type="button"
                                   onClick={() => handleCartChange(index, 'activeTab', 'tracking')}
@@ -1769,7 +1768,7 @@ const ServiceEntry = () => {
                           )}
 
                           {/* ---------- TRACKING TAB ---------- */}
-                          {activeTab === 'tracking' && (
+                          {activeTab === 'tracking' && !isEditMode && (
                             <div className="space-y-3">
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 {/* Application No */}
@@ -2476,7 +2475,7 @@ const ServiceEntry = () => {
         )}
       </div>
 
-      {/* ========== CUSTOM CONFIRMATION MODAL ========== */}
+      {/* ========== CUSTOM CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[60]">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">
