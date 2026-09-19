@@ -86,11 +86,24 @@ const formatDate = (dateString) => {
   }
 };
 
-// Timeline date formatting utility - DD-MM-YYYY at HH:mm
+// Timeline date formatting utility - Fixes UTC parsing issues
 const formatTimelineDate = (dateString) => {
   if (!dateString) return 'Not set';
   try {
-    const date = new Date(dateString);
+    let parsedStr = dateString;
+    
+    // Convert SQL datetime (e.g. "2026-09-19 10:08:00") to strict ISO UTC
+    if (typeof parsedStr === 'string') {
+      if (!parsedStr.includes('T') && parsedStr.includes(' ')) {
+        parsedStr = parsedStr.replace(' ', 'T');
+      }
+      // If it has a time component but lacks a timezone, assume UTC from backend
+      if (parsedStr.length === 19 && !parsedStr.endsWith('Z')) {
+        parsedStr += 'Z';
+      }
+    }
+
+    const date = new Date(parsedStr);
     if (isNaN(date.getTime())) return 'Invalid date';
     
     const day = String(date.getDate()).padStart(2, '0');
@@ -398,8 +411,11 @@ const TrackServicePage = () => {
         ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
         : 'No payments recorded';
 
+      // Grouping date must strictly use created_at to avoid moving items to "today" when updated
+      const createdDate = new Date(trackingEntry.created_at || trackingEntry.updated_at || Date.now());
+      const dateStr = createdDate.toISOString().split('T')[0];
+      
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
-      const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
       const calculatedProgress = trackingEntry.progress || calculateProgress(
@@ -434,11 +450,12 @@ const TrackServicePage = () => {
         currentStep: trackingEntry.current_step || 'Submitted',
         progress: calculatedProgress,
         priority: trackingEntry.priority || 'medium',
-        date: dateStr,
+        date: dateStr, // Safely bound to creation date now
         time: timeStr,
-        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? new Date(trackingEntry.estimated_delivery).toISOString() : 'Not set',
+        // Format ISO String instantly so it doesn't show 2026-09-21T00:00:00.000Z in UI
+        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? formatDate(trackingEntry.estimated_delivery) : 'Not set',
         expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'N/A',
-        createdAt: trackingEntry.updated_at,
+        createdAt: trackingEntry.created_at || trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
         duration: null,
         notes: trackingEntry.notes || 'No notes available',
@@ -686,6 +703,29 @@ const TrackServicePage = () => {
         progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
       };
 
+      // Handle Optimistic UI injection for Timeline
+      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+      if (updates.currentStep !== undefined && service.currentStep !== updates.currentStep) {
+          const targetOrder = stepOrderMap[updates.currentStep] || 1;
+          const nowIso = new Date().toISOString();
+          
+          if (service.steps && service.steps.length > 0) {
+              updates.steps = service.steps.map(step => {
+                  const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
+                  if (currentOrder <= targetOrder) {
+                      return { 
+                          ...step, 
+                          completed: true, 
+                          // Only assign the brand new time if it's the specific step we just clicked
+                          date: (currentOrder === targetOrder) ? nowIso : (step.date || service.createdAt)
+                      };
+                  }
+                  return { ...step, completed: false };
+              });
+          }
+          updates.updatedAt = nowIso;
+      }
+
       Object.assign(service, updates);
       if (updates.applicationNumber !== undefined) service.applicationNumber = updates.applicationNumber;
       if (updates.currentStep !== undefined) service.currentStep = updates.currentStep;
@@ -695,6 +735,8 @@ const TrackServicePage = () => {
           return {
             ...s,
             ...updates,
+            steps: updates.steps || s.steps,
+            updatedAt: updates.updatedAt || s.updatedAt,
             assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
             assignedToId: updates.assignedTo !== undefined ? parseInt(updates.assignedTo) : s.assignedToId,
             rawEstimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : s.rawEstimatedDelivery,
@@ -706,7 +748,13 @@ const TrackServicePage = () => {
       }));
       
       if (selectedService?.id === service.id) {
-        setSelectedService(prev => ({ ...prev, ...updates, progress: payload.progress }));
+        setSelectedService(prev => ({ 
+            ...prev, 
+            ...updates, 
+            steps: updates.steps || prev.steps,
+            updatedAt: updates.updatedAt || prev.updatedAt,
+            progress: payload.progress 
+        }));
         setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
 
@@ -772,10 +820,27 @@ const TrackServicePage = () => {
         progress: newProgress
       };
       
-      console.log('TrackServicePage: Sending update payload with progress:', payload);
+      // Optimitic Timeline injection
+      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+      const targetOrder = stepOrderMap[trackingFormData.currentStep] || 1;
+      const nowIso = new Date().toISOString();
+      
+      let updatedSteps = selectedService.steps;
+      if (updatedSteps && updatedSteps.length > 0 && selectedService.currentStep !== trackingFormData.currentStep) {
+          updatedSteps = updatedSteps.map(step => {
+              const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
+              if (currentOrder <= targetOrder) {
+                  return { 
+                      ...step, 
+                      completed: true, 
+                      date: (currentOrder === targetOrder) ? nowIso : (step.date || selectedService.createdAt)
+                  };
+              }
+              return { ...step, completed: false };
+          });
+      }
 
       const response = await updateTrackingEntry(selectedService.id, payload);
-      console.log('TrackServicePage: Update response:', response);
 
       toast.success('Tracking details updated successfully');
       
@@ -793,7 +858,9 @@ const TrackServicePage = () => {
           email: trackingFormData.email || '',
           priority: trackingFormData.priority || 'medium',
           progress: newProgress,
-          rawEstimatedDelivery: trackingFormData.estimatedDelivery
+          rawEstimatedDelivery: trackingFormData.estimatedDelivery,
+          steps: updatedSteps,
+          updatedAt: (selectedService.currentStep !== trackingFormData.currentStep) ? nowIso : service.updatedAt
         } : service
       );
       
@@ -811,7 +878,9 @@ const TrackServicePage = () => {
         email: trackingFormData.email || '',
         priority: trackingFormData.priority || 'medium',
         progress: newProgress,
-        rawEstimatedDelivery: trackingFormData.estimatedDelivery
+        rawEstimatedDelivery: trackingFormData.estimatedDelivery,
+        steps: updatedSteps,
+        updatedAt: (selectedService.currentStep !== trackingFormData.currentStep) ? nowIso : selectedService.updatedAt
       });
       
       setActiveTab('overview');
@@ -822,7 +891,6 @@ const TrackServicePage = () => {
   };
 
   const handleServiceSelect = (service, preventNav = false) => {
-    console.log('TrackServicePage: Selected service:', service);
     setSelectedService(service);
     setTrackingFormData({
       applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
@@ -1165,19 +1233,21 @@ const TrackServicePage = () => {
   );
 
   const OverviewView = ({ service, onUpdateStatus, priorityConfig }) => {
+    // Dynamic fallback structure to avoid copying a single timestamp across uncompleted steps
     const getDisplaySteps = () => {
       if (service.steps && service.steps.length > 0) {
-        return service.steps.sort((a, b) => a.step_order - b.step_order);
+        return service.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
       }
       
-      const allSteps = [
-        { id: 1, name: 'Submitted', completed: true, step_order: 1 },
-        { id: 2, name: 'Initial Review', completed: ['Initial Review', 'Document Verification', 'Final Approval'].includes(service.currentStep), step_order: 2 },
-        { id: 3, name: 'Document Verification', completed: ['Document Verification', 'Final Approval'].includes(service.currentStep), step_order: 3 },
-        { id: 4, name: 'Final Approval', completed: service.currentStep === 'Final Approval', step_order: 4 }
+      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+      const currentOrder = stepOrderMap[service.currentStep] || 1;
+
+      return [
+        { id: 1, name: 'Submitted', completed: true, step_order: 1, date: service.createdAt },
+        { id: 2, name: 'Initial Review', completed: currentOrder >= 2, step_order: 2, date: currentOrder === 2 ? service.updatedAt : null },
+        { id: 3, name: 'Document Verification', completed: currentOrder >= 3, step_order: 3, date: currentOrder === 3 ? service.updatedAt : null },
+        { id: 4, name: 'Final Approval', completed: currentOrder >= 4, step_order: 4, date: currentOrder >= 4 ? service.updatedAt : null }
       ];
-      
-      return allSteps;
     };
 
     const displaySteps = getDisplaySteps();
@@ -1248,13 +1318,13 @@ const TrackServicePage = () => {
             <div className="space-y-3">
               {displaySteps.length > 0 ? (
                 displaySteps.map((step) => {
-                  const dateTimeStr = formatTimelineDate(step.date || service.createdAt);
+                  const dateTimeStr = step.date ? formatTimelineDate(step.date) : 'Pending';
                   
                   return (
                     <TimelineItem 
                       key={step.id}
                       title={step.name}
-                      dateTime={dateTimeStr}
+                      dateTime={step.completed ? dateTimeStr : 'Pending'}
                       completed={step.completed}
                       current={step.name === service.currentStep}
                     />
