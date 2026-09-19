@@ -22,7 +22,8 @@ import {
   getStaff, 
   getCategories, 
   getServiceEntries,
-  getTrackingStats
+  getTrackingStats, 
+  getTrackingActivity
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
@@ -122,6 +123,10 @@ const TrackServicePage = () => {
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
   const [categories, setCategories] = useState([]);
+
+  //for showing tracking history
+  const [activityHistory, setActivityHistory] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const getSavedFilters = () => {
     try {
@@ -494,6 +499,30 @@ const TrackServicePage = () => {
     setGlobalStats(data);
   };
 
+  const fetchActivityHistory = async (trackingId) => {
+    if (!trackingId) {
+      setActivityHistory([]);
+      return;
+    }
+
+    try {
+      setActivityLoading(true);
+
+      const response = await getTrackingActivity(trackingId);
+
+      const activities = Array.isArray(response?.activities)
+        ? response.activities
+        : [];
+
+      setActivityHistory(activities);
+    } catch (error) {
+      console.error('Error fetching activity history:', error);
+      setActivityHistory([]);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
   const fetchSingleTrackingEntry = async (entryId) => {
     try {
       console.log('Fetching single tracking entry:', entryId);
@@ -511,6 +540,7 @@ const TrackServicePage = () => {
       if (transformed.length > 0) {
         setServices(transformed);
         setSelectedService(transformed[0]);
+        await fetchActivityHistory(transformed[0].id);
         
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
@@ -673,6 +703,7 @@ const TrackServicePage = () => {
       }
 
       await updateTrackingStatus(serviceId, apiStatus);
+      await fetchActivityHistory(serviceId);
       toast.success(`Status updated to ${newStatus}`);
       
     } catch (error) {
@@ -752,6 +783,7 @@ const TrackServicePage = () => {
       }
 
       await updateTrackingEntry(service.id, payload);
+      await fetchActivityHistory(service.id);
       toast.success('Details updated successfully');
 
     } catch (error) {
@@ -834,6 +866,7 @@ const TrackServicePage = () => {
       }
 
       const response = await updateTrackingEntry(selectedService.id, payload);
+      await fetchActivityHistory(selectedService.id);
 
       toast.success('Tracking details updated successfully');
       
@@ -883,8 +916,11 @@ const TrackServicePage = () => {
     }
   };
 
-  const handleServiceSelect = (service, preventNav = false) => {
+  const handleServiceSelect = async (service, preventNav = false) => {
     setSelectedService(service);
+
+    await fetchActivityHistory(service.id);
+
     setTrackingFormData({
       applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
       currentStep: service.currentStep || 'Submitted',
@@ -1035,7 +1071,10 @@ const TrackServicePage = () => {
                   />
                 )}
                 {activeTab === 'history' && (
-                  <HistoryView service={selectedService} />
+                  <HistoryView
+                    activityHistory={activityHistory}
+                    activityLoading={activityLoading}
+                  />
                 )}
                 {activeTab === 'discussion' && (
                   <div className="space-y-4">
@@ -2251,30 +2290,66 @@ const EnhancedDocumentsView = ({ service, entryServices, categories, formatPayme
   );
 };
 
-const HistoryView = ({ service }) => (
-  <div className="space-y-6">
-    <h3 className="font-semibold text-gray-900">Activity History</h3>
-    <div className="space-y-3">
-      <ActivityItem 
-        action="Status updated"
-        description={`Changed to ${service.status}`}
-        time={formatDate(service.updatedAt) || 'Recently'}
-        user="System"
-      />
-      <ActivityItem 
-        action="Service assigned"
-        description={`Assigned to ${service.assignedTo || 'Unassigned'}`}
-        time={formatDate(service.updatedAt) || 'Recently'}
-        user="Administrator"
-      />
-      <ActivityItem 
-        action="Application submitted"
-        description="New service application received"
-        time={formatDate(service.createdAt) || 'Recently'}
-        user="Customer"
-      />
+const HistoryView = ({ activityHistory, activityLoading }) => {
+  if (activityLoading) {
+    return (
+      <div className="space-y-6">
+        <h3 className="font-semibold text-gray-900">Activity History</h3>
+
+        <div className="flex items-center justify-center py-10">
+          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="ml-3 text-sm text-gray-500">
+            Loading activity history...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activityHistory || activityHistory.length === 0) {
+    return (
+      <div className="space-y-6">
+        <h3 className="font-semibold text-gray-900">Activity History</h3>
+
+        <div className="text-center py-10 bg-gray-50 rounded-lg border border-gray-200">
+          <FiClock className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+          <p className="text-sm text-gray-500">
+            No activity history available
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-gray-900">
+          Activity History
+        </h3>
+
+        <span className="text-xs text-gray-500">
+          {activityHistory.length} {activityHistory.length === 1 ? 'event' : 'events'}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {activityHistory.map((activity) => (
+          <ActivityItem
+            key={activity.id}
+            action={activity.action}
+            description={activity.description}
+            time={
+              activity.created_at
+                ? formatTimelineDate(activity.created_at)
+                : 'Unknown time'
+            }
+            user={activity.performed_by_name || 'System'}
+          />
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default TrackServicePage;

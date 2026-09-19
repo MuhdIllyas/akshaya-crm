@@ -21,6 +21,22 @@ const formatYMD = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+// Format service tracking status for activity history
+const formatStatusLabel = (status) => {
+  if (!status) return 'Unknown';
+
+  const labels = {
+    pending: 'Pending',
+    in_progress: 'In Progress',
+    completed: 'Completed',
+    rejected: 'Rejected',
+    resubmit: 'Resubmit',
+    paid: 'Paid'
+  };
+
+  return labels[status] || status;
+};
+
 // ==========================================
 // CENTRAL COMMUNICATION ENGINE INTEGRATION
 // ==========================================
@@ -1248,6 +1264,111 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /api/servicetracking/:id/activity
+ * Get activity history for a service tracking entry
+ */
+router.get('/:id/activity', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  if (isNaN(parseInt(id, 10))) {
+    return res.status(400).json({ error: 'Invalid tracking ID provided.' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    const trackingId = parseInt(id, 10);
+
+    // First verify that the tracking entry exists
+    const trackingResult = await client.query(
+      `
+      SELECT 
+        st.id,
+        st.service_entry_id,
+        se.staff_id,
+        staff.centre_id
+      FROM service_tracking st
+      JOIN service_entries se ON se.id = st.service_entry_id
+      JOIN staff ON staff.id = se.staff_id
+      WHERE st.id = $1
+      `,
+      [trackingId]
+    );
+
+    if (trackingResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Service tracking entry not found'
+      });
+    }
+
+    const tracking = trackingResult.rows[0];
+
+    // Centre-level access protection
+    if (
+      req.user.role !== 'superadmin' &&
+      parseInt(req.user.centre_id) !== parseInt(tracking.centre_id)
+    ) {
+      return res.status(403).json({
+        error: 'Unauthorized to view this activity history'
+      });
+    }
+
+    const activityResult = await client.query(
+      `
+      SELECT
+        a.id,
+        a.action,
+        a.description,
+        a.performed_by,
+        a.performed_by_role,
+        a.created_at,
+        s.name AS performed_by_name
+      FROM activities a
+      LEFT JOIN staff s
+        ON s.id = a.performed_by
+      WHERE a.related_type = 'service_tracking'
+        AND a.related_id = $1
+      ORDER BY a.created_at DESC, a.id DESC
+      `,
+      [trackingId]
+    );
+
+    const activities = activityResult.rows.map(activity => ({
+      id: activity.id,
+      action: activity.action,
+      description: activity.description,
+      performed_by: activity.performed_by,
+      performed_by_name:
+        activity.performed_by_name ||
+        (
+          activity.performed_by_role === 'customer'
+            ? 'Customer'
+            : activity.performed_by_role === 'system'
+              ? 'System'
+              : activity.performed_by_role || 'System'
+        ),
+      performed_by_role: activity.performed_by_role,
+      created_at: activity.created_at
+        ? activity.created_at.toISOString()
+        : null
+    }));
+    res.json({
+      activities
+    });
+  } catch (err) {
+    console.error(
+      'servicetracking.js: Error fetching activity history:',
+      err
+    );
+    res.status(500).json({
+      error: 'Failed to fetch activity history'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * POST /api/servicetracking - Create new service tracking entry
  */
 router.post('/', authenticateToken, async (req, res) => {
@@ -1767,7 +1888,20 @@ router.put('/:id', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const entryResult = await client.query(
-      'SELECT application_number, service_entry_id, status, current_step, progress, aadhaar, email, priority FROM service_tracking WHERE id = $1',
+      `
+      SELECT
+        application_number,
+        service_entry_id,
+        status,
+        current_step,
+        assigned_to,
+        progress,
+        aadhaar,
+        email,
+        priority
+      FROM service_tracking
+      WHERE id = $1
+      `,
       [parseInt(id)]
     );
     if (entryResult.rows.length === 0) {
@@ -2024,18 +2158,69 @@ router.put('/:id', authenticateToken, async (req, res) => {
     );
 
     // ========== ACTIVITY LOGGING ==========
-    // Log task completion on update if status changed to completed
-    if (status === 'completed' && existingEntry.status !== 'completed') {
+
+    // 1. STATUS CHANGE
+    if (
+      status !== undefined &&
+      existingEntry.status !== status
+    ) {
       await logActivity({
         centre_id: centreId,
         related_type: 'service_tracking',
-        related_id: id,
-        action: 'Task Completed',
-        description: `Task completed for ${serviceEntry.rows[0].customer_name} - ${serviceName} (Application: ${updatedEntry.application_number || 'N/A'})`,
+        related_id: parseInt(id),
+        action: 'Status changed',
+        description:
+          `Changed from ${formatStatusLabel(existingEntry.status)} to ${formatStatusLabel(status)}`,
         performed_by: req.user.id,
         performed_by_role: req.user.role
       });
     }
+
+
+    // 2. ASSIGNMENT CHANGE
+    if (
+        assignedTo !== undefined &&
+        assignedTo !== null &&
+        assignedTo !== '' &&
+        parseInt(assignedTo) !== parseInt(existingEntry.assigned_to)
+      ) {
+      const newAssignedStaff = await client.query(
+        'SELECT name FROM staff WHERE id = $1',
+        [parseInt(assignedTo)]
+      );
+
+      const newAssignedName =
+        newAssignedStaff.rows[0]?.name || 'Unknown staff';
+
+      await logActivity({
+        centre_id: centreId,
+        related_type: 'service_tracking',
+        related_id: parseInt(id),
+        action: 'Service assigned',
+        description: `Assigned to ${newAssignedName}`,
+        performed_by: req.user.id,
+        performed_by_role: req.user.role
+      });
+    }
+
+
+    // 3. CURRENT STEP CHANGE
+    if (
+      currentStep !== undefined &&
+      currentStep !== existingEntry.current_step
+    ) {
+      await logActivity({
+        centre_id: centreId,
+        related_type: 'service_tracking',
+        related_id: parseInt(id),
+        action: 'Step changed',
+        description:
+          `Changed from ${existingEntry.current_step || 'Submitted'} to ${currentStep || 'Submitted'}`,
+        performed_by: req.user.id,
+        performed_by_role: req.user.role
+      });
+    }
+
     // ======================================
 
     // Send notification with the appropriate status
@@ -2286,18 +2471,21 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     );
 
     // ========== ACTIVITY LOGGING ==========
-    // Log task completion if status changed to completed
-    if (status === 'completed' && existingEntry.status !== 'completed') {
+
+    // Log every actual status change
+    if (existingEntry.status !== status) {
       await logActivity({
         centre_id: centreId,
         related_type: 'service_tracking',
-        related_id: id,
-        action: 'Task Completed',
-        description: `Task completed for ${serviceEntry.rows[0].customer_name} - ${serviceName} (Application: ${updatedEntry.application_number || 'N/A'})`,
+        related_id: parseInt(id),
+        action: 'Status changed',
+        description:
+          `Changed from ${formatStatusLabel(existingEntry.status)} to ${formatStatusLabel(status)}`,
         performed_by: req.user.id,
         performed_by_role: req.user.role
       });
     }
+
     // ======================================
 
     // Send notification with the status (not current_step)
