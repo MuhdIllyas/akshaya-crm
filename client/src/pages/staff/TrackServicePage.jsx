@@ -90,29 +90,22 @@ const formatDate = (dateString) => {
 const formatTimelineDate = (dateString) => {
   if (!dateString) return 'Not set';
   try {
-    let parsedStr = dateString;
-    
-    // Convert SQL datetime (e.g. "2026-09-19 10:08:00") to strict ISO UTC
-    if (typeof parsedStr === 'string') {
-      if (!parsedStr.includes('T') && parsedStr.includes(' ')) {
-        parsedStr = parsedStr.replace(' ', 'T');
-      }
-      // If it has a time component but lacks a timezone, assume UTC from backend
-      if (parsedStr.length === 19 && !parsedStr.endsWith('Z')) {
-        parsedStr += 'Z';
-      }
+    const date = new Date(dateString);
+
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
     }
 
-    const date = new Date(parsedStr);
-    if (isNaN(date.getTime())) return 'Invalid date';
-    
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    return `${day}-${month}-${year} at ${hours}:${minutes}`;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(date).replace(',', ' at');
+
   } catch (error) {
     console.error('Error formatting timeline date:', error);
     return 'Invalid date';
