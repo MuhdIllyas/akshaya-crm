@@ -2572,14 +2572,6 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
 
     // ======================================
 
-    // Send notification with the status (not current_step)
-    await sendStatusNotification(
-      updatedEntry.service_entry_id, 
-      status, // Pass the actual status, not current_step
-      existingEntry.current_step, // Keep current_step for reference but not used in notification
-      updatedEntry.notes
-    );
-
     io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
       application_number: updatedEntry.application_number,
       status: updatedEntry.status,
