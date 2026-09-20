@@ -13,10 +13,12 @@ import {
   FiDownload,
   FiUpload,
   FiX,
-  FiFlag,
   FiUser,
   FiFile,
   FiClock,
+  FiChevronRight,
+  FiCalendar,
+  FiArrowRight,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import Chat from '@/components/Chat';
@@ -25,7 +27,32 @@ import { socket } from '@/services/socket';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
-// Helper to get current user from token
+/* ------------------------------------------------------------------ */
+/*  Design tokens                                                      */
+/* ------------------------------------------------------------------ */
+
+const PRIORITY = {
+  high: { label: 'High', dot: 'bg-rose-500', pill: 'bg-rose-50 text-rose-700 border-rose-100' },
+  medium: { label: 'Medium', dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700 border-amber-100' },
+  low: { label: 'Low', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+};
+
+const STATUS = {
+  pending: { label: 'To Do', dot: 'bg-slate-400', pill: 'bg-slate-100 text-slate-700 border-slate-200' },
+  in_progress: { label: 'In Progress', dot: 'bg-indigo-500', pill: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+  completed: { label: 'Done', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+};
+
+const STATUS_OPTIONS = [
+  { value: 'pending', label: 'To-do' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'completed', label: 'Done' },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
 const getCurrentUser = () => {
   const token = localStorage.getItem('token');
   if (!token) return null;
@@ -44,7 +71,6 @@ const getCurrentUser = () => {
   }
 };
 
-// Helper to format date consistently
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
   try {
@@ -53,15 +79,59 @@ const formatDate = (dateString) => {
     return date.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
   } catch (error) {
     return 'Invalid date';
   }
 };
 
+/* ------------------------------------------------------------------ */
+/*  Small presentational primitives                                    */
+/* ------------------------------------------------------------------ */
+
+const Avatar = ({ name, size = 'md', className = '' }) => {
+  const sizes = { sm: 'w-7 h-7 text-[10px]', md: 'w-8 h-8 text-xs', lg: 'w-10 h-10 text-sm' };
+  return (
+    <div
+      className={`${sizes[size]} rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-white font-semibold flex items-center justify-center ring-2 ring-white ${className}`}
+    >
+      {name?.charAt(0)?.toUpperCase() || '?'}
+    </div>
+  );
+};
+
+const PriorityBadge = ({ priority = 'medium' }) => {
+  const p = PRIORITY[priority] || PRIORITY.medium;
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border ${p.pill}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
+      {p.label}
+    </span>
+  );
+};
+
+const EmptyState = ({ icon: Icon, title, description, action }) => (
+  <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-slate-200">
+    {Icon && (
+      <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 mb-4">
+        <Icon size={22} />
+      </div>
+    )}
+    <p className="text-sm font-semibold text-slate-800">{title}</p>
+    {description && <p className="text-xs text-slate-500 mt-1 max-w-xs">{description}</p>}
+    {action && <div className="mt-5">{action}</div>}
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Main component                                                     */
+/* ------------------------------------------------------------------ */
+
 const ServiceWorkspace = () => {
-  const { selectedServiceId } = useParams(); // This is the tracking ID
+  const { selectedServiceId } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('board');
 
@@ -79,18 +149,23 @@ const ServiceWorkspace = () => {
   const [showParticipantModal, setShowParticipantModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [newParticipant, setNewParticipant] = useState({ staffId: '', role: 'collaborator' });
-  const [newTask, setNewTask] = useState({ title: '', description: '', assignedTo: '', dueDate: '', priority: 'medium' });
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    assignedTo: '',
+    dueDate: '',
+    priority: 'medium',
+  });
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
   const currentUser = useMemo(() => getCurrentUser(), []);
   const token = localStorage.getItem('token');
 
-  // Fetch workspace data
+  /* ----------------------------- data ----------------------------- */
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // 1. Get the tracking entry to obtain the actual service_entry_id
         const serviceRes = await fetch(`${API_BASE_URL}/api/servicetracking/${selectedServiceId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -100,7 +175,6 @@ const ServiceWorkspace = () => {
         const actualServiceEntryId = serviceData.service_entry_id;
         setServiceEntryId(actualServiceEntryId);
 
-        // 2. Now fetch all collaboration data using the actual service_entry_id
         const [convRes, partsRes, tasksRes, docsRes, staffRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/servicecollaboration/${actualServiceEntryId}/conversation`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -134,33 +208,35 @@ const ServiceWorkspace = () => {
     fetchData();
   }, [selectedServiceId, token]);
 
-  // Real-time Socket Listeners for Tasks
+  /* -------------------------- socket sync ------------------------- */
   useEffect(() => {
     if (!socket?.connected || !serviceEntryId) return;
 
     const handleTaskUpdated = (data) => {
-      setTasks((prev) => prev.map((t) => (String(t.id) === String(data.id) ? { ...t, status: data.status } : t)));
+      setTasks((prev) =>
+        prev.map((t) => (String(t.id) === String(data.id) ? { ...t, status: data.status } : t))
+      );
     };
 
     const handleTaskAssigned = (newTask) => {
       if (String(newTask.related_service_entry_id) === String(serviceEntryId)) {
         setTasks((prev) => {
-          if (prev.some(t => String(t.id) === String(newTask.id))) return prev;
+          if (prev.some((t) => String(t.id) === String(newTask.id))) return prev;
           return [newTask, ...prev];
         });
       }
     };
 
-    socket.on("taskUpdated", handleTaskUpdated);
-    socket.on("taskAssigned", handleTaskAssigned);
+    socket.on('taskUpdated', handleTaskUpdated);
+    socket.on('taskAssigned', handleTaskAssigned);
 
     return () => {
-      socket.off("taskUpdated", handleTaskUpdated);
-      socket.off("taskAssigned", handleTaskAssigned);
+      socket.off('taskUpdated', handleTaskUpdated);
+      socket.off('taskAssigned', handleTaskAssigned);
     };
   }, [serviceEntryId]);
 
-  // --- Participants handlers ---
+  /* -------------------------- participants ------------------------ */
   const handleAddParticipant = async () => {
     if (!serviceEntryId) return;
     if (!newParticipant.staffId) {
@@ -197,10 +273,13 @@ const ServiceWorkspace = () => {
     if (!serviceEntryId) return;
     if (!window.confirm('Remove this participant from the service?')) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/participants/${staffId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/participants/${staffId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       if (!res.ok) throw new Error('Failed to remove participant');
       toast.success('Participant removed');
       setParticipants((prev) => prev.filter((p) => p.staff_id !== staffId));
@@ -210,7 +289,7 @@ const ServiceWorkspace = () => {
     }
   };
 
-  // --- Tasks handlers ---
+  /* ----------------------------- tasks ---------------------------- */
   const handleCreateTask = async () => {
     if (!serviceEntryId) return;
     if (!newTask.title.trim()) {
@@ -247,26 +326,31 @@ const ServiceWorkspace = () => {
   const handleTaskStatusUpdate = async (taskId, newStatus) => {
     if (!serviceEntryId) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/tasks/${taskId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
       if (!res.ok) throw new Error('Failed to update task');
-      
-      setTasks((prev) => prev.map((t) => (String(t.id) === String(taskId) ? { ...t, status: newStatus } : t)));
+
+      setTasks((prev) =>
+        prev.map((t) => (String(t.id) === String(taskId) ? { ...t, status: newStatus } : t))
+      );
       toast.success(`Task marked as ${newStatus}`);
     } catch (err) {
       console.error(err);
       toast.error(err.message);
-      throw err; // Crucial for Chat.jsx to know it failed and stop the spinner
+      throw err;
     }
   };
 
-  // --- Documents handlers ---
+  /* --------------------------- documents -------------------------- */
   const handleDocumentUpload = async (e) => {
     if (!serviceEntryId) return;
     const file = e.target.files[0];
@@ -302,10 +386,13 @@ const ServiceWorkspace = () => {
     if (!serviceEntryId) return;
     if (!window.confirm('Delete this document?')) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/documents/${docId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/documents/${docId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       if (!res.ok) throw new Error('Delete failed');
       setDocuments((prev) => prev.filter((d) => d.id !== docId));
       toast.success('Document deleted');
@@ -315,7 +402,7 @@ const ServiceWorkspace = () => {
     }
   };
 
-  // --- Chat integration (via hook) ---
+  /* ------------------------------ chat ---------------------------- */
   const { messages, loading: chatLoading, typingUsers, sendMessage, sendTyping } = useServiceChat(
     conversation?.id,
     currentUser,
@@ -341,14 +428,14 @@ const ServiceWorkspace = () => {
     }
   };
 
-  // Build serviceInfo for the Chat component
+  /* --------------------------- derived data ----------------------- */
   const serviceInfo = useMemo(() => {
     if (!service) return null;
     return {
       name: service.service_name,
       applicationNumber: service.application_number,
       phone: service.phone,
-      tasks: tasks.map(task => ({
+      tasks: tasks.map((task) => ({
         id: task.id,
         title: task.title,
         description: task.description,
@@ -360,243 +447,373 @@ const ServiceWorkspace = () => {
     };
   }, [service, tasks]);
 
-  // Group tasks by status for Kanban
-  const tasksByStatus = {
-    pending: tasks.filter((t) => t.status === 'pending'),
-    in_progress: tasks.filter((t) => t.status === 'in_progress'),
-    completed: tasks.filter((t) => t.status === 'completed'),
-  };
+  const tasksByStatus = useMemo(
+    () => ({
+      pending: tasks.filter((t) => t.status === 'pending'),
+      in_progress: tasks.filter((t) => t.status === 'in_progress'),
+      completed: tasks.filter((t) => t.status === 'completed'),
+    }),
+    [tasks]
+  );
 
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const completed = tasks.filter((t) => t.status === 'completed').length;
+    return { total, completed, progress: total ? Math.round((completed / total) * 100) : 0 };
+  }, [tasks]);
+
+  const tabs = useMemo(
+    () => [
+      { id: 'board', label: 'Board', icon: FiGrid, count: null },
+      { id: 'chat', label: 'Chat', icon: FiMessageSquare, count: null },
+      { id: 'tasks', label: 'Tasks', icon: FiCheckSquare, count: tasks.length },
+      { id: 'participants', label: 'Participants', icon: FiUsers, count: participants.length },
+      { id: 'documents', label: 'Documents', icon: FiFileText, count: documents.length },
+    ],
+    [tasks.length, participants.length, documents.length]
+  );
+
+  /* ----------------------------- loading -------------------------- */
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading workspace...</p>
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center">
+          <div className="relative w-12 h-12">
+            <div className="absolute inset-0 rounded-full border-[3px] border-slate-200" />
+            <div className="absolute inset-0 rounded-full border-[3px] border-indigo-600 border-t-transparent animate-spin" />
+          </div>
+          <p className="mt-4 text-sm font-medium text-slate-500">Loading workspace…</p>
         </div>
       </div>
     );
   }
 
+  /* ------------------------------ render -------------------------- */
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-      {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/dashboard/staff/track_service')}
-            className="p-2 hover:bg-gray-100 rounded-xl transition-all duration-200"
-          >
-            <FiArrowLeft size={20} className="text-gray-600" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-              {service?.service_name || 'Service'} Workspace
-            </h1>
-            <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
-              <span className="flex items-center gap-1">
-                <FiUser size={14} /> {service?.customer_name}
-              </span>
-              <span className="flex items-center gap-1">
-                <FiFile size={14} /> App #{service?.application_number}
-              </span>
-              <span className="flex items-center gap-1">
-                <FiClock size={14} /> Created {formatDate(service?.created_at || service?.createdAt)}
-              </span>
+    <div className="h-screen flex flex-col bg-slate-50">
+      {/* ============================ HEADER ============================ */}
+      <header className="bg-white/95 backdrop-blur border-b border-slate-200 sticky top-0 z-30">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-4 h-16">
+            {/* Left: back + title */}
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => navigate('/dashboard/staff/track_service')}
+                aria-label="Back to service tracking"
+                className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+              >
+                <FiArrowLeft size={17} />
+              </button>
+
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-semibold text-slate-900 truncate leading-tight">
+                  {service?.service_name || 'Service'}
+                  <span className="text-slate-400 font-normal"> · Workspace</span>
+                </h1>
+                <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5 truncate">
+                  <span className="inline-flex items-center gap-1.5">
+                    <FiUser size={12} className="text-slate-400" />
+                    {service?.customer_name || '—'}
+                  </span>
+                  <span className="hidden sm:inline-flex items-center gap-1.5">
+                    <FiFile size={12} className="text-slate-400" />#{service?.application_number || '—'}
+                  </span>
+                  <span className="hidden md:inline-flex items-center gap-1.5">
+                    <FiClock size={12} className="text-slate-400" />
+                    {formatDate(service?.created_at || service?.createdAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: progress + collaborators */}
+            <div className="flex items-center gap-4">
+              <div className="hidden lg:flex items-center gap-3 pr-4 border-r border-slate-200">
+                <div className="text-right leading-tight">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Progress
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {stats.completed}
+                    <span className="text-slate-400 font-normal">/{stats.total} tasks</span>
+                  </p>
+                </div>
+                <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-500"
+                    style={{ width: `${stats.progress}%` }}
+                  />
+                </div>
+              </div>
+
+              {participants.length > 0 && (
+                <div className="flex items-center -space-x-2">
+                  {participants.slice(0, 4).map((p) => (
+                    <Avatar key={p.staff_id} name={p.name} />
+                  ))}
+                  {participants.length > 4 && (
+                    <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold flex items-center justify-center ring-2 ring-white">
+                      +{participants.length - 4}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-white/50 backdrop-blur-sm px-6 sticky top-[73px] z-10">
-        {[
-          { id: 'board', label: 'Board', icon: FiGrid },
-          { id: 'chat', label: 'Chat', icon: FiMessageSquare },
-          { id: 'tasks', label: 'Tasks', icon: FiCheckSquare },
-          { id: 'participants', label: 'Participants', icon: FiUsers },
-          { id: 'documents', label: 'Documents', icon: FiFileText },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-5 py-3 border-b-2 transition-all duration-200 ${
-              activeTab === tab.id
-                ? 'border-purple-600 text-purple-700 font-medium'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <tab.icon size={18} />
-            <span className="hidden sm:inline">{tab.label}</span>
-          </button>
-        ))}
-      </div>
+        {/* ============================ TABS ============================ */}
+        <div className="px-4 sm:px-6 lg:px-8">
+          <nav className="flex items-center gap-1 overflow-x-auto -mb-px">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative shrink-0 flex items-center gap-2 px-3.5 py-3 text-sm font-medium transition-colors ${
+                    isActive ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <tab.icon size={16} />
+                  <span>{tab.label}</span>
+                  {tab.count !== null && tab.count > 0 && (
+                    <span
+                      className={`ml-0.5 min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold flex items-center justify-center ${
+                        isActive ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                  {isActive && (
+                    <motion.span
+                      layoutId="workspace-tab-underline"
+                      className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo-600"
+                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </header>
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-auto p-6">
+      {/* ============================ CONTENT ============================ */}
+      <main
+        className={`flex-1 min-h-0 ${
+          activeTab === 'chat' ? '' : 'overflow-auto p-4 sm:p-6 lg:p-8'
+        }`}
+      >
         <AnimatePresence mode="wait">
-          {/* Board Tab */}
+          {/* ---------------------------- BOARD ---------------------------- */}
           {activeTab === 'board' && (
             <motion.div
               key="board"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.18 }}
               className="h-full"
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-800">Task Board</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Track work across To Do, In Progress and Done.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowTaskModal(true)}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm shadow-indigo-600/20"
+                >
+                  <FiPlus size={16} /> New Task
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 h-[calc(100%-64px)] min-h-[420px]">
                 <BoardColumn
                   title="To Do"
-                  tasks={tasksByStatus.pending}
                   status="pending"
+                  tasks={tasksByStatus.pending}
                   onTaskMove={handleTaskStatusUpdate}
                 />
                 <BoardColumn
                   title="In Progress"
-                  tasks={tasksByStatus.in_progress}
                   status="in_progress"
+                  tasks={tasksByStatus.in_progress}
                   onTaskMove={handleTaskStatusUpdate}
                 />
                 <BoardColumn
                   title="Done"
-                  tasks={tasksByStatus.completed}
                   status="completed"
+                  tasks={tasksByStatus.completed}
                   onTaskMove={handleTaskStatusUpdate}
                 />
               </div>
             </motion.div>
           )}
 
-          {/* Chat Tab */}
+          {/* ----------------------------- CHAT ---------------------------- */}
           {activeTab === 'chat' && (
             <motion.div
               key="chat"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="h-full"
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.18 }}
+              className="h-full bg-white"
             >
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col">
-                <div className="flex-1 min-h-0">
-                  <Chat
-                    activeConversation={conversation}
-                    messages={{ [conversation?.id]: messages }}
-                    currentUser={currentUser}
-                    loadingChat={chatLoading}
-                    typingUsers={{ [conversation?.id]: typingUsers }}
-                    onSendMessage={handleSendMessage}
-                    onDeleteMessage={handleDeleteMessage}
-                    onOpenTaskModal={() => setShowTaskModal(true)}
-                    onOpenNewChatModal={() => {}}
-                    onBack={() => {}}
-                    onlineUsers={new Set()}
-                    serviceInfo={serviceInfo}
-                    serviceEntryId={serviceEntryId}
-                    onTaskStatusUpdate={handleTaskStatusUpdate}
-                  />
-                </div>
-              </div>
+              <Chat
+                activeConversation={conversation}
+                messages={{ [conversation?.id]: messages }}
+                currentUser={currentUser}
+                loadingChat={chatLoading}
+                typingUsers={{ [conversation?.id]: typingUsers }}
+                onSendMessage={handleSendMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onOpenTaskModal={() => setShowTaskModal(true)}
+                onOpenNewChatModal={() => {}}
+                onBack={() => {}}
+                onlineUsers={new Set()}
+                serviceInfo={serviceInfo}
+                serviceEntryId={serviceEntryId}
+                onTaskStatusUpdate={handleTaskStatusUpdate}
+              />
             </motion.div>
           )}
 
-          {/* Tasks Tab (List View) */}
+          {/* ----------------------------- TASKS --------------------------- */}
           {activeTab === 'tasks' && (
             <motion.div
               key="tasks"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.18 }}
+              className="max-w-5xl mx-auto space-y-5"
             >
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-800">All Tasks</h2>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-800">All Tasks</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {stats.completed} of {stats.total} completed
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowTaskModal(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-sm"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm shadow-indigo-600/20"
                 >
-                  <FiPlus size={18} /> New Task
+                  <FiPlus size={16} /> New Task
                 </button>
               </div>
-              <div className="space-y-3">
-                {tasks.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-gray-200">
-                    No tasks yet. Create one!
-                  </div>
-                ) : (
-                  tasks.map((task) => (
+
+              {tasks.length === 0 ? (
+                <EmptyState
+                  icon={FiCheckSquare}
+                  title="No tasks yet"
+                  description="Break this service down into tasks and assign them to your team."
+                  action={
+                    <button
+                      onClick={() => setShowTaskModal(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
+                    >
+                      <FiPlus size={16} /> Create your first task
+                    </button>
+                  }
+                />
+              ) : (
+                <div className="space-y-3">
+                  {tasks.map((task) => (
                     <TaskCard key={task.id} task={task} onStatusUpdate={handleTaskStatusUpdate} />
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 
-          {/* Participants Tab */}
+          {/* -------------------------- PARTICIPANTS ----------------------- */}
           {activeTab === 'participants' && (
             <motion.div
               key="participants"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.18 }}
+              className="max-w-5xl mx-auto space-y-5"
             >
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-800">Collaborators</h2>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-800">Collaborators</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    People with access to this service workspace.
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowParticipantModal(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-sm"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm shadow-indigo-600/20"
                 >
-                  <FiPlus size={18} /> Add Participant
+                  <FiPlus size={16} /> Add Participant
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {participants.map((p) => (
-                  <div
-                    key={p.staff_id}
-                    className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between shadow-sm hover:shadow-md transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-semibold">
-                        {p.name?.charAt(0) || '?'}
+
+              {participants.length === 0 ? (
+                <EmptyState
+                  icon={FiUsers}
+                  title="No collaborators"
+                  description="Invite team members to collaborate on this service."
+                />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {participants.map((p) => (
+                    <div
+                      key={p.staff_id}
+                      className="group bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between shadow-sm hover:shadow-md hover:border-slate-300 transition-all"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Avatar name={p.name} size="lg" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{p.name}</p>
+                          <p className="text-xs text-slate-500 capitalize truncate">
+                            {p.role} · {p.staff_role}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{p.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {p.role} • {p.staff_role}
-                        </p>
-                      </div>
+                      {p.staff_id !== service?.assignedToId && (
+                        <button
+                          onClick={() => handleRemoveParticipant(p.staff_id)}
+                          aria-label={`Remove ${p.name}`}
+                          className="shrink-0 p-2 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all"
+                        >
+                          <FiTrash2 size={16} />
+                        </button>
+                      )}
                     </div>
-                    {p.staff_id !== service?.assignedToId && (
-                      <button
-                        onClick={() => handleRemoveParticipant(p.staff_id)}
-                        className="p-2 text-gray-400 hover:text-red-500 transition"
-                      >
-                        <FiTrash2 size={16} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 
-          {/* Documents Tab */}
+          {/* --------------------------- DOCUMENTS ------------------------- */}
           {activeTab === 'documents' && (
             <motion.div
               key="documents"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.18 }}
+              className="max-w-5xl mx-auto space-y-5"
             >
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-800">Shared Documents</h2>
-                <div className="relative">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-800">Shared Documents</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Files attached to this service workspace.
+                  </p>
+                </div>
+                <div>
                   <input
                     type="file"
                     id="doc-upload"
@@ -607,194 +824,195 @@ const ServiceWorkspace = () => {
                   <button
                     onClick={() => document.getElementById('doc-upload').click()}
                     disabled={uploadingDoc}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-sm disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm shadow-indigo-600/20 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {uploadingDoc ? (
                       <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Uploading...
+                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Uploading…
                       </>
                     ) : (
                       <>
-                        <FiUpload size={18} /> Upload Document
+                        <FiUpload size={16} /> Upload Document
                       </>
                     )}
                   </button>
                 </div>
               </div>
-              <div className="space-y-3">
-                {documents.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-gray-200">
-                    No documents yet.
-                  </div>
-                ) : (
-                  documents.map((doc) => (
+
+              {documents.length === 0 ? (
+                <EmptyState
+                  icon={FiFileText}
+                  title="No documents yet"
+                  description="Upload files to share them with everyone in this workspace."
+                />
+              ) : (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+                  {documents.map((doc) => (
                     <div
                       key={doc.id}
-                      className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between shadow-sm hover:shadow-md transition"
+                      className="group flex items-center justify-between gap-4 p-4 hover:bg-slate-50/70 transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-gray-100 rounded-lg">
-                          <FiFileText className="text-gray-600" size={20} />
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="shrink-0 w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500">
+                          <FiFileText size={18} />
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{doc.document_name}</p>
-                          <p className="text-xs text-gray-500">
-                            Uploaded by {doc.uploaded_by_name || 'Staff'} on{' '}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">
+                            {doc.document_name}
+                          </p>
+                          <p className="text-xs text-slate-500 truncate">
+                            {doc.uploaded_by_name || 'Staff'} ·{' '}
                             {new Date(doc.created_at).toLocaleDateString()}
-                            {doc.file_size && ` • ${(doc.file_size / 1024).toFixed(1)} KB`}
+                            {doc.file_size ? ` · ${(doc.file_size / 1024).toFixed(1)} KB` : ''}
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+
+                      <div className="flex items-center gap-1 shrink-0">
                         <a
                           href={`${API_BASE_URL}/api/files/version/${doc.id}/download?token=${token}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-2 text-gray-500 hover:text-purple-600 transition"
                           title="Download"
+                          className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                         >
-                          <FiDownload size={18} />
+                          <FiDownload size={17} />
                         </a>
                         <button
                           onClick={() => handleDeleteDocument(doc.id)}
-                          className="p-2 text-gray-500 hover:text-red-500 transition"
                           title="Delete"
+                          className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                         >
-                          <FiTrash2 size={18} />
+                          <FiTrash2 size={17} />
                         </button>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </main>
 
-      {/* Modals */}
+      {/* ============================ MODALS ============================ */}
       <AnimatePresence>
         {showParticipantModal && (
-          <Modal title="Add Participant" onClose={() => setShowParticipantModal(false)}>
+          <Modal
+            title="Add Participant"
+            subtitle="Grant a team member access to this workspace."
+            onClose={() => setShowParticipantModal(false)}
+            onSubmit={handleAddParticipant}
+            submitLabel="Add Participant"
+          >
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member</label>
+              <Field label="Staff Member">
                 <select
                   value={newParticipant.staffId}
                   onChange={(e) => setNewParticipant({ ...newParticipant, staffId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
                 >
-                  <option value="">Select staff</option>
+                  <option value="">Select staff…</option>
                   {staffList.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} ({s.role})
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+              </Field>
+
+              <Field label="Role">
                 <select
                   value={newParticipant.role}
                   onChange={(e) => setNewParticipant({ ...newParticipant, role: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
                 >
                   <option value="collaborator">Collaborator</option>
                   <option value="reviewer">Reviewer</option>
                 </select>
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  onClick={() => setShowParticipantModal(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddParticipant}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition"
-                >
-                  Add
-                </button>
-              </div>
+              </Field>
             </div>
           </Modal>
         )}
 
         {showTaskModal && (
-          <Modal title="Create New Task" onClose={() => setShowTaskModal(false)}>
+          <Modal
+            title="Create New Task"
+            subtitle="Assign work and keep the service moving."
+            onClose={() => setShowTaskModal(false)}
+            onSubmit={handleCreateTask}
+            submitLabel="Create Task"
+          >
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+              <Field label="Title" required>
                 <input
                   type="text"
                   value={newTask.title}
                   onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  placeholder="Task title"
+                  placeholder="e.g. Verify customer documents"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              </Field>
+
+              <Field label="Description">
                 <textarea
                   value={newTask.description}
                   onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  placeholder="Task description"
+                  placeholder="Add any details the assignee should know…"
+                  className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition resize-none"
                 />
+              </Field>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Assign To">
+                  <select
+                    value={newTask.assignedTo}
+                    onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
+                  >
+                    <option value="">Unassigned</option>
+                    {staffList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Due Date">
+                  <input
+                    type="date"
+                    value={newTask.dueDate}
+                    onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
+                  />
+                </Field>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
-                <select
-                  value={newTask.assignedTo}
-                  onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                >
-                  <option value="">Select staff</option>
-                  {staffList.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-                <input
-                  type="date"
-                  value={newTask.dueDate}
-                  onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                <select
-                  value={newTask.priority}
-                  onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  onClick={() => setShowTaskModal(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateTask}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition"
-                >
-                  Create
-                </button>
-              </div>
+
+              <Field label="Priority">
+                <div className="grid grid-cols-3 gap-2">
+                  {['low', 'medium', 'high'].map((p) => {
+                    const active = newTask.priority === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setNewTask({ ...newTask, priority: p })}
+                        className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-medium capitalize transition-all ${
+                          active
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500/20'
+                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY[p].dot}`} />
+                        {p}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
             </div>
           </Modal>
         )}
@@ -803,137 +1021,249 @@ const ServiceWorkspace = () => {
   );
 };
 
-// BoardColumn component (Kanban column)
+/* ------------------------------------------------------------------ */
+/*  Board column                                                       */
+/* ------------------------------------------------------------------ */
+
 const BoardColumn = ({ title, tasks, status, onTaskMove }) => {
+  const meta = STATUS[status];
+
   const getNextStatus = (currentStatus) => {
     if (currentStatus === 'pending') return 'in_progress';
     if (currentStatus === 'in_progress') return 'completed';
     return null;
   };
 
-  const getButtonText = (currentStatus) => {
-    if (currentStatus === 'pending') return '→ In Progress';
-    if (currentStatus === 'in_progress') return '→ Done';
+  const getNextLabel = (currentStatus) => {
+    if (currentStatus === 'pending') return 'Start';
+    if (currentStatus === 'in_progress') return 'Complete';
     return null;
   };
 
   return (
-    <div className="bg-gray-100/80 rounded-2xl p-4 flex flex-col h-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-700">{title}</h3>
-        <span className="text-sm text-gray-500 bg-white px-2 py-1 rounded-full">{tasks.length}</span>
+    <div className="flex flex-col bg-slate-100/60 rounded-2xl border border-slate-200/70 overflow-hidden">
+      {/* Column header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-white/60 border-b border-slate-200/70">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
+          <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+        </div>
+        <span className="min-w-[22px] h-5 px-1.5 rounded-full bg-white border border-slate-200 text-[11px] font-semibold text-slate-500 flex items-center justify-center">
+          {tasks.length}
+        </span>
       </div>
-      <div className="space-y-3 flex-1 overflow-y-auto">
-        {tasks.map((task) => (
-          <div key={task.id} className="bg-white rounded-xl p-3 shadow-sm border border-gray-200">
-            <p className="font-medium text-gray-800">{task.title}</p>
-            {task.description && (
-              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>
-            )}
-            <div className="flex items-center gap-2 mt-2 text-xs">
-              {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
-              {task.due_date && <span>📅 {new Date(task.due_date).toLocaleDateString()}</span>}
-              <span
-                className={`px-2 py-0.5 rounded-full ${
-                  task.priority === 'high'
-                    ? 'bg-red-100 text-red-800'
-                    : task.priority === 'medium'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-green-100 text-green-800'
-                }`}
-              >
-                {task.priority}
-              </span>
+
+      {/* Column body */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {tasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-9 h-9 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-slate-300">
+              <FiCheckSquare size={16} />
             </div>
-            {status !== 'completed' && (
-              <div className="flex justify-end mt-2">
-                <button
-                  onClick={() => onTaskMove(task.id, getNextStatus(status))}
-                  className="text-xs text-purple-600 hover:text-purple-800"
-                >
-                  {getButtonText(status)}
-                </button>
-              </div>
-            )}
+            <p className="text-xs text-slate-400 mt-2">Nothing here</p>
           </div>
-        ))}
+        ) : (
+          tasks.map((task) => (
+            <BoardTaskCard
+              key={task.id}
+              task={task}
+              nextStatus={getNextStatus(status)}
+              nextLabel={getNextLabel(status)}
+              onMove={onTaskMove}
+            />
+          ))
+        )}
       </div>
     </div>
   );
 };
 
-// TaskCard component (for list view)
-const TaskCard = ({ task, onStatusUpdate }) => {
-  const statusOptions = [
-    { value: 'pending', label: 'To-do', color: 'bg-gray-100 text-gray-800' },
-    { value: 'in_progress', label: 'In Progress', color: 'bg-blue-100 text-blue-800' },
-    { value: 'completed', label: 'Done', color: 'bg-green-100 text-green-800' },
-  ];
+/* ------------------------------------------------------------------ */
+/*  Board task card                                                    */
+/* ------------------------------------------------------------------ */
 
-  const currentStatus = statusOptions.find((s) => s.value === task.status) || statusOptions[0];
+const BoardTaskCard = ({ task, nextStatus, nextLabel, onMove }) => {
+  const priority = PRIORITY[task.priority] || PRIORITY.medium;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition">
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <h3 className="font-medium text-gray-900">{task.title}</h3>
-          {task.description && <p className="text-sm text-gray-600 mt-1">{task.description}</p>}
-          <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
-            {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
-            {task.due_date && <span>📅 {new Date(task.due_date).toLocaleDateString()}</span>}
-            <span
-              className={`px-2 py-0.5 rounded-full ${
-                task.priority === 'high'
-                  ? 'bg-red-100 text-red-800'
-                  : task.priority === 'medium'
-                  ? 'bg-yellow-100 text-yellow-800'
-                  : 'bg-green-100 text-green-800'
-              }`}
-            >
-              {task.priority}
+    <div className="group relative bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow-md hover:border-slate-300 transition-all">
+      {/* Priority rail */}
+      <span className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${priority.dot} opacity-70`} />
+
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-medium text-slate-800 leading-snug line-clamp-2">
+          {task.title}
+        </p>
+        <PriorityBadge priority={task.priority} />
+      </div>
+
+      {task.description && (
+        <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+          {task.description}
+        </p>
+      )}
+
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center gap-3 text-[11px] text-slate-500 min-w-0">
+          {task.assigned_to_name && (
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <Avatar name={task.assigned_to_name} size="sm" className="!w-5 !h-5 !text-[9px] !ring-0" />
+              <span className="truncate">{task.assigned_to_name}</span>
             </span>
-          </div>
+          )}
+          {task.due_date && (
+            <span className="inline-flex items-center gap-1 shrink-0">
+              <FiCalendar size={11} className="text-slate-400" />
+              {new Date(task.due_date).toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+              })}
+            </span>
+          )}
         </div>
-        <select
-          value={task.status}
-          onChange={(e) => onStatusUpdate(task.id, e.target.value)}
-          className={`text-xs px-2 py-1 rounded-full border ${currentStatus.color} focus:outline-none`}
-        >
-          {statusOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+
+        {nextStatus && (
+          <button
+            onClick={() => onMove(task.id, nextStatus)}
+            className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          >
+            {nextLabel}
+            <FiArrowRight size={12} />
+          </button>
+        )}
       </div>
     </div>
   );
 };
 
-// Modal component
-const Modal = ({ title, children, onClose }) => (
+/* ------------------------------------------------------------------ */
+/*  Task list card                                                     */
+/* ------------------------------------------------------------------ */
+
+const TaskCard = ({ task, onStatusUpdate }) => {
+  const priority = PRIORITY[task.priority] || PRIORITY.medium;
+  const status = STATUS[task.status] || STATUS.pending;
+
+  return (
+    <div className="group relative bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all overflow-hidden">
+      <span className={`absolute left-0 top-0 bottom-0 w-0.5 ${priority.dot} opacity-70`} />
+
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-4 pl-5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-slate-900">{task.title}</h3>
+            <PriorityBadge priority={task.priority} />
+          </div>
+
+          {task.description && (
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{task.description}</p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-slate-500">
+            {task.assigned_to_name && (
+              <span className="inline-flex items-center gap-1.5">
+                <Avatar
+                  name={task.assigned_to_name}
+                  size="sm"
+                  className="!w-5 !h-5 !text-[9px] !ring-0"
+                />
+                {task.assigned_to_name}
+              </span>
+            )}
+            {task.due_date && (
+              <span className="inline-flex items-center gap-1.5">
+                <FiCalendar size={12} className="text-slate-400" />
+                {new Date(task.due_date).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="shrink-0">
+          <select
+            value={task.status}
+            onChange={(e) => onStatusUpdate(task.id, e.target.value)}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${status.pill}`}
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/*  Modal + Field                                                      */
+/* ------------------------------------------------------------------ */
+
+const Field = ({ label, required, children }) => (
+  <div>
+    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+      {label}
+      {required && <span className="text-rose-500 ml-0.5">*</span>}
+    </label>
+    {children}
+  </div>
+);
+
+const Modal = ({ title, subtitle, children, onClose, onSubmit, submitLabel = 'Save' }) => (
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
-    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+    transition={{ duration: 0.15 }}
+    className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
     onClick={onClose}
   >
     <motion.div
-      initial={{ y: 20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: 20, opacity: 0 }}
-      className="bg-white rounded-2xl w-full max-w-md shadow-xl"
+      initial={{ y: 16, opacity: 0, scale: 0.98 }}
+      animate={{ y: 0, opacity: 1, scale: 1 }}
+      exit={{ y: 16, opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className="bg-white rounded-2xl w-full max-w-lg shadow-2xl shadow-slate-900/10 overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-            <FiX className="text-gray-500" />
-          </button>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-slate-100">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
         </div>
-        {children}
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+        >
+          <FiX size={18} />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="px-6 py-5 max-h-[65vh] overflow-y-auto">{children}</div>
+
+      {/* Footer */}
+      <div className="flex justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-100">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSubmit}
+          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm shadow-indigo-600/20"
+        >
+          {submitLabel}
+        </button>
       </div>
     </motion.div>
   </motion.div>
