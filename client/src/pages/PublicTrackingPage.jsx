@@ -12,6 +12,8 @@ const PublicTrackingPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const API_URL = import.meta.env.VITE_API_URL || '';
+
   useEffect(() => {
     const fetchStatus = async () => {
       // Prevent fetching if parameter is missing or evaluates to string 'undefined'
@@ -22,7 +24,16 @@ const PublicTrackingPage = () => {
       }
 
       try {
-        const response = await axios.get(`/api/servicetracking/public/status/${encodeURIComponent(trackingId.trim())}`);
+        const response = await axios.get(
+          `${API_URL}/api/servicetracking/public/status/${encodeURIComponent(trackingId.trim())}`
+        );
+
+        // If the request hit the frontend host, the SPA fallback returns index.html (a string).
+        // Treat that as a failure instead of rendering an empty page.
+        if (!response.data || typeof response.data !== 'object') {
+          throw new Error('Unexpected response from server');
+        }
+
         setData(response.data);
       } catch (err) {
         console.error('Tracking fetch error:', err);
