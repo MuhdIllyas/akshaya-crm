@@ -1,27 +1,122 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { FiCheckCircle, FiClock, FiFileText, FiAlertCircle } from 'react-icons/fi';
+import {
+  FiAlertCircle,
+  FiBriefcase,
+  FiCalendar,
+  FiCheck,
+  FiChevronRight,
+  FiCopy,
+  FiFileText,
+  FiRefreshCw,
+  FiUser,
+} from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import axios from 'axios';
 
+/* ------------------------------------------------------------------ */
+/*  Config                                                             */
+/* ------------------------------------------------------------------ */
+
+const STATUS_CONFIG = {
+  pending: { label: 'Pending', dot: 'bg-amber-400' },
+  in_progress: { label: 'In Progress', dot: 'bg-indigo-400' },
+  completed: { label: 'Completed', dot: 'bg-emerald-400' },
+  paid: { label: 'Paid', dot: 'bg-emerald-400' },
+  rejected: { label: 'Delayed', dot: 'bg-rose-400' },
+  resubmit: { label: 'Resubmit Required', dot: 'bg-orange-400' },
+};
+
+const ACCENTS = {
+  indigo: 'bg-indigo-50 text-indigo-600',
+  violet: 'bg-violet-50 text-violet-600',
+};
+
+/* ------------------------------------------------------------------ */
+/*  Small building blocks                                              */
+/* ------------------------------------------------------------------ */
+
+const ProgressRing = ({ value = 0 }) => {
+  const size = 84;
+  const stroke = 8;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+
+  return (
+    <div className="relative h-[84px] w-[84px] shrink-0">
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.22)"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="white"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference - (circumference * pct) / 100}
+          style={{ transition: 'stroke-dashoffset 1s cubic-bezier(.4,0,.2,1)' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-lg font-bold leading-none text-white">
+          {pct}
+          <span className="text-[11px] font-semibold">%</span>
+        </span>
+        <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-indigo-200">
+          Complete
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const InfoTile = ({ icon, label, value, accent = 'indigo' }) => (
+  <div className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${ACCENTS[accent]}`}>
+      {icon}
+    </span>
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-bold text-slate-800">{value}</p>
+    </div>
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Page                                                               */
+/* ------------------------------------------------------------------ */
+
 const PublicTrackingPage = () => {
-  // MUST perfectly match the parameter name defined in App.jsx
-  const { trackingId } = useParams(); 
-  
+  const { trackingId } = useParams();
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || '';
 
-  useEffect(() => {
-    const fetchStatus = async () => {
-      // Prevent fetching if parameter is missing or evaluates to string 'undefined'
+  const fetchStatus = useCallback(
+    async (isRefresh = false) => {
       if (!trackingId || trackingId === 'undefined') {
         setError('No tracking ID provided in the link.');
         setLoading(false);
         return;
       }
+
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
 
       try {
         const response = await axios.get(
@@ -35,195 +130,406 @@ const PublicTrackingPage = () => {
         }
 
         setData(response.data);
+        setError(null);
       } catch (err) {
         console.error('Tracking fetch error:', err);
-        setError(err.response?.data?.error || 'We could not find an application. Please check your link.');
+        setError(
+          err.response?.data?.error ||
+            'We could not find an application. Please check your link.'
+        );
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
-    };
+    },
+    [trackingId, API_URL]
+  );
 
+  useEffect(() => {
     fetchStatus();
-  }, [trackingId]);
+  }, [fetchStatus]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-500 font-medium animate-pulse">Locating your application...</p>
-      </div>
-    );
-  }
+  /* ---------------------------- helpers ---------------------------- */
 
-  if (error || !data) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FiAlertCircle className="w-8 h-8" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Application Not Found</h2>
-          <p className="text-slate-500 mb-6 text-sm">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(data.applicationNumber);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard not available — silently ignore */
+    }
+  };
 
   const formatWhatsAppLink = () => {
     const phone = data.centrePhone ? data.centrePhone.replace(/\D/g, '') : '';
-    const message = encodeURIComponent(`Hi ${data.centreName}, I have a query regarding my application ${data.applicationNumber}.`);
+    const message = encodeURIComponent(
+      `Hi ${data.centreName}, I have a query regarding my application ${data.applicationNumber}.`
+    );
     return phone ? `https://wa.me/${phone}?text=${message}` : '#';
   };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Pending Confirmation';
     return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric'
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
     });
   };
 
   const formatDateTime = (dateStr) => {
     if (!dateStr) return '';
     return new Date(dateStr).toLocaleString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: 'numeric', minute: '2-digit', hour12: true
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
     });
   };
 
-  const STATUS_LABELS = {
-    pending: 'Pending',
-    in_progress: 'In Progress',
-    completed: 'Completed',
-    rejected: 'Delayed',
-    resubmit: 'Resubmit Required',
-    paid: 'Paid'
+  /* ---------------------------- loading ---------------------------- */
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="mx-auto max-w-2xl space-y-5 px-4 py-10 sm:py-14">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 animate-pulse rounded-2xl bg-slate-200" />
+            <div className="space-y-2">
+              <div className="h-3 w-36 animate-pulse rounded-full bg-slate-200" />
+              <div className="h-2.5 w-20 animate-pulse rounded-full bg-slate-200/70" />
+            </div>
+          </div>
+
+          <div className="h-56 animate-pulse rounded-3xl bg-gradient-to-br from-slate-200 to-slate-100" />
+
+          <div className="space-y-6 rounded-3xl border border-slate-100 bg-white p-6">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex gap-4" style={{ opacity: 1 - i * 0.18 }}>
+                <div className="h-7 w-7 shrink-0 animate-pulse rounded-full bg-slate-200" />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="h-3 w-1/2 animate-pulse rounded-full bg-slate-200" />
+                  <div className="h-2.5 w-1/3 animate-pulse rounded-full bg-slate-100" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-center text-xs font-medium text-slate-400">
+            Locating your application…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ----------------------------- error ----------------------------- */
+
+  if (error && !data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-rose-50 to-red-50 text-rose-500 ring-1 ring-rose-100">
+            <FiAlertCircle className="h-7 w-7" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Application not found</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">{error}</p>
+
+          <button
+            onClick={() => fetchStatus(true)}
+            disabled={refreshing}
+            className="mt-6 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-indigo-200 hover:text-indigo-600 disabled:opacity-60"
+          >
+            <FiRefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ----------------------------- success --------------------------- */
+
+  const statusCfg = STATUS_CONFIG[data.status] || {
+    label: data.status || 'Pending',
+    dot: 'bg-slate-300',
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-xl mx-auto space-y-6">
-        
-        {/* Header / Branding */}
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-indigo-950 tracking-tight">{data.centreName || 'Akshaya Sahayi'}</h1>
-          <p className="text-slate-500 text-sm">Live Application Tracker</p>
-        </div>
+  const steps = Array.isArray(data.steps) ? data.steps : [];
+  const updates = Array.isArray(data.updates) ? data.updates : [];
 
-        {/* Main Status Card */}
-        <div className="bg-white rounded-3xl shadow-xl shadow-indigo-100/40 border border-slate-100 overflow-hidden relative">
-          <div className="h-2 w-full bg-slate-100">
-            <div 
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000 ease-out"
-              style={{ width: `${data.progress || 0}%` }}
+  const initials = (data.centreName || 'AS')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+
+  return (
+    <div className="relative min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 antialiased">
+      {/* ambient background glow */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-indigo-100/70 via-indigo-50/30 to-transparent" />
+
+      <div className="relative mx-auto max-w-2xl px-4 pb-14 pt-8 sm:px-6 sm:pt-12">
+        {/* ------------------------- header ------------------------- */}
+        <header className="mb-5 flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-lg shadow-indigo-500/25">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-slate-900">
+                {data.centreName || 'Akshaya Sahayi'}
+              </p>
+              <p className="text-xs text-slate-500">Application tracker</p>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 ring-1 ring-emerald-100">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              </span>
+              Live
+            </span>
+
+            <button
+              onClick={() => fetchStatus(true)}
+              disabled={refreshing}
+              aria-label="Refresh status"
+              className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600 disabled:opacity-60"
+            >
+              <FiRefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </header>
+
+        <div className="space-y-4">
+          {/* ---------------------- hero card ---------------------- */}
+          <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 p-6 text-white shadow-xl shadow-indigo-900/15 sm:p-7">
+            <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-12 h-56 w-56 rounded-full bg-fuchsia-400/20 blur-3xl" />
+
+            {/* application number + status */}
+            <div className="relative flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-200">
+                  Application number
+                </p>
+                <button
+                  onClick={handleCopy}
+                  title="Copy application number"
+                  className="group mt-1 flex max-w-full items-center gap-2 rounded-lg text-left transition hover:opacity-90"
+                >
+                  <span className="truncate font-mono text-lg font-bold tracking-wide">
+                    {data.applicationNumber || 'N/A'}
+                  </span>
+                  {copied ? (
+                    <FiCheck className="h-4 w-4 shrink-0 text-emerald-300" />
+                  ) : (
+                    <FiCopy className="h-3.5 w-3.5 shrink-0 text-white/50 transition group-hover:text-white" />
+                  )}
+                </button>
+                {copied && (
+                  <p className="mt-0.5 text-[10px] font-medium text-emerald-300">Copied!</p>
+                )}
+              </div>
+
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ring-white/25 backdrop-blur">
+                <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
+                {statusCfg.label}
+              </span>
+            </div>
+
+            {/* service + progress */}
+            <div className="relative mt-7 flex items-end justify-between gap-5">
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold leading-snug sm:text-2xl">
+                  {data.serviceName || 'Service Request'}
+                </h2>
+
+                {data.subcategoryName && (
+                  <p className="mt-1 text-sm font-medium text-indigo-200">
+                    {data.subcategoryName}
+                  </p>
+                )}
+
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-indigo-100">
+                  <span className="inline-flex items-center gap-1.5">
+                    <FiUser className="h-3.5 w-3.5 opacity-70" />
+                    {data.customerName || 'Customer'}
+                  </span>
+
+                  {data.handledBy && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <FiBriefcase className="h-3.5 w-3.5 opacity-70" />
+                      {data.handledBy}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <ProgressRing value={data.progress} />
+            </div>
+          </section>
+
+          {/* ---------------------- timeline ----------------------- */}
+          <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-7">
+            <h3 className="mb-5 text-sm font-bold text-slate-900">Progress timeline</h3>
+
+            {steps.length > 0 ? (
+              <ol className="relative">
+                {steps.map((step, index) => {
+                  const isDone = !!step.completed;
+                  const isCurrent = !isDone && step.name === data.currentStep;
+                  const isLast = index === steps.length - 1;
+
+                  return (
+                    <li key={index} className="relative flex gap-4 pb-7 last:pb-0">
+                      {/* connector */}
+                      {!isLast && (
+                        <span
+                          className={`absolute bottom-0 left-[13px] top-9 w-[2px] rounded-full ${
+                            isDone ? 'bg-emerald-300' : 'bg-slate-200'
+                          }`}
+                        />
+                      )}
+
+                      {/* node */}
+                      <span
+                        className={`relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full ring-4 ring-white ${
+                          isDone
+                            ? 'bg-emerald-500 text-white'
+                            : isCurrent
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-slate-100 text-slate-300'
+                        }`}
+                      >
+                        {isCurrent && (
+                          <span className="absolute -inset-1 animate-ping rounded-full bg-indigo-400/30" />
+                        )}
+                        {isDone ? (
+                          <FiCheck className="relative h-3.5 w-3.5" strokeWidth={3} />
+                        ) : (
+                          <span
+                            className={`relative h-1.5 w-1.5 rounded-full ${
+                              isCurrent ? 'bg-white' : 'bg-slate-300'
+                            }`}
+                          />
+                        )}
+                      </span>
+
+                      {/* text */}
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <p
+                            className={`text-sm font-semibold ${
+                              isDone || isCurrent ? 'text-slate-900' : 'text-slate-400'
+                            }`}
+                          >
+                            {step.name}
+                          </p>
+
+                          {isCurrent && (
+                            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+                              In progress
+                            </span>
+                          )}
+                        </div>
+
+                        {isDone && step.date && (
+                          <p className="mt-1 text-xs text-slate-400">{formatDate(step.date)}</p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="text-sm text-slate-400">
+                Milestones for this application haven’t been published yet.
+              </p>
+            )}
+          </section>
+
+          {/* ---------------------- updates ------------------------ */}
+          {updates.length > 0 && (
+            <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-7">
+              <h3 className="mb-5 text-sm font-bold text-slate-900">Recent updates</h3>
+
+              <div className="space-y-5">
+                {updates.map((u, i) => (
+                  <div key={i} className="flex gap-3.5">
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-indigo-400 ring-4 ring-indigo-50" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">{u.title}</p>
+                      {u.detail && (
+                        <p className="mt-0.5 text-sm leading-relaxed text-slate-500">
+                          {u.detail}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                        {formatDateTime(u.date)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ---------------------- info tiles --------------------- */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <InfoTile
+              icon={<FiCalendar className="h-4 w-4" />}
+              label="Estimated completion"
+              value={
+                data.estimatedDelivery ? formatDate(data.estimatedDelivery) : 'Pending confirmation'
+              }
+              accent="indigo"
+            />
+            <InfoTile
+              icon={<FiFileText className="h-4 w-4" />}
+              label="Submitted on"
+              value={data.createdAt ? formatDate(data.createdAt) : '—'}
+              accent="violet"
             />
           </div>
 
-          <div className="p-6 sm:p-8">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Application Number</p>
-                <p className="text-base font-bold text-slate-800 font-mono bg-slate-50 inline-block px-3 py-1 rounded-lg border border-slate-100">
-                  {data.applicationNumber || 'N/A'}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide
-                    ${(data.status === 'completed' || data.status === 'paid') ? 'bg-emerald-100 text-emerald-700' :
-                    data.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 
-                    'bg-amber-100 text-amber-700'}`}>
-                  {STATUS_LABELS[data.status] || data.status || 'Pending'}
+          {/* ---------------------- WhatsApp CTA ------------------- */}
+          {data.centrePhone && (
+            <a
+              href={formatWhatsAppLink()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex w-full items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#25D366] to-[#1ebe5b] p-4 text-white shadow-lg shadow-emerald-500/25 transition hover:brightness-[1.04] active:scale-[0.99]"
+            >
+              <span className="flex items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/20">
+                  <FaWhatsapp className="h-5 w-5" />
                 </span>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-slate-900 mb-1">{data.serviceName || 'Service Request'}</h2>
-              {data.subcategoryName && (
-                <p className="text-indigo-600 text-sm font-medium mb-2">{data.subcategoryName}</p>
-              )}
-              <div className="space-y-1 text-sm text-slate-500">
-                <p>Applicant: <span className="text-slate-700 font-medium">{data.customerName || 'Customer'}</span></p>
-                {data.handledBy && (
-                  <p>Handled by: <span className="text-slate-700 font-medium">{data.handledBy}</span></p>
-                )}
-              </div>
-            </div>
-
-            {/* Stepper Timeline */}
-            <div className="relative pl-6 border-l-2 border-slate-100 space-y-6 mb-8 mt-4">
-              {data.steps?.map((step, index) => (
-                <div key={index} className="relative">
-                  <div className={`absolute -left-[31px] mt-0.5 w-5 h-5 rounded-full flex items-center justify-center border-2 bg-white
-                    ${step.completed 
-                      ? 'border-emerald-500 text-emerald-500' 
-                      : data.currentStep === step.name 
-                        ? 'border-indigo-500 text-indigo-500 bg-indigo-50' 
-                        : 'border-slate-200 text-slate-300'}`}>
-                    {step.completed ? <FiCheckCircle className="w-4 h-4 bg-white rounded-full" /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
-                  </div>
-                  <div>
-                    <p className={`text-sm font-semibold ${step.completed || data.currentStep === step.name ? 'text-slate-800' : 'text-slate-400'}`}>
-                      {step.name}
-                    </p>
-                    {step.completed && step.date && (
-                      <p className="text-xs text-slate-400 mt-0.5 flex items-center">
-                        <FiClock className="w-3 h-3 mr-1" /> {formatDate(step.date)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Status Updates */}
-            {data.updates?.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                  Status Updates
-                </h3>
-                <div className="space-y-3">
-                  {data.updates.map((u, i) => (
-                    <div key={i} className="flex gap-3">
-                      <div className="mt-1.5 w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{u.title}</p>
-                        {u.detail && <p className="text-sm text-slate-500">{u.detail}</p>}
-                        <p className="text-xs text-slate-400 mt-0.5 flex items-center">
-                          <FiClock className="w-3 h-3 mr-1" /> {formatDateTime(u.date)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Target Delivery Date */}
-            <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between border border-slate-100">
-              <div className="flex items-center text-slate-600">
-                <FiFileText className="w-5 h-5 mr-3 text-indigo-500" />
-                <span className="text-sm font-medium">Estimated Completion</span>
-              </div>
-              <span className="font-bold text-slate-800 text-sm">
-                {data.estimatedDelivery ? formatDate(data.estimatedDelivery) : 'Pending Confirmation'}
+                <span className="text-left">
+                  <span className="block text-sm font-bold">Have a question?</span>
+                  <span className="block text-xs text-white/85">
+                    Chat with {data.centreName}
+                  </span>
+                </span>
               </span>
-            </div>
-          </div>
+              <FiChevronRight className="h-5 w-5 shrink-0 transition group-hover:translate-x-0.5" />
+            </a>
+          )}
+
+          <p className="pt-2 text-center text-[11px] leading-relaxed text-slate-400">
+            This page updates automatically as your application progresses.
+            <br className="hidden sm:block" /> Please keep your application number handy for
+            enquiries.
+          </p>
         </div>
-
-        {/* WhatsApp Contact Action */}
-        {data.centrePhone && (
-          <a 
-            href={formatWhatsAppLink()} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white p-4 rounded-2xl font-bold flex items-center justify-center space-x-2 transition-all shadow-md shadow-green-200"
-          >
-            <FaWhatsapp className="w-5 h-5" />
-            <span>Have a question? Chat with us</span>
-          </a>
-        )}
-
       </div>
     </div>
   );
