@@ -28,7 +28,7 @@ const STATUS = {
 const clamp = (n) => Math.max(0, Math.min(100, Number(n) || 0));
 
 /* ------------------------------------------------------------------ */
-/*  Progress ring — on light card                                      */
+/*  Progress ring                                                      */
 /* ------------------------------------------------------------------ */
 
 const Ring = ({ value = 0, size = 132, compact = false }) => {
@@ -62,7 +62,7 @@ const Ring = ({ value = 0, size = 132, compact = false }) => {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Fact row — stacked label above value (reads better in narrow rail) */
+/*  Fact row                                                           */
 /* ------------------------------------------------------------------ */
 
 const FactRow = ({ icon, label, value }) => (
@@ -309,7 +309,7 @@ const PublicTrackingPage = () => {
         </header>
 
         {/* ============================================================
-            APP SHELL — sticky rail on desktop, stacked on mobile
+            APP SHELL
            ============================================================ */}
         <div className="lg:grid lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start lg:gap-6">
 
@@ -317,7 +317,6 @@ const PublicTrackingPage = () => {
           <aside className="hidden lg:block">
             <div className="sticky top-6 space-y-4">
 
-              {/* Big progress card */}
               <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 bg-gradient-to-b from-white to-teal-50/60 p-6 text-center">
                 <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-teal-300/20 blur-3xl" />
 
@@ -340,10 +339,8 @@ const PublicTrackingPage = () => {
                 </div>
               </div>
 
-              {/* Facts */}
               <FactsCard data={data} />
 
-              {/* WhatsApp CTA */}
               {data.centrePhone && (
                 <a
                   href={formatWhatsAppLink()}
@@ -392,47 +389,40 @@ const PublicTrackingPage = () => {
                 </div>
               </div>
 
-              {/* Desktop: full-width application number strip */}
-              <div className="mt-6 hidden items-center justify-between gap-4 rounded-2xl bg-slate-50 px-5 py-4 lg:flex">
-                <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                  Application number
-                </span>
-                <div className="flex items-center gap-2">
-                  <code className="font-mono text-base font-bold tracking-wide text-[#0F2B5B]">
-                    {data.applicationNumber || 'N/A'}
-                  </code>
-                  <button
-                    onClick={handleCopy}
-                    title="Copy application number"
-                    className="rounded-md p-1 text-slate-400 transition hover:bg-white hover:text-[#0F2B5B]"
-                  >
-                    {copied ? <FiCheck className="h-3.5 w-3.5 text-teal-500" /> : <FiCopy className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Mobile: 2-col stat grid */}
-              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-100 pt-5 lg:hidden">
+              {/* ✅ Unified stat grid — visible on ALL screen sizes */}
+              <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-slate-100 pt-5 sm:gap-x-6 lg:grid-cols-3 lg:pt-6">
+                {/* Applicant */}
                 <div className="min-w-0">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Applicant</p>
-                  <p className="mt-1 truncate text-[13px] font-bold text-[#0F2B5B]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Applicant
+                  </p>
+                  <p className="mt-1.5 truncate text-sm font-bold text-[#0F2B5B]">
                     {data.customerName || 'Customer'}
                   </p>
                 </div>
+
+                {/* Handled by */}
                 <div className="min-w-0">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Handled by</p>
-                  <p className="mt-1 truncate text-[13px] font-bold text-[#0F2B5B]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Handled by
+                  </p>
+                  <p className="mt-1.5 truncate text-sm font-bold text-[#0F2B5B]">
                     {data.handledBy || 'Not assigned yet'}
                   </p>
                 </div>
-                <div className="col-span-2 min-w-0">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Application no</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <code className="truncate font-mono text-[13px] font-bold tracking-wide text-[#0F2B5B]">
+
+                {/* Application No — spans 2 cols on mobile so the number has room */}
+                <div className="col-span-2 min-w-0 lg:col-span-1">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Application no
+                  </p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <code className="truncate font-mono text-sm font-bold tracking-wide text-[#0F2B5B]">
                       {data.applicationNumber || 'N/A'}
                     </code>
                     <button
                       onClick={handleCopy}
+                      title="Copy application number"
                       className="shrink-0 rounded-md p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-[#0F2B5B]"
                     >
                       {copied ? <FiCheck className="h-3.5 w-3.5 text-teal-500" /> : <FiCopy className="h-3.5 w-3.5" />}
@@ -455,7 +445,6 @@ const PublicTrackingPage = () => {
 
               {steps.length > 0 ? (
                 <>
-                  {/* Desktop — segmented railway track */}
                   <ol
                     className="hidden lg:grid lg:gap-3"
                     style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0,1fr))` }}
@@ -507,7 +496,6 @@ const PublicTrackingPage = () => {
                     })}
                   </ol>
 
-                  {/* Mobile — vertical list */}
                   <ol className="relative lg:hidden">
                     {steps.map((step, i) => {
                       const isDone = !!step.completed;
