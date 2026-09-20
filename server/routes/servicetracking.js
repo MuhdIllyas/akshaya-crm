@@ -39,16 +39,19 @@ const formatStatusLabel = (status) => {
 
 /**
  * GET /api/servicetracking/public/status/:appNumber
- * PUBLIC ROUTE: Returns limited, safe tracking data for the customer tracking page.
- * Strictly excludes Aadhaar, full internal notes, and staff IDs.
+ * PUBLIC ROUTE: Safe tracking data for customers
  */
 router.get('/public/status/:appNumber', async (req, res) => {
   const { appNumber } = req.params;
   const client = await pool.connect();
   
   try {
+    const cleanAppNumber = appNumber.trim();
+
+    // 1. Fetch tracking details using LEFT JOINs to avoid missing records
     const query = `
       SELECT 
+        st.id AS tracking_id,
         st.application_number,
         st.status,
         st.current_step,
@@ -57,51 +60,51 @@ router.get('/public/status/:appNumber', async (req, res) => {
         se.customer_name,
         se.created_at,
         s.name AS service_name,
-        c.name AS centre_name,
-        c.phone AS centre_phone
+        COALESCE(c.name, 'Akshaya Sahayi') AS centre_name,
+        COALESCE(c.phone, se_staff.phone, '') AS centre_phone
       FROM service_tracking st
-      JOIN service_entries se ON st.service_entry_id = se.id
-      JOIN services s ON se.category_id = s.id
-      JOIN staff se_staff ON se.staff_id = se_staff.id
-      JOIN centres c ON se_staff.centre_id = c.id
-      WHERE st.application_number = $1
+      LEFT JOIN service_entries se ON st.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      LEFT JOIN centres c ON se_staff.centre_id = c.id
+      WHERE LOWER(TRIM(st.application_number)) = LOWER($1)
       LIMIT 1
     `;
     
-    const result = await client.query(query, [appNumber]);
+    const result = await client.query(query, [cleanAppNumber]);
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Application not found' });
+      return res.status(404).json({ error: 'Application not found. Please check your application number.' });
     }
 
     const tracking = result.rows[0];
 
-    // Fetch the steps for the timeline
+    // 2. Fetch steps using the resolved tracking_id directly
     const stepsResult = await client.query(
       `SELECT name, completed, date, step_order 
        FROM service_tracking_steps 
-       WHERE service_tracking_id = (SELECT id FROM service_tracking WHERE application_number = $1)
+       WHERE service_tracking_id = $1
        ORDER BY step_order ASC`,
-      [appNumber]
+      [tracking.tracking_id]
     );
 
     res.json({
       applicationNumber: tracking.application_number,
       customerName: tracking.customer_name,
-      serviceName: tracking.service_name,
+      serviceName: tracking.service_name || 'Government Service',
       status: tracking.status,
       currentStep: tracking.current_step,
-      progress: tracking.progress,
+      progress: tracking.progress || 25,
       estimatedDelivery: tracking.estimated_delivery,
       createdAt: tracking.created_at,
       centreName: tracking.centre_name,
       centrePhone: tracking.centre_phone,
-      steps: stepsResult.rows
+      steps: stepsResult.rows || []
     });
 
   } catch (err) {
     console.error('Public tracking error:', err);
-    res.status(500).json({ error: 'Failed to retrieve application status' });
+    res.status(500).json({ error: 'Failed to retrieve application status: ' + err.message });
   } finally {
     client.release();
   }
