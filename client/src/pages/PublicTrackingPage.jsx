@@ -10,6 +10,7 @@ import {
   FiFileText,
   FiRefreshCw,
   FiUser,
+  FiUserCheck,
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import axios from 'axios';
@@ -30,6 +31,7 @@ const STATUS_CONFIG = {
 const ACCENTS = {
   indigo: 'bg-indigo-50 text-indigo-600',
   violet: 'bg-violet-50 text-violet-600',
+  emerald: 'bg-emerald-50 text-emerald-600',
 };
 
 /* ------------------------------------------------------------------ */
@@ -91,6 +93,24 @@ const InfoTile = ({ icon, label, value, accent = 'indigo' }) => (
   </div>
 );
 
+/* ---- Labelled person row (used in the hero for applicant / handler) ---- */
+const PersonRow = ({ icon, label, name }) => {
+  if (!name) return null;
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-inset ring-white/20">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-200">
+          {label}
+        </p>
+        <p className="truncate text-sm font-bold text-white">{name}</p>
+      </div>
+    </div>
+  );
+};
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
@@ -122,8 +142,6 @@ const PublicTrackingPage = () => {
           `${API_URL}/api/servicetracking/public/status/${encodeURIComponent(trackingId.trim())}`
         );
 
-        // If the request hit the frontend host, the SPA fallback returns index.html (a string).
-        // Treat that as a failure instead of rendering an empty page.
         if (!response.data || typeof response.data !== 'object') {
           throw new Error('Unexpected response from server');
         }
@@ -160,12 +178,30 @@ const PublicTrackingPage = () => {
     }
   };
 
+  /* -------- WhatsApp message: rich & meaningful context -------- */
   const formatWhatsAppLink = () => {
     const phone = data.centrePhone ? data.centrePhone.replace(/\D/g, '') : '';
-    const message = encodeURIComponent(
-      `Hi ${data.centreName}, I have a query regarding my application ${data.applicationNumber}.`
-    );
-    return phone ? `https://wa.me/${phone}?text=${message}` : '#';
+    if (!phone) return '#';
+
+    const lines = [
+      `Hi ${data.centreName || 'Team'},`,
+      '',
+      `I have a query regarding my application. Here are the details:`,
+      '',
+      `• Applicant Name: ${data.customerName || 'N/A'}`,
+      `• Service: ${data.serviceName || 'N/A'}`,
+    ];
+
+    if (data.subcategoryName) {
+      lines.push(`• Sub-category: ${data.subcategoryName}`);
+    }
+
+    lines.push(`• Application No: ${data.applicationNumber || 'N/A'}`);
+    lines.push('');
+    lines.push('Please assist.');
+
+    const message = encodeURIComponent(lines.join('\n'));
+    return `https://wa.me/${phone}?text=${message}`;
   };
 
   const formatDate = (dateStr) => {
@@ -190,7 +226,6 @@ const PublicTrackingPage = () => {
   };
 
   /* ---------------------------- loading ---------------------------- */
-  /*  Mirrors the final layout: single column on mobile, 3-col on lg  */
 
   if (loading) {
     return (
@@ -274,10 +309,8 @@ const PublicTrackingPage = () => {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 antialiased">
-      {/* ambient background glow */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-indigo-100/70 via-indigo-50/30 to-transparent" />
 
-      {/* max-w-6xl → gives laptops a wide, landscape canvas */}
       <div className="relative mx-auto max-w-6xl px-4 pb-14 pt-8 sm:px-6 sm:pt-10 lg:pt-12">
         {/* ------------------------- header ------------------------- */}
         <header className="mb-5 flex items-center justify-between gap-4">
@@ -314,7 +347,7 @@ const PublicTrackingPage = () => {
         </header>
 
         {/* ============================================================
-            HERO — full width on every screen, horizontal on laptop
+            HERO
            ============================================================ */}
         <section className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 p-6 text-white shadow-xl shadow-indigo-900/15 sm:p-7 lg:p-8">
           <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
@@ -347,7 +380,6 @@ const PublicTrackingPage = () => {
                   )}
                 </div>
 
-                {/* status pill — inline on mobile, sits next to the number on laptop */}
                 <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ring-white/25 backdrop-blur lg:hidden">
                   <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
                   {statusCfg.label}
@@ -371,25 +403,18 @@ const PublicTrackingPage = () => {
                 </p>
               )}
 
-              <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-indigo-100">
-                <span className="inline-flex items-center gap-1.5">
-                  <FiUser className="h-3.5 w-3.5 opacity-70" />
-                  {data.customerName || 'Customer'}
-                </span>
-
-                {data.handledBy && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <FiBriefcase className="h-3.5 w-3.5 opacity-70" />
-                    {data.handledBy}
-                  </span>
-                )}
-
-                {data.estimatedDelivery && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <FiCalendar className="h-3.5 w-3.5 opacity-70" />
-                    ETA {formatDate(data.estimatedDelivery)}
-                  </span>
-                )}
+              {/* ---------- Labelled people row ---------- */}
+              <div className="mt-6 grid gap-4 border-t border-white/15 pt-5 sm:grid-cols-2">
+                <PersonRow
+                  icon={<FiUser className="h-3.5 w-3.5 text-white/80" />}
+                  label="Applicant"
+                  name={data.customerName || 'Customer'}
+                />
+                <PersonRow
+                  icon={<FiUserCheck className="h-3.5 w-3.5 text-white/80" />}
+                  label="Handled by"
+                  name={data.handledBy || 'Not assigned yet'}
+                />
               </div>
             </div>
 
@@ -410,10 +435,10 @@ const PublicTrackingPage = () => {
         </section>
 
         {/* ============================================================
-            BODY — 1 column on phone, 3 columns (2 + 1) on laptop
+            BODY
            ============================================================ */}
         <div className="grid gap-5 lg:grid-cols-3">
-          {/* ------------------ LEFT / MAIN ------------------ */}
+          {/* ------------------ MAIN ------------------ */}
           <div className="space-y-5 lg:col-span-2">
             {/* timeline */}
             <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-7">
@@ -433,7 +458,6 @@ const PublicTrackingPage = () => {
 
                     return (
                       <li key={index} className="relative flex gap-4 pb-7 last:pb-0">
-                        {/* connector */}
                         {!isLast && (
                           <span
                             className={`absolute bottom-0 left-[13px] top-9 w-[2px] rounded-full lg:hidden ${
@@ -442,7 +466,6 @@ const PublicTrackingPage = () => {
                           />
                         )}
 
-                        {/* node */}
                         <span
                           className={`relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full ring-4 ring-white ${
                             isDone
@@ -466,7 +489,6 @@ const PublicTrackingPage = () => {
                           )}
                         </span>
 
-                        {/* text */}
                         <div className="min-w-0 flex-1 pt-0.5">
                           <div className="flex items-center justify-between gap-3">
                             <p
@@ -499,7 +521,7 @@ const PublicTrackingPage = () => {
               )}
             </section>
 
-            {/* updates — on laptop this fills the empty space under the timeline */}
+            {/* updates */}
             {updates.length > 0 && (
               <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-7">
                 <h3 className="mb-5 text-sm font-bold text-slate-900">Recent updates</h3>
@@ -526,9 +548,8 @@ const PublicTrackingPage = () => {
             )}
           </div>
 
-          {/* ------------------ RIGHT / SIDEBAR ------------------ */}
+          {/* ------------------ SIDEBAR ------------------ */}
           <aside className="space-y-5 lg:col-span-1">
-            {/* key facts — 2-up on tablet, stacked in the narrow laptop rail */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
               <InfoTile
                 icon={<FiCalendar className="h-4 w-4" />}
@@ -546,7 +567,6 @@ const PublicTrackingPage = () => {
               />
             </div>
 
-            {/* current stage card — gives the sidebar substance on laptop */}
             <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
               <h3 className="mb-4 text-sm font-bold text-slate-900">Current stage</h3>
 
