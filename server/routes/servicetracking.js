@@ -37,10 +37,110 @@ const formatStatusLabel = (status) => {
   return labels[status] || status;
 };
 
+/**
+ * GET /api/servicetracking/public/status/:identifier
+ * PUBLIC ROUTE: Safe tracking data accepting BOTH Tracking ID OR Application Number
+ */
+router.get('/public/status/:identifier', async (req, res) => {
+  const identifier = (req.params.identifier || '').trim();
+
+  if (!identifier || identifier === 'undefined' || identifier.length > 50) {
+    return res.status(400).json({ error: 'Invalid tracking link.' });
+  }
+
+  res.set('Cache-Control', 'no-store');
+
+  try {
+
+    const result = await pool.query(
+      `SELECT 
+        st.id AS tracking_id,
+        st.application_number,
+        st.status,
+        st.current_step,
+        st.progress,
+        st.estimated_delivery,
+        se.customer_name,
+        se.created_at,
+        s.name AS service_name,
+        sub.name AS subcategory_name,
+        COALESCE(asg.name, se_staff.name) AS handled_by,
+        COALESCE(c.name, 'Akshaya Sahayi') AS centre_name,
+        COALESCE(c.phone, se_staff.phone, '') AS centre_phone
+      FROM service_tracking st
+      LEFT JOIN service_entries se ON st.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN staff asg ON st.assigned_to = asg.id
+      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      LEFT JOIN centres c ON se_staff.centre_id = c.id
+      WHERE st.public_token = $1
+       LIMIT 1`,
+      [identifier]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found. Please check your link.' });
+    }
+
+    const tracking = result.rows[0];
+
+    const stepsResult = await pool.query(
+      `SELECT name, completed, date, step_order 
+       FROM service_tracking_steps 
+       WHERE service_tracking_id = $1
+       ORDER BY step_order ASC`,
+      [tracking.tracking_id]
+    );
+
+    const updatesResult = await pool.query(
+      `SELECT action, description, created_at
+      FROM activities
+      WHERE related_type = 'service_tracking'
+        AND related_id = $1
+        AND action IN ('Task Created', 'Status changed', 'Step changed')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 20`,
+      [tracking.tracking_id]
+    );
+
+    const updates = updatesResult.rows.map((a) => ({
+      title:
+        a.action === 'Task Created' ? 'Application received'
+        : a.action === 'Status changed' ? 'Status updated'
+        : 'Stage updated',
+      // Don't expose the "Task Created" text: it contains the customer name and internal wording
+      detail: a.action === 'Task Created' ? null : a.description,
+      date: a.created_at
+    }));
+
+    res.json({
+      trackingId: tracking.tracking_id,
+      applicationNumber: tracking.application_number || 'N/A',
+      customerName: tracking.customer_name || 'Customer',
+      serviceName: tracking.service_name || 'Service Request',
+      status: tracking.status || 'pending',
+      currentStep: tracking.current_step || 'Submitted',
+      progress: tracking.progress || 25,
+      estimatedDelivery: formatYMD(tracking.estimated_delivery),
+      createdAt: tracking.created_at,
+      centreName: tracking.centre_name,
+      centrePhone: tracking.centre_phone,
+      steps: stepsResult.rows,
+      subcategoryName: tracking.subcategory_name || null,
+      handledBy: tracking.handled_by || null,
+      updates,
+    });
+  } catch (err) {
+    console.error('Public tracking error:', err);
+    res.status(500).json({ error: 'Failed to retrieve application status' });
+  }
+});
+
 // ==========================================
 // CENTRAL COMMUNICATION ENGINE INTEGRATION
 // ==========================================
-const sendStatusNotification = async (serviceEntryId, status, currentStep, notes) => {
+const sendStatusNotification = async (serviceEntryId, status, currentStep, notes, publicTokenFromCaller = null) => {
   const client = await pool.connect();
   try {
     // 1. Fetch service entry details AND the centre_id (crucial for routing)
@@ -63,11 +163,12 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
 
     const entry = serviceEntryResult.rows[0];
 
-    // Fetch application_number from service_tracking
+    // Fetch application_number + public link token from service_tracking
     const trackingResult = await client.query(
-      `SELECT application_number FROM service_tracking WHERE service_entry_id = $1 LIMIT 1`,
+      `SELECT application_number, public_token FROM service_tracking WHERE service_entry_id = $1 LIMIT 1`,
       [serviceEntryId]
     );
+    const publicToken = publicTokenFromCaller || trackingResult.rows[0]?.public_token || null;
 
     const formattedPhone = entry.phone.startsWith('+91') ? entry.phone : `+91${entry.phone.replace(/^\+91/, '')}`;
     const submissionDate = entry.created_at ? new Date(entry.created_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
@@ -120,11 +221,28 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
     ];
 
     // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
+    if (!publicToken) {
+      throw new Error(`No public_token found for service entry ${serviceEntryId}`);
+    }
+
+    // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
     const response = await triggerNotification({
-      eventKey: 'service_tracking', // Must match the key mapped by the Superadmin
+      eventKey: 'status_update_v2', // Must match the key mapped by the Superadmin
       centreId: entry.centre_id,    // Routes to the correct WhatsApp Number
       customerPhone: formattedPhone,
-      templateParams: templateParams
+      customComponents: [
+        { type: "header" }, // keep: the default path needed it to avoid the 408
+        {
+          type: "body",
+          parameters: templateParams.map(p => ({ type: "text", text: String(p || "-") }))
+        },
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [{ type: "text", text: String(publicToken) }]
+        }
+      ]
     });
 
     if (response.success) {
@@ -1578,7 +1696,7 @@ router.post('/', authenticateToken, async (req, res) => {
     // ======================================
 
     // Send notification with status (not currentStep)
-    await sendStatusNotification(serviceEntryId, status, currentStep || 'Submitted', notes);
+    await sendStatusNotification(serviceEntryId, status, currentStep || 'Submitted', notes, newEntry.public_token);
 
     io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
       application_number: newEntry.application_number,
@@ -2390,12 +2508,21 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     // 🔹 DEBUG: Check if status is 'completed'
     console.log("🔥 STATUS COMPLETED CHECK - Status value:", status);
     console.log("🔥 STATUS COMPLETED BLOCK ENTERED:", status === 'completed');
+
+    // Send notification with the status (not current_step)
+    await sendStatusNotification(
+      updatedEntry.service_entry_id, 
+      status, // Pass the actual status, not current_step
+      existingEntry.current_step, // Keep current_step for reference but not used in notification
+      updatedEntry.notes
+    );
     
-    // 🔹 AUTO CREATE REVIEW ONLY FOR NON-REGISTERED CUSTOMERS
+    // ======================================
+    // 🔹 AUTO CREATE REVIEW 
+    // ======================================
     if (status === 'completed') {
       const entryData = serviceEntry.rows[0];
       
-      // Only create token review if NOT booked through portal
       if (!entryData.customer_service_id) {
         try {
           const existingReview = await client.query(
@@ -2404,27 +2531,27 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
           );
 
           if (existingReview.rows.length === 0) {
-            
-            // 🔥 NEW: Fetch the actual centre name from the database!
             const centreNameResult = await client.query(
               'SELECT name FROM centres WHERE id = $1', 
               [centreId]
             );
             const actualCentreName = centreNameResult.rows[0]?.name || "Akshaya Sahayi";
 
-            // Fire and forget the review request
-            createReviewRequest({
-              centreId: centreId,
-              trackingId: updatedEntry.id,
-              serviceId: entryData.category_id,
-              staffId: entryData.staff_id,
-              customerName: entryData.customer_name,
-              customerPhone: entryData.phone,
-              centreName: actualCentreName // 👈 Dynamically injects the exact centre name
-            }).catch(err =>
-              console.error("Review auto-send failed:", err)
-            );
-            
+            // Delay the feedback form by 2 seconds so the completion message arrives first.
+            // Using setTimeout ensures the API doesn't hang for the user while waiting.
+            setTimeout(() => {
+              createReviewRequest({
+                centreId: centreId,
+                trackingId: updatedEntry.id,
+                serviceId: entryData.category_id,
+                staffId: entryData.staff_id,
+                customerName: entryData.customer_name,
+                customerPhone: entryData.phone,
+                centreName: actualCentreName 
+              }).catch(err =>
+                console.error("Review auto-send failed:", err)
+              );
+            }, 2000); 
           }
         } catch (err) {
           console.error("Review trigger error:", err);
@@ -2486,14 +2613,6 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     }
 
     // ======================================
-
-    // Send notification with the status (not current_step)
-    await sendStatusNotification(
-      updatedEntry.service_entry_id, 
-      status, // Pass the actual status, not current_step
-      existingEntry.current_step, // Keep current_step for reference but not used in notification
-      updatedEntry.notes
-    );
 
     io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
       application_number: updatedEntry.application_number,

@@ -75,6 +75,7 @@ import ApplicationDocuments from './components/ApplicationDocuments';
 import ConfirmationPage from './components/ConfirmationPage';
 import ViewServiceDetails from './components/ViewServiceDetails';
 import PublicReview from './components/PublicReview';
+import PublicTrackingPage from './pages/PublicTrackingPage';
 
 // ---------------------------------------------------------------------
 // Protected Route Component (FIXED - No toasts, no retry logic)
@@ -261,6 +262,7 @@ const App = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
         <Route path="/review/:token" element={<PublicReview />} />
+        <Route path="/track/:trackingId" element={<PublicTrackingPage />} />
         <Route path="/print" element={<SelfServicePrint />} /> 
 
         <Route element={<ProtectedRoute />}>
