@@ -238,7 +238,7 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
         {
           type: "button",
           sub_type: "url",
-          index: "0",
+          index: "1",
           parameters: [{ type: "text", text: String(publicToken) }]
         }
       ]
