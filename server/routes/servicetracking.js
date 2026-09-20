@@ -51,8 +51,6 @@ router.get('/public/status/:identifier', async (req, res) => {
   res.set('Cache-Control', 'no-store');
 
   try {
-    // Only treat as a DB id if it's numeric AND fits in a Postgres integer
-    const numericId = /^\d{1,9}$/.test(identifier) ? parseInt(identifier, 10) : null;
 
     const result = await pool.query(
       `SELECT 
@@ -76,11 +74,9 @@ router.get('/public/status/:identifier', async (req, res) => {
       LEFT JOIN staff asg ON st.assigned_to = asg.id
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
       LEFT JOIN centres c ON se_staff.centre_id = c.id
-       WHERE ($1::int IS NOT NULL AND st.id = $1::int)
-          OR LOWER(st.application_number) = LOWER($2)
-       ORDER BY (st.id = $1::int) DESC NULLS LAST
+      WHERE st.public_token = $1
        LIMIT 1`,
-      [numericId, identifier]
+      [identifier]
     );
 
     if (result.rows.length === 0) {
@@ -144,7 +140,7 @@ router.get('/public/status/:identifier', async (req, res) => {
 // ==========================================
 // CENTRAL COMMUNICATION ENGINE INTEGRATION
 // ==========================================
-const sendStatusNotification = async (serviceEntryId, status, currentStep, notes) => {
+const sendStatusNotification = async (serviceEntryId, status, currentStep, notes, publicTokenFromCaller = null) => {
   const client = await pool.connect();
   try {
     // 1. Fetch service entry details AND the centre_id (crucial for routing)
@@ -167,11 +163,12 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
 
     const entry = serviceEntryResult.rows[0];
 
-    // Fetch application_number from service_tracking
+    // Fetch application_number + public link token from service_tracking
     const trackingResult = await client.query(
-      `SELECT application_number FROM service_tracking WHERE service_entry_id = $1 LIMIT 1`,
+      `SELECT application_number, public_token FROM service_tracking WHERE service_entry_id = $1 LIMIT 1`,
       [serviceEntryId]
     );
+    const publicToken = publicTokenFromCaller || trackingResult.rows[0]?.public_token || null;
 
     const formattedPhone = entry.phone.startsWith('+91') ? entry.phone : `+91${entry.phone.replace(/^\+91/, '')}`;
     const submissionDate = entry.created_at ? new Date(entry.created_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
@@ -224,11 +221,28 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
     ];
 
     // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
+    if (!publicToken) {
+      throw new Error(`No public_token found for service entry ${serviceEntryId}`);
+    }
+
+    // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
     const response = await triggerNotification({
       eventKey: 'service_tracking', // Must match the key mapped by the Superadmin
       centreId: entry.centre_id,    // Routes to the correct WhatsApp Number
       customerPhone: formattedPhone,
-      templateParams: templateParams
+      customComponents: [
+        { type: "header" }, // keep: the default path needed it to avoid the 408
+        {
+          type: "body",
+          parameters: templateParams.map(p => ({ type: "text", text: String(p || "-") }))
+        },
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [{ type: "text", text: String(publicToken) }]
+        }
+      ]
     });
 
     if (response.success) {
@@ -1682,7 +1696,7 @@ router.post('/', authenticateToken, async (req, res) => {
     // ======================================
 
     // Send notification with status (not currentStep)
-    await sendStatusNotification(serviceEntryId, status, currentStep || 'Submitted', notes);
+    await sendStatusNotification(serviceEntryId, status, currentStep || 'Submitted', notes, newEntry.public_token);
 
     io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
       application_number: newEntry.application_number,
