@@ -231,7 +231,6 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
       centreId: entry.centre_id,    // Routes to the correct WhatsApp Number
       customerPhone: formattedPhone,
       customComponents: [
-        { type: "header" }, // keep: the default path needed it to avoid the 408
         {
           type: "body",
           parameters: templateParams.map(p => ({ type: "text", text: String(p || "-") }))
