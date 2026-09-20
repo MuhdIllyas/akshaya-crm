@@ -38,22 +38,24 @@ const formatStatusLabel = (status) => {
 };
 
 /**
- * GET /api/servicetracking/public/status/:id
- * PUBLIC ROUTE: Safe tracking data for customers using Tracking ID
+ * GET /api/servicetracking/public/status/:identifier
+ * PUBLIC ROUTE: Safe tracking data accepting BOTH Tracking ID OR Application Number
  */
-router.get('/public/status/:id', async (req, res) => {
-  const { id } = req.params;
+router.get('/public/status/:identifier', async (req, res) => {
+  const { identifier } = req.params;
   
-  // Strict check to ensure the ID is a valid number
-  if (isNaN(parseInt(id, 10))) {
+  if (!identifier || identifier === 'undefined') {
     return res.status(400).json({ error: 'Invalid tracking link.' });
   }
 
   const client = await pool.connect();
   
   try {
-    // 1. Fetch tracking details using LEFT JOINs to guarantee data is returned
-    const query = `
+    const cleanIdentifier = identifier.trim();
+    // Check if the identifier is purely numeric (e.g., '15' for trackingId)
+    const isNumeric = /^\d+$/.test(cleanIdentifier);
+
+    let query = `
       SELECT 
         st.id AS tracking_id,
         st.application_number,
@@ -71,11 +73,21 @@ router.get('/public/status/:id', async (req, res) => {
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
       LEFT JOIN centres c ON se_staff.centre_id = c.id
-      WHERE st.id = $1
-      LIMIT 1
     `;
     
-    const result = await client.query(query, [parseInt(id, 10)]);
+    const values = [];
+
+    // If it's a number, check BOTH the DB primary key and application_number column
+    if (isNumeric) {
+      query += ` WHERE st.id = $1 OR st.application_number = $2 LIMIT 1`;
+      values.push(parseInt(cleanIdentifier, 10), cleanIdentifier);
+    } else {
+      // If it contains letters (like APP123), check only application_number
+      query += ` WHERE LOWER(st.application_number) = LOWER($1) LIMIT 1`;
+      values.push(cleanIdentifier);
+    }
+    
+    const result = await client.query(query, values);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Application not found. Please check your link.' });
@@ -83,7 +95,7 @@ router.get('/public/status/:id', async (req, res) => {
 
     const tracking = result.rows[0];
 
-    // 2. Fetch steps using the tracking_id directly
+    // Fetch steps securely using the resolved tracking_id
     const stepsResult = await client.query(
       `SELECT name, completed, date, step_order 
        FROM service_tracking_steps 
@@ -92,7 +104,6 @@ router.get('/public/status/:id', async (req, res) => {
       [tracking.tracking_id]
     );
 
-    // 3. Return data with guaranteed fallbacks to prevent empty fields on the frontend
     res.json({
       trackingId: tracking.tracking_id,
       applicationNumber: tracking.application_number || 'N/A',

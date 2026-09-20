@@ -5,22 +5,24 @@ import { FaWhatsapp } from 'react-icons/fa';
 import axios from 'axios';
 
 const PublicTrackingPage = () => {
-  // CHANGED: Now pulling trackingId from the URL instead of appNumber
-  const { trackingId } = useParams();
+  // MUST perfectly match the parameter name defined in App.jsx
+  const { trackingId } = useParams(); 
+  
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchStatus = async () => {
-      if (!trackingId) {
+      // Prevent fetching if parameter is missing or evaluates to string 'undefined'
+      if (!trackingId || trackingId === 'undefined') {
         setError('No tracking ID provided in the link.');
         setLoading(false);
         return;
       }
 
       try {
-        const response = await axios.get(`/api/servicetracking/public/status/${trackingId}`);
+        const response = await axios.get(`/api/servicetracking/public/status/${encodeURIComponent(trackingId.trim())}`);
         setData(response.data);
       } catch (err) {
         console.error('Tracking fetch error:', err);
@@ -63,7 +65,7 @@ const PublicTrackingPage = () => {
   };
 
   const formatDate = (dateStr) => {
-    if (!dateStr) return 'Pending';
+    if (!dateStr) return 'Pending Confirmation';
     return new Date(dateStr).toLocaleDateString('en-IN', {
       day: 'numeric', month: 'short', year: 'numeric'
     });
@@ -75,7 +77,7 @@ const PublicTrackingPage = () => {
         
         {/* Header / Branding */}
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-indigo-950 tracking-tight">{data.centreName}</h1>
+          <h1 className="text-2xl font-bold text-indigo-950 tracking-tight">{data.centreName || 'Akshaya Sahayi'}</h1>
           <p className="text-slate-500 text-sm">Live Application Tracker</p>
         </div>
 
@@ -84,7 +86,7 @@ const PublicTrackingPage = () => {
           <div className="h-2 w-full bg-slate-100">
             <div 
               className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000 ease-out"
-              style={{ width: `${data.progress}%` }}
+              style={{ width: `${data.progress || 0}%` }}
             />
           </div>
 
@@ -93,7 +95,7 @@ const PublicTrackingPage = () => {
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Application Number</p>
                 <p className="text-base font-bold text-slate-800 font-mono bg-slate-50 inline-block px-3 py-1 rounded-lg border border-slate-100">
-                  {data.applicationNumber}
+                  {data.applicationNumber || 'N/A'}
                 </p>
               </div>
               <div className="text-right">
@@ -101,14 +103,14 @@ const PublicTrackingPage = () => {
                   ${data.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 
                     data.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 
                     'bg-amber-100 text-amber-700'}`}>
-                  {data.status === 'in_progress' ? 'In Progress' : data.status}
+                  {data.status === 'in_progress' ? 'In Progress' : data.status || 'Pending'}
                 </span>
               </div>
             </div>
 
             <div className="mb-8">
-              <h2 className="text-xl font-bold text-slate-900 mb-1">{data.serviceName}</h2>
-              <p className="text-slate-500 text-sm">Applicant: <span className="text-slate-700 font-medium">{data.customerName}</span></p>
+              <h2 className="text-xl font-bold text-slate-900 mb-1">{data.serviceName || 'Service Request'}</h2>
+              <p className="text-slate-500 text-sm">Applicant: <span className="text-slate-700 font-medium">{data.customerName || 'Customer'}</span></p>
             </div>
 
             {/* Stepper Timeline */}
