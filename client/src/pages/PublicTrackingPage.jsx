@@ -62,18 +62,18 @@ const Ring = ({ value = 0, size = 132, compact = false }) => {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Fact row (used in rail and mobile card)                            */
+/*  Fact row — stacked label above value (reads better in narrow rail) */
 /* ------------------------------------------------------------------ */
 
-const FactRow = ({ icon, label, value, valueClass = '' }) => (
-  <div className="flex items-center justify-between gap-4 py-3.5 first:pt-0 last:pb-0">
-    <span className="flex min-w-0 items-center gap-2.5 text-slate-500">
-      <span className="text-slate-400">{icon}</span>
-      <span className="truncate text-xs font-medium">{label}</span>
-    </span>
-    <span className={`shrink-0 text-right text-sm font-bold text-[#0F2B5B] ${valueClass}`}>
-      {value}
-    </span>
+const FactRow = ({ icon, label, value }) => (
+  <div className="py-4 first:pt-0 last:pb-0">
+    <div className="flex items-center gap-2 text-slate-400">
+      <span className="shrink-0">{icon}</span>
+      <span className="text-[10px] font-bold uppercase tracking-[0.16em]">
+        {label}
+      </span>
+    </div>
+    <p className="mt-1.5 text-sm font-bold text-[#0F2B5B]">{value}</p>
   </div>
 );
 
@@ -82,12 +82,24 @@ const FactsCard = ({ data }) => (
     <FactRow
       icon={<FiCalendar className="h-3.5 w-3.5" />}
       label="Estimated completion"
-      value={data.estimatedDelivery ? new Date(data.estimatedDelivery).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Pending'}
+      value={
+        data.estimatedDelivery
+          ? new Date(data.estimatedDelivery).toLocaleDateString('en-IN', {
+              day: 'numeric', month: 'short', year: 'numeric',
+            })
+          : 'Pending'
+      }
     />
     <FactRow
       icon={<FiFileText className="h-3.5 w-3.5" />}
       label="Submitted on"
-      value={data.createdAt ? new Date(data.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+      value={
+        data.createdAt
+          ? new Date(data.createdAt).toLocaleDateString('en-IN', {
+              day: 'numeric', month: 'short', year: 'numeric',
+            })
+          : '—'
+      }
     />
   </div>
 );
@@ -454,7 +466,6 @@ const PublicTrackingPage = () => {
 
                       return (
                         <li key={i} className="relative min-w-0">
-                          {/* tick + bar */}
                           <div className="relative">
                             <span
                               className={`absolute -top-[3px] left-0 z-10 h-3 w-3 rounded-full ring-4 ring-white ${
@@ -466,7 +477,6 @@ const PublicTrackingPage = () => {
                                 isDone ? 'bg-teal-400' : isCurrent ? 'bg-[#0F2B5B]' : 'bg-slate-200'
                               }`}
                             />
-                            {/* terminal dot at the very end of the last segment */}
                             {i === steps.length - 1 && (
                               <span
                                 className={`absolute -top-[3px] right-0 h-3 w-3 rounded-full ring-4 ring-white ${
