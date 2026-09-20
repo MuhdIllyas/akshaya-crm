@@ -15,8 +15,9 @@ import axios from 'axios';
 
 /* ------------------------------------------------------------------ */
 /*  Brand palette (matches /logo-light.png)                            */
-/*  Navy : #0F2B5B  (primary)                                          */
-/*  Teal : #14B8A6  (accent, from the sparkle)                         */
+/*  Navy  : #0F2B5B  (primary text + accents)                          */
+/*  Teal  : #14B8A6  (progress + success accent)                       */
+/*  Mist  : #EEF2F8  (soft navy tint)                                  */
 /* ------------------------------------------------------------------ */
 
 const STATUS = {
@@ -36,7 +37,7 @@ const ACCENTS = {
 const clamp = (n) => Math.max(0, Math.min(100, Number(n) || 0));
 
 /* ------------------------------------------------------------------ */
-/*  Progress ring — teal stroke, matches the logo sparkle              */
+/*  Progress ring — teal stroke on a light slate track                 */
 /* ------------------------------------------------------------------ */
 
 const Ring = ({ value = 0, size = 104, compact = false }) => {
@@ -48,7 +49,7 @@ const Ring = ({ value = 0, size = 104, compact = false }) => {
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E2E8F0" strokeWidth={stroke} />
         <circle
           cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#14B8A6"
           strokeWidth={stroke} strokeLinecap="round"
@@ -57,11 +58,11 @@ const Ring = ({ value = 0, size = 104, compact = false }) => {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`font-bold leading-none text-white ${compact ? 'text-sm' : 'text-2xl'}`}>
+        <span className={`font-bold leading-none text-[#0F2B5B] ${compact ? 'text-sm' : 'text-2xl'}`}>
           {pct}
           <span className={`font-semibold ${compact ? 'text-[9px]' : 'text-sm'}`}>%</span>
         </span>
-        <span className={`mt-1 font-semibold uppercase tracking-[0.16em] text-[#93A8C9] ${compact ? 'text-[7px]' : 'text-[9px]'}`}>
+        <span className={`mt-1 font-semibold uppercase tracking-[0.16em] text-slate-400 ${compact ? 'text-[7px]' : 'text-[9px]'}`}>
           Done
         </span>
       </div>
@@ -75,20 +76,20 @@ const Ring = ({ value = 0, size = 104, compact = false }) => {
 
 const HeroStat = ({ label, value, mono, onCopy, copied }) => (
   <div className="min-w-0">
-    <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#93A8C9] sm:text-[10px]">
+    <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:text-[10px]">
       {label}
     </p>
     <div className="mt-1 flex items-center gap-1.5 sm:mt-1.5 sm:gap-2">
-      <p className={`truncate text-[13px] font-semibold text-white sm:text-[15px] ${mono ? 'font-mono tracking-wide' : ''}`}>
+      <p className={`truncate text-[13px] font-semibold text-slate-900 sm:text-[15px] ${mono ? 'font-mono tracking-wide' : ''}`}>
         {value}
       </p>
       {mono && (
         <button
           onClick={onCopy}
           title="Copy application number"
-          className="shrink-0 rounded-md p-0.5 text-white/50 transition hover:bg-white/10 hover:text-white"
+          className="shrink-0 rounded-md p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-[#0F2B5B]"
         >
-          {copied ? <FiCheck className="h-3.5 w-3.5 text-teal-300" /> : <FiCopy className="h-3.5 w-3.5" />}
+          {copied ? <FiCheck className="h-3.5 w-3.5 text-teal-500" /> : <FiCopy className="h-3.5 w-3.5" />}
         </button>
       )}
     </div>
@@ -223,12 +224,12 @@ const PublicTrackingPage = () => {
             <div className="h-9 w-9 animate-pulse rounded-full bg-slate-200" />
           </div>
 
-          <div className="h-52 animate-pulse rounded-[24px] bg-gradient-to-br from-[#0F2B5B]/30 to-[#0F2B5B]/10 sm:h-72 sm:rounded-[28px]" />
+          <div className="h-52 animate-pulse rounded-[24px] border border-slate-100 bg-gradient-to-br from-white to-[#EEF2F8] sm:h-72 sm:rounded-[28px]" />
           <div className="h-40 animate-pulse rounded-3xl bg-white shadow-sm ring-1 ring-slate-100" />
 
           <div className="grid gap-4 sm:gap-5 lg:grid-cols-3">
             <div className="h-56 animate-pulse rounded-3xl bg-white shadow-sm ring-1 ring-slate-100 lg:col-span-2" />
-            <div className="h-56 animate-pulse rounded-3xl bg-white shadow-sm ring-1 ring-slate-100" />
+            <div className="h-56 animate-pulse rounded-3xl bg-white shadow-sm ring-1 ring-slate-100 lg:col-span-1" />
           </div>
         </div>
       </div>
@@ -274,14 +275,13 @@ const PublicTrackingPage = () => {
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 antialiased">
       {/* ambient navy glow */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-[#DDE5F0]/70 via-[#EEF2F8]/40 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-[#DDE5F0]/60 via-[#EEF2F8]/30 to-transparent" />
 
       <div className="relative mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-10">
 
         {/* ------------------------- header ------------------------- */}
         <header className="mb-4 flex items-center justify-between gap-4 sm:mb-5 lg:mb-7">
           <div className="flex min-w-0 items-center gap-3">
-            {/* Brand logo — replaces the two-letter initials badge */}
             <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-100">
               <img
                 src="/logo-light.png"
@@ -314,37 +314,44 @@ const PublicTrackingPage = () => {
         </header>
 
         {/* ============================================================
-            HERO — navy gradient with a teal glow (matches logo)
+            HERO — light card with navy text + teal accents
            ============================================================ */}
-        <section className="relative mb-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#0F2B5B] via-[#0F2B5B] to-[#0A1F44] p-5 text-white shadow-xl shadow-[#0F2B5B]/25 sm:mb-5 sm:rounded-[28px] sm:p-9 lg:mb-6 lg:p-10">
-          <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-[80px]" />
-          {/* teal glow instead of the old fuchsia one */}
-          <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-teal-400/25 blur-[90px]" />
+        <section className="relative mb-4 overflow-hidden rounded-[24px] border border-[#DDE5F0] bg-gradient-to-br from-white via-[#F5F8FC] to-[#E6F4F1] p-5 shadow-sm sm:mb-5 sm:rounded-[28px] sm:p-9 lg:mb-6 lg:p-10">
+          {/* thin navy brand strip along the top edge */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#0F2B5B] via-[#0F2B5B] to-[#14B8A6]" />
+
+          {/* soft teal glow, bottom-right */}
+          <div aria-hidden className="pointer-events-none absolute -bottom-24 -right-20 h-64 w-64 rounded-full bg-teal-300/20 blur-[80px]" />
+          {/* soft navy glow, top-left */}
+          <div aria-hidden className="pointer-events-none absolute -left-24 -top-24 h-64 w-64 rounded-full bg-[#0F2B5B]/5 blur-[80px]" />
 
           <div className="relative flex flex-col lg:flex-row lg:items-center lg:gap-12">
+            {/* ---- left column ---- */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-4">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ring-1 ring-inset ring-white/25 backdrop-blur sm:px-3">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] sm:px-3 ${statusCfg.tone}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
                   {statusCfg.label}
                 </span>
 
+                {/* Compact ring — mobile / tablet only */}
                 <div className="lg:hidden">
                   <Ring value={pct} size={72} compact />
                 </div>
               </div>
 
-              <h1 className="mt-3.5 text-xl font-bold leading-tight tracking-tight sm:mt-5 sm:text-3xl lg:text-[40px]">
+              <h1 className="mt-3.5 text-xl font-bold leading-tight tracking-tight text-[#0F2B5B] sm:mt-5 sm:text-3xl lg:text-[40px]">
                 {data.serviceName || 'Service Request'}
               </h1>
 
               {data.subcategoryName && (
-                <p className="mt-1 text-[13px] font-medium text-teal-200/90 sm:mt-2 sm:text-sm lg:text-base">
+                <p className="mt-1 text-[13px] font-semibold text-teal-600 sm:mt-2 sm:text-sm lg:text-base">
                   {data.subcategoryName}
                 </p>
               )}
 
-              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-white/15 pt-4 sm:mt-8 sm:grid-cols-3 sm:gap-6 sm:pt-6 lg:mt-10">
+              {/* Labelled stat row */}
+              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-200/80 pt-4 sm:mt-8 sm:grid-cols-3 sm:gap-6 sm:pt-6 lg:mt-10">
                 <HeroStat
                   label="Applicant"
                   value={data.customerName || 'Customer'}
@@ -365,7 +372,8 @@ const PublicTrackingPage = () => {
               </div>
             </div>
 
-            <div className="hidden shrink-0 items-center border-l border-white/15 pl-12 lg:flex">
+            {/* ---- right column: full ring, desktop only ---- */}
+            <div className="hidden shrink-0 items-center border-l border-slate-200/80 pl-12 lg:flex">
               <Ring value={pct} size={104} />
             </div>
           </div>
@@ -422,7 +430,7 @@ const PublicTrackingPage = () => {
                       }`}
                     >
                       {isCurrent && (
-                        <span className="absolute -inset-1 animate-ping rounded-full bg-[#0F2B5B]/25" />
+                        <span className="absolute -inset-1 animate-ping rounded-full bg-[#0F2B5B]/20" />
                       )}
                       {isDone ? (
                         <FiCheck className="relative h-3.5 w-3.5" strokeWidth={3} />
@@ -470,11 +478,11 @@ const PublicTrackingPage = () => {
           {/* ------------------ MAIN ------------------ */}
           <div className="space-y-4 sm:space-y-5 lg:col-span-2">
 
-            {/* Note from the centre — navy tint */}
+            {/* Note from the centre */}
             {data.notes && (
-              <section className="rounded-3xl border border-[#DDE5F0] bg-[#EEF2F8]/70 p-6 shadow-sm sm:p-8">
+              <section className="rounded-3xl border border-teal-100 bg-teal-50/50 p-6 shadow-sm sm:p-8">
                 <div className="mb-3 flex items-center gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[#0F2B5B] ring-1 ring-[#DDE5F0]">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-teal-600 ring-1 ring-teal-100">
                     <FiMessageSquare className="h-4 w-4" />
                   </span>
                   <h2 className="text-sm font-bold text-slate-900">Note from our team</h2>
