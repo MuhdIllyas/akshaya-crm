@@ -60,6 +60,7 @@ router.get('/public/status/:identifier', async (req, res) => {
         st.current_step,
         st.progress,
         st.estimated_delivery,
+        st.notes,
         se.customer_name,
         se.created_at,
         s.name AS service_name,
@@ -129,6 +130,7 @@ router.get('/public/status/:identifier', async (req, res) => {
       steps: stepsResult.rows,
       subcategoryName: tracking.subcategory_name || null,
       handledBy: tracking.handled_by || null,
+      notes: tracking.notes?.trim() || null,
       updates,
     });
   } catch (err) {
