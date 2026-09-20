@@ -5,32 +5,33 @@ import { FaWhatsapp } from 'react-icons/fa';
 import axios from 'axios';
 
 const PublicTrackingPage = () => {
-  const { appNumber } = useParams();
+  // CHANGED: Now pulling trackingId from the URL instead of appNumber
+  const { trackingId } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchStatus = async () => {
-      if (!appNumber) {
-        setError('No application number provided in the link.');
+      if (!trackingId) {
+        setError('No tracking ID provided in the link.');
         setLoading(false);
         return;
       }
 
       try {
-        const response = await axios.get(`/api/servicetracking/public/status/${encodeURIComponent(appNumber.trim())}`);
+        const response = await axios.get(`/api/servicetracking/public/status/${trackingId}`);
         setData(response.data);
       } catch (err) {
         console.error('Tracking fetch error:', err);
-        setError(err.response?.data?.error || 'We could not find an application with this number. Please check your link.');
+        setError(err.response?.data?.error || 'We could not find an application. Please check your link.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchStatus();
-  }, [appNumber]);
+  }, [trackingId]);
 
   if (loading) {
     return (
@@ -74,7 +75,7 @@ const PublicTrackingPage = () => {
         
         {/* Header / Branding */}
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-indigo-950 tracking-tight">{data.centreName || 'Akshaya Sahayi'}</h1>
+          <h1 className="text-2xl font-bold text-indigo-950 tracking-tight">{data.centreName}</h1>
           <p className="text-slate-500 text-sm">Live Application Tracker</p>
         </div>
 
@@ -83,7 +84,7 @@ const PublicTrackingPage = () => {
           <div className="h-2 w-full bg-slate-100">
             <div 
               className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000 ease-out"
-              style={{ width: `${data.progress || 0}%` }}
+              style={{ width: `${data.progress}%` }}
             />
           </div>
 

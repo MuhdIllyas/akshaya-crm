@@ -262,7 +262,7 @@ const App = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
         <Route path="/review/:token" element={<PublicReview />} />
-        <Route path="/track/:appNumber" element={<PublicTrackingPage />}/>
+        <Route path="/track/:trackingId" element={<PublicTrackingPage />} />
         <Route path="/print" element={<SelfServicePrint />} /> 
 
         <Route element={<ProtectedRoute />}>

@@ -38,17 +38,21 @@ const formatStatusLabel = (status) => {
 };
 
 /**
- * GET /api/servicetracking/public/status/:appNumber
- * PUBLIC ROUTE: Safe tracking data for customers
+ * GET /api/servicetracking/public/status/:id
+ * PUBLIC ROUTE: Safe tracking data for customers using Tracking ID
  */
-router.get('/public/status/:appNumber', async (req, res) => {
-  const { appNumber } = req.params;
+router.get('/public/status/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  // Strict check to ensure the ID is a valid number
+  if (isNaN(parseInt(id, 10))) {
+    return res.status(400).json({ error: 'Invalid tracking link.' });
+  }
+
   const client = await pool.connect();
   
   try {
-    const cleanAppNumber = appNumber.trim();
-
-    // 1. Fetch tracking details using LEFT JOINs to avoid missing records
+    // 1. Fetch tracking details using LEFT JOINs to guarantee data is returned
     const query = `
       SELECT 
         st.id AS tracking_id,
@@ -67,19 +71,19 @@ router.get('/public/status/:appNumber', async (req, res) => {
       LEFT JOIN services s ON se.category_id = s.id
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
       LEFT JOIN centres c ON se_staff.centre_id = c.id
-      WHERE LOWER(TRIM(st.application_number)) = LOWER($1)
+      WHERE st.id = $1
       LIMIT 1
     `;
     
-    const result = await client.query(query, [cleanAppNumber]);
+    const result = await client.query(query, [parseInt(id, 10)]);
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Application not found. Please check your application number.' });
+      return res.status(404).json({ error: 'Application not found. Please check your link.' });
     }
 
     const tracking = result.rows[0];
 
-    // 2. Fetch steps using the resolved tracking_id directly
+    // 2. Fetch steps using the tracking_id directly
     const stepsResult = await client.query(
       `SELECT name, completed, date, step_order 
        FROM service_tracking_steps 
@@ -88,12 +92,14 @@ router.get('/public/status/:appNumber', async (req, res) => {
       [tracking.tracking_id]
     );
 
+    // 3. Return data with guaranteed fallbacks to prevent empty fields on the frontend
     res.json({
-      applicationNumber: tracking.application_number,
-      customerName: tracking.customer_name,
-      serviceName: tracking.service_name || 'Government Service',
-      status: tracking.status,
-      currentStep: tracking.current_step,
+      trackingId: tracking.tracking_id,
+      applicationNumber: tracking.application_number || 'N/A',
+      customerName: tracking.customer_name || 'Customer',
+      serviceName: tracking.service_name || 'Service Request',
+      status: tracking.status || 'pending',
+      currentStep: tracking.current_step || 'Submitted',
       progress: tracking.progress || 25,
       estimatedDelivery: tracking.estimated_delivery,
       createdAt: tracking.created_at,
@@ -104,7 +110,7 @@ router.get('/public/status/:appNumber', async (req, res) => {
 
   } catch (err) {
     console.error('Public tracking error:', err);
-    res.status(500).json({ error: 'Failed to retrieve application status: ' + err.message });
+    res.status(500).json({ error: 'Failed to retrieve application status' });
   } finally {
     client.release();
   }
