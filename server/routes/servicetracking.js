@@ -37,6 +37,76 @@ const formatStatusLabel = (status) => {
   return labels[status] || status;
 };
 
+/**
+ * GET /api/servicetracking/public/status/:appNumber
+ * PUBLIC ROUTE: Returns limited, safe tracking data for the customer tracking page.
+ * Strictly excludes Aadhaar, full internal notes, and staff IDs.
+ */
+router.get('/public/status/:appNumber', async (req, res) => {
+  const { appNumber } = req.params;
+  const client = await pool.connect();
+  
+  try {
+    const query = `
+      SELECT 
+        st.application_number,
+        st.status,
+        st.current_step,
+        st.progress,
+        st.estimated_delivery,
+        se.customer_name,
+        se.created_at,
+        s.name AS service_name,
+        c.name AS centre_name,
+        c.phone AS centre_phone
+      FROM service_tracking st
+      JOIN service_entries se ON st.service_entry_id = se.id
+      JOIN services s ON se.category_id = s.id
+      JOIN staff se_staff ON se.staff_id = se_staff.id
+      JOIN centres c ON se_staff.centre_id = c.id
+      WHERE st.application_number = $1
+      LIMIT 1
+    `;
+    
+    const result = await client.query(query, [appNumber]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    const tracking = result.rows[0];
+
+    // Fetch the steps for the timeline
+    const stepsResult = await client.query(
+      `SELECT name, completed, date, step_order 
+       FROM service_tracking_steps 
+       WHERE service_tracking_id = (SELECT id FROM service_tracking WHERE application_number = $1)
+       ORDER BY step_order ASC`,
+      [appNumber]
+    );
+
+    res.json({
+      applicationNumber: tracking.application_number,
+      customerName: tracking.customer_name,
+      serviceName: tracking.service_name,
+      status: tracking.status,
+      currentStep: tracking.current_step,
+      progress: tracking.progress,
+      estimatedDelivery: tracking.estimated_delivery,
+      createdAt: tracking.created_at,
+      centreName: tracking.centre_name,
+      centrePhone: tracking.centre_phone,
+      steps: stepsResult.rows
+    });
+
+  } catch (err) {
+    console.error('Public tracking error:', err);
+    res.status(500).json({ error: 'Failed to retrieve application status' });
+  } finally {
+    client.release();
+  }
+});
+
 // ==========================================
 // CENTRAL COMMUNICATION ENGINE INTEGRATION
 // ==========================================
