@@ -42,61 +42,50 @@ const formatStatusLabel = (status) => {
  * PUBLIC ROUTE: Safe tracking data accepting BOTH Tracking ID OR Application Number
  */
 router.get('/public/status/:identifier', async (req, res) => {
-  const { identifier } = req.params;
-  
-  if (!identifier || identifier === 'undefined') {
+  const identifier = (req.params.identifier || '').trim();
+
+  if (!identifier || identifier === 'undefined' || identifier.length > 50) {
     return res.status(400).json({ error: 'Invalid tracking link.' });
   }
 
-  const client = await pool.connect();
-  
+  res.set('Cache-Control', 'no-store');
+
   try {
-    const cleanIdentifier = identifier.trim();
-    // Check if the identifier is purely numeric (e.g., '15' for trackingId)
-    const isNumeric = /^\d+$/.test(cleanIdentifier);
+    // Only treat as a DB id if it's numeric AND fits in a Postgres integer
+    const numericId = /^\d{1,9}$/.test(identifier) ? parseInt(identifier, 10) : null;
 
-    let query = `
-      SELECT 
-        st.id AS tracking_id,
-        st.application_number,
-        st.status,
-        st.current_step,
-        st.progress,
-        st.estimated_delivery,
-        se.customer_name,
-        se.created_at,
-        s.name AS service_name,
-        COALESCE(c.name, 'Akshaya Sahayi') AS centre_name,
-        COALESCE(c.phone, se_staff.phone, '') AS centre_phone
-      FROM service_tracking st
-      LEFT JOIN service_entries se ON st.service_entry_id = se.id
-      LEFT JOIN services s ON se.category_id = s.id
-      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-      LEFT JOIN centres c ON se_staff.centre_id = c.id
-    `;
-    
-    const values = [];
+    const result = await pool.query(
+      `SELECT 
+         st.id AS tracking_id,
+         st.application_number,
+         st.status,
+         st.current_step,
+         st.progress,
+         st.estimated_delivery,
+         se.customer_name,
+         se.created_at,
+         s.name AS service_name,
+         COALESCE(c.name, 'Akshaya Sahayi') AS centre_name,
+         COALESCE(c.phone, se_staff.phone, '') AS centre_phone
+       FROM service_tracking st
+       LEFT JOIN service_entries se ON st.service_entry_id = se.id
+       LEFT JOIN services s ON se.category_id = s.id
+       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+       LEFT JOIN centres c ON se_staff.centre_id = c.id
+       WHERE ($1::int IS NOT NULL AND st.id = $1::int)
+          OR LOWER(st.application_number) = LOWER($2)
+       ORDER BY (st.id = $1::int) DESC NULLS LAST
+       LIMIT 1`,
+      [numericId, identifier]
+    );
 
-    // If it's a number, check BOTH the DB primary key and application_number column
-    if (isNumeric) {
-      query += ` WHERE st.id = $1 OR st.application_number = $2 LIMIT 1`;
-      values.push(parseInt(cleanIdentifier, 10), cleanIdentifier);
-    } else {
-      // If it contains letters (like APP123), check only application_number
-      query += ` WHERE LOWER(st.application_number) = LOWER($1) LIMIT 1`;
-      values.push(cleanIdentifier);
-    }
-    
-    const result = await client.query(query, values);
-    
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Application not found. Please check your link.' });
     }
 
     const tracking = result.rows[0];
 
-    // Fetch steps securely using the resolved tracking_id
-    const stepsResult = await client.query(
+    const stepsResult = await pool.query(
       `SELECT name, completed, date, step_order 
        FROM service_tracking_steps 
        WHERE service_tracking_id = $1
@@ -112,18 +101,15 @@ router.get('/public/status/:identifier', async (req, res) => {
       status: tracking.status || 'pending',
       currentStep: tracking.current_step || 'Submitted',
       progress: tracking.progress || 25,
-      estimatedDelivery: tracking.estimated_delivery,
+      estimatedDelivery: formatYMD(tracking.estimated_delivery),
       createdAt: tracking.created_at,
       centreName: tracking.centre_name,
       centrePhone: tracking.centre_phone,
-      steps: stepsResult.rows || []
+      steps: stepsResult.rows
     });
-
   } catch (err) {
     console.error('Public tracking error:', err);
     res.status(500).json({ error: 'Failed to retrieve application status' });
-  } finally {
-    client.release();
   }
 });
 
