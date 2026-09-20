@@ -65,7 +65,6 @@ export const triggerNotification = async ({ eventKey, centreId, customerPhone, t
       }
     };
 
-    console.log('[DEBUG payload]', JSON.stringify(payload, null, 2));
     // 5. Dispatch
     const response = await axios.post(`${account.base_url}/messages`, payload, {
       headers: {
