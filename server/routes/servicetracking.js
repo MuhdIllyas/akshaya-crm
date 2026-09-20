@@ -2224,11 +2224,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // ======================================
 
     // Send notification with the appropriate status
-    const notificationStatus = status || updatedEntry.status;
-    if (notificationStatus || currentStep) {
+    if (status !== undefined && existingEntry.status !== status) {
       await sendStatusNotification(
         updatedEntry.service_entry_id, 
-        notificationStatus, 
+        status, 
         currentStep || updatedEntry.current_step, 
         notes || updatedEntry.notes
       );
