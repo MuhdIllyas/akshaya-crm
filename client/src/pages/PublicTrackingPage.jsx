@@ -33,11 +33,11 @@ const ACCENTS = {
 const clamp = (n) => Math.max(0, Math.min(100, Number(n) || 0));
 
 /* ------------------------------------------------------------------ */
-/*  Progress ring (white stroke on the indigo hero)                    */
+/*  Progress ring — scales for both compact (mobile) and full (lg)    */
 /* ------------------------------------------------------------------ */
 
-const Ring = ({ value = 0, size = 104 }) => {
-  const stroke = 6;
+const Ring = ({ value = 0, size = 104, compact = false }) => {
+  const stroke = compact ? 5 : 6;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const pct = clamp(value);
@@ -54,11 +54,12 @@ const Ring = ({ value = 0, size = 104 }) => {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold leading-none text-white">
-          {pct}<span className="text-sm font-semibold">%</span>
+        <span className={`font-bold leading-none text-white ${compact ? 'text-sm' : 'text-2xl'}`}>
+          {pct}
+          <span className={`font-semibold ${compact ? 'text-[9px]' : 'text-sm'}`}>%</span>
         </span>
-        <span className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-indigo-200">
-          Complete
+        <span className={`mt-1 font-semibold uppercase tracking-[0.16em] text-indigo-200 ${compact ? 'text-[7px]' : 'text-[9px]'}`}>
+          Done
         </span>
       </div>
     </div>
@@ -71,18 +72,18 @@ const Ring = ({ value = 0, size = 104 }) => {
 
 const HeroStat = ({ label, value, mono, onCopy, copied }) => (
   <div className="min-w-0">
-    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-200">
+    <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-indigo-200 sm:text-[10px]">
       {label}
     </p>
-    <div className="mt-1.5 flex items-center gap-2">
-      <p className={`truncate text-[15px] font-semibold text-white ${mono ? 'font-mono tracking-wide' : ''}`}>
+    <div className="mt-1 flex items-center gap-1.5 sm:mt-1.5 sm:gap-2">
+      <p className={`truncate text-[13px] font-semibold text-white sm:text-[15px] ${mono ? 'font-mono tracking-wide' : ''}`}>
         {value}
       </p>
       {mono && (
         <button
           onClick={onCopy}
           title="Copy application number"
-          className="shrink-0 rounded-md p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
+          className="shrink-0 rounded-md p-0.5 text-white/50 transition hover:bg-white/10 hover:text-white"
         >
           {copied ? <FiCheck className="h-3.5 w-3.5 text-emerald-300" /> : <FiCopy className="h-3.5 w-3.5" />}
         </button>
@@ -210,7 +211,7 @@ const PublicTrackingPage = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-6xl space-y-5 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+        <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:space-y-5 sm:px-6 sm:py-8 lg:px-8 lg:py-12">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 animate-pulse rounded-xl bg-slate-200" />
@@ -222,10 +223,10 @@ const PublicTrackingPage = () => {
             <div className="h-9 w-9 animate-pulse rounded-full bg-slate-200" />
           </div>
 
-          <div className="h-72 animate-pulse rounded-[28px] bg-gradient-to-br from-slate-300 to-slate-200" />
+          <div className="h-52 animate-pulse rounded-[24px] bg-gradient-to-br from-slate-300 to-slate-200 sm:h-72 sm:rounded-[28px]" />
           <div className="h-40 animate-pulse rounded-3xl bg-white shadow-sm ring-1 ring-slate-100" />
 
-          <div className="grid gap-5 lg:grid-cols-3">
+          <div className="grid gap-4 sm:gap-5 lg:grid-cols-3">
             <div className="h-56 animate-pulse rounded-3xl bg-white shadow-sm ring-1 ring-slate-100 lg:col-span-2" />
             <div className="h-56 animate-pulse rounded-3xl bg-white shadow-sm ring-1 ring-slate-100" />
           </div>
@@ -278,10 +279,10 @@ const PublicTrackingPage = () => {
       {/* ambient indigo glow */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-indigo-100/70 via-indigo-50/30 to-transparent" />
 
-      <div className="relative mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+      <div className="relative mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-10">
 
         {/* ------------------------- header ------------------------- */}
-        <header className="mb-5 flex items-center justify-between gap-4 lg:mb-7">
+        <header className="mb-4 flex items-center justify-between gap-4 sm:mb-5 lg:mb-7">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-[13px] font-bold text-white shadow-lg shadow-indigo-500/25">
               {initials}
@@ -311,32 +312,43 @@ const PublicTrackingPage = () => {
         </header>
 
         {/* ============================================================
-            HERO — indigo/violet gradient, labelled stat row
+            HERO
+            - mobile: compact landscape card (pill + ring in one row,
+              2-col stat grid → roughly half the height)
+            - desktop: full layout with large ring on the right
            ============================================================ */}
-        <section className="relative mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 p-7 text-white shadow-xl shadow-indigo-900/15 sm:p-9 lg:mb-6 lg:p-10">
+        <section className="relative mb-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-700 p-5 text-white shadow-xl shadow-indigo-900/15 sm:mb-5 sm:rounded-[28px] sm:p-9 lg:mb-6 lg:p-10">
           <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-[80px]" />
           <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-fuchsia-400/20 blur-[90px]" />
 
-          <div className="relative grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12">
-            {/* ---- left ---- */}
-            <div className="min-w-0">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ring-1 ring-inset ring-white/25 backdrop-blur">
-                <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
-                {statusCfg.label}
-              </span>
+          <div className="relative flex flex-col lg:flex-row lg:items-center lg:gap-12">
+            {/* ---- left column ---- */}
+            <div className="min-w-0 flex-1">
+              {/* Mobile: pill on the left, small ring on the right — saves a whole block of height */}
+              <div className="flex items-center justify-between gap-4">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ring-1 ring-inset ring-white/25 backdrop-blur sm:px-3">
+                  <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
+                  {statusCfg.label}
+                </span>
 
-              <h1 className="mt-5 text-2xl font-bold leading-[1.15] tracking-tight sm:text-3xl lg:text-[40px]">
+                {/* Compact ring — mobile / tablet only */}
+                <div className="lg:hidden">
+                  <Ring value={pct} size={72} compact />
+                </div>
+              </div>
+
+              <h1 className="mt-3.5 text-xl font-bold leading-tight tracking-tight sm:mt-5 sm:text-3xl lg:text-[40px]">
                 {data.serviceName || 'Service Request'}
               </h1>
 
               {data.subcategoryName && (
-                <p className="mt-2 text-sm font-medium text-indigo-200 lg:text-base">
+                <p className="mt-1 text-[13px] font-medium text-indigo-200 sm:mt-2 sm:text-sm lg:text-base">
                   {data.subcategoryName}
                 </p>
               )}
 
-              {/* labelled stat row — applicant / handler / app no */}
-              <div className="mt-8 grid gap-5 border-t border-white/15 pt-6 sm:grid-cols-3 sm:gap-6 lg:mt-10">
+              {/* Labelled stat row — 2 cols on mobile so it takes 2 short rows, not 3 tall ones */}
+              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-white/15 pt-4 sm:mt-8 sm:grid-cols-3 sm:gap-6 sm:pt-6 lg:mt-10">
                 <HeroStat
                   label="Applicant"
                   value={data.customerName || 'Customer'}
@@ -345,27 +357,21 @@ const PublicTrackingPage = () => {
                   label="Handled by"
                   value={data.handledBy || 'Not assigned yet'}
                 />
-                <HeroStat
-                  label="Application No"
-                  value={data.applicationNumber || 'N/A'}
-                  mono
-                  onCopy={handleCopy}
-                  copied={copied}
-                />
+                <div className="col-span-2 sm:col-span-1">
+                  <HeroStat
+                    label="Application No"
+                    value={data.applicationNumber || 'N/A'}
+                    mono
+                    onCopy={handleCopy}
+                    copied={copied}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* ---- right: ring ---- */}
-            <div className="flex items-center justify-between gap-6 border-t border-white/15 pt-7 lg:border-l lg:border-t-0 lg:pl-12 lg:pt-0">
-              <div className="lg:hidden">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-200">
-                  Currently at
-                </p>
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {data.currentStep || 'Submitted'}
-                </p>
-              </div>
-              <Ring value={pct} />
+            {/* ---- right column: full ring, desktop only ---- */}
+            <div className="hidden shrink-0 items-center border-l border-white/15 pl-12 lg:flex">
+              <Ring value={pct} size={104} />
             </div>
           </div>
         </section>
@@ -373,8 +379,8 @@ const PublicTrackingPage = () => {
         {/* ============================================================
             STEPPER — horizontal on desktop, vertical on mobile
            ============================================================ */}
-        <section className="mb-5 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8 lg:mb-6">
-          <div className="mb-7 flex items-center justify-between gap-4">
+        <section className="mb-4 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:mb-5 sm:p-8 lg:mb-6">
+          <div className="mb-6 flex items-center justify-between gap-4 sm:mb-7">
             <h2 className="text-sm font-bold text-slate-900">Progress</h2>
             <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
               {pct}% · {steps.filter((s) => s.completed).length}/{steps.length || 0} steps
@@ -391,7 +397,7 @@ const PublicTrackingPage = () => {
                 return (
                   <li
                     key={i}
-                    className="relative flex gap-4 pb-7 last:pb-0 lg:flex-col lg:items-center lg:gap-0 lg:px-2 lg:pb-0 lg:text-center"
+                    className="relative flex gap-4 pb-6 last:pb-0 sm:pb-7 lg:flex-col lg:items-center lg:gap-0 lg:px-2 lg:pb-0 lg:text-center"
                   >
                     {/* mobile vertical connector */}
                     {!isLast && (
@@ -469,9 +475,9 @@ const PublicTrackingPage = () => {
         {/* ============================================================
             BENTO BODY
            ============================================================ */}
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-5 lg:grid-cols-3">
           {/* ------------------ MAIN ------------------ */}
-          <div className="space-y-5 lg:col-span-2">
+          <div className="space-y-4 sm:space-y-5 lg:col-span-2">
             <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8">
               <div className="mb-6 flex items-center justify-between gap-4">
                 <h2 className="text-sm font-bold text-slate-900">Recent updates</h2>
@@ -515,7 +521,7 @@ const PublicTrackingPage = () => {
           </div>
 
           {/* ------------------ SIDEBAR ------------------ */}
-          <aside className="space-y-5 lg:col-span-1">
+          <aside className="space-y-4 sm:space-y-5 lg:col-span-1">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
               <Tile
                 icon={<FiCalendar className="h-4 w-4" />}
