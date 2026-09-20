@@ -227,7 +227,7 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
 
     // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
     const response = await triggerNotification({
-      eventKey: 'service_tracking', // Must match the key mapped by the Superadmin
+      eventKey: 'status_update_v2', // Must match the key mapped by the Superadmin
       centreId: entry.centre_id,    // Routes to the correct WhatsApp Number
       customerPhone: formattedPhone,
       customComponents: [
