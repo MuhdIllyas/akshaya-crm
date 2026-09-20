@@ -2390,12 +2390,21 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     // 🔹 DEBUG: Check if status is 'completed'
     console.log("🔥 STATUS COMPLETED CHECK - Status value:", status);
     console.log("🔥 STATUS COMPLETED BLOCK ENTERED:", status === 'completed');
+
+    // Send notification with the status (not current_step)
+    await sendStatusNotification(
+      updatedEntry.service_entry_id, 
+      status, // Pass the actual status, not current_step
+      existingEntry.current_step, // Keep current_step for reference but not used in notification
+      updatedEntry.notes
+    );
     
-    // 🔹 AUTO CREATE REVIEW ONLY FOR NON-REGISTERED CUSTOMERS
+    // ======================================
+    // 🔹 AUTO CREATE REVIEW 
+    // ======================================
     if (status === 'completed') {
       const entryData = serviceEntry.rows[0];
       
-      // Only create token review if NOT booked through portal
       if (!entryData.customer_service_id) {
         try {
           const existingReview = await client.query(
@@ -2404,27 +2413,27 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
           );
 
           if (existingReview.rows.length === 0) {
-            
-            // 🔥 NEW: Fetch the actual centre name from the database!
             const centreNameResult = await client.query(
               'SELECT name FROM centres WHERE id = $1', 
               [centreId]
             );
             const actualCentreName = centreNameResult.rows[0]?.name || "Akshaya Sahayi";
 
-            // Fire and forget the review request
-            createReviewRequest({
-              centreId: centreId,
-              trackingId: updatedEntry.id,
-              serviceId: entryData.category_id,
-              staffId: entryData.staff_id,
-              customerName: entryData.customer_name,
-              customerPhone: entryData.phone,
-              centreName: actualCentreName // 👈 Dynamically injects the exact centre name
-            }).catch(err =>
-              console.error("Review auto-send failed:", err)
-            );
-            
+            // Delay the feedback form by 2 seconds so the completion message arrives first.
+            // Using setTimeout ensures the API doesn't hang for the user while waiting.
+            setTimeout(() => {
+              createReviewRequest({
+                centreId: centreId,
+                trackingId: updatedEntry.id,
+                serviceId: entryData.category_id,
+                staffId: entryData.staff_id,
+                customerName: entryData.customer_name,
+                customerPhone: entryData.phone,
+                centreName: actualCentreName 
+              }).catch(err =>
+                console.error("Review auto-send failed:", err)
+              );
+            }, 2000); 
           }
         } catch (err) {
           console.error("Review trigger error:", err);
