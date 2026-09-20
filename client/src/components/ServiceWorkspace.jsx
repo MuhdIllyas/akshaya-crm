@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -18,17 +18,14 @@ import {
   FiClock,
   FiCalendar,
   FiArrowRight,
-  FiChevronDown,
-  FiAlertCircle,
   FiRefreshCw,
-  FiMail,
-  FiCreditCard,
+  FiAlertCircle,
   FiFlag,
   FiTrendingUp,
   FiAward,
   FiBarChart2,
   FiCheckCircle,
-  FiMoreHorizontal,
+  FiTarget,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import Chat from '@/components/Chat';
@@ -113,27 +110,6 @@ const formatDate = (dateString) => {
   }
 };
 
-const formatTimelineDate = (dateString) => {
-  if (!dateString) return 'Not set';
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Invalid date';
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-      .format(date)
-      .replace(',', ' at');
-  } catch {
-    return 'Invalid date';
-  }
-};
-
 const initials = (name) =>
   (name || '?')
     .split(' ')
@@ -200,7 +176,7 @@ const STATUS_OPTIONS = [
 ];
 
 /* ══════════════════════════════════════════════════════════════════
-   PRIMITIVES (matched to TrackServicePage styles)
+   PRIMITIVES
    ══════════════════════════════════════════════════════════════════ */
 const Avatar = ({ name, size = 'md', className = '' }) => {
   const sizes = {
@@ -227,18 +203,6 @@ const PriorityBadge = ({ priority = 'medium' }) => {
     >
       <FiFlag className={`h-3 w-3 ${p.color}`} />
       <span className={p.color}>{p.label}</span>
-    </span>
-  );
-};
-
-const StatusBadge = ({ status = 'pending' }) => {
-  const s = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
-  return (
-    <span
-      className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 border ${s.bg} ${s.border}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-      <span className={s.color}>{s.label}</span>
     </span>
   );
 };
@@ -292,16 +256,6 @@ const PrimaryButton = ({ icon: Icon, children, className = '', ...rest }) => (
   <button
     {...rest}
     className={`flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all duration-200 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${className}`}
-  >
-    {Icon && <Icon className="h-4 w-4" />}
-    {children && <span>{children}</span>}
-  </button>
-);
-
-const SecondaryButton = ({ icon: Icon, children, className = '', ...rest }) => (
-  <button
-    {...rest}
-    className={`flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all duration-200 ${className}`}
   >
     {Icon && <Icon className="h-4 w-4" />}
     {children && <span>{children}</span>}
@@ -633,7 +587,7 @@ const ServiceWorkspace = () => {
     };
   }, [tasks]);
 
-  const tabs = useMemo(
+  const navItems = useMemo(
     () => [
       { id: 'board', label: 'Board', icon: FiGrid, count: tasks.length },
       { id: 'chat', label: 'Chat', icon: FiMessageSquare, count: null },
@@ -660,410 +614,520 @@ const ServiceWorkspace = () => {
   return (
     <WorkspaceErrorBoundary>
       <div className="min-h-screen bg-gray-50">
-        {/* ══════════════════ HEADER ══════════════════ */}
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-[1600px] mx-auto px-6 py-4">
-            {/* Top row */}
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center space-x-4 min-w-0">
-                <button
-                  onClick={() => navigate('/dashboard/staff/track_service')}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
-                  title="Back to Track Service"
-                >
-                  <FiArrowLeft className="h-5 w-5 text-gray-600" />
-                </button>
-
+        <div className="flex min-h-screen">
+          {/* ═══════════════════════ SIDEBAR ═══════════════════════ */}
+          <aside className="hidden lg:flex w-64 shrink-0 flex-col bg-white border-r border-gray-200">
+            {/* Brand block */}
+            <div className="px-5 py-5 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
                 <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shrink-0">
-                  <FiGrid className="h-5 w-5 text-white" />
+                  <FiTarget className="h-5 w-5 text-white" />
                 </div>
-
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-xl font-bold text-gray-900 truncate">
-                      {service?.service_name || 'Service Workspace'}
-                    </h1>
-                    <span className="px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded-full border border-green-200">
-                      Active
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-gray-500 mt-1 flex-wrap">
-                    <span className="flex items-center gap-1">
-                      <FiUser className="h-3 w-3" /> {service?.customer_name || '—'}
-                    </span>
-                    <span className="hidden sm:flex items-center gap-1">
-                      <FiFile className="h-3 w-3" /> App #{service?.application_number || '—'}
-                    </span>
-                    <span className="hidden md:flex items-center gap-1">
-                      <FiClock className="h-3 w-3" /> Created{' '}
-                      {formatDate(service?.created_at || service?.createdAt)}
-                    </span>
-                  </div>
+                  <p className="text-sm font-bold text-gray-900 leading-tight">Workspace</p>
+                  <p className="text-[11px] text-gray-500">Service Operations</p>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {participants.length > 0 && (
-                  <div className="hidden lg:flex items-center -space-x-1.5 mr-2">
-                    {participants.slice(0, 4).map((p) => (
-                      <Avatar key={p.staff_id} name={p.name} size="sm" className="ring-2 ring-white" />
-                    ))}
-                    {participants.length > 4 && (
-                      <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white">
-                        +{participants.length - 4}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <button
-                  onClick={() => window.location.reload()}
-                  className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
-                >
-                  <FiRefreshCw className="h-4 w-4" />
-                  <span className="hidden sm:inline">Refresh</span>
-                </button>
-
-                <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
-                  <span className="hidden sm:inline">New Task</span>
-                </PrimaryButton>
               </div>
             </div>
 
-            {/* Tabs row */}
-            <nav className="flex -mb-px overflow-x-auto mt-4 hide-scrollbar">
-              {tabs.map((tab) => {
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 py-3 px-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                      isActive
-                        ? 'border-indigo-500 text-indigo-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <tab.icon className="h-4 w-4" />
-                    <span>{tab.label}</span>
-                    {tab.count !== null && tab.count > 0 && (
-                      <span
-                        className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold flex items-center justify-center ${
-                          isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
+            {/* Service card */}
+            <div className="px-4 pt-5 pb-4">
+              <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white text-[11px] font-bold shadow-sm">
+                    {(service?.service_name || 'S').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-gray-900 truncate">
+                      {service?.service_name || 'Service'}
+                    </p>
+                    <p className="text-[11px] text-gray-500 truncate">
+                      App #{service?.application_number || '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <nav className="flex-1 px-3 overflow-y-auto">
+              <p className="px-3 mb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                Navigation
+              </p>
+              <ul className="space-y-1">
+                {navItems.map((item) => {
+                  const isActive = activeTab === item.id;
+                  return (
+                    <li key={item.id}>
+                      <button
+                        onClick={() => setActiveTab(item.id)}
+                        className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                          isActive
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                         }`}
                       >
-                        {tab.count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+                        <item.icon
+                          className={`h-4 w-4 shrink-0 ${
+                            isActive ? 'text-white' : 'text-gray-400 group-hover:text-indigo-600'
+                          }`}
+                        />
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {item.count !== null && item.count > 0 && (
+                          <span
+                            className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold flex items-center justify-center ${
+                              isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {item.count}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </nav>
-          </div>
-        </header>
 
-        {/* ══════════════════ CONTENT ══════════════════ */}
-        <div className="max-w-[1600px] mx-auto px-6 py-8">
-          {/* KPI strip (always visible across tabs) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <KPIStat
-              title="Total Tasks"
-              value={stats.total}
-              subtitle="In this workspace"
-              trend={0}
-              icon={FiBarChart2}
-              color="bg-gradient-to-br from-blue-500 to-blue-600"
-            />
-            <KPIStat
-              title="In Progress"
-              value={stats.inProgress}
-              subtitle="Active now"
-              trend={0}
-              icon={FiTrendingUp}
-              color="bg-gradient-to-br from-amber-500 to-amber-600"
-            />
-            <KPIStat
-              title="Completed"
-              value={stats.completed}
-              subtitle="Successfully done"
-              trend={0}
-              icon={FiCheckCircle}
-              color="bg-gradient-to-br from-emerald-500 to-emerald-600"
-            />
-            <KPIStat
-              title="Collaborators"
-              value={participants.length}
-              subtitle="Working on this"
-              trend={0}
-              icon={FiAward}
-              color="bg-gradient-to-br from-purple-500 to-purple-600"
-            />
-          </div>
-
-          <AnimatePresence mode="wait">
-            {/* ══════ BOARD ══════ */}
-            {activeTab === 'board' && (
-              <motion.div
-                key="board"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <BoardColumn
-                    title="To Do"
-                    status="pending"
-                    tasks={tasksByStatus.pending}
-                    onTaskMove={handleTaskStatusUpdate}
+            {/* Progress footer */}
+            <div className="p-4 border-t border-gray-200">
+              <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
+                    Progress
+                  </span>
+                  <span className="text-sm font-bold text-indigo-700">
+                    {stats.progress}%
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-700"
+                    style={{ width: `${stats.progress}%` }}
                   />
-                  <BoardColumn
+                </div>
+                <p className="text-[11px] text-indigo-600 mt-2 font-medium">
+                  {stats.completed} of {stats.total} tasks complete
+                </p>
+              </div>
+            </div>
+          </aside>
+
+          {/* ═══════════════════════ MAIN AREA ═══════════════════════ */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* ─────────── HEADER ─────────── */}
+            <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
+              <div className="px-6 py-4">
+                {/* Title row */}
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center space-x-4 min-w-0">
+                    <button
+                      onClick={() => navigate('/dashboard/staff/track_service')}
+                      className="p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
+                      title="Back to Track Service"
+                    >
+                      <FiArrowLeft className="h-5 w-5 text-gray-600" />
+                    </button>
+
+                    <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shrink-0">
+                      <FiGrid className="h-5 w-5 text-white" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h1 className="text-xl font-bold text-gray-900 truncate">
+                          {service?.service_name || 'Service Workspace'}
+                        </h1>
+                        <span className="px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded-full border border-green-200">
+                          Active
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-1 flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <FiUser className="h-3 w-3" /> {service?.customer_name || '—'}
+                        </span>
+                        <span className="hidden sm:flex items-center gap-1">
+                          <FiFile className="h-3 w-3" /> App #{service?.application_number || '—'}
+                        </span>
+                        <span className="hidden md:flex items-center gap-1">
+                          <FiClock className="h-3 w-3" /> Created{' '}
+                          {formatDate(service?.created_at || service?.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {participants.length > 0 && (
+                      <div className="hidden xl:flex items-center -space-x-1.5 mr-2">
+                        {participants.slice(0, 4).map((p) => (
+                          <Avatar key={p.staff_id} name={p.name} size="sm" className="ring-2 ring-white" />
+                        ))}
+                        {participants.length > 4 && (
+                          <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white">
+                            +{participants.length - 4}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
+                    >
+                      <FiRefreshCw className="h-4 w-4" />
+                      <span className="hidden sm:inline">Refresh</span>
+                    </button>
+
+                    <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
+                      <span className="hidden sm:inline">New Task</span>
+                    </PrimaryButton>
+                  </div>
+                </div>
+
+                {/* Mobile nav (sidebar fallback) */}
+                <nav className="lg:hidden flex mt-4 -mb-px overflow-x-auto hide-scrollbar">
+                  {navItems.map((item) => {
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className={`flex items-center gap-2 py-2.5 px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                          isActive
+                            ? 'border-indigo-500 text-indigo-600'
+                            : 'border-transparent text-gray-500'
+                        }`}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                        {item.count > 0 && (
+                          <span
+                            className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ${
+                              isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {item.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+            </header>
+
+            {/* ─────────── CONTENT ─────────── */}
+            <div className={`flex-1 ${activeTab === 'chat' ? '' : 'px-6 py-8'}`}>
+              {/* KPI strip (hidden on chat tab to give chat full space) */}
+              {activeTab !== 'chat' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                  <KPIStat
+                    title="Total Tasks"
+                    value={stats.total}
+                    subtitle="In this workspace"
+                    trend={0}
+                    icon={FiBarChart2}
+                    color="bg-gradient-to-br from-blue-500 to-blue-600"
+                  />
+                  <KPIStat
                     title="In Progress"
-                    status="in_progress"
-                    tasks={tasksByStatus.in_progress}
-                    onTaskMove={handleTaskStatusUpdate}
+                    value={stats.inProgress}
+                    subtitle="Active now"
+                    trend={0}
+                    icon={FiTrendingUp}
+                    color="bg-gradient-to-br from-amber-500 to-amber-600"
                   />
-                  <BoardColumn
-                    title="Done"
-                    status="completed"
-                    tasks={tasksByStatus.completed}
-                    onTaskMove={handleTaskStatusUpdate}
+                  <KPIStat
+                    title="Completed"
+                    value={stats.completed}
+                    subtitle="Successfully done"
+                    trend={0}
+                    icon={FiCheckCircle}
+                    color="bg-gradient-to-br from-emerald-500 to-emerald-600"
                   />
-                </div>
-              </motion.div>
-            )}
-
-            {/* ══════ CHAT ══════ */}
-            {activeTab === 'chat' && (
-              <motion.div
-                key="chat"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
-                style={{ height: 'calc(100vh - 420px)', minHeight: '500px' }}
-              >
-                <Chat
-                  activeConversation={conversation}
-                  messages={{ [conversation?.id]: messages }}
-                  currentUser={currentUser}
-                  loadingChat={chatLoading}
-                  typingUsers={{ [conversation?.id]: typingUsers }}
-                  onSendMessage={handleSendMessage}
-                  onDeleteMessage={handleDeleteMessage}
-                  onOpenTaskModal={() => setShowTaskModal(true)}
-                  onOpenNewChatModal={() => {}}
-                  onBack={() => {}}
-                  onlineUsers={new Set()}
-                  serviceInfo={serviceInfo}
-                  serviceEntryId={serviceEntryId}
-                  onTaskStatusUpdate={handleTaskStatusUpdate}
-                />
-              </motion.div>
-            )}
-
-            {/* ══════ TASKS ══════ */}
-            {activeTab === 'tasks' && (
-              <motion.div
-                key="tasks"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                  <SectionHeader
-                    title="All Tasks"
-                    subtitle={`${stats.completed} of ${stats.total} completed`}
-                    action={
-                      <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
-                        New Task
-                      </PrimaryButton>
-                    }
-                  />
-
-                  {tasks.length === 0 ? (
-                    <EmptyState
-                      icon={FiCheckSquare}
-                      title="No tasks yet"
-                      description="Break this service down into tasks and assign them to your team."
-                      action={
-                        <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
-                          Create your first task
-                        </PrimaryButton>
-                      }
-                    />
-                  ) : (
-                    <div className="space-y-3">
-                      {tasks.map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          onStatusUpdate={handleTaskStatusUpdate}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-            {/* ══════ PARTICIPANTS ══════ */}
-            {activeTab === 'participants' && (
-              <motion.div
-                key="participants"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                  <SectionHeader
+                  <KPIStat
                     title="Collaborators"
-                    subtitle="People with access to this service workspace."
-                    action={
-                      <PrimaryButton icon={FiPlus} onClick={() => setShowParticipantModal(true)}>
-                        Add Participant
-                      </PrimaryButton>
-                    }
+                    value={participants.length}
+                    subtitle="Working on this"
+                    trend={0}
+                    icon={FiAward}
+                    color="bg-gradient-to-br from-purple-500 to-purple-600"
                   />
-
-                  {participants.length === 0 ? (
-                    <EmptyState
-                      icon={FiUsers}
-                      title="No collaborators"
-                      description="Invite team members to collaborate on this service."
-                      action={
-                        <PrimaryButton icon={FiPlus} onClick={() => setShowParticipantModal(true)}>
-                          Add a participant
-                        </PrimaryButton>
-                      }
-                    />
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {participants.map((p) => (
-                        <div
-                          key={p.staff_id}
-                          className="group bg-gray-50 rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:shadow-md transition-all"
-                        >
-                          <div className="flex items-center space-x-3 min-w-0">
-                            <Avatar name={p.name} size="lg" />
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">
-                                {p.name}
-                              </p>
-                              <p className="text-xs text-gray-500 capitalize truncate mt-0.5">
-                                {p.role} · {p.staff_role}
-                              </p>
-                            </div>
-                          </div>
-                          {p.staff_id !== service?.assignedToId && (
-                            <button
-                              onClick={() => handleRemoveParticipant(p.staff_id)}
-                              title="Remove"
-                              className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
-                            >
-                              <FiTrash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              </motion.div>
-            )}
+              )}
 
-            {/* ══════ DOCUMENTS ══════ */}
-            {activeTab === 'documents' && (
-              <motion.div
-                key="documents"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                  <SectionHeader
-                    title="Shared Documents"
-                    subtitle="Files attached to this service workspace."
-                    action={
-                      <>
-                        <input
-                          type="file"
-                          id="doc-upload"
-                          className="hidden"
-                          onChange={handleDocumentUpload}
-                          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+              <AnimatePresence mode="wait">
+                {/* ══════ BOARD ══════ */}
+                {activeTab === 'board' && (
+                  <motion.div
+                    key="board"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <BoardColumn
+                        title="To Do"
+                        status="pending"
+                        tasks={tasksByStatus.pending}
+                        onTaskMove={handleTaskStatusUpdate}
+                      />
+                      <BoardColumn
+                        title="In Progress"
+                        status="in_progress"
+                        tasks={tasksByStatus.in_progress}
+                        onTaskMove={handleTaskStatusUpdate}
+                      />
+                      <BoardColumn
+                        title="Done"
+                        status="completed"
+                        tasks={tasksByStatus.completed}
+                        onTaskMove={handleTaskStatusUpdate}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ══════ CHAT ══════ */}
+                {activeTab === 'chat' && (
+                  <motion.div
+                    key="chat"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="h-[calc(100vh-120px)] bg-white border-t border-gray-200"
+                  >
+                    <Chat
+                      activeConversation={conversation}
+                      messages={{ [conversation?.id]: messages }}
+                      currentUser={currentUser}
+                      loadingChat={chatLoading}
+                      typingUsers={{ [conversation?.id]: typingUsers }}
+                      onSendMessage={handleSendMessage}
+                      onDeleteMessage={handleDeleteMessage}
+                      onOpenTaskModal={() => setShowTaskModal(true)}
+                      onOpenNewChatModal={() => {}}
+                      onBack={() => {}}
+                      onlineUsers={new Set()}
+                      serviceInfo={serviceInfo}
+                      serviceEntryId={serviceEntryId}
+                      onTaskStatusUpdate={handleTaskStatusUpdate}
+                    />
+                  </motion.div>
+                )}
+
+                {/* ══════ TASKS ══════ */}
+                {activeTab === 'tasks' && (
+                  <motion.div
+                    key="tasks"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                      <SectionHeader
+                        title="All Tasks"
+                        subtitle={`${stats.completed} of ${stats.total} completed`}
+                        action={
+                          <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
+                            New Task
+                          </PrimaryButton>
+                        }
+                      />
+
+                      {tasks.length === 0 ? (
+                        <EmptyState
+                          icon={FiCheckSquare}
+                          title="No tasks yet"
+                          description="Break this service down into tasks and assign them to your team."
+                          action={
+                            <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
+                              Create your first task
+                            </PrimaryButton>
+                          }
                         />
-                        <PrimaryButton
-                          icon={FiUpload}
-                          onClick={() => document.getElementById('doc-upload').click()}
-                          disabled={uploadingDoc}
-                        >
-                          {uploadingDoc ? 'Uploading…' : 'Upload Document'}
-                        </PrimaryButton>
-                      </>
-                    }
-                  />
-
-                  {documents.length === 0 ? (
-                    <EmptyState
-                      icon={FiFileText}
-                      title="No documents yet"
-                      description="Upload files to share them with everyone in this workspace."
-                    />
-                  ) : (
-                    <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
-                      {documents.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="group flex items-center justify-between gap-4 px-4 py-3 hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center space-x-3 min-w-0">
-                            <div className="shrink-0 w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                              <FiFileText className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-900 truncate">
-                                {doc.document_name}
-                              </p>
-                              <p className="text-xs text-gray-500 truncate mt-0.5">
-                                {doc.uploaded_by_name || 'Staff'} ·{' '}
-                                {new Date(doc.created_at).toLocaleDateString()}
-                                {doc.file_size
-                                  ? ` · ${(doc.file_size / 1024).toFixed(1)} KB`
-                                  : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <a
-                              href={`${API_BASE_URL}/api/files/version/${doc.id}/download?token=${token}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Download"
-                              className="p-2 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                            >
-                              <FiDownload className="h-4 w-4" />
-                            </a>
-                            <button
-                              onClick={() => handleDeleteDocument(doc.id)}
-                              title="Delete"
-                              className="p-2 rounded-lg text-gray-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            >
-                              <FiTrash2 className="h-4 w-4" />
-                            </button>
-                          </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {tasks.map((task) => (
+                            <TaskCard
+                              key={task.id}
+                              task={task}
+                              onStatusUpdate={handleTaskStatusUpdate}
+                            />
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  </motion.div>
+                )}
+
+                {/* ══════ PARTICIPANTS ══════ */}
+                {activeTab === 'participants' && (
+                  <motion.div
+                    key="participants"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                      <SectionHeader
+                        title="Collaborators"
+                        subtitle="People with access to this service workspace."
+                        action={
+                          <PrimaryButton
+                            icon={FiPlus}
+                            onClick={() => setShowParticipantModal(true)}
+                          >
+                            Add Participant
+                          </PrimaryButton>
+                        }
+                      />
+
+                      {participants.length === 0 ? (
+                        <EmptyState
+                          icon={FiUsers}
+                          title="No collaborators"
+                          description="Invite team members to collaborate on this service."
+                          action={
+                            <PrimaryButton
+                              icon={FiPlus}
+                              onClick={() => setShowParticipantModal(true)}
+                            >
+                              Add a participant
+                            </PrimaryButton>
+                          }
+                        />
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                          {participants.map((p) => (
+                            <div
+                              key={p.staff_id}
+                              className="group bg-gray-50 rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:shadow-md transition-all"
+                            >
+                              <div className="flex items-center space-x-3 min-w-0">
+                                <Avatar name={p.name} size="lg" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-gray-900 truncate">
+                                    {p.name}
+                                  </p>
+                                  <p className="text-xs text-gray-500 capitalize truncate mt-0.5">
+                                    {p.role} · {p.staff_role}
+                                  </p>
+                                </div>
+                              </div>
+                              {p.staff_id !== service?.assignedToId && (
+                                <button
+                                  onClick={() => handleRemoveParticipant(p.staff_id)}
+                                  title="Remove"
+                                  className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
+                                >
+                                  <FiTrash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ══════ DOCUMENTS ══════ */}
+                {activeTab === 'documents' && (
+                  <motion.div
+                    key="documents"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                      <SectionHeader
+                        title="Shared Documents"
+                        subtitle="Files attached to this service workspace."
+                        action={
+                          <>
+                            <input
+                              type="file"
+                              id="doc-upload"
+                              className="hidden"
+                              onChange={handleDocumentUpload}
+                              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                            />
+                            <PrimaryButton
+                              icon={FiUpload}
+                              onClick={() => document.getElementById('doc-upload').click()}
+                              disabled={uploadingDoc}
+                            >
+                              {uploadingDoc ? 'Uploading…' : 'Upload Document'}
+                            </PrimaryButton>
+                          </>
+                        }
+                      />
+
+                      {documents.length === 0 ? (
+                        <EmptyState
+                          icon={FiFileText}
+                          title="No documents yet"
+                          description="Upload files to share them with everyone in this workspace."
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+                          {documents.map((doc) => (
+                            <div
+                              key={doc.id}
+                              className="group flex items-center justify-between gap-4 px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center space-x-3 min-w-0">
+                                <div className="shrink-0 w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                                  <FiFileText className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {doc.document_name}
+                                  </p>
+                                  <p className="text-xs text-gray-500 truncate mt-0.5">
+                                    {doc.uploaded_by_name || 'Staff'} ·{' '}
+                                    {new Date(doc.created_at).toLocaleDateString()}
+                                    {doc.file_size
+                                      ? ` · ${(doc.file_size / 1024).toFixed(1)} KB`
+                                      : ''}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <a
+                                  href={`${API_BASE_URL}/api/files/version/${doc.id}/download?token=${token}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Download"
+                                  className="p-2 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                >
+                                  <FiDownload className="h-4 w-4" />
+                                </a>
+                                <button
+                                  onClick={() => handleDeleteDocument(doc.id)}
+                                  title="Delete"
+                                  className="p-2 rounded-lg text-gray-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                >
+                                  <FiTrash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
         </div>
 
         {/* ══════════════════ MODALS ══════════════════ */}
@@ -1212,7 +1276,6 @@ const BoardColumn = ({ title, tasks, status, onTaskMove }) => {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col min-h-[420px]">
-      {/* Column header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
@@ -1223,7 +1286,6 @@ const BoardColumn = ({ title, tasks, status, onTaskMove }) => {
         </span>
       </div>
 
-      {/* Cards */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {tasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -1300,7 +1362,6 @@ const BoardTaskCard = ({ task, nextStatus, nextLabel, onMove }) => {
 };
 
 const TaskCard = ({ task, onStatusUpdate }) => {
-  const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
   const status = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
 
   return (
