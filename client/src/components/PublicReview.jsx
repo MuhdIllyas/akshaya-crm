@@ -345,7 +345,7 @@ const PublicReview = () => {
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-gray-500">
-          <p>Powered by Akshaya e Centre Pukayur | Government of Kerala Initiative</p>
+          <p>Powered by Akshaya Sahayi ❤️</p>
           <p className="mt-1">For any assistance, please contact the Akshaya Centre where you availed the service.</p>
         </div>
       </div>
