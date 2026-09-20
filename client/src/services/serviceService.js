@@ -282,6 +282,10 @@ export const notifyCustomer = async (id, message) => {
   return (await trackingApi.post(`/entries/${id}/notify`, { message })).data;
 };
 
+export const getTrackingActivity = async (trackingId) => {
+  return (await trackingApi.get(`/${trackingId}/activity`)).data;
+};
+
 //service_logs in admin / superadmin related
 export const getServiceEntryByTokenId = async (tokenId) => {
   try {

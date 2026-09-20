@@ -5,13 +5,25 @@ import {
   FiUser, FiPhone, FiCreditCard, FiDollarSign, FiCheck, FiX, FiCheckCircle, 
   FiChevronDown, FiPlus, FiTrash2, FiCalendar, FiClock, FiEye, FiLink, 
   FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
-  FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip,
-  FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck
+  FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip, FiPackage,
+  FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck, FiTarget,
+  FiMail, FiFlag, FiActivity
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { MentionsInput, Mention } from 'react-mentions';
-import { getCategories, getWallets, getServiceEntries, createServiceEntry, getTokenById, updateServiceEntry, getStaff } from '/src/services/serviceService';
+import { 
+  getCategories, 
+  getWallets, 
+  getServiceEntries, 
+  createServiceEntry, 
+  getTokenById, 
+  updateServiceEntry, 
+  getStaff,
+  updateTrackingEntry,
+  updateTrackingStatus,
+  getTrackingEntries
+} from '/src/services/serviceService';
 import { createNote } from '/src/services/noteService';
 import api from '@/services/serviceService';
 import { jsPDF } from 'jspdf';
@@ -21,13 +33,32 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import axios from 'axios';
 
-const createEmptyService = () => ({
-  id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
-  departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-  hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-  initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
-  showNoteArea: false, // <-- Added this to collapse the UI by default
-});
+// 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
+const createEmptyService = () => {
+  const currentStaffId = typeof window !== 'undefined' ? localStorage.getItem('id') : '';
+  
+  return {
+    id: crypto.randomUUID(), 
+    category: '', subcategory: '', serviceCharge: '', 
+    departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
+    hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
+    initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
+    showNoteArea: false,
+    activeTab: 'service',        
+
+    // --- TRACKING FIELDS ---
+    applicationNumber: '',
+    estimatedDelivery: '',
+    averageTime: '',
+    priority: 'medium',
+    assignedTo: currentStaffId || '', // <-- DEFAULT TO LOGGED-IN STAFF
+    currentStep: 'Submitted',
+    trackingStatus: 'pending',
+    aadhaar: '',
+    email: '',
+    customerRemarks: ''
+  };
+};
 
 // 🔥 SAFETY LAYER: Get only latest non-reversal transactions per correction group
 const getLatestTransactions = (transactions) => {
@@ -36,15 +67,10 @@ const getLatestTransactions = (transactions) => {
   const map = new Map();
   
   transactions.forEach((tx, index) => {
-    // Skip reversal transactions entirely
     if (tx.is_reversal) return;
-    
-    // Safely grab the ID (checking transaction_id, then id, then falling back to index)
     const txId = tx.transaction_id || tx.id || `fallback-${index}`;
     const groupId = tx.correction_group_id || `direct-${txId}`;
-    
     const existing = map.get(groupId);
-    
     if (!existing || new Date(tx.created_at) > new Date(existing.created_at)) {
       map.set(groupId, tx);
     }
@@ -56,7 +82,6 @@ const getLatestTransactions = (transactions) => {
 const getBase64ImageFromUrl = (imageUrl) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    // This allows fetching from your backend without CORS blocking the canvas
     img.crossOrigin = 'Anonymous'; 
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -72,6 +97,27 @@ const getBase64ImageFromUrl = (imageUrl) => {
   });
 };
 
+// Tracking status options (label ↔ API value) + dot colors for visual feedback
+const TRACKING_STATUS_OPTIONS = [
+  { value: 'pending',     label: 'Pending',     dot: 'bg-amber-500' },
+  { value: 'in_progress', label: 'In Progress', dot: 'bg-blue-500' },
+  { value: 'completed',   label: 'Completed',   dot: 'bg-emerald-500' },
+  { value: 'rejected',    label: 'Delayed',     dot: 'bg-rose-500' },
+  { value: 'resubmit',    label: 'Resubmit',    dot: 'bg-orange-500' },
+  { value: 'paid',        label: 'Paid',        dot: 'bg-green-600' },
+];
+
+const getTrackingStatusStyle = (value) => {
+  switch (value) {
+    case 'in_progress': return 'border-blue-200 bg-blue-50 text-blue-700';
+    case 'completed':   return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'rejected':    return 'border-rose-200 bg-rose-50 text-rose-700';
+    case 'resubmit':    return 'border-orange-200 bg-orange-50 text-orange-700';
+    case 'paid':        return 'border-green-200 bg-green-50 text-green-700';
+    default:            return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
+};
+
 const ServiceEntry = () => {
   const { tokenId, customerServiceId } = useParams();
   const navigate = useNavigate();
@@ -79,28 +125,16 @@ const ServiceEntry = () => {
   
   // ========== STATE FOR TRANSACTION CORRECTION (UNIFIED) ==========
   const [correctionModal, setCorrectionModal] = useState({
-    isOpen: false,
-    transaction: null,
-    loading: false,
-    newAmount: '',
-    newWalletId: '',
-    reason: '',
-    transactionType: ''
+    isOpen: false, transaction: null, loading: false,
+    newAmount: '', newWalletId: '', reason: '', transactionType: ''
   });
   
   const [historyModal, setHistoryModal] = useState({
-    isOpen: false,
-    transactionId: null,
-    history: [],
-    loading: false,
-    transactionType: ''
+    isOpen: false, transactionId: null, history: [], loading: false, transactionType: ''
   });
 
   const [confirmDialog, setConfirmDialog] = useState({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: null
+    isOpen: false, title: '', message: '', onConfirm: null
   });
   
   const [correctionStatus, setCorrectionStatus] = useState({});
@@ -137,12 +171,7 @@ const ServiceEntry = () => {
 
   const [centreDetails, setCentreDetails] = useState({
     name: 'Akshaya e Centre',
-    address: '',
-    district: '',
-    state: '',
-    pincode: '',
-    phone: '',
-    logo: '/logo-light.png'
+    address: '', district: '', state: '', pincode: '', phone: '', logo: '/logo-light.png'
   });
 
   // --- MENTIONS LOGIC FOR INITIAL NOTE ---
@@ -186,17 +215,12 @@ const ServiceEntry = () => {
   // ========== INVOICE GENERATOR STATE ==========
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [invoiceData, setInvoiceData] = useState({
-    customerName: '',
-    phone: '',
-    items: [{ description: '', amount: '' }],
-    notes: '',
+    customerName: '', phone: '', items: [{ description: '', amount: '' }], notes: ''
   });
 
   // ========== DELETE MODAL STATE ==========
   const [deleteDialog, setDeleteDialog] = useState({
-    isOpen: false,
-    entryId: null,
-    loading: false,
+    isOpen: false, entryId: null, loading: false,
   });
   
   const userRole = localStorage.getItem('role') || 'staff';
@@ -225,6 +249,18 @@ const ServiceEntry = () => {
         initialNote: '', initialNoteMentions: [], initialNoteVisibility: 'private',
         createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null,
         showNoteArea: false,
+        activeTab: 'service',
+        // Preserve tracking fields on edit
+        applicationNumber: entry.applicationNumber || '',
+        estimatedDelivery: entry.estimatedDelivery || '',
+        averageTime: entry.averageTime || '',
+        priority: entry.priority || 'medium',
+        assignedTo: entry.assignedTo || '',
+        currentStep: entry.currentStep || 'Submitted',
+        trackingStatus: entry.trackingStatus || entry.tracking_status || 'pending',
+        aadhaar: entry.aadhaar || '',
+        email: entry.email || '',
+        customerRemarks: entry.customerRemarks || entry.notes || ''
       }]
     });
 
@@ -274,9 +310,7 @@ const ServiceEntry = () => {
     }
   };
 
-  // 🔥 FIXED: Use transaction_id (wallet_transactions.id) for correction
   const openCorrectionModal = async (transaction, entry, type) => {
-    // Determine the correct ID: use transaction_id if available, else fallback to id
     const correctionId = transaction.transaction_id || transaction.id;
     
     console.log("🔍 Opening correction modal for:", {
@@ -290,7 +324,6 @@ const ServiceEntry = () => {
       correction_group_id: transaction.correction_group_id
     });
     
-    // 🔥 SAFETY: Block if transaction is a reversal
     if (transaction.is_reversal) {
       toast.error('Cannot correct a reversal transaction');
       return;
@@ -312,7 +345,7 @@ const ServiceEntry = () => {
       isOpen: true,
       transaction: {
         ...transaction,
-        id: correctionId, // CRUCIAL: Override with wallet_transactions.id
+        id: correctionId,
         serviceEntryId: entry.id,
         originalAmount: transaction.amount,
         wallet_id: transaction.wallet || transaction.wallet_id,
@@ -326,13 +359,11 @@ const ServiceEntry = () => {
     });
   };
 
-  // 🔥 FIXED: Only send changed fields, with safety verification
   const submitCorrection = async () => {
     const { transaction, newAmount, newWalletId, reason, transactionType } = correctionModal;
     
-    // 🔥 CRITICAL DEBUG: Log what we're about to correct
     console.log("🚀 Submitting correction for:", {
-      id: transaction.id, // Now wallet_transactions.id
+      id: transaction.id,
       type: transactionType,
       originalAmount: transaction.originalAmount,
       newAmount: newAmount,
@@ -341,14 +372,12 @@ const ServiceEntry = () => {
       wallet_id: transaction.wallet_id
     });
     
-    // Validate amount
     const parsedAmount = parseFloat(newAmount);
     if (isNaN(parsedAmount) || parsedAmount < 0) {
       toast.error('Please enter a valid amount (can be 0 to cancel the charge)');
       return;
     }
     
-    // Validate wallet
     const parsedWalletId = parseInt(newWalletId);
     if (!parsedWalletId || isNaN(parsedWalletId)) {
       toast.error('Please select a wallet');
@@ -360,29 +389,24 @@ const ServiceEntry = () => {
       return;
     }
 
-    // Build payload (only changed fields)
     const payload = {
       reason: reason.trim()
     };
     
-    // Only include amount if it changed (with small tolerance for floating point)
     const originalAmount = parseFloat(transaction.originalAmount);
     if (Math.abs(parsedAmount - originalAmount) > 0.001) {
       payload.new_amount = parsedAmount;
     }
     
-    // Only include wallet if it changed
     const originalWalletId = transaction.wallet_id || transaction.wallet;
     if (parsedWalletId !== parseInt(originalWalletId)) {
       payload.new_wallet_id = parsedWalletId;
     }
     
-    // 🔥 SAFETY: Send correction_group_id for backend verification
     if (transaction.correction_group_id) {
       payload.correction_group_id = transaction.correction_group_id;
     }
 
-    // Prepare the actual API call
     const executeCorrectionApi = async () => {
       setCorrectionModal(prev => ({ ...prev, loading: true }));
       try {
@@ -403,13 +427,8 @@ const ServiceEntry = () => {
         });
         
         setCorrectionModal({ 
-          isOpen: false, 
-          transaction: null, 
-          loading: false, 
-          newAmount: '', 
-          newWalletId: '', 
-          reason: '',
-          transactionType: '' 
+          isOpen: false, transaction: null, loading: false, 
+          newAmount: '', newWalletId: '', reason: '', transactionType: '' 
         });
       } catch (err) {
         console.error('❌ Correction error:', err);
@@ -421,7 +440,6 @@ const ServiceEntry = () => {
       }
     };
 
-    // 🛑 Personal wallet check with modal
     const allWallets = [...wallets.offline, ...wallets.online];
     const targetWallet = allWallets.find(w => w.id === parsedWalletId);
     
@@ -438,7 +456,6 @@ const ServiceEntry = () => {
       return;
     }
 
-    // No personal wallet involved – execute immediately
     executeCorrectionApi();
   };
 
@@ -446,11 +463,7 @@ const ServiceEntry = () => {
     console.log("📜 Fetching transaction history for ID:", transactionId);
     
     setHistoryModal({ 
-      isOpen: true, 
-      transactionId, 
-      history: [], 
-      loading: true,
-      transactionType: type 
+      isOpen: true, transactionId, history: [], loading: true, transactionType: type 
     });
     
     try {
@@ -464,11 +477,7 @@ const ServiceEntry = () => {
         historyData = [response.data];
       }
       
-      setHistoryModal(prev => ({
-        ...prev,
-        history: historyData,
-        loading: false
-      }));
+      setHistoryModal(prev => ({ ...prev, history: historyData, loading: false }));
     } catch (err) {
       console.error('Error fetching transaction history:', err);
       toast.error('Failed to load transaction history');
@@ -476,16 +485,9 @@ const ServiceEntry = () => {
     }
   };
 
-  // 🔥 Check if transaction can be corrected
   const canCorrectTransaction = (transaction, entry, type) => {
-    // 🔥 SAFETY: Never allow correcting reversal transactions
     if (transaction.is_reversal) return false;
-    
-    // Staff can only correct today's entries
-    if (userRole === 'staff') {
-      return isToday(entry.created_at);
-    }
-    
+    if (userRole === 'staff') return isToday(entry.created_at);
     return userRole === 'admin' || userRole === 'superadmin';
   };
 
@@ -504,15 +506,9 @@ const ServiceEntry = () => {
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return 'Invalid Date';
       return date.toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
       });
-    } catch {
-      return 'Invalid Date';
-    }
+    } catch { return 'Invalid Date'; }
   };
 
   const formatAmount = (amount) => {
@@ -520,7 +516,6 @@ const ServiceEntry = () => {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
-  // ========== HANDLE DELETION ==========
   const handleDeleteEntry = async () => {
     const entryId = deleteDialog.entryId;
     if (!entryId) return;
@@ -530,13 +525,11 @@ const ServiceEntry = () => {
       const response = await api.delete(`/entry/${entryId}/force`);
       toast.success(response.data.message || 'Service entry deleted successfully');
 
-      // Remove the deleted entry from the UI without refreshing
       setServiceEntries(prev => prev.filter(entry => entry.id !== entryId));
       
       setDeleteDialog({ isOpen: false, entryId: null, loading: false });
     } catch (err) {
       console.error('Delete error:', err);
-      // This will show the error message we wrote in the backend (e.g., if money is collected)
       toast.error(err.response?.data?.error || 'Failed to delete service entry', {
         autoClose: 7000
       });
@@ -544,13 +537,11 @@ const ServiceEntry = () => {
     }
   };
 
-  // ========== INVOICE GENERATOR FUNCTIONS ==========
   const openInvoiceModal = () => {
-    // Build default items from the dynamic Services Cart
     const items = [];
 
     (formData.services || []).forEach((svc) => {
-      if (!svc.category) return; // Skip empty rows
+      if (!svc.category) return;
 
       const catName = getCategoryName(svc.category);
       const subName = getSubcategoryName(svc.category, svc.subcategory);
@@ -564,7 +555,6 @@ const ServiceEntry = () => {
       }
     });
 
-    // Fallback if the cart is somehow totally empty
     if (items.length === 0) {
       items.push({ description: 'Service Charge', amount: '0' });
     }
@@ -583,15 +573,12 @@ const ServiceEntry = () => {
     const navy = '#0F172A';        
     const textDark = '#333333';
     const textLight = '#666666';
-    const rightMargin = 196; // 210mm width - 14mm margin
+    const rightMargin = 196;
 
-    // ---- HEADER BAND (LIGHT THEME) ----
-    // ⚠️ CRITICAL: There is no doc.rect() here. The background is pure white.
-    doc.setDrawColor(226, 232, 240); // Light slate gray (#E2E8F0)
+    doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.5);
-    doc.line(14, 42, rightMargin, 42); // Subtle separator line
+    doc.line(14, 42, rightMargin, 42);
 
-    // ---- DYNAMIC LOGO HANDLING (LEFT) ----
     try {
       if (centreDetails.logo) {
         const fullLogoUrl = centreDetails.logo.startsWith('http') 
@@ -599,28 +586,24 @@ const ServiceEntry = () => {
           : `${import.meta.env.VITE_API_URL}${centreDetails.logo}`;
         
         const base64Img = await getBase64ImageFromUrl(fullLogoUrl);
-        // Logo will now sit beautifully on the white paper
         doc.addImage(base64Img, 'PNG', 14, 10, 26, 26); 
       } else {
         throw new Error("No logo available"); 
       }
     } catch (e) {
       console.warn("Could not load invoice logo:", e);
-      // Fallback: If no logo exists or it fails to load, print the text on the left
       doc.setTextColor(navy);
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.text(centreDetails.name || 'Akshaya e Centre', 14, 24);
     }
 
-    // ---- DYNAMIC CENTRE DETAILS (RIGHT ALIGNED) ----
-    // Changed text to dark navy/gray so it is visible on the white paper
     doc.setTextColor(navy);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text(centreDetails.name || 'Akshaya e Centre', rightMargin, 16, { align: 'right' });
     
-    doc.setTextColor('#475569'); // Slate gray for address
+    doc.setTextColor('#475569');
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     
@@ -638,8 +621,6 @@ const ServiceEntry = () => {
       doc.text(`Phone: ${centreDetails.phone}`, rightMargin, 32, { align: 'right' });
     }
 
-    // ---- TWO-COLUMN INFO SECTION ----
-    // LEFT COLUMN: BILL TO
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(textLight);
@@ -653,7 +634,6 @@ const ServiceEntry = () => {
     doc.setFont('helvetica', 'normal');
     doc.text(`Phone: ${invoiceData.phone}`, 14, 64);
 
-    // RIGHT COLUMN: INVOICE META
     doc.setFontSize(22);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(navy);
@@ -667,7 +647,6 @@ const ServiceEntry = () => {
     const staffName = localStorage.getItem('name') || 'Staff';
     doc.text(`Served by: ${staffName}`, rightMargin, 66, { align: 'right' });
 
-    // ---- SERVICES RENDERED (FULL WIDTH ROW) ----
     const serviceNamesList = (formData.services || [])
       .filter(svc => svc.category)
       .map(svc => {
@@ -684,7 +663,6 @@ const ServiceEntry = () => {
     doc.setFont('helvetica', 'normal');
     doc.text(displayServiceName, 14, 84);
 
-    // ---- STYLED ITEMS TABLE ----
     const tableBody = invoiceData.items.map((item, idx) => [
       idx + 1,
       item.description,
@@ -698,32 +676,13 @@ const ServiceEntry = () => {
       body: tableBody,
       foot: [['', 'Total Amount', `Rs. ${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]],
       theme: 'striped',
-      styles: { 
-        font: 'helvetica', 
-        fontSize: 10, 
-        cellPadding: 5 
-      },
-      headStyles: { 
-        fillColor: navy, // Table header remains dark blue
-        textColor: '#FFFFFF', 
-        fontStyle: 'bold' 
-      },
-      footStyles: { 
-        fillColor: '#E2E8F0', // Light slate gray background for the total
-        textColor: navy, 
-        fontStyle: 'bold' 
-      },
-      alternateRowStyles: {
-        fillColor: '#F8FAFC' // Very faint blue-gray for alternating rows
-      },
-      columnStyles: { 
-        0: { cellWidth: 12 }, 
-        1: { cellWidth: 'auto' }, 
-        2: { halign: 'right', cellWidth: 40 } 
-      },
+      styles: { font: 'helvetica', fontSize: 10, cellPadding: 5 },
+      headStyles: { fillColor: navy, textColor: '#FFFFFF', fontStyle: 'bold' },
+      footStyles: { fillColor: '#E2E8F0', textColor: navy, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: '#F8FAFC' },
+      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 'auto' }, 2: { halign: 'right', cellWidth: 40 } },
     });
 
-    // ---- NOTES & FOOTER ----
     let finalY = doc.lastAutoTable.finalY + 12;
 
     if (invoiceData.notes) {
@@ -747,8 +706,6 @@ const ServiceEntry = () => {
     setInvoiceModalOpen(false);
   };
 
-  // ========== useEffect HOOKS ==========
-  
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -796,10 +753,8 @@ const ServiceEntry = () => {
         }
 
         try {
-          // Fetch dynamic centre details for invoices
           const centreId = localStorage.getItem('centre_id');
           if (centreId) {
-            // FIX: Use standard axios to hit the correct /api/centres endpoint directly
             const centreRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres/${centreId}`, {
               headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
@@ -848,7 +803,6 @@ const ServiceEntry = () => {
                 amount: String(p.amount || ''),
                 status: p.status || 'pending',
               })) : [],
-              // 🔥 PROPERLY INITIALIZING THE CART ARRAY
               services: [{
                 id: crypto.randomUUID(),
                 category: tokenData.category_id ? String(tokenData.category_id) : '',
@@ -867,7 +821,18 @@ const ServiceEntry = () => {
                 taskTitle: '', 
                 taskAssignee: '', 
                 taskDueDate: null,
-                showNoteArea: false
+                showNoteArea: false,
+                activeTab: 'service',
+                applicationNumber: '',
+                estimatedDelivery: '',
+                averageTime: '',
+                priority: 'medium',
+                assignedTo: staffId || '', // <-- DEFAULT TO LOGGED-IN STAFF
+                currentStep: 'Submitted',
+                trackingStatus: 'pending',
+                aadhaar: tokenData.aadhaar || '',
+                email: tokenData.email || '',
+                customerRemarks: ''
               }]
             };
 
@@ -912,7 +877,6 @@ const ServiceEntry = () => {
               tokenId: null,
               customerName: booking.customer_name || '',
               phone: booking.phone || '',
-              // 🔥 PROPERLY INITIALIZING THE CART ARRAY
               services: [{
                 id: crypto.randomUUID(),
                 category: booking.service_id ? String(booking.service_id) : '',
@@ -931,7 +895,18 @@ const ServiceEntry = () => {
                 taskTitle: '', 
                 taskAssignee: '', 
                 taskDueDate: null,
-                showNoteArea: false
+                showNoteArea: false,
+                activeTab: 'service',
+                applicationNumber: '',
+                estimatedDelivery: '',
+                averageTime: '',
+                priority: 'medium',
+                assignedTo: staffId || '', // <-- DEFAULT TO LOGGED-IN STAFF
+                currentStep: 'Submitted',
+                trackingStatus: 'pending',
+                aadhaar: booking.aadhaar || '',
+                email: booking.email || '',
+                customerRemarks: ''
               }]
             }));
 
@@ -984,16 +959,13 @@ const ServiceEntry = () => {
     setDaysRemaining(days);
   };
 
-  // 🔥 CATCH ADMIN EDIT FROM SERVICE LOGS (FIXED: removed undefined reverseStatusMap)
   useEffect(() => {
     if (location.state && location.state.adminEditEntry && categories.length > 0) {
       const adminEntry = location.state.adminEditEntry;
       
       console.log("Catching Admin Edit Entry:", adminEntry);
 
-      // Map the ServiceLogs data format to match what ServiceEntry expects
       const mappedEntry = {
-        // Critical: ServiceLogs uses serviceEntryId, but ServiceEntry expects id
         id: adminEntry.serviceEntryId || adminEntry.id, 
         tokenId: adminEntry.tokenId || '',
         customerName: adminEntry.customerName || '',
@@ -1003,7 +975,6 @@ const ServiceEntry = () => {
         serviceCharge: adminEntry.serviceCharge || 0,
         departmentCharge: adminEntry.departmentCharge || 0,
         totalCharge: adminEntry.totalCharge || 0,
-        // Normalize the status string – fallback to 'pending' if unrecognised
         status: adminEntry.status?.toLowerCase() === 'completed' ? 'completed' : 
                 adminEntry.status?.toLowerCase() === 'pending' ? 'pending' : 'pending',
         expiryDate: adminEntry.expiryDate && adminEntry.expiryDate !== 'Not set' 
@@ -1011,15 +982,23 @@ const ServiceEntry = () => {
         payments: adminEntry.payments || [],
         serviceWalletId: adminEntry.serviceWalletId || null,
         requiresWallet: adminEntry.requiresWallet || false,
+        applicationNumber: adminEntry.applicationNumber || '',
+        estimatedDelivery: adminEntry.estimatedDelivery || '',
+        averageTime: adminEntry.averageTime || '',
+        priority: adminEntry.priority || 'medium',
+        assignedTo: adminEntry.assignedTo || '',
+        currentStep: adminEntry.currentStep || 'Submitted',
+        trackingStatus: adminEntry.trackingStatus || adminEntry.tracking_status || 'pending',
+        aadhaar: adminEntry.aadhaar || '',
+        email: adminEntry.email || '',
+        customerRemarks: adminEntry.customerRemarks || adminEntry.notes || ''
       };
 
-      // Slight delay to ensure wallets and categories have finished rendering
       setTimeout(() => {
         handleEditEntry(mappedEntry);
         toast.info("Admin Override Mode Activated", { icon: "🔓" });
       }, 500);
       
-      // Clear the router state so it doesn't get stuck in a loop if the page refreshes
       window.history.replaceState({}, document.title);
     }
   }, [location.state, categories.length]);
@@ -1037,6 +1016,10 @@ const ServiceEntry = () => {
   };
 
   const handleCartChange = (index, field, value) => {
+    if (field === 'aadhaar') {
+      value = String(value).replace(/\D/g, '').slice(0, 12);
+    }
+
     setFormData(prev => {
       const updated = [...prev.services];
       const svc = { ...updated[index], [field]: value };
@@ -1112,7 +1095,7 @@ const ServiceEntry = () => {
         .filter((_, i) => i !== index && _.status === 'received')
         .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
 
-      const maxAllowed = grandTotal - otherReceived; // 🔥 Changed to grandTotal
+      const maxAllowed = grandTotal - otherReceived; 
 
       if (entered > maxAllowed) {
         toast.error(`Amount exceeds remaining balance (₹${maxAllowed})`);
@@ -1181,6 +1164,8 @@ const ServiceEntry = () => {
       if (svc.requiresWallet && (!svc.serviceWalletId || isNaN(parseInt(svc.serviceWalletId)))) errors.push(`${prefix}Requires a wallet assignment`);
       if (svc.hasExpiry && (!svc.expiryDate || isNaN(Date.parse(svc.expiryDate)))) errors.push(`${prefix}Expiry date required`);
       if (svc.createTask && (!svc.taskTitle || !svc.taskAssignee)) errors.push(`${prefix}Task Title & Assignee required`);
+      if (svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)) errors.push(`${prefix}Aadhaar must be exactly 12 digits`);
+      if (svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email)) errors.push(`${prefix}Please enter a valid email address`);
     });
 
     if (formData.payments.length === 0) errors.push('At least one payment is required');
@@ -1230,7 +1215,6 @@ const ServiceEntry = () => {
     const executeFinalSubmit = async () => {
       try {
         if (editingEntryId) {
-          // Single Edit Mode Logic
           const editPayload = {
              ...payload,
              categoryId: payload.services[0].categoryId,
@@ -1244,80 +1228,121 @@ const ServiceEntry = () => {
           };
           delete editPayload.payments;
           delete editPayload.services;
-
-          // 🔥 when admin edits: Remove the logged-in admin's ID so the backend preserves the original staff member
           delete editPayload.staffId;
 
           await updateServiceEntry(editingEntryId, editPayload);
           toast.success('Service entry updated successfully!');
+          
+          const entriesRes = await getServiceEntries(true, null, 500);
+          setServiceEntries(entriesRes.data || []);
+          
+          setFormData({
+            tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
+            services: [createEmptyService()]
+          });
+          setEditingEntryId(null);
+          
         } else {
-          // 🔥 SEND CART TO BULK ROUTE
+          const submittedServicesData = [...formData.services];
+
           const response = await api.post('/entry/bulk', payload);
           const createdServices = response.data.createdServices || [];
 
-          // 🔥 LOOP THROUGH THE RESPONSE TO CREATE NOTES & TASKS
-          for (const svc of createdServices) {
-            if (svc.initialNote && svc.initialNote.trim() !== '') {
-              try {
-                // 1. Save Note
-                const noteRes = await createNote({
-                  title: 'Initial Note',
-                  content: svc.initialNote.trim(),
-                  visibility: svc.initialNoteVisibility,
-                  related_service_entry_id: svc.serviceEntryId,
-                  mentions: svc.initialNoteMentions 
-                });
-                
-                const savedNoteId = noteRes?.data?.id || noteRes?.id;
-
-                // 2. Save Task
-                if (svc.createTask && svc.taskTitle && svc.taskAssignee && savedNoteId) {
-                  const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-                  
-                  await api.post('/add', {
-                    title: svc.taskTitle.trim(),
-                    description: svc.initialNote.trim(),
-                    assigned_to: parseInt(svc.taskAssignee),
-                    due_date: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
-                    priority: 'medium',
-                    related_service_entry_id: svc.serviceEntryId,
-                    note_id: savedNoteId
-                  }, { baseURL: taskBaseUrl });
-                }
-              } catch (noteErr) {
-                console.error(`❌ Failed to save note/task for Entry ${svc.serviceEntryId}:`, noteErr);
-                toast.warn(`Service created, but failed to attach note/task.`);
-              }
-            }
-          }
-          
           toast.success('Services successfully created and paid!');
-        }
-        
-        // --- 1. Fetch updated entries so the table shows the new submission immediately ---
-        try {
-          const entriesRes = await getServiceEntries(true, null, 500);
-          setServiceEntries(entriesRes.data || []);
-        } catch (fetchErr) {
-          console.error("Failed to refresh table", fetchErr);
-        }
+          
+          setFormData({
+            tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
+            services: [createEmptyService()]
+          });
+          setEditingEntryId(null);
 
-        // --- 2. Clear the form instead of navigating away ---
-        setFormData({
-          tokenId: '',
-          customerName: '',
-          phone: '',
-          status: 'pending',
-          payments: [],
-          services: [{
-            id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
-            departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-            hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-            initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false
-          }]
-        });
-        setEditingEntryId(null);
-        
+          const processBackgroundTasks = async () => {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 1500)); 
+              
+              let recentTrackingRecords = [];
+              try {
+                 const trackRes = await getTrackingEntries({ limit: 100 });
+                 recentTrackingRecords = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
+              } catch (err) {
+                 console.warn("Could not fetch tracking entries to map IDs", err);
+              }
+
+              const backgroundPromises = createdServices.map(async (svc, i) => {
+                const svcFormData = submittedServicesData[i]; 
+
+                const hasTrackingData = 
+                  svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || 
+                  svcFormData.aadhaar || svcFormData.email || svcFormData.averageTime || svcFormData.customerRemarks ||
+                  (svcFormData.priority && svcFormData.priority !== 'medium') ||
+                  (svcFormData.trackingStatus && svcFormData.trackingStatus !== 'pending') ||
+                  (svcFormData.currentStep && svcFormData.currentStep !== 'Submitted');
+
+                if (hasTrackingData) {
+                  try {
+                    const serviceEntryId = svc.serviceEntryId || svc.id;
+                    const trackingRecord = recentTrackingRecords.find(t => 
+                      Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
+                    );
+
+                    if (trackingRecord) {
+                      // 🔥 COMBINED API CALL: Send the status here to prevent Double-WhatsApp messages
+                      await updateTrackingEntry(trackingRecord.id, {
+                        applicationNumber: svcFormData.applicationNumber || null,
+                        assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
+                        estimatedDelivery: svcFormData.estimatedDelivery || null,
+                        averageTime: svcFormData.averageTime || '7 days',
+                        notes: svcFormData.customerRemarks || null,
+                        aadhaar: svcFormData.aadhaar || null,
+                        email: svcFormData.email || null,
+                        priority: svcFormData.priority || 'medium',
+                        currentStep: svcFormData.currentStep || 'Submitted',
+                        status: svcFormData.trackingStatus || 'pending', 
+                        progress: 25 
+                      });
+                    } else {
+                      console.warn(`Tracking row not found for Service Entry ${serviceEntryId}.`);
+                    }
+                  } catch (trackErr) {
+                    console.error(`Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
+                  }
+                }
+
+                if (svcFormData.initialNote && svcFormData.initialNote.trim() !== '') {
+                  try {
+                    const noteRes = await createNote({
+                      title: 'Initial Note', content: svcFormData.initialNote.trim(), visibility: svcFormData.initialNoteVisibility,
+                      related_service_entry_id: svc.serviceEntryId || svc.id, mentions: svcFormData.initialNoteMentions 
+                    });
+                    
+                    const savedNoteId = noteRes?.data?.id || noteRes?.id;
+
+                    if (svcFormData.createTask && svcFormData.taskTitle && svcFormData.taskAssignee && savedNoteId) {
+                      const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+                      await api.post('/add', {
+                        title: svcFormData.taskTitle.trim(), description: svcFormData.initialNote.trim(), assigned_to: parseInt(svcFormData.taskAssignee),
+                        due_date: svcFormData.taskDueDate ? new Date(svcFormData.taskDueDate).toISOString().split('T')[0] : null,
+                        priority: 'medium', related_service_entry_id: svc.serviceEntryId || svc.id, note_id: savedNoteId
+                      }, { baseURL: taskBaseUrl });
+                    }
+                  } catch (noteErr) {
+                    console.error(`Failed to save note/task for Entry:`, noteErr);
+                  }
+                }
+              });
+
+              await Promise.allSettled(backgroundPromises);
+
+              const entriesRes = await getServiceEntries(true, null, 500);
+              setServiceEntries(entriesRes.data || []);
+
+            } catch (err) {
+              console.error("Background task execution failed:", err);
+            }
+          };
+
+          processBackgroundTasks();
+        }
       } catch (err) {
         toast.error(err.response?.data?.error || 'Failed to submit service entries');
       }
@@ -1368,11 +1393,7 @@ const ServiceEntry = () => {
       const walletId = String(p.wallet);
 
       if (!walletSummary[walletId]) {
-        walletSummary[walletId] = {
-          received: 0,
-          pending: 0,
-          method: p.method,
-        };
+        walletSummary[walletId] = { received: 0, pending: 0, method: p.method };
       }
 
       if (p.status === 'received') {
@@ -1492,9 +1513,7 @@ const ServiceEntry = () => {
           {/* MAIN 2-COLUMN GRID */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* ======================================================== */}
-            {/* LEFT COLUMN: CUSTOMER INFO & CART                        */}
-            {/* ======================================================== */}
+            {/* LEFT COLUMN: CUSTOMER INFO & CART */}
             <div className="space-y-6">
               
               {/* 1. Customer Information */}
@@ -1564,9 +1583,33 @@ const ServiceEntry = () => {
                     const subcategoryDocs = categories.find(c => c.id === parseInt(svc.category))?.subcategories?.find(s => s.id === parseInt(svc.subcategory))?.required_documents || [];
                     const website = categories.find(c => c.id === parseInt(svc.category))?.website || null;
 
+                    // ===== Tab state & counters =====
+                    const activeTab = svc.activeTab || 'service';
+                    const trackingFilledCount = [
+                      svc.applicationNumber,
+                      svc.aadhaar,
+                      svc.email,
+                      svc.assignedTo,
+                      svc.estimatedDelivery,
+                      svc.averageTime,
+                      svc.priority !== 'medium' ? 1 : null,
+                      svc.currentStep !== 'Submitted' ? 1 : null,
+                      svc.trackingStatus !== 'pending' ? 1 : null,
+                      svc.customerRemarks
+                    ].filter(Boolean).length;
+                    const statusIsActive = svc.trackingStatus && svc.trackingStatus !== 'pending';
+
+                    // 🔥 UI UPDATE: Hide the specific tabs during Edit mode
+                    const tabDefs = [
+                      { id: 'service',  label: 'Service',  icon: FiCreditCard, badge: null },
+                      ...(!isEditMode ? [{ id: 'tracking', label: 'Tracking', icon: FiPackage, badge: trackingFilledCount || null, dot: statusIsActive }] : []),
+                      ...(!isEditMode ? [{ id: 'notes', label: 'Notes', icon: FiMessageCircle, badge: svc.initialNote ? 1 : null }] : [])
+                    ];
+
                     return (
-                      <motion.div key={svc.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative">
-                        
+                      <motion.div key={svc.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative">
+
                         {/* Compact Header */}
                         <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
                           <div className="flex items-center gap-3">
@@ -1582,158 +1625,367 @@ const ServiceEntry = () => {
                           )}
                         </div>
 
-                        {/* Body Content */}
-                        <div className="p-4 space-y-4">
-                          {/* Row 1: Selectors */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
-                              <div className="relative">
-                                <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
-                                  <option value="">Select Category</option>
-                                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
-                              <div className="relative">
-                                <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
-                                  <option value="">Select Subcategory</option>
-                                  {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
-                              </div>
-                            </div>
-                          </div>
+                        {/* ===== TABS ===== */}
+                        <div className="flex border-b border-gray-200 bg-white">
+                          {tabDefs.map(tab => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === tab.id;
+                            return (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => handleCartChange(index, 'activeTab', tab.id)}
+                                className={`relative flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors border-b-2 ${
+                                  isActive
+                                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40'
+                                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                                }`}
+                              >
+                                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-indigo-600' : ''}`} />
+                                <span>{tab.label}</span>
+                                {tab.badge && (
+                                  <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold ${
+                                    isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
+                                  }`}>
+                                    {tab.badge}
+                                  </span>
+                                )}
+                                {tab.dot && !tab.badge && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
 
-                          {/* Row 2: Financials (Strictly 3 Columns) */}
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
-                              <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Dept (₹)</label>
-                              <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Total (₹)</label>
-                              <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 rounded-lg text-sm" />
-                            </div>
-                          </div>
+                        {/* ===== TAB CONTENT ===== */}
+                        <div className="p-4">
 
-                          {/* Row 2.5: Expiry Date */}
-                          {svc.hasExpiry && (
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
-                              <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                  <FiCalendar className="h-4 w-4 text-gray-400" />
-                                </div>
-                                <input 
-                                  type="date" 
-                                  value={svc.expiryDate} 
-                                  onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} 
-                                  required 
-                                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" 
-                                />
-                              </div>
-                              {svc.expiryDate && (
-                                <p className={`text-xs mt-1.5 font-medium ${
-                                  Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) < 30 ? 'text-amber-600' : 'text-emerald-600'
-                                }`}>
-                                  <FiClock className="inline mr-1" />
-                                  {Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))} days remaining
-                                </p>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Row 3: Docs & Web */}
-                          {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
-                            <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
-                              {website && (
-                                <div className="flex items-center gap-1.5">
-                                  <FiLink className="text-blue-500 shrink-0" />
-                                  <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
-                                </div>
-                              )}
-                              {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
-                                <div className="flex items-start gap-1.5">
-                                  <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
-                                  <div className="flex flex-wrap gap-2">
-                                    <span className="font-semibold text-gray-700 mr-1">Docs:</span>
-                                    {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
-                                      <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
-                                        <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Row 4: Collapsible Notes & Tasks */}
-                          {!isEditMode && (
-                            <div className="pt-2 border-t border-gray-100">
-                              {!svc.showNoteArea ? (
-                                <button type="button" onClick={() => handleCartChange(index, 'showNoteArea', true)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition">
-                                  <FiMessageCircle className="h-4 w-4" /> Add Note or Task for this Service
-                                </button>
-                              ) : (
-                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 shadow-inner">
-                                  <div className="flex justify-between items-center mb-3">
-                                    <label className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                                      <FiMessageCircle className="text-indigo-500 h-4 w-4"/> Note & Task Assignment
-                                    </label>
-                                    <button type="button" onClick={() => { handleCartChange(index, 'showNoteArea', false); handleCartChange(index, 'initialNote', ''); handleCartChange(index, 'createTask', false); }} className="text-xs text-gray-500 hover:text-rose-500 flex items-center gap-1">
-                                      <FiX className="h-3 w-3" /> Cancel
-                                    </button>
-                                  </div>
-
-                                  <MentionsInput
-                                    value={svc.initialNote}
-                                    onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
-                                    className="mentions-input text-sm"
-                                    placeholder="Write a note... Type @ to assign staff members"
-                                    style={{
-                                      control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
-                                      highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
-                                      input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
-                                      suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
-                                    }}
-                                  >
-                                    <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`} renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
-                                  </MentionsInput>
-
-                                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                                    <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)} className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
-                                      <option value="centre">🏢 Centre View</option>
-                                      <option value="private">🔒 Private</option>
-                                      <option value="mentioned_only">👥 Mentions Only</option>
+                          {/* ---------- SERVICE TAB (default) ---------- */}
+                          {activeTab === 'service' && (
+                            <div className="space-y-4">
+                              {/* Selectors */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                                  <div className="relative">
+                                    <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
+                                      <option value="">Select Category</option>
+                                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
-                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 px-3 py-1.5 rounded shadow-sm hover:bg-indigo-50 transition">
-                                      <input type="checkbox" checked={svc.createTask} onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)} className="rounded text-indigo-600" />
-                                      Convert to Task
-                                    </label>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
                                   </div>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
+                                  <div className="relative">
+                                    <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
+                                      <option value="">Select Subcategory</option>
+                                      {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
+                                  </div>
+                                </div>
+                              </div>
 
-                                  {/* Task Expansion */}
-                                  {svc.createTask && (
-                                    <div className="mt-3 bg-white p-3 rounded-lg border border-indigo-100 shadow-sm space-y-3">
-                                      <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500" />
-                                      <div className="grid grid-cols-2 gap-2">
-                                        <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} required className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
-                                          <option value="">Assign To *</option>
-                                          {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
-                                        </select>
-                                        <DatePicker selected={svc.taskDueDate} onChange={(date) => handleCartChange(index, 'taskDueDate', date)} placeholderText="Due Date" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
+                              {/* Docs & Web */}
+                              {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                                  {website && (
+                                    <div className="flex items-center gap-1.5">
+                                      <FiLink className="text-blue-500 shrink-0" />
+                                      <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
+                                    </div>
+                                  )}
+                                  {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                    <div className="flex items-start gap-1.5">
+                                      <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
+                                      <div className="flex flex-wrap gap-2">
+                                        <span className="font-semibold text-gray-700 mr-1">Required Docs:</span>
+                                        {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
+                                          <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                            <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
+                                          </span>
+                                        ))}
                                       </div>
                                     </div>
                                   )}
+                                </div>
+                              )}
+
+                              {/* Financials */}
+                              <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
+                                  <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Dept (₹)</label>
+                                  <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Total (₹)</label>
+                                  <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 rounded-lg text-sm" />
+                                </div>
+                              </div>
+
+                              {/* Expiry */}
+                              {svc.hasExpiry && (
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                      <FiCalendar className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                    <input type="date" value={svc.expiryDate} onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} required
+                                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                                  </div>
+                                  {svc.expiryDate && (
+                                    <p className={`text-xs mt-1.5 font-medium ${
+                                      Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) < 30 ? 'text-amber-600' : 'text-emerald-600'
+                                    }`}>
+                                      <FiClock className="inline mr-1" />
+                                      {Math.ceil((new Date(svc.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))} days remaining
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Tab hint when empty */}
+                              {(!isEditMode && trackingFilledCount === 0) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCartChange(index, 'activeTab', 'tracking')}
+                                  className="w-full text-left text-xs text-gray-400 hover:text-indigo-600 flex items-center justify-center gap-1 py-1 transition-colors"
+                                >
+                                  <FiPackage className="h-3 w-3" />
+                                  <span>Optional: add tracking / fulfillment details →</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ---------- TRACKING TAB ---------- */}
+                          {activeTab === 'tracking' && !isEditMode && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {/* Application No */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
+                                  <input type="text" placeholder="e.g., APP12345"
+                                    value={svc.applicationNumber}
+                                    onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
+                                    maxLength="50"
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm" />
+                                </div>
+
+                                {/* Aadhaar */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Aadhaar</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiCreditCard className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="text" inputMode="numeric" placeholder="12-digit Aadhaar"
+                                      value={svc.aadhaar}
+                                      onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
+                                      maxLength="12"
+                                      className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                        svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                      }`} />
+                                    <span className={`absolute inset-y-0 right-2 flex items-center text-[10px] font-medium ${
+                                      svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
+                                    }`}>{svc.aadhaar?.length || 0}/12</span>
+                                  </div>
+                                </div>
+
+                                {/* Email */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiMail className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="email" placeholder="customer@email.com"
+                                      value={svc.email}
+                                      onChange={(e) => handleCartChange(index, 'email', e.target.value)}
+                                      className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
+                                        svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                      }`} />
+                                  </div>
+                                </div>
+
+                                {/* Assign To */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Assign To</label>
+                                  <select value={svc.assignedTo}
+                                    onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm">
+                                    <option value="">Unassigned Staff</option>
+                                    {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                  </select>
+                                </div>
+
+                                {/* Est Delivery */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="date" value={svc.estimatedDelivery}
+                                      onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
+                                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm text-gray-700" />
+                                  </div>
+                                </div>
+
+                                {/* Avg Time */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Avg. Time</label>
+                                  <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                      <FiClock className="h-3.5 w-3.5 text-gray-400" />
+                                    </div>
+                                    <input type="text" placeholder="e.g., 7 days"
+                                      value={svc.averageTime}
+                                      onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
+                                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm" />
+                                  </div>
+                                </div>
+
+                                {/* Priority */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                    <FiFlag className="h-3 w-3" /> Priority
+                                  </label>
+                                  <select value={svc.priority}
+                                    onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
+                                    className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium ${
+                                      svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                                      svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                                      'border-amber-200 bg-amber-50 text-amber-700'
+                                    }`}>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                  </select>
+                                </div>
+
+                                {/* Current Step */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Current Step</label>
+                                  <select value={svc.currentStep}
+                                    onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
+                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm">
+                                    <option value="Submitted">Submitted</option>
+                                    <option value="Initial Review">Initial Review</option>
+                                    <option value="Document Verification">Document Verification</option>
+                                    <option value="Final Approval">Final Approval</option>
+                                  </select>
+                                </div>
+
+                                {/* Status */}
+                                <div>
+                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                    <FiActivity className="h-3 w-3" /> Status
+                                  </label>
+                                  <div className="relative">
+                                    <span className={`absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full pointer-events-none z-10 ${
+                                      TRACKING_STATUS_OPTIONS.find(o => o.value === svc.trackingStatus)?.dot || 'bg-amber-500'
+                                    }`} />
+                                    <select value={svc.trackingStatus}
+                                      onChange={(e) => handleCartChange(index, 'trackingStatus', e.target.value)}
+                                      className={`w-full pl-7 pr-8 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium appearance-none ${getTrackingStatusStyle(svc.trackingStatus)}`}>
+                                      {TRACKING_STATUS_OPTIONS.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                      ))}
+                                    </select>
+                                    <FiChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Customer Remarks */}
+                              <div>
+                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                  <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-gray-400 normal-case font-normal">(sent via WhatsApp)</span>
+                                </label>
+                                <textarea rows="2" placeholder="Remarks visible to customer..."
+                                  value={svc.customerRemarks}
+                                  onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
+                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm resize-none" />
+                              </div>
+
+                              {/* Quick "Clear all" link */}
+                              {trackingFilledCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    ['applicationNumber','estimatedDelivery','averageTime','assignedTo','aadhaar','email','customerRemarks'].forEach(f => handleCartChange(index, f, ''));
+                                    handleCartChange(index, 'priority', 'medium');
+                                    handleCartChange(index, 'currentStep', 'Submitted');
+                                    handleCartChange(index, 'trackingStatus', 'pending');
+                                  }}
+                                  className="text-[11px] text-gray-400 hover:text-rose-600 flex items-center gap-1 transition-colors"
+                                >
+                                  <FiTrash2 className="h-3 w-3" /> Clear all tracking fields
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* ---------- NOTES TAB (hidden in edit mode) ---------- */}
+                          {activeTab === 'notes' && !isEditMode && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <FiMessageCircle className="text-indigo-500 h-4 w-4" />
+                                <span className="text-sm font-semibold text-gray-800">Internal Note & Task</span>
+                              </div>
+
+                              <MentionsInput
+                                value={svc.initialNote}
+                                onChange={(e, nv, nt, ma) => handleNoteMentionChangeCart(index, e, nv, nt, ma)}
+                                className="mentions-input text-sm"
+                                placeholder="Write an internal note... Type @ to assign staff members"
+                                style={{
+                                  control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
+                                  highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
+                                  input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
+                                  suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
+                                }}
+                              >
+                                <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`}
+                                  renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
+                              </MentionsInput>
+
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)}
+                                  className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
+                                  <option value="centre">🏢 Centre View</option>
+                                  <option value="private">🔒 Private</option>
+                                  <option value="mentioned_only">👥 Mentions Only</option>
+                                </select>
+                                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 px-3 py-1.5 rounded shadow-sm hover:bg-indigo-50 transition">
+                                  <input type="checkbox" checked={svc.createTask} onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)} className="rounded text-indigo-600" />
+                                  Convert to Task
+                                </label>
+                              </div>
+
+                              {svc.createTask && (
+                                <div className="bg-indigo-50/40 p-3 rounded-lg border border-indigo-100 space-y-3">
+                                  <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500" />
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} required
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
+                                      <option value="">Assign To *</option>
+                                      {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+                                    </select>
+                                    <DatePicker selected={svc.taskDueDate} onChange={(date) => handleCartChange(index, 'taskDueDate', date)} placeholderText="Due Date"
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1751,11 +2003,9 @@ const ServiceEntry = () => {
                   </button>
                 )}
               </div>
-            </div> {/* <-- END OF LEFT COLUMN */}
+            </div>
 
-            {/* ======================================================== */}
-            {/* RIGHT COLUMN: PAYMENT DETAILS                            */}
-            {/* ======================================================== */}
+            {/* RIGHT COLUMN: PAYMENT DETAILS */}
             <div>
               <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 h-full flex flex-col">
                 <div className="flex justify-between items-center mb-5">
@@ -1900,9 +2150,9 @@ const ServiceEntry = () => {
                   <div className="bg-rose-50 -m-4 p-4 rounded-r-xl border-l border-rose-100 flex flex-col justify-center"><p className="text-xs text-rose-600 uppercase tracking-wider font-semibold">Balance Due</p><p className="text-2xl font-black text-rose-600">₹{balanceAmount.toFixed(2)}</p></div>
                 </div>
               </div>
-            </div> {/* <-- END OF RIGHT COLUMN */}
+            </div>
             
-          </div> {/* <-- END OF MAIN 2-COLUMN GRID */}
+          </div>
 
           {/* ACTION BUTTONS */}
           <div className="flex justify-end mt-2 gap-4">
@@ -1915,12 +2165,7 @@ const ServiceEntry = () => {
                   phone: '',
                   status: 'pending',
                   payments: [],
-                  services: [{
-                    id: crypto.randomUUID(), category: '', subcategory: '', serviceCharge: '', 
-                    departmentCharge: '', totalCharge: '', serviceWalletId: null, requiresWallet: false, 
-                    hasExpiry: false, expiryDate: '', initialNote: '', initialNoteMentions: [], 
-                    initialNoteVisibility: 'centre', createTask: false, taskTitle: '', taskAssignee: '', taskDueDate: null, showNoteArea: false
-                  }]
+                  services: [createEmptyService()]
                 });
                 setEditingEntryId(null);
               }}
@@ -1998,12 +2243,10 @@ const ServiceEntry = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  {/* 🔥 ADDED SERIAL NUMBER HEADER */}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                   
-                  {/* 🔥 CONDITIONALLY SHOW STAFF HEADER FOR ADMINS */}
                   {(userRole === 'admin' || userRole === 'superadmin') && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
                   )}
@@ -2016,7 +2259,6 @@ const ServiceEntry = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {/* 🔥 ADDED 'index' FOR SERIAL NUMBER */}
                 {serviceEntries.map((entry, index) => {
                   const deptTx = entry.departmentChargeTransaction;
                   const serviceTx = entry.serviceChargeTransaction;
@@ -2024,7 +2266,6 @@ const ServiceEntry = () => {
                   
                   return (
                     <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                      {/* 🔥 RENDER SERIAL NUMBER */}
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
                         {index + 1}
                       </td>
@@ -2033,7 +2274,6 @@ const ServiceEntry = () => {
                         {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
                       </td>
 
-                      {/* 🔥 WRAPPED CUSTOMER NAME: Removed 'whitespace-nowrap' from td, added 'whitespace-normal break-words' to span */}
                       <td className="px-6 py-4 text-sm text-gray-900">
                         <div className="font-medium flex items-center gap-2">
                           <span className="whitespace-normal break-words max-w-[150px] sm:max-w-[200px]">
@@ -2053,7 +2293,6 @@ const ServiceEntry = () => {
                         <div className="text-gray-500 mt-0.5">{entry.phone}</div>
                       </td>
 
-                      {/* 🔥 CONDITIONALLY RENDER STAFF NAME FOR ADMINS */}
                       {(userRole === 'admin' || userRole === 'superadmin') && (
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
                           {entry.staffName || 'Unknown'}
@@ -2075,7 +2314,6 @@ const ServiceEntry = () => {
                        </td>
                       <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
                         <div className="space-y-2">
-                          {/* Department Charge Row */}
                           {deptTx && deptTx.id && !deptTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -2112,7 +2350,6 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* Service Charge Row */}
                           {serviceTx && serviceTx.id && !serviceTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -2149,7 +2386,6 @@ const ServiceEntry = () => {
                             </div>
                           )}
 
-                          {/* 🔥 SAFETY: Use filtered payments (latest non-reversal only) */}
                           {safePayments.map((payment, idx) => {
                             const status = correctionStatus[payment.transaction_id || payment.id];
                             const hasBeenCorrected = status?.corrections_used > 0;
@@ -2175,14 +2411,9 @@ const ServiceEntry = () => {
                                   >
                                     <FiHistory className="h-3.5 w-3.5" />
                                   </button>
-                                  {/* 🔥 CRITICAL FIX: Using wallet_transactions.id */}
                                   {canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' && (
                                     <button
                                       onClick={() => {
-                                        console.log("🔍 Correcting Payment - TX ID:", correctionId, 
-                                          "| Amount:", payment.amount, 
-                                          "| Wallet:", payment.wallet,
-                                          "| is_reversal:", payment.is_reversal);
                                         openCorrectionModal(payment, entry, 'payment');
                                       }}
                                       className="text-amber-500 hover:text-amber-700 p-0.5 rounded"
@@ -2211,7 +2442,6 @@ const ServiceEntry = () => {
                         >
                           <FiEye className="h-5 w-5" />
                         </button>
-                        {/* 🔥 FIXED: Admin can always edit, staff can only edit if it hasn't been edited yet */}
                         {isToday(entry.created_at) && (!entry.is_edited || userRole === 'admin' || userRole === 'superadmin') && (
                           <button
                             onClick={() => handleEditEntry(entry)}
@@ -2226,7 +2456,6 @@ const ServiceEntry = () => {
                             Edited
                           </span>
                         )}
-                        {/* 🔥 NEW DELETE BUTTON FOR ADMINS ONLY */}
                         {(userRole === 'admin' || userRole === 'superadmin') && (
                           <button
                             onClick={() => setDeleteDialog({ isOpen: true, entryId: entry.id, loading: false })}
@@ -2275,7 +2504,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== UPGRADED ENTRY DETAILS MODAL with better notes section ========== */}
+      {/* ========== UPGRADED ENTRY DETAILS MODAL ========== */}
       {selectedEntry && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-40">
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -2304,6 +2533,14 @@ const ServiceEntry = () => {
                   </span>
                 </p>
                 <p><strong>Expiry Date:</strong> {selectedEntry.expiryDate || 'N/A'}</p>
+                {selectedEntry.aadhaar && <p><strong>Aadhaar:</strong> {selectedEntry.aadhaar}</p>}
+                {selectedEntry.email && <p><strong>Email:</strong> {selectedEntry.email}</p>}
+                {selectedEntry.applicationNumber && <p><strong>Application No:</strong> {selectedEntry.applicationNumber}</p>}
+                {selectedEntry.estimatedDelivery && <p><strong>Est. Delivery:</strong> {selectedEntry.estimatedDelivery}</p>}
+                {selectedEntry.averageTime && <p><strong>Avg. Time:</strong> {selectedEntry.averageTime}</p>}
+                {(selectedEntry.trackingStatus || selectedEntry.tracking_status) && (
+                  <p><strong>Tracking Status:</strong> {selectedEntry.trackingStatus || selectedEntry.tracking_status}</p>
+                )}
               </div>
               <div>
                 <strong className="block mb-2">Payments:</strong>
@@ -2314,7 +2551,6 @@ const ServiceEntry = () => {
                 </ul>
               </div>
             </div>
-            {/* UPGRADED NOTES PANEL WITH BETTER VISIBILITY */}
             <div className="mt-6 border-t border-gray-200 pt-5">
               <div className="flex items-center gap-2 mb-3">
                 <FiMessageCircle className="h-4 w-4 text-indigo-500" />
@@ -2336,7 +2572,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== UNIFIED TRANSACTION CORRECTION MODAL ========== */}
       {correctionModal.isOpen && correctionModal.transaction && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
@@ -2492,7 +2728,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== UNIFIED TRANSACTION HISTORY MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== UNIFIED TRANSACTION HISTORY MODAL ========== */}
       {historyModal.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
@@ -2614,7 +2850,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== INVOICE GENERATOR MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== INVOICE GENERATOR MODAL ========== */}
       {invoiceModalOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
@@ -2629,7 +2865,6 @@ const ServiceEntry = () => {
             </div>
 
             <div className="space-y-4">
-              {/* Customer details */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2659,7 +2894,6 @@ const ServiceEntry = () => {
                 </div>
               </div>
 
-              {/* Editable line items */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Invoice Items
@@ -2716,7 +2950,6 @@ const ServiceEntry = () => {
                 </button>
               </div>
 
-              {/* Total displayed */}
               <div className="bg-gray-50 p-3 rounded-lg flex justify-between">
                 <span className="font-medium">Total</span>
                 <span className="font-bold text-indigo-700">
@@ -2727,7 +2960,6 @@ const ServiceEntry = () => {
                 </span>
               </div>
 
-              {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notes (optional)
@@ -2763,7 +2995,7 @@ const ServiceEntry = () => {
         </div>
       )}
 
-      {/* ========== DELETE CONFIRMATION MODAL (BLURRED BACKGROUND) ========== */}
+      {/* ========== DELETE CONFIRMATION MODAL ========== */}
       {deleteDialog.isOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[70]">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform transition-all">

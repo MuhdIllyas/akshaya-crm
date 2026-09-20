@@ -2174,10 +2174,18 @@ router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
     // 4b. Delete Payments
     await client.query('DELETE FROM payments WHERE service_entry_id = $1', [id]);
 
-    // 4c. Delete Tracking History
+    // 🔥 4c. NEW FIX: Delete Tracking Steps first to prevent Foreign Key Violation
+    await client.query(`
+      DELETE FROM service_tracking_steps 
+      WHERE service_tracking_id IN (
+        SELECT id FROM service_tracking WHERE service_entry_id = $1
+      )
+    `, [id]);
+
+    // 4d. Delete Tracking History
     await client.query('DELETE FROM service_tracking WHERE service_entry_id = $1', [id]);
 
-    // 4d. Delete the Service Entry
+    // 4e. Delete the Service Entry
     await client.query('DELETE FROM service_entries WHERE id = $1', [id]);
 
     // ====================================================================

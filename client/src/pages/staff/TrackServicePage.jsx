@@ -22,7 +22,8 @@ import {
   getStaff, 
   getCategories, 
   getServiceEntries,
-  getTrackingStats
+  getTrackingStats, 
+  getTrackingActivity
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
@@ -86,20 +87,26 @@ const formatDate = (dateString) => {
   }
 };
 
-// Timeline date formatting utility - DD-MM-YYYY at HH:mm
+// Timeline date formatting utility - Fixes UTC parsing issues
 const formatTimelineDate = (dateString) => {
   if (!dateString) return 'Not set';
   try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Invalid date';
-    
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    return `${day}-${month}-${year} at ${hours}:${minutes}`;
+
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(date).replace(',', ' at');
+
   } catch (error) {
     console.error('Error formatting timeline date:', error);
     return 'Invalid date';
@@ -115,7 +122,11 @@ const TrackServicePage = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
-  const [categories, setCategories] = useState([]);   // <-- Moved UP before useMemo
+  const [categories, setCategories] = useState([]);
+
+  //for showing tracking history
+  const [activityHistory, setActivityHistory] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const getSavedFilters = () => {
     try {
@@ -139,7 +150,10 @@ const TrackServicePage = () => {
   const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-// Auto-reset subcategory when service changes
+  // Default to this month to prevent huge initial loading times
+  const [timeRange, setTimeRange] = useState('month'); 
+
+  // Auto-reset subcategory when service changes
   useEffect(() => {
     setSubcategoryFilter('all');
   }, [serviceFilter]);
@@ -198,6 +212,7 @@ const TrackServicePage = () => {
     setDateFilter('');
     setServiceFilter('all');
     setSubcategoryFilter('all');
+    setTimeRange('month'); // Reset time range to default too
   };
 
   const [activeTab, setActiveTab] = useState('overview');
@@ -212,7 +227,7 @@ const TrackServicePage = () => {
     email: '',
     priority: 'medium'
   });
-  const [timeRange, setTimeRange] = useState('week');
+  
   const [viewMode, setViewMode] = useState('grid');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
@@ -377,55 +392,6 @@ const TrackServicePage = () => {
     }
   };
 
-  const fetchPaymentDetails = async (serviceEntryId, serviceEntries) => {
-    try {
-      const serviceEntry = serviceEntries.find(entry => Number(entry.id) === Number(serviceEntryId));
-      
-      if (!serviceEntry) {
-        return { 
-          payments: [], 
-          totalCharge: 0, 
-          paymentStatus: 'Not Applicable', 
-          paymentDetails: 'No payments recorded' 
-        };
-      }
-
-      const payments = Array.isArray(serviceEntry.payments) ? serviceEntry.payments : [];
-      const totalCharge = parseFloat(serviceEntry.totalCharge || serviceEntry.total_charges || 0);
-      const totalReceived = payments
-        .filter(p => p.status === 'received')
-        .reduce((sum, p) => sum + (parseFloat(p.amount || 0)), 0);
-
-      let paymentStatus;
-      if (totalCharge <= 0) {
-        paymentStatus = 'Not Applicable';
-      } else if (totalReceived >= totalCharge) {
-        paymentStatus = 'Received';
-      } else if (totalReceived > 0) {
-        paymentStatus = 'Partial';
-      } else {
-        paymentStatus = 'Pending';
-      }
-
-      const paymentDetails = formatPayments(payments);
-
-      return {
-        payments,
-        totalCharge,
-        paymentStatus,
-        paymentDetails
-      };
-    } catch (err) {
-      console.error('Error processing payment details:', err);
-      return { 
-        payments: [], 
-        totalCharge: 0, 
-        paymentStatus: 'Pending', 
-        paymentDetails: 'Error fetching payments' 
-      };
-    }
-  };
-
   // Transform backend data (Instantly process using pre-calculated backend data)
   const transformBackendData = async (trackingData) => {
     return trackingData.map((trackingEntry) => {
@@ -443,8 +409,11 @@ const TrackServicePage = () => {
         ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
         : 'No payments recorded';
 
+      // Grouping date must strictly use created_at to avoid moving items to "today" when updated
+      const createdDate = new Date(trackingEntry.created_at || trackingEntry.updated_at || Date.now());
+      const dateStr = createdDate.toISOString().split('T')[0];
+      
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
-      const dateStr = updatedDate.toISOString().split('T')[0];
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
       const calculatedProgress = trackingEntry.progress || calculateProgress(
@@ -479,11 +448,12 @@ const TrackServicePage = () => {
         currentStep: trackingEntry.current_step || 'Submitted',
         progress: calculatedProgress,
         priority: trackingEntry.priority || 'medium',
-        date: dateStr,
+        date: dateStr, // Safely bound to creation date now
         time: timeStr,
-        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? new Date(trackingEntry.estimated_delivery).toISOString() : 'Not set',
+        // Format ISO String instantly so it doesn't show 2026-09-21T00:00:00.000Z in UI
+        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? formatDate(trackingEntry.estimated_delivery) : 'Not set',
         expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'N/A',
-        createdAt: trackingEntry.updated_at,
+        createdAt: trackingEntry.created_at || trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
         duration: null,
         notes: trackingEntry.notes || 'No notes available',
@@ -519,7 +489,7 @@ const TrackServicePage = () => {
   const fetchStats = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
     const data = await getTrackingStats({ 
-        timeRange, 
+        timeRange: timeRange === 'all' ? undefined : timeRange, 
         date: dateFilter || undefined,
         service: serviceFilter === 'all' ? undefined : serviceFilter,
         subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
@@ -527,6 +497,30 @@ const TrackServicePage = () => {
         staff: staffFilter === 'all' ? undefined : staffFilter,
       });
     setGlobalStats(data);
+  };
+
+  const fetchActivityHistory = async (trackingId) => {
+    if (!trackingId) {
+      setActivityHistory([]);
+      return;
+    }
+
+    try {
+      setActivityLoading(true);
+
+      const response = await getTrackingActivity(trackingId);
+
+      const activities = Array.isArray(response?.activities)
+        ? response.activities
+        : [];
+
+      setActivityHistory(activities);
+    } catch (error) {
+      console.error('Error fetching activity history:', error);
+      setActivityHistory([]);
+    } finally {
+      setActivityLoading(false);
+    }
   };
 
   const fetchSingleTrackingEntry = async (entryId) => {
@@ -541,12 +535,12 @@ const TrackServicePage = () => {
                       Array.isArray(staffResponse?.data) ? staffResponse.data : [];
       setStaffList(staffData);
       
-      // 🔥 FIX: No longer downloading the database here
       const transformed = await transformBackendData([response]);
       
       if (transformed.length > 0) {
         setServices(transformed);
         setSelectedService(transformed[0]);
+        await fetchActivityHistory(transformed[0].id);
         
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
@@ -586,10 +580,12 @@ const TrackServicePage = () => {
       const params = {
         page: currentPage,
         limit: limit,
-        timeRange: timeRange,
+        timeRange: timeRange === 'all' ? undefined : timeRange,
         date: dateFilter || undefined,
         service: serviceFilter === 'all' ? undefined : serviceFilter,
+        categoryId: serviceFilter === 'all' ? undefined : serviceFilter, 
         subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+        subcategoryId: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
         status: statusFilter === 'all' ? undefined : apiStatus,
         staff: staffFilter === 'all' ? undefined : staffFilter,
         expiry: expiryFilter === 'all' ? undefined : expiryFilter,
@@ -597,7 +593,6 @@ const TrackServicePage = () => {
         aadhaar: debouncedAadhaar || undefined
       };
 
-      // 🔥 FIX: Removed getServiceEntries() to prevent full DB download
       const [trackingResponse, staffResponse, categoriesResponse] = await Promise.all([
         getTrackingEntries(params),
         getStaff(),
@@ -619,8 +614,16 @@ const TrackServicePage = () => {
       setStaffList(staffData);
       setCategories(categoriesData);
 
-      // 🔥 FIX: Transform directly uses backend data
-      const transformedServices = await transformBackendData(trackingData);
+      let transformedServices = await transformBackendData(trackingData);
+
+      // Explicit local fallback for category & subcategory filtering to enforce selection
+      if (serviceFilter !== 'all') {
+        transformedServices = transformedServices.filter(s => String(s.categoryId) === String(serviceFilter));
+      }
+      if (subcategoryFilter !== 'all') {
+        transformedServices = transformedServices.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+      }
+
       setServices(transformedServices);
       setIsSidebarVisible(true);
       
@@ -675,7 +678,8 @@ const TrackServicePage = () => {
     expiryFilter,
     timeRange,
     dateFilter,
-    serviceFilter
+    serviceFilter,
+    subcategoryFilter
   ]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
@@ -699,6 +703,7 @@ const TrackServicePage = () => {
       }
 
       await updateTrackingStatus(serviceId, apiStatus);
+      await fetchActivityHistory(serviceId);
       toast.success(`Status updated to ${newStatus}`);
       
     } catch (error) {
@@ -722,6 +727,29 @@ const TrackServicePage = () => {
         progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
       };
 
+      // Handle Optimistic UI injection for Timeline
+      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+      if (updates.currentStep !== undefined && service.currentStep !== updates.currentStep) {
+          const targetOrder = stepOrderMap[updates.currentStep] || 1;
+          const nowIso = new Date().toISOString();
+          
+          if (service.steps && service.steps.length > 0) {
+              updates.steps = service.steps.map(step => {
+                  const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
+                  if (currentOrder <= targetOrder) {
+                      return { 
+                          ...step, 
+                          completed: true, 
+                          // Only assign the brand new time if it's the specific step we just clicked
+                          date: (currentOrder === targetOrder) ? nowIso : (step.date || service.createdAt)
+                      };
+                  }
+                  return { ...step, completed: false };
+              });
+          }
+          updates.updatedAt = nowIso;
+      }
+
       Object.assign(service, updates);
       if (updates.applicationNumber !== undefined) service.applicationNumber = updates.applicationNumber;
       if (updates.currentStep !== undefined) service.currentStep = updates.currentStep;
@@ -731,6 +759,8 @@ const TrackServicePage = () => {
           return {
             ...s,
             ...updates,
+            steps: updates.steps || s.steps,
+            updatedAt: updates.updatedAt || s.updatedAt,
             assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
             assignedToId: updates.assignedTo !== undefined ? parseInt(updates.assignedTo) : s.assignedToId,
             rawEstimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : s.rawEstimatedDelivery,
@@ -742,11 +772,18 @@ const TrackServicePage = () => {
       }));
       
       if (selectedService?.id === service.id) {
-        setSelectedService(prev => ({ ...prev, ...updates, progress: payload.progress }));
+        setSelectedService(prev => ({ 
+            ...prev, 
+            ...updates, 
+            steps: updates.steps || prev.steps,
+            updatedAt: updates.updatedAt || prev.updatedAt,
+            progress: payload.progress 
+        }));
         setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
 
       await updateTrackingEntry(service.id, payload);
+      await fetchActivityHistory(service.id);
       toast.success('Details updated successfully');
 
     } catch (error) {
@@ -808,10 +845,28 @@ const TrackServicePage = () => {
         progress: newProgress
       };
       
-      console.log('TrackServicePage: Sending update payload with progress:', payload);
+      // Optimitic Timeline injection
+      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+      const targetOrder = stepOrderMap[trackingFormData.currentStep] || 1;
+      const nowIso = new Date().toISOString();
+      
+      let updatedSteps = selectedService.steps;
+      if (updatedSteps && updatedSteps.length > 0 && selectedService.currentStep !== trackingFormData.currentStep) {
+          updatedSteps = updatedSteps.map(step => {
+              const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
+              if (currentOrder <= targetOrder) {
+                  return { 
+                      ...step, 
+                      completed: true, 
+                      date: (currentOrder === targetOrder) ? nowIso : (step.date || selectedService.createdAt)
+                  };
+              }
+              return { ...step, completed: false };
+          });
+      }
 
       const response = await updateTrackingEntry(selectedService.id, payload);
-      console.log('TrackServicePage: Update response:', response);
+      await fetchActivityHistory(selectedService.id);
 
       toast.success('Tracking details updated successfully');
       
@@ -829,7 +884,9 @@ const TrackServicePage = () => {
           email: trackingFormData.email || '',
           priority: trackingFormData.priority || 'medium',
           progress: newProgress,
-          rawEstimatedDelivery: trackingFormData.estimatedDelivery
+          rawEstimatedDelivery: trackingFormData.estimatedDelivery,
+          steps: updatedSteps,
+          updatedAt: (selectedService.currentStep !== trackingFormData.currentStep) ? nowIso : service.updatedAt
         } : service
       );
       
@@ -847,7 +904,9 @@ const TrackServicePage = () => {
         email: trackingFormData.email || '',
         priority: trackingFormData.priority || 'medium',
         progress: newProgress,
-        rawEstimatedDelivery: trackingFormData.estimatedDelivery
+        rawEstimatedDelivery: trackingFormData.estimatedDelivery,
+        steps: updatedSteps,
+        updatedAt: (selectedService.currentStep !== trackingFormData.currentStep) ? nowIso : selectedService.updatedAt
       });
       
       setActiveTab('overview');
@@ -857,9 +916,11 @@ const TrackServicePage = () => {
     }
   };
 
-  const handleServiceSelect = (service, preventNav = false) => {
-    console.log('TrackServicePage: Selected service:', service);
+  const handleServiceSelect = async (service, preventNav = false) => {
     setSelectedService(service);
+
+    await fetchActivityHistory(service.id);
+
     setTrackingFormData({
       applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
       currentStep: service.currentStep || 'Submitted',
@@ -921,7 +982,7 @@ const TrackServicePage = () => {
             </div>
             <div className="flex space-x-2 mt-4 lg:mt-0">
               <button
-                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
                 onClick={() => handleNotifyCustomer(selectedService)}
               >
                 <FiMessageSquare className="h-4 w-4" />
@@ -1010,7 +1071,10 @@ const TrackServicePage = () => {
                   />
                 )}
                 {activeTab === 'history' && (
-                  <HistoryView service={selectedService} />
+                  <HistoryView
+                    activityHistory={activityHistory}
+                    activityLoading={activityLoading}
+                  />
                 )}
                 {activeTab === 'discussion' && (
                   <div className="space-y-4">
@@ -1039,17 +1103,18 @@ const TrackServicePage = () => {
     );
   };
 
-  // Add this new helper function to fetch all filtered data for export:
   const fetchAllFilteredDataForExport = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
     
     const params = {
       page: 1,
       limit: totalRecords > 0 ? totalRecords : 10000, 
-      timeRange: timeRange,
+      timeRange: timeRange === 'all' ? undefined : timeRange,
       date: dateFilter || undefined,
       service: serviceFilter === 'all' ? undefined : serviceFilter,
+      categoryId: serviceFilter === 'all' ? undefined : serviceFilter,
       subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+      subcategoryId: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
       status: statusFilter === 'all' ? undefined : apiStatus,
       staff: staffFilter === 'all' ? undefined : staffFilter,
       expiry: expiryFilter === 'all' ? undefined : expiryFilter,
@@ -1063,8 +1128,16 @@ const TrackServicePage = () => {
         ? trackingResponse.data 
         : Array.isArray(trackingResponse) ? trackingResponse : [];
 
-      // 🔥 FIX: No longer requires the local entryServices array
-      const transformedData = await transformBackendData(trackingData);
+      let transformedData = await transformBackendData(trackingData);
+
+      // Explicit local fallback for category & subcategory filtering
+      if (serviceFilter !== 'all') {
+        transformedData = transformedData.filter(s => String(s.categoryId) === String(serviceFilter));
+      }
+      if (subcategoryFilter !== 'all') {
+        transformedData = transformedData.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+      }
+
       return transformedData;
     } catch (error) {
       console.error('Error fetching export data:', error);
@@ -1081,7 +1154,6 @@ const TrackServicePage = () => {
       
       toast.info("Preparing Excel file... This might take a moment.", { autoClose: 2000 });
       
-      // Fetch ALL filtered data instead of using local state
       const fullDataset = await fetchAllFilteredDataForExport();
 
       const exportData = fullDataset.map(s => ({
@@ -1123,7 +1195,6 @@ const TrackServicePage = () => {
       
       toast.info("Generating PDF... This might take a moment.", { autoClose: 2000 });
       
-      // Fetch ALL filtered data instead of using local state
       const fullDataset = await fetchAllFilteredDataForExport();
       
       const doc = new jsPDF('landscape');
@@ -1157,7 +1228,7 @@ const TrackServicePage = () => {
         body: tableRows,
         startY: 28,
         styles: { fontSize: 8 },
-        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600 to match your UI
+        headStyles: { fillColor: [79, 70, 229] },
         alternateRowStyles: { fillColor: [249, 250, 251] }
       });
 
@@ -1194,19 +1265,21 @@ const TrackServicePage = () => {
   );
 
   const OverviewView = ({ service, onUpdateStatus, priorityConfig }) => {
+    // Dynamic fallback structure to avoid copying a single timestamp across uncompleted steps
     const getDisplaySteps = () => {
       if (service.steps && service.steps.length > 0) {
-        return service.steps.sort((a, b) => a.step_order - b.step_order);
+        return service.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
       }
       
-      const allSteps = [
-        { id: 1, name: 'Submitted', completed: true, step_order: 1 },
-        { id: 2, name: 'Initial Review', completed: ['Initial Review', 'Document Verification', 'Final Approval'].includes(service.currentStep), step_order: 2 },
-        { id: 3, name: 'Document Verification', completed: ['Document Verification', 'Final Approval'].includes(service.currentStep), step_order: 3 },
-        { id: 4, name: 'Final Approval', completed: service.currentStep === 'Final Approval', step_order: 4 }
+      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+      const currentOrder = stepOrderMap[service.currentStep] || 1;
+
+      return [
+        { id: 1, name: 'Submitted', completed: true, step_order: 1, date: service.createdAt },
+        { id: 2, name: 'Initial Review', completed: currentOrder >= 2, step_order: 2, date: currentOrder === 2 ? service.updatedAt : null },
+        { id: 3, name: 'Document Verification', completed: currentOrder >= 3, step_order: 3, date: currentOrder === 3 ? service.updatedAt : null },
+        { id: 4, name: 'Final Approval', completed: currentOrder >= 4, step_order: 4, date: currentOrder >= 4 ? service.updatedAt : null }
       ];
-      
-      return allSteps;
     };
 
     const displaySteps = getDisplaySteps();
@@ -1277,13 +1350,13 @@ const TrackServicePage = () => {
             <div className="space-y-3">
               {displaySteps.length > 0 ? (
                 displaySteps.map((step) => {
-                  const dateTimeStr = formatTimelineDate(step.date || service.createdAt);
+                  const dateTimeStr = step.date ? formatTimelineDate(step.date) : 'Pending';
                   
                   return (
                     <TimelineItem 
                       key={step.id}
                       title={step.name}
-                      dateTime={dateTimeStr}
+                      dateTime={step.completed ? dateTimeStr : 'Pending'}
                       completed={step.completed}
                       current={step.name === service.currentStep}
                     />
@@ -1503,14 +1576,12 @@ const TrackServicePage = () => {
         </div>
       </div>
       
-      {/* Note: Changed grid-cols-4 to grid-cols-5 to accommodate the extra button */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
           <FiPlus className="h-5 w-5 mb-1" />
           <span className="text-xs font-medium">New</span>
         </button>
         
-        {/* NEW: Excel Export Button */}
         <button 
           onClick={handleExportExcel}
           className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
@@ -1518,7 +1589,6 @@ const TrackServicePage = () => {
           <span className="text-xs font-medium">Excel</span>
         </button>
         
-        {/* NEW: PDF Export Button */}
         <button 
           onClick={handleExportPDF}
           className="p-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors flex flex-col items-center justify-center">
@@ -1577,6 +1647,20 @@ const TrackServicePage = () => {
               exit={{ height: 0, opacity: 0 }}
               className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
             >
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Data Range</label>
+                <select 
+                  className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" 
+                  value={timeRange} 
+                  onChange={(e) => setTimeRange(e.target.value)}
+                >
+                  <option value="week">Last 7 Days</option>
+                  <option value="month">This Month</option>
+                  <option value="year">This Year</option>
+                  <option value="all">All Time</option>
+                </select>
+              </div>
+
               <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                 <div className="relative">
@@ -1734,17 +1818,9 @@ const TrackServicePage = () => {
                     <span>Back to List</span>
                   </button>
                 )}
-                <select 
-                  className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={timeRange}
-                  onChange={(e) => setTimeRange(e.target.value)}
-                >
-                  <option value="week">Last 7 days</option>
-                  <option value="month">Last 30 days</option>
-                  <option value="quarter">Last quarter</option>
-                </select>
+                
                 <button
-                  className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all duration-200 shadow-sm"
+                  className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
                   onClick={() => window.location.reload()}
                 >
                   <FiRefreshCw className="h-4 w-4" />
@@ -2214,30 +2290,66 @@ const EnhancedDocumentsView = ({ service, entryServices, categories, formatPayme
   );
 };
 
-const HistoryView = ({ service }) => (
-  <div className="space-y-6">
-    <h3 className="font-semibold text-gray-900">Activity History</h3>
-    <div className="space-y-3">
-      <ActivityItem 
-        action="Status updated"
-        description={`Changed to ${service.status}`}
-        time={formatDate(service.updatedAt) || 'Recently'}
-        user="System"
-      />
-      <ActivityItem 
-        action="Service assigned"
-        description={`Assigned to ${service.assignedTo || 'Unassigned'}`}
-        time={formatDate(service.updatedAt) || 'Recently'}
-        user="Administrator"
-      />
-      <ActivityItem 
-        action="Application submitted"
-        description="New service application received"
-        time={formatDate(service.createdAt) || 'Recently'}
-        user="Customer"
-      />
+const HistoryView = ({ activityHistory, activityLoading }) => {
+  if (activityLoading) {
+    return (
+      <div className="space-y-6">
+        <h3 className="font-semibold text-gray-900">Activity History</h3>
+
+        <div className="flex items-center justify-center py-10">
+          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="ml-3 text-sm text-gray-500">
+            Loading activity history...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activityHistory || activityHistory.length === 0) {
+    return (
+      <div className="space-y-6">
+        <h3 className="font-semibold text-gray-900">Activity History</h3>
+
+        <div className="text-center py-10 bg-gray-50 rounded-lg border border-gray-200">
+          <FiClock className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+          <p className="text-sm text-gray-500">
+            No activity history available
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-gray-900">
+          Activity History
+        </h3>
+
+        <span className="text-xs text-gray-500">
+          {activityHistory.length} {activityHistory.length === 1 ? 'event' : 'events'}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {activityHistory.map((activity) => (
+          <ActivityItem
+            key={activity.id}
+            action={activity.action}
+            description={activity.description}
+            time={
+              activity.created_at
+                ? formatTimelineDate(activity.created_at)
+                : 'Unknown time'
+            }
+            user={activity.performed_by_name || 'System'}
+          />
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default TrackServicePage;
