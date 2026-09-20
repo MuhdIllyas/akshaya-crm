@@ -7,6 +7,7 @@ import {
   FiCheck,
   FiCopy,
   FiFileText,
+  FiMessageSquare,
   FiRefreshCw,
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
@@ -478,6 +479,22 @@ const PublicTrackingPage = () => {
         <div className="grid gap-4 sm:gap-5 lg:grid-cols-3">
           {/* ------------------ MAIN ------------------ */}
           <div className="space-y-4 sm:space-y-5 lg:col-span-2">
+
+            {/* Note from the centre */}
+            {data.notes && (
+              <section className="rounded-3xl border border-indigo-100 bg-indigo-50/60 p-6 shadow-sm sm:p-8">
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-indigo-600 ring-1 ring-indigo-100">
+                    <FiMessageSquare className="h-4 w-4" />
+                  </span>
+                  <h2 className="text-sm font-bold text-slate-900">Note from our team</h2>
+                </div>
+                <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-700">
+                  {data.notes}
+                </p>
+              </section>
+            )}
+
             <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8">
               <div className="mb-6 flex items-center justify-between gap-4">
                 <h2 className="text-sm font-bold text-slate-900">Recent updates</h2>
