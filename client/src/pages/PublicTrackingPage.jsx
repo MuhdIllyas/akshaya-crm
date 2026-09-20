@@ -66,7 +66,7 @@ const Ring = ({ value = 0, size = 132, compact = false }) => {
 /* ------------------------------------------------------------------ */
 
 const FactRow = ({ icon, label, value }) => (
-  <div className="py-4 first:pt-0 last:pb-0">
+  <div>
     <div className="flex items-center gap-2 text-slate-400">
       <span className="shrink-0">{icon}</span>
       <span className="text-[10px] font-bold uppercase tracking-[0.16em]">
@@ -78,7 +78,7 @@ const FactRow = ({ icon, label, value }) => (
 );
 
 const FactsCard = ({ data }) => (
-  <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200/70 bg-white px-5">
+  <div className="rounded-2xl border border-slate-200/70 bg-white p-5">
     <FactRow
       icon={<FiCalendar className="h-3.5 w-3.5" />}
       label="Estimated completion"
@@ -90,6 +90,9 @@ const FactsCard = ({ data }) => (
           : 'Pending'
       }
     />
+
+    <div className="my-4 h-px bg-slate-100" />
+
     <FactRow
       icon={<FiFileText className="h-3.5 w-3.5" />}
       label="Submitted on"
