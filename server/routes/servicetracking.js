@@ -56,22 +56,26 @@ router.get('/public/status/:identifier', async (req, res) => {
 
     const result = await pool.query(
       `SELECT 
-         st.id AS tracking_id,
-         st.application_number,
-         st.status,
-         st.current_step,
-         st.progress,
-         st.estimated_delivery,
-         se.customer_name,
-         se.created_at,
-         s.name AS service_name,
-         COALESCE(c.name, 'Akshaya Sahayi') AS centre_name,
-         COALESCE(c.phone, se_staff.phone, '') AS centre_phone
-       FROM service_tracking st
-       LEFT JOIN service_entries se ON st.service_entry_id = se.id
-       LEFT JOIN services s ON se.category_id = s.id
-       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-       LEFT JOIN centres c ON se_staff.centre_id = c.id
+        st.id AS tracking_id,
+        st.application_number,
+        st.status,
+        st.current_step,
+        st.progress,
+        st.estimated_delivery,
+        se.customer_name,
+        se.created_at,
+        s.name AS service_name,
+        sub.name AS subcategory_name,
+        COALESCE(asg.name, se_staff.name) AS handled_by,
+        COALESCE(c.name, 'Akshaya Sahayi') AS centre_name,
+        COALESCE(c.phone, se_staff.phone, '') AS centre_phone
+      FROM service_tracking st
+      LEFT JOIN service_entries se ON st.service_entry_id = se.id
+      LEFT JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+      LEFT JOIN staff asg ON st.assigned_to = asg.id
+      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+      LEFT JOIN centres c ON se_staff.centre_id = c.id
        WHERE ($1::int IS NOT NULL AND st.id = $1::int)
           OR LOWER(st.application_number) = LOWER($2)
        ORDER BY (st.id = $1::int) DESC NULLS LAST
@@ -93,6 +97,27 @@ router.get('/public/status/:identifier', async (req, res) => {
       [tracking.tracking_id]
     );
 
+    const updatesResult = await pool.query(
+      `SELECT action, description, created_at
+      FROM activities
+      WHERE related_type = 'service_tracking'
+        AND related_id = $1
+        AND action IN ('Task Created', 'Status changed', 'Step changed')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 20`,
+      [tracking.tracking_id]
+    );
+
+    const updates = updatesResult.rows.map((a) => ({
+      title:
+        a.action === 'Task Created' ? 'Application received'
+        : a.action === 'Status changed' ? 'Status updated'
+        : 'Stage updated',
+      // Don't expose the "Task Created" text: it contains the customer name and internal wording
+      detail: a.action === 'Task Created' ? null : a.description,
+      date: a.created_at
+    }));
+
     res.json({
       trackingId: tracking.tracking_id,
       applicationNumber: tracking.application_number || 'N/A',
@@ -105,7 +130,10 @@ router.get('/public/status/:identifier', async (req, res) => {
       createdAt: tracking.created_at,
       centreName: tracking.centre_name,
       centrePhone: tracking.centre_phone,
-      steps: stepsResult.rows
+      steps: stepsResult.rows,
+      subcategoryName: tracking.subcategory_name || null,
+      handledBy: tracking.handled_by || null,
+      updates,
     });
   } catch (err) {
     console.error('Public tracking error:', err);

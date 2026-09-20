@@ -82,6 +82,23 @@ const PublicTrackingPage = () => {
     });
   };
 
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true
+    });
+  };
+
+  const STATUS_LABELS = {
+    pending: 'Pending',
+    in_progress: 'In Progress',
+    completed: 'Completed',
+    rejected: 'Delayed',
+    resubmit: 'Resubmit Required',
+    paid: 'Paid'
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-xl mx-auto space-y-6">
@@ -111,17 +128,25 @@ const PublicTrackingPage = () => {
               </div>
               <div className="text-right">
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide
-                  ${data.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 
+                    ${(data.status === 'completed' || data.status === 'paid') ? 'bg-emerald-100 text-emerald-700' :
                     data.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 
                     'bg-amber-100 text-amber-700'}`}>
-                  {data.status === 'in_progress' ? 'In Progress' : data.status || 'Pending'}
+                  {STATUS_LABELS[data.status] || data.status || 'Pending'}
                 </span>
               </div>
             </div>
 
-            <div className="mb-8">
+            <div className="mb-6">
               <h2 className="text-xl font-bold text-slate-900 mb-1">{data.serviceName || 'Service Request'}</h2>
-              <p className="text-slate-500 text-sm">Applicant: <span className="text-slate-700 font-medium">{data.customerName || 'Customer'}</span></p>
+              {data.subcategoryName && (
+                <p className="text-indigo-600 text-sm font-medium mb-2">{data.subcategoryName}</p>
+              )}
+              <div className="space-y-1 text-sm text-slate-500">
+                <p>Applicant: <span className="text-slate-700 font-medium">{data.customerName || 'Customer'}</span></p>
+                {data.handledBy && (
+                  <p>Handled by: <span className="text-slate-700 font-medium">{data.handledBy}</span></p>
+                )}
+              </div>
             </div>
 
             {/* Stepper Timeline */}
@@ -149,6 +174,29 @@ const PublicTrackingPage = () => {
                 </div>
               ))}
             </div>
+
+            {/* Status Updates */}
+            {data.updates?.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                  Status Updates
+                </h3>
+                <div className="space-y-3">
+                  {data.updates.map((u, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="mt-1.5 w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{u.title}</p>
+                        {u.detail && <p className="text-sm text-slate-500">{u.detail}</p>}
+                        <p className="text-xs text-slate-400 mt-0.5 flex items-center">
+                          <FiClock className="w-3 h-3 mr-1" /> {formatDateTime(u.date)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Target Delivery Date */}
             <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between border border-slate-100">
