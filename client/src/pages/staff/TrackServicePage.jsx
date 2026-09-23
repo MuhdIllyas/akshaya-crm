@@ -184,7 +184,6 @@ const TrackServicePage = () => {
     notes: '', assignedTo: '', aadhaar: '', email: '', priority: 'medium'
   });
   
-  // 'board' = Kanban (default), 'table' = spreadsheet
   const [viewMode, setViewMode] = useState('board');
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -211,12 +210,12 @@ const TrackServicePage = () => {
   };
 
   const statusConfig = {
-    'Pending': { color: 'text-amber-800', bg: 'bg-amber-100', border: 'border-amber-300', dot: 'bg-amber-600', button: 'bg-amber-600 hover:bg-amber-700 text-white', accent: '#f59e0b', soft: 'bg-amber-50', text: 'text-amber-700' },
-    'In Progress': { color: 'text-blue-800', bg: 'bg-blue-100', border: 'border-blue-300', dot: 'bg-blue-600', button: 'bg-blue-600 hover:bg-blue-700 text-white', accent: '#3b82f6', soft: 'bg-blue-50', text: 'text-blue-700' },
-    'Delayed': { color: 'text-rose-800', bg: 'bg-rose-100', border: 'border-rose-300', dot: 'bg-rose-600', button: 'bg-rose-600 hover:bg-rose-700 text-white', accent: '#f43f5e', soft: 'bg-rose-50', text: 'text-rose-700' },
-    'Completed': { color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300', dot: 'bg-emerald-600', button: 'bg-emerald-600 hover:bg-emerald-700 text-white', accent: '#10b981', soft: 'bg-emerald-50', text: 'text-emerald-700' },
-    'Resubmit': { color: 'text-orange-800', bg: 'bg-orange-100', border: 'border-orange-300', dot: 'bg-orange-600', button: 'bg-orange-600 hover:bg-orange-700 text-white', accent: '#f97316', soft: 'bg-orange-50', text: 'text-orange-700' },
-    'Paid': { color: 'text-green-700', bg: 'bg-green-100', border: 'border-green-300', dot: 'bg-green-600', button: 'bg-green-600 hover:bg-green-700 text-white', accent: '#22c55e', soft: 'bg-green-50', text: 'text-green-700' }
+    'Pending': { color: 'text-amber-800', bg: 'bg-amber-100', border: 'border-amber-300', dot: 'bg-amber-600', button: 'bg-amber-600 hover:bg-amber-700 text-white', solid: 'bg-amber-500', soft: 'bg-amber-50', text: 'text-amber-700' },
+    'In Progress': { color: 'text-blue-800', bg: 'bg-blue-100', border: 'border-blue-300', dot: 'bg-blue-600', button: 'bg-blue-600 hover:bg-blue-700 text-white', solid: 'bg-blue-500', soft: 'bg-blue-50', text: 'text-blue-700' },
+    'Delayed': { color: 'text-rose-800', bg: 'bg-rose-100', border: 'border-rose-300', dot: 'bg-rose-600', button: 'bg-rose-600 hover:bg-rose-700 text-white', solid: 'bg-rose-500', soft: 'bg-rose-50', text: 'text-rose-700' },
+    'Completed': { color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300', dot: 'bg-emerald-600', button: 'bg-emerald-600 hover:bg-emerald-700 text-white', solid: 'bg-emerald-500', soft: 'bg-emerald-50', text: 'text-emerald-700' },
+    'Resubmit': { color: 'text-orange-800', bg: 'bg-orange-100', border: 'border-orange-300', dot: 'bg-orange-600', button: 'bg-orange-600 hover:bg-orange-700 text-white', solid: 'bg-orange-500', soft: 'bg-orange-50', text: 'text-orange-700' },
+    'Paid': { color: 'text-green-700', bg: 'bg-green-100', border: 'border-green-300', dot: 'bg-green-600', button: 'bg-green-600 hover:bg-green-700 text-white', solid: 'bg-green-500', soft: 'bg-green-50', text: 'text-green-700' }
   };
 
   const BOARD_COLUMNS = ['Pending', 'In Progress', 'Resubmit', 'Delayed', 'Completed', 'Paid'];
@@ -753,7 +752,6 @@ const TrackServicePage = () => {
 
   const handleBackToList = () => navigate('/dashboard/staff/track_service');
 
-  // Group by status for Kanban board
   const servicesByStatus = useMemo(() => {
     const groups = {};
     BOARD_COLUMNS.forEach(col => { groups[col] = []; });
@@ -793,7 +791,7 @@ const TrackServicePage = () => {
           <div className="px-5 lg:px-6 py-3.5">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
                   <FiTarget className="h-5 w-5 text-white" />
                 </div>
                 <div>
@@ -1009,7 +1007,7 @@ const TrackServicePage = () => {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
                                 <div className="relative flex-shrink-0">
-                                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
+                                  <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center shadow-sm">
                                     <span className="text-white text-xs font-bold">
                                       {(service.customerName || 'U').charAt(0).toUpperCase()}
                                     </span>
@@ -1138,16 +1136,16 @@ const TrackServicePage = () => {
                 className="fixed top-0 right-0 h-full w-full sm:w-[640px] lg:w-[720px] bg-white shadow-2xl z-50 flex flex-col">
 
                 {/* Drawer header */}
-                <div className="flex items-start justify-between gap-3 p-5 border-b border-gray-200 bg-gradient-to-br from-indigo-600 to-purple-600 text-white">
+                <div className="flex items-start justify-between gap-3 p-5 border-b border-indigo-700 bg-indigo-600 text-white">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0 border border-white/20">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-700 flex items-center justify-center flex-shrink-0 border border-indigo-500">
                       <span className="text-white text-lg font-bold">
                         {(selectedService.customerName || 'U').charAt(0).toUpperCase()}
                       </span>
                     </div>
                     <div className="min-w-0">
                       <h2 className="text-lg font-bold truncate">{selectedService.customerName}</h2>
-                      <div className="flex items-center gap-3 text-xs text-white/80 mt-1 flex-wrap">
+                      <div className="flex items-center gap-3 text-xs text-indigo-100 mt-1 flex-wrap">
                         <span className="flex items-center gap-1"><FiPhone className="h-3 w-3" />{selectedService.phone}</span>
                         {selectedService.email && <span className="hidden sm:flex items-center gap-1"><FiMail className="h-3 w-3" />{selectedService.email}</span>}
                       </div>
@@ -1155,15 +1153,15 @@ const TrackServicePage = () => {
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button onClick={() => handleNotifyCustomer(selectedService)}
-                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 backdrop-blur text-xs font-semibold rounded-lg border border-white/20 transition-colors">
+                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-xs font-semibold rounded-lg border border-indigo-500 transition-colors">
                       <FiMessageSquare className="h-3.5 w-3.5" /> Notify
                     </button>
                     <button onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 backdrop-blur text-xs font-semibold rounded-lg border border-white/20 transition-colors">
+                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-xs font-semibold rounded-lg border border-indigo-500 transition-colors">
                       <FiGrid className="h-3.5 w-3.5" /> Workspace
                     </button>
                     <button onClick={handleCloseDrawer}
-                      className="p-2 rounded-lg hover:bg-white/15 transition-colors">
+                      className="p-2 rounded-lg hover:bg-indigo-700 transition-colors">
                       <FiX className="h-4 w-4" />
                     </button>
                   </div>
@@ -1384,7 +1382,7 @@ const KanbanCard = ({ service, statusConfig, priorityConfig, isSelected, onClick
       {/* Top row: avatar + name + priority */}
       <div className="flex items-start gap-2 mb-2">
         <div className="relative flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center">
             <span className="text-white text-xs font-bold">{(service.customerName || 'U').charAt(0).toUpperCase()}</span>
           </div>
           <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${config.dot}`}></span>
@@ -1416,7 +1414,7 @@ const KanbanCard = ({ service, statusConfig, priorityConfig, isSelected, onClick
       {/* Progress bar */}
       <div className="w-full bg-gray-100 rounded-full h-1 mb-2 overflow-hidden">
         <div
-          className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all"
+          className="bg-indigo-500 h-full rounded-full transition-all"
           style={{ width: `${service.progress}%` }}></div>
       </div>
 
@@ -1426,7 +1424,7 @@ const KanbanCard = ({ service, statusConfig, priorityConfig, isSelected, onClick
         <span className="truncate">{service.assignedTo}</span>
       </div>
 
-      {/* Quick actions on hover */}
+      {/* Bottom row */}
       <div className="flex items-center justify-between pt-2 border-t border-gray-100">
         <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
           service.workSource === 'online' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
@@ -1454,10 +1452,10 @@ const KanbanCard = ({ service, statusConfig, priorityConfig, isSelected, onClick
    ============================================================ */
 const KpiTile = ({ label, value, trend, icon: Icon, tint, sub }) => {
   const tints = {
-    blue: { grad: 'from-blue-500 to-blue-600' },
-    amber: { grad: 'from-amber-500 to-amber-600' },
-    emerald: { grad: 'from-emerald-500 to-emerald-600' },
-    purple: { grad: 'from-purple-500 to-purple-600' }
+    blue: { solid: 'bg-blue-500', ring: 'ring-blue-500/10' },
+    amber: { solid: 'bg-amber-500', ring: 'ring-amber-500/10' },
+    emerald: { solid: 'bg-emerald-500', ring: 'ring-emerald-500/10' },
+    purple: { solid: 'bg-purple-500', ring: 'ring-purple-500/10' }
   };
   const t = tints[tint] || tints.blue;
 
@@ -1476,7 +1474,7 @@ const KpiTile = ({ label, value, trend, icon: Icon, tint, sub }) => {
             <span className="text-[10px] text-gray-400 truncate">{sub}</span>
           </div>
         </div>
-        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${t.grad} flex items-center justify-center shadow-sm flex-shrink-0`}>
+        <div className={`w-10 h-10 rounded-xl ${t.solid} flex items-center justify-center shadow-sm flex-shrink-0`}>
           <Icon className="h-5 w-5 text-white" />
         </div>
       </div>
@@ -1531,7 +1529,7 @@ const OverviewView = ({ service, onUpdateStatus, statusConfig, priorityConfig, p
             initial={{ width: 0 }}
             animate={{ width: `${service.progress}%` }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full"
+            className="bg-indigo-500 h-full rounded-full"
           />
         </div>
 
@@ -1638,7 +1636,7 @@ const OverviewView = ({ service, onUpdateStatus, statusConfig, priorityConfig, p
 
       {/* Customer review */}
       {service.serviceRating && (
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-5">
+        <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
           <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
             <FiStar className="h-4 w-4 text-amber-500" />
             Customer Review
