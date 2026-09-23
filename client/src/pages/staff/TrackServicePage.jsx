@@ -1099,7 +1099,9 @@ const TrackServicePage = () => {
               {services.map(service => (
                 <ServiceCard key={service.id} service={service}
                   isSelected={selectedService?.id === service.id}
-                  onClick={() => handleServiceSelect(service)} />
+                  onClick={() => handleServiceSelect(service)}
+                  statusConfig={statusConfig}
+                  priorityConfig={priorityConfig} />
               ))}
               {services.length === 0 && (
                 <div className="col-span-full bg-white rounded-xl border border-gray-200 text-center py-16">
@@ -1215,6 +1217,7 @@ const TrackServicePage = () => {
                           <OverviewView
                             service={selectedService}
                             onUpdateStatus={handleUpdateStatus}
+                            statusConfig={statusConfig}
                             priorityConfig={priorityConfig}
                             paymentStatusConfig={paymentStatusConfig}
                           />
@@ -1356,7 +1359,7 @@ const QuickStat = ({ label, value }) => (
   </div>
 );
 
-const ServiceCard = ({ service, isSelected, onClick }) => {
+const ServiceCard = ({ service, isSelected, onClick, statusConfig, priorityConfig }) => {
   const config = statusConfig[service.status] || statusConfig['Pending'];
   const priority = priorityConfig[service.priority || 'medium'];
 
@@ -1410,9 +1413,9 @@ const ServiceCard = ({ service, isSelected, onClick }) => {
 };
 
 /* ============================================================
-   OVERVIEW (redesigned for the drawer)
+   OVERVIEW (drawer)
    ============================================================ */
-const OverviewView = ({ service, onUpdateStatus, priorityConfig, paymentStatusConfig }) => {
+const OverviewView = ({ service, onUpdateStatus, statusConfig, priorityConfig, paymentStatusConfig }) => {
   const getDisplaySteps = () => {
     if (service.steps && service.steps.length > 0) return service.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
     const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
@@ -1591,7 +1594,7 @@ const OverviewView = ({ service, onUpdateStatus, priorityConfig, paymentStatusCo
 };
 
 /* ============================================================
-   LEGACY SUB-COMPONENTS (unchanged)
+   LEGACY SUB-COMPONENTS
    ============================================================ */
 
 const FinancialRow = ({ label, amount, currency, isTotal = false }) => (
@@ -1637,20 +1640,6 @@ const FormTextarea = ({ label, name, value, onChange, placeholder, rows = 4 }) =
   </div>
 );
 
-const ActivityItem = ({ action, description, time, user }) => (
-  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-    <div className="w-2 h-2 bg-indigo-500 rounded-full mt-2 flex-shrink-0"></div>
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-gray-900">{action}</p>
-        <p className="text-[10px] text-gray-500 whitespace-nowrap">{time}</p>
-      </div>
-      <p className="text-xs text-gray-600 mt-1">{description}</p>
-      <p className="text-[10px] text-gray-500 mt-1">By {user}</p>
-    </div>
-  </div>
-);
-
 const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions, priorityOptions, onSave, onCancel }) => (
   <div className="space-y-5">
     <div className="flex items-center gap-2">
@@ -1690,7 +1679,7 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
 );
 
 /* ============================================================
-   DOCUMENTS VIEW (kept identical, includes remark feature)
+   DOCUMENTS VIEW
    ============================================================ */
 const DocumentRemarkEditor = ({ doc, onSave }) => {
   const [editing, setEditing] = useState(false);
