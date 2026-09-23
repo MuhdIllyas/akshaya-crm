@@ -164,8 +164,12 @@ router.get('/public/status/:identifier/documents/:docId/download', async (req, r
       return res.status(404).json({ error: 'Document not found' });
     }
     const doc = result.rows[0];
+    const ext = path.extname(doc.file_path); // e.g. ".pdf"
+    const hasExt = path.extname(doc.label).toLowerCase() === ext.toLowerCase();
+    const downloadName = hasExt ? doc.label : `${doc.label}${ext}`;
+
     res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${doc.label}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
     res.sendFile(path.resolve(doc.file_path));
   } catch (err) {
     res.status(500).json({ error: 'Failed to download document' });

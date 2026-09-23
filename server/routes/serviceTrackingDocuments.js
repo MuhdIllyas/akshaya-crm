@@ -217,8 +217,12 @@ router.get("/:trackingId/documents/:docId/download", authenticateToken, async (r
   if (doc.rows.length === 0 || !fs.existsSync(doc.rows[0].file_path)) {
     return res.status(404).json({ error: "Not found" });
   }
+  const ext = path.extname(doc.rows[0].file_path);
+  const hasExt = path.extname(doc.rows[0].label).toLowerCase() === ext.toLowerCase();
+  const downloadName = hasExt ? doc.rows[0].label : `${doc.rows[0].label}${ext}`;
+
   res.setHeader("Content-Type", doc.rows[0].mime_type || "application/octet-stream");
-  res.setHeader("Content-Disposition", `attachment; filename="${doc.rows[0].label}"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
   res.sendFile(path.resolve(doc.rows[0].file_path));
 });
 
