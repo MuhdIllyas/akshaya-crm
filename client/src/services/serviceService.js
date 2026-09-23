@@ -286,6 +286,22 @@ export const getTrackingActivity = async (trackingId) => {
   return (await trackingApi.get(`/${trackingId}/activity`)).data;
 };
 
+export const getTrackingDocuments = async (trackingId) => {
+  return (await trackingApi.get(`/${trackingId}/documents`)).data;
+};
+
+export const uploadTrackingDocument = async (trackingId, formData) => {
+  return (await trackingApi.post(`/${trackingId}/documents`, formData)).data;
+};
+
+export const toggleTrackingDocumentVisibility = async (trackingId, docId, visible) => {
+  return (await trackingApi.patch(`/${trackingId}/documents/${docId}`, { visible_to_customer: visible })).data;
+};
+
+export const deleteTrackingDocument = async (trackingId, docId) => {
+  return (await trackingApi.delete(`/${trackingId}/documents/${docId}`)).data;
+};
+
 //service_logs in admin / superadmin related
 export const getServiceEntryByTokenId = async (tokenId) => {
   try {

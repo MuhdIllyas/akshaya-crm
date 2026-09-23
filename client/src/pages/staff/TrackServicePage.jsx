@@ -8,7 +8,8 @@ import {
   FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
-  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle
+  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -23,7 +24,11 @@ import {
   getCategories, 
   getServiceEntries,
   getTrackingStats, 
-  getTrackingActivity
+  getTrackingActivity,
+  getTrackingDocuments,
+  uploadTrackingDocument,
+  toggleTrackingDocumentVisibility,
+  deleteTrackingDocument
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
@@ -127,6 +132,11 @@ const TrackServicePage = () => {
   //for showing tracking history
   const [activityHistory, setActivityHistory] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
+
+  //for document session
+  const [documents, setDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
 
   const getSavedFilters = () => {
     try {
@@ -523,6 +533,63 @@ const TrackServicePage = () => {
     }
   };
 
+    const fetchDocuments = async (trackingId) => {
+    if (!trackingId) {
+      setDocuments([]);
+      return;
+    }
+    try {
+      setDocumentsLoading(true);
+      const data = await getTrackingDocuments(trackingId);
+      setDocuments(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      setDocuments([]);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  const handleUploadDocument = async (trackingId, file, label, visibleToCustomer) => {
+    try {
+      setUploadingDocument(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('label', label);
+      formData.append('visible_to_customer', visibleToCustomer ? 'true' : 'false');
+      await uploadTrackingDocument(trackingId, formData);
+      await fetchDocuments(trackingId);
+      toast.success('Document uploaded');
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      toast.error('Failed to upload document: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleToggleDocumentVisibility = async (trackingId, docId, visible) => {
+    try {
+      await toggleTrackingDocumentVisibility(trackingId, docId, visible);
+      await fetchDocuments(trackingId);
+      toast.success(visible ? 'Document is now visible to the customer' : 'Document hidden from the customer');
+    } catch (error) {
+      console.error('Error updating document visibility:', error);
+      toast.error('Failed to update document visibility');
+    }
+  };
+
+  const handleDeleteDocument = async (trackingId, docId) => {
+    try {
+      await deleteTrackingDocument(trackingId, docId);
+      await fetchDocuments(trackingId);
+      toast.success('Document deleted');
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Failed to delete document');
+    }
+  };
+
   const fetchSingleTrackingEntry = async (entryId) => {
     try {
       console.log('Fetching single tracking entry:', entryId);
@@ -541,6 +608,7 @@ const TrackServicePage = () => {
         setServices(transformed);
         setSelectedService(transformed[0]);
         await fetchActivityHistory(transformed[0].id);
+        await fetchDocuments(transformed[0].id);
         
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
@@ -867,6 +935,7 @@ const TrackServicePage = () => {
 
       const response = await updateTrackingEntry(selectedService.id, payload);
       await fetchActivityHistory(selectedService.id);
+      await fetchDocuments(selectedService.id);
 
       toast.success('Tracking details updated successfully');
       
@@ -918,8 +987,8 @@ const TrackServicePage = () => {
 
   const handleServiceSelect = async (service, preventNav = false) => {
     setSelectedService(service);
-
     await fetchActivityHistory(service.id);
+    await fetchDocuments(service.id);
 
     setTrackingFormData({
       applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
@@ -1068,6 +1137,12 @@ const TrackServicePage = () => {
                     categories={categories}
                     formatPayments={formatPayments}
                     priorityConfig={priorityConfig}
+                    documents={documents}
+                    documentsLoading={documentsLoading}
+                    uploadingDocument={uploadingDocument}
+                    onUpload={(file, label, visible) => handleUploadDocument(selectedService.id, file, label, visible)}
+                    onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(selectedService.id, docId, visible)}
+                    onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)}
                   />
                 )}
                 {activeTab === 'history' && (
@@ -2247,7 +2322,33 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
   </div>
 );
 
-const EnhancedDocumentsView = ({ service, entryServices, categories, formatPayments, priorityConfig }) => {
+const EnhancedDocumentsView = ({ 
+  service, entryServices, categories, formatPayments, priorityConfig,
+  documents = [], documentsLoading, uploadingDocument, onUpload, onToggleVisibility, onDelete
+}) => {
+  const [file, setFile] = useState(null);
+  const [label, setLabel] = useState('');
+  const [visibleToCustomer, setVisibleToCustomer] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!file || !label.trim()) {
+      toast.error('Choose a file and enter a label first');
+      return;
+    }
+    onUpload(file, label.trim(), visibleToCustomer);
+    setFile(null);
+    setLabel('');
+    setVisibleToCustomer(false);
+    e.target.reset();
+  };
+
+  const formatBytes = (bytes) => {
+    if (!bytes) return '';
+    const kb = bytes / 1024;
+    return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2285,6 +2386,101 @@ const EnhancedDocumentsView = ({ service, entryServices, categories, formatPayme
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ---- Customer Documents ---- */}
+      <div className="border-t border-gray-200 pt-6">
+        <div className="flex items-center gap-2 mb-1">
+          <FiPaperclip className="h-4 w-4 text-indigo-600" />
+          <h3 className="font-semibold text-gray-900">Customer Documents</h3>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Files marked "Visible to customer" appear on the public tracking page and can be downloaded there.
+        </p>
+
+        <form onSubmit={handleSubmit} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              placeholder="Document label (e.g. Income Certificate)"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              onChange={(e) => setFile(e.target.files[0] || null)}
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-600 file:text-sm file:font-medium hover:file:bg-indigo-100"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={visibleToCustomer}
+                onChange={(e) => setVisibleToCustomer(e.target.checked)}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Visible to customer on tracking page
+            </label>
+            <button
+              type="submit"
+              disabled={uploadingDocument}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+            >
+              <FiUpload className="h-4 w-4" />
+              {uploadingDocument ? 'Uploading...' : 'Upload'}
+            </button>
+          </div>
+        </form>
+
+        {documentsLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+            <FiFileText className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+            <p className="text-sm text-gray-500">No documents uploaded yet</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {documents.map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">{doc.label}</p>
+                  <p className="text-xs text-gray-500">
+                    {formatBytes(doc.file_size)} · Uploaded by {doc.uploaded_by_name || 'Staff'} · {formatDate(doc.created_at)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 ml-3">
+                  <button
+                    onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
+                    title={doc.visible_to_customer ? 'Visible to customer — click to hide' : 'Hidden from customer — click to show'}
+                    className={`p-2 rounded-lg border transition-colors ${
+                      doc.visible_to_customer
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {doc.visible_to_customer ? <FiEye className="h-4 w-4" /> : <FiEyeOff className="h-4 w-4" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id);
+                    }}
+                    title="Delete document"
+                    className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors"
+                  >
+                    <FiTrash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

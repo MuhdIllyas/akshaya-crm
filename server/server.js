@@ -71,6 +71,9 @@ import knowledgeRoutes from "./routes/knowledge.js";
 //Companion Device Routes
 import companionRoutes from "./routes/companion.js";
 
+//Public Tracking - documents view
+import serviceTrackingDocumentsRoutes from "./routes/serviceTrackingDocuments.js";
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -452,6 +455,9 @@ app.use("/api/knowledge", knowledgeRoutes);
 
 /* Companion Devices */
 app.use("/api/companion", companionRoutes);
+
+/* Service Tracking Documents - for public access */
+app.use("/api/servicetracking", serviceTrackingDocumentsRoutes);
 
 /* ================================
    STATIC FILES
