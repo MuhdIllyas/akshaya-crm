@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -9,7 +9,7 @@ import {
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
   FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
-  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -28,6 +28,7 @@ import {
   getTrackingDocuments,
   uploadTrackingDocument,
   toggleTrackingDocumentVisibility,
+  updateTrackingDocumentRemark,   
   deleteTrackingDocument
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -2330,60 +2331,86 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
   </div>
 );
 
+/* ============================================================
+   INLINE REMARK EDITOR — used inside Documents table
+   ============================================================ */
+
 const DocumentRemarkEditor = ({ doc, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(doc.remark || '');
+  const inputRef = useRef(null);
 
   useEffect(() => { setValue(doc.remark || ''); }, [doc.remark]);
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+
+  const commit = () => {
+    if (value.trim() !== (doc.remark || '').trim()) onSave(value.trim());
+    setEditing(false);
+  };
+  const cancel = () => { setValue(doc.remark || ''); setEditing(false); };
 
   if (editing) {
     return (
-      <div className="mt-1.5 flex items-start gap-2">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Remark for the customer..."
-          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500"
-          autoFocus
-        />
-        <button
-          onClick={() => { onSave(value); setEditing(false); }}
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-        >
-          Save
-        </button>
-        <button
-          onClick={() => { setValue(doc.remark || ''); setEditing(false); }}
-          className="text-xs text-gray-400 hover:text-gray-600"
-        >
-          Cancel
-        </button>
+      <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="relative flex-1 min-w-0">
+          <FiMessageSquare className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-amber-500 pointer-events-none" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') cancel();
+            }}
+            onBlur={commit}
+            placeholder="Remark for customer (e.g. Password: 1234)"
+            className="w-full pl-7 pr-2 py-1 text-xs border border-amber-300 bg-amber-50/60 rounded-md focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all"
+          />
+        </div>
       </div>
     );
   }
 
-  return doc.remark ? (
-    <p onClick={() => setEditing(true)} className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block cursor-pointer" title="Click to edit">
-      {doc.remark}
-    </p>
-  ) : (
-    <button onClick={() => setEditing(true)} className="mt-1 text-xs text-gray-400 hover:text-indigo-600">
-      + Add remark
+  if (doc.remark) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        className="mt-1.5 group/remark inline-flex items-center gap-1.5 max-w-full text-left text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-0.5 hover:bg-amber-100 transition-colors"
+        title="Click to edit remark"
+      >
+        <FiMessageSquare className="h-3 w-3 text-amber-600 flex-shrink-0" />
+        <span className="truncate">{doc.remark}</span>
+        <FiEdit className="h-2.5 w-2.5 opacity-0 group-hover/remark:opacity-60 flex-shrink-0" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      className="mt-1.5 text-[11px] text-gray-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+    >
+      <FiPlus className="h-2.5 w-2.5" />
+      Add customer remark
     </button>
   );
 };
 
+/* ============================================================
+   ENHANCED DOCUMENTS VIEW
+   ============================================================ */
+
 const EnhancedDocumentsView = ({ 
-  service, entryServices, categories, formatPayments, priorityConfig,
-  documents = [], documentsLoading, uploadingDocument, onUpload, onToggleVisibility, onDelete, onUpdateRemark
+  documents = [], documentsLoading, uploadingDocument,
+  onUpload, onToggleVisibility, onDelete, onUpdateRemark
 }) => {
   const [file, setFile] = useState(null);
   const [label, setLabel] = useState('');
   const [visibleToCustomer, setVisibleToCustomer] = useState(false);
   const [remark, setRemark] = useState('');
   const [dragActive, setDragActive] = useState(false);
-  const fileInputRef = React.useRef(null);
+  const fileInputRef = useRef(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -2396,7 +2423,7 @@ const EnhancedDocumentsView = ({
     setLabel('');
     setVisibleToCustomer(false);
     setRemark('');
-    e.target.reset();
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDrop = (e) => {
@@ -2408,17 +2435,8 @@ const EnhancedDocumentsView = ({
     }
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-  };
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); };
 
   const formatBytes = (bytes) => {
     if (!bytes) return '';
@@ -2446,7 +2464,7 @@ const EnhancedDocumentsView = ({
             <h3 className="text-lg font-semibold text-gray-900">Customer Documents</h3>
           </div>
           <p className="text-sm text-gray-500 ml-11">
-            Upload and manage documents. Files marked visible will appear on the customer's public tracking page.
+            Upload and manage documents. Files marked visible and their remarks appear on the customer's public tracking page.
           </p>
         </div>
         <div className="flex items-center gap-2 ml-11 sm:ml-0">
@@ -2469,7 +2487,7 @@ const EnhancedDocumentsView = ({
           <FiUpload className="h-4 w-4 text-indigo-600" />
           <h4 className="text-sm font-semibold text-gray-900">Upload New Document</h4>
         </div>
-        <form onSubmit={handleSubmit} className="p-5">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             {/* Label */}
             <div className="lg:col-span-4">
@@ -2526,13 +2544,6 @@ const EnhancedDocumentsView = ({
                   </>
                 )}
               </div>
-              <textarea
-                placeholder="Remark for the customer (e.g. Password: 1234) — optional"
-                value={remark}
-                onChange={(e) => setRemark(e.target.value)}
-                rows={2}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
             </div>
 
             {/* Visibility + Button */}
@@ -2574,6 +2585,22 @@ const EnhancedDocumentsView = ({
               </div>
             </div>
           </div>
+
+          {/* Remark row — full width, amber-tinted to signal customer-facing */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1.5">
+              <FiMessageSquare className="h-3.5 w-3.5 text-amber-500" />
+              Customer Remark
+              <span className="text-gray-400 font-normal">— optional, shown to the customer alongside the document</span>
+            </label>
+            <input
+              type="text"
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              placeholder="e.g. Password: 1234 — visible on the customer's tracking page"
+              className="w-full px-3 py-2 text-sm border border-amber-200 bg-amber-50/40 rounded-lg focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all placeholder:text-amber-700/40"
+            />
+          </div>
         </form>
       </div>
 
@@ -2609,7 +2636,7 @@ const EnhancedDocumentsView = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-200 text-[11px] text-gray-500 uppercase tracking-wider">
-                  <th className="px-5 py-3 font-semibold">Document</th>
+                  <th className="px-5 py-3 font-semibold">Document & Remark</th>
                   <th className="px-5 py-3 font-semibold w-40">Uploaded By</th>
                   <th className="px-5 py-3 font-semibold w-32">Date</th>
                   <th className="px-5 py-3 font-semibold w-28 text-center">Size</th>
@@ -2621,38 +2648,42 @@ const EnhancedDocumentsView = ({
                 {documents.map((doc) => {
                   const { Icon, color, bg } = getFileIcon(doc);
                   return (
-                    <tr key={doc.id} className="hover:bg-gray-50/60 transition-colors group">
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
+                    <tr key={doc.id} className="hover:bg-gray-50/60 transition-colors group align-top">
+                      <td className="px-5 py-4">
+                        <div className="flex items-start gap-3">
                           <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${bg}`}>
                             <Icon className={`h-4 w-4 ${color}`} />
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-gray-900 truncate" title={doc.label}>
                               {doc.label}
                             </p>
                             <p className="text-xs text-gray-500 truncate" title={doc.file_name}>
                               {doc.file_name || 'document'}
                             </p>
+                            <DocumentRemarkEditor
+                              doc={doc}
+                              onSave={(text) => onUpdateRemark(doc.id, text)}
+                            />
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-4">
                         <span className="text-sm text-gray-700">
                           {doc.uploaded_by_name || 'Staff'}
                         </span>
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-4">
                         <span className="text-sm text-gray-600">
                           {formatDate(doc.created_at)}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-center">
+                      <td className="px-5 py-4 text-center">
                         <span className="text-xs text-gray-500 font-mono">
                           {formatBytes(doc.file_size) || '—'}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-center">
+                      <td className="px-5 py-4 text-center">
                         <button
                           onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
@@ -2675,7 +2706,7 @@ const EnhancedDocumentsView = ({
                           )}
                         </button>
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-1">
                           <a
                             href={doc.file_url || doc.url || '#'}
@@ -2698,14 +2729,6 @@ const EnhancedDocumentsView = ({
                           >
                             <FiTrash2 className="h-4 w-4" />
                           </button>
-
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 truncate">{doc.label}</p>
-                            <p className="text-xs text-gray-500">
-                              {formatBytes(doc.file_size)} · Uploaded by {doc.uploaded_by_name || 'Staff'} · {formatDate(doc.created_at)}
-                            </p>
-                            <DocumentRemarkEditor doc={doc} onSave={(text) => onUpdateRemark(doc.id, text)} />
-                          </div>
                         </div>
                       </td>
                     </tr>
