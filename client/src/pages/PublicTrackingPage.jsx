@@ -126,9 +126,11 @@ const DocumentsCard = ({ documents, trackingId, apiUrl }) => {
             key={doc.id}
             className="rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4"
           >
-            
+            <a
               href={`${apiUrl}/api/servicetracking/public/status/${encodeURIComponent(trackingId)}/documents/${doc.id}/download`}
               className="flex items-center justify-between"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               <span className="min-w-0 truncate text-sm font-bold text-[#0F2B5B]">{doc.label}</span>
               <span className="ml-3 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[#0F2B5B] ring-1 ring-slate-200/70">
