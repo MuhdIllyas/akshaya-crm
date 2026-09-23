@@ -2323,6 +2323,8 @@ const EnhancedDocumentsView = ({
   const [file, setFile] = useState(null);
   const [label, setLabel] = useState('');
   const [visibleToCustomer, setVisibleToCustomer] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = React.useRef(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -2334,7 +2336,28 @@ const EnhancedDocumentsView = ({
     setFile(null);
     setLabel('');
     setVisibleToCustomer(false);
-    e.target.reset();
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
   };
 
   const formatBytes = (bytes) => {
@@ -2343,97 +2366,281 @@ const EnhancedDocumentsView = ({
     return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
   };
 
+  const getFileIcon = (doc) => {
+    const name = (doc.file_name || doc.label || '').toLowerCase();
+    if (name.endsWith('.pdf')) return { Icon: FiFileText, color: 'text-rose-600', bg: 'bg-rose-50' };
+    if (name.match(/\.(jpg|jpeg|png|gif|webp)$/)) return { Icon: FiEye, color: 'text-blue-600', bg: 'bg-blue-50' };
+    if (name.match(/\.(doc|docx)$/)) return { Icon: FiFileText, color: 'text-indigo-600', bg: 'bg-indigo-50' };
+    return { Icon: FiFileText, color: 'text-gray-600', bg: 'bg-gray-50' };
+  };
+
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-1">
-        <FiPaperclip className="h-4 w-4 text-indigo-600" />
-        <h3 className="font-semibold text-gray-900">Customer Documents</h3>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <FiPaperclip className="h-4 w-4 text-indigo-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">Customer Documents</h3>
+          </div>
+          <p className="text-sm text-gray-500 ml-11">
+            Upload and manage documents. Files marked visible will appear on the customer's public tracking page.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 ml-11 sm:ml-0">
+          <div className="px-3 py-1.5 bg-gray-100 rounded-lg">
+            <span className="text-xs font-medium text-gray-600">
+              {documents.length} {documents.length === 1 ? 'file' : 'files'}
+            </span>
+          </div>
+          <div className="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+            <span className="text-xs font-medium text-emerald-700">
+              {documents.filter(d => d.visible_to_customer).length} visible
+            </span>
+          </div>
+        </div>
       </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Files marked "Visible to customer" appear on the public tracking page and can be downloaded there.
-      </p>
 
-      <form onSubmit={handleSubmit} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 space-y-3">
-        <input
-          type="text"
-          placeholder="Document label (e.g. Income Certificate)"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        />
-        <input
-          type="file"
-          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-          onChange={(e) => setFile(e.target.files[0] || null)}
-          className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-600 file:text-sm file:font-medium hover:file:bg-indigo-100"
-        />
-        <div className="flex items-center justify-between pt-1">
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={visibleToCustomer}
-              onChange={(e) => setVisibleToCustomer(e.target.checked)}
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            Visible to customer
-          </label>
-          <button
-            type="submit"
-            disabled={uploadingDocument}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
-          >
-            <FiUpload className="h-4 w-4" />
-            {uploadingDocument ? 'Uploading...' : 'Upload'}
-          </button>
+      {/* Upload Form */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+          <FiUpload className="h-4 w-4 text-indigo-600" />
+          <h4 className="text-sm font-semibold text-gray-900">Upload New Document</h4>
         </div>
-      </form>
+        <form onSubmit={handleSubmit} className="p-5">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Label */}
+            <div className="lg:col-span-4">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Document Label <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Income Certificate"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              />
+            </div>
 
-      {documentsLoading ? (
-        <div className="flex items-center justify-center py-6">
-          <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
-        </div>
-      ) : documents.length === 0 ? (
-        <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-          <FiFileText className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-          <p className="text-sm text-gray-500">No documents uploaded yet</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {documents.map((doc) => (
-            <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-900 truncate">{doc.label}</p>
-                <p className="text-xs text-gray-500">
-                  {formatBytes(doc.file_size)} · Uploaded by {doc.uploaded_by_name || 'Staff'} · {formatDate(doc.created_at)}
-                </p>
+            {/* File Drop Zone */}
+            <div className="lg:col-span-5">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                File <span className="text-rose-500">*</span>
+              </label>
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative flex items-center gap-3 px-3 py-2.5 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                  dragActive
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : file
+                    ? 'border-emerald-400 bg-emerald-50/40'
+                    : 'border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50/40'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  onChange={(e) => setFile(e.target.files[0] || null)}
+                  className="hidden"
+                />
+                {file ? (
+                  <>
+                    <FiFileText className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <span className="text-sm text-gray-800 truncate flex-1">{file.name}</span>
+                    <span className="text-xs text-gray-500 flex-shrink-0">{formatBytes(file.size)}</span>
+                  </>
+                ) : (
+                  <>
+                    <FiUpload className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <span className="text-sm text-gray-500 truncate flex-1">
+                      {dragActive ? 'Drop file here' : 'Click or drag file to upload'}
+                    </span>
+                    <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">PDF, DOC, IMG</span>
+                  </>
+                )}
               </div>
-              <div className="flex items-center gap-2 ml-3">
+            </div>
+
+            {/* Visibility + Button */}
+            <div className="lg:col-span-3 flex flex-col">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Visibility
+              </label>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
-                  title={doc.visible_to_customer ? 'Visible to customer — click to hide' : 'Hidden from customer — click to show'}
-                  className={`p-2 rounded-lg border transition-colors ${
-                    doc.visible_to_customer
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                      : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                  type="button"
+                  onClick={() => setVisibleToCustomer(!visibleToCustomer)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium rounded-lg border transition-all ${
+                    visibleToCustomer
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                      : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
                   }`}
+                  title={visibleToCustomer ? 'Visible to customer' : 'Hidden from customer'}
                 >
-                  {doc.visible_to_customer ? <FiEye className="h-4 w-4" /> : <FiEyeOff className="h-4 w-4" />}
+                  {visibleToCustomer ? <FiEye className="h-3.5 w-3.5" /> : <FiEyeOff className="h-3.5 w-3.5" />}
+                  {visibleToCustomer ? 'Visible' : 'Hidden'}
                 </button>
                 <button
-                  onClick={() => {
-                    if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id);
-                  }}
-                  title="Delete document"
-                  className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors"
+                  type="submit"
+                  disabled={uploadingDocument || !file || !label.trim()}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                 >
-                  <FiTrash2 className="h-4 w-4" />
+                  {uploadingDocument ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Uploading
+                    </>
+                  ) : (
+                    <>
+                      <FiUpload className="h-3.5 w-3.5" />
+                      Upload
+                    </>
+                  )}
                 </button>
               </div>
             </div>
-          ))}
+          </div>
+        </form>
+      </div>
+
+      {/* Documents List */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FiFileText className="h-4 w-4 text-indigo-600" />
+            <h4 className="text-sm font-semibold text-gray-900">Uploaded Documents</h4>
+          </div>
+          {documents.length > 0 && (
+            <span className="text-xs text-gray-500">
+              {documents.length} {documents.length === 1 ? 'document' : 'documents'}
+            </span>
+          )}
         </div>
-      )}
+
+        {documentsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-12 px-6">
+            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <FiFileText className="h-7 w-7 text-gray-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-900 mb-1">No documents yet</p>
+            <p className="text-xs text-gray-500">Upload the first document using the form above</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/70 border-b border-gray-200 text-[11px] text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 font-semibold">Document</th>
+                  <th className="px-5 py-3 font-semibold w-40">Uploaded By</th>
+                  <th className="px-5 py-3 font-semibold w-32">Date</th>
+                  <th className="px-5 py-3 font-semibold w-28 text-center">Size</th>
+                  <th className="px-5 py-3 font-semibold w-32 text-center">Visibility</th>
+                  <th className="px-5 py-3 font-semibold w-24 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {documents.map((doc) => {
+                  const { Icon, color, bg } = getFileIcon(doc);
+                  return (
+                    <tr key={doc.id} className="hover:bg-gray-50/60 transition-colors group">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${bg}`}>
+                            <Icon className={`h-4 w-4 ${color}`} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate" title={doc.label}>
+                              {doc.label}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate" title={doc.file_name}>
+                              {doc.file_name || 'document'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="text-sm text-gray-700">
+                          {doc.uploaded_by_name || 'Staff'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="text-sm text-gray-600">
+                          {formatDate(doc.created_at)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        <span className="text-xs text-gray-500 font-mono">
+                          {formatBytes(doc.file_size) || '—'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        <button
+                          onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                            doc.visible_to_customer
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                          }`}
+                          title={doc.visible_to_customer ? 'Click to hide from customer' : 'Click to make visible to customer'}
+                        >
+                          {doc.visible_to_customer ? (
+                            <>
+                              <FiEye className="h-3 w-3" />
+                              Visible
+                            </>
+                          ) : (
+                            <>
+                              <FiEyeOff className="h-3 w-3" />
+                              Hidden
+                            </>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <a
+                            href={doc.file_url || doc.url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            title="View document"
+                            onClick={(e) => {
+                              if (!doc.file_url && !doc.url) e.preventDefault();
+                            }}
+                          >
+                            <FiEye className="h-4 w-4" />
+                          </a>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id);
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete document"
+                          >
+                            <FiTrash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
