@@ -1132,11 +1132,6 @@ const TrackServicePage = () => {
                 )}
                 {activeTab === 'documents' && (
                   <EnhancedDocumentsView 
-                    service={selectedService}
-                    entryServices={entryServices}
-                    categories={categories}
-                    formatPayments={formatPayments}
-                    priorityConfig={priorityConfig}
                     documents={documents}
                     documentsLoading={documentsLoading}
                     uploadingDocument={uploadingDocument}
@@ -2323,7 +2318,6 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
 );
 
 const EnhancedDocumentsView = ({ 
-  service, entryServices, categories, formatPayments, priorityConfig,
   documents = [], documentsLoading, uploadingDocument, onUpload, onToggleVisibility, onDelete
 }) => {
   const [file, setFile] = useState(null);
@@ -2350,138 +2344,96 @@ const EnhancedDocumentsView = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <h3 className="font-semibold text-gray-900">Service Information</h3>
-          <div className="space-y-3">
-            <DetailRow label="Token ID" value={service.trackingId || 'N/A'} />
-            <DetailRow label="Customer Name" value={service.customerName || 'Unknown'} />
-            <DetailRow label="Phone" value={service.phone || 'N/A'} />
-            <DetailRow label="Email" value={service.email || 'N/A'} />
-            <DetailRow label="Aadhaar" value={service.aadhaar || 'N/A'} />
-            <DetailRow label="Service" value={service.serviceType || 'Unknown'} />
-            <DetailRow label="Subcategory" value={service.subcategoryName || 'N/A'} />
-            <DetailRow label="Expiry Date" value={service.expiryDate || 'Not set'} />
-            <div className="flex justify-between items-center py-1">
-              <span className="text-sm text-gray-600">Priority</span>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${priorityConfig[service.priority]?.bg} ${priorityConfig[service.priority]?.border}`}>
-                <FiFlag className={`h-3 w-3 ${priorityConfig[service.priority]?.color}`} />
-                <span className={priorityConfig[service.priority]?.color}>{priorityConfig[service.priority]?.label}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="space-y-4">
-          <h3 className="font-semibold text-gray-900">Financial Information</h3>
-          <div className="space-y-3">
-            <FinancialRow label="Service Charge" amount={service.serviceCharge} currency="₹" />
-            <FinancialRow label="Department Charge" amount={service.departmentCharge} currency="₹" />
-            <FinancialRow label="Total Charge" amount={service.totalCharge} currency="₹" />
-            <div className="flex justify-between items-center py-2">
-              <span className="text-sm text-gray-600">Payments:</span>
-              <span className="text-sm text-gray-900">
-                {service.paymentDetails || 'No payments recorded'}
-              </span>
-            </div>
-          </div>
-        </div>
+    <div className="w-full max-w-2xl mx-auto">
+      <div className="flex items-center gap-2 mb-1">
+        <FiPaperclip className="h-4 w-4 text-indigo-600" />
+        <h3 className="font-semibold text-gray-900">Customer Documents</h3>
       </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Files marked "Visible to customer" appear on the public tracking page and can be downloaded there.
+      </p>
 
-      {/* ---- Customer Documents ---- */}
-      <div className="border-t border-gray-200 pt-6">
-        <div className="flex items-center gap-2 mb-1">
-          <FiPaperclip className="h-4 w-4 text-indigo-600" />
-          <h3 className="font-semibold text-gray-900">Customer Documents</h3>
+      <form onSubmit={handleSubmit} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 space-y-3">
+        <input
+          type="text"
+          placeholder="Document label (e.g. Income Certificate)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        />
+        <input
+          type="file"
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+          onChange={(e) => setFile(e.target.files[0] || null)}
+          className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-600 file:text-sm file:font-medium hover:file:bg-indigo-100"
+        />
+        <div className="flex items-center justify-between pt-1">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={visibleToCustomer}
+              onChange={(e) => setVisibleToCustomer(e.target.checked)}
+              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            Visible to customer
+          </label>
+          <button
+            type="submit"
+            disabled={uploadingDocument}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+          >
+            <FiUpload className="h-4 w-4" />
+            {uploadingDocument ? 'Uploading...' : 'Upload'}
+          </button>
         </div>
-        <p className="text-sm text-gray-500 mb-4">
-          Files marked "Visible to customer" appear on the public tracking page and can be downloaded there.
-        </p>
+      </form>
 
-        <form onSubmit={handleSubmit} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
-              type="text"
-              placeholder="Document label (e.g. Income Certificate)"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-              onChange={(e) => setFile(e.target.files[0] || null)}
-              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-600 file:text-sm file:font-medium hover:file:bg-indigo-100"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={visibleToCustomer}
-                onChange={(e) => setVisibleToCustomer(e.target.checked)}
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              Visible to customer on tracking page
-            </label>
-            <button
-              type="submit"
-              disabled={uploadingDocument}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
-            >
-              <FiUpload className="h-4 w-4" />
-              {uploadingDocument ? 'Uploading...' : 'Upload'}
-            </button>
-          </div>
-        </form>
-
-        {documentsLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-            <FiFileText className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-            <p className="text-sm text-gray-500">No documents uploaded yet</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {documents.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{doc.label}</p>
-                  <p className="text-xs text-gray-500">
-                    {formatBytes(doc.file_size)} · Uploaded by {doc.uploaded_by_name || 'Staff'} · {formatDate(doc.created_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 ml-3">
-                  <button
-                    onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
-                    title={doc.visible_to_customer ? 'Visible to customer — click to hide' : 'Hidden from customer — click to show'}
-                    className={`p-2 rounded-lg border transition-colors ${
-                      doc.visible_to_customer
-                        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                        : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
-                    }`}
-                  >
-                    {doc.visible_to_customer ? <FiEye className="h-4 w-4" /> : <FiEyeOff className="h-4 w-4" />}
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id);
-                    }}
-                    title="Delete document"
-                    className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors"
-                  >
-                    <FiTrash2 className="h-4 w-4" />
-                  </button>
-                </div>
+      {documentsLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
+        </div>
+      ) : documents.length === 0 ? (
+        <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+          <FiFileText className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+          <p className="text-sm text-gray-500">No documents uploaded yet</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {documents.map((doc) => (
+            <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-900 truncate">{doc.label}</p>
+                <p className="text-xs text-gray-500">
+                  {formatBytes(doc.file_size)} · Uploaded by {doc.uploaded_by_name || 'Staff'} · {formatDate(doc.created_at)}
+                </p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <div className="flex items-center gap-2 ml-3">
+                <button
+                  onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
+                  title={doc.visible_to_customer ? 'Visible to customer — click to hide' : 'Hidden from customer — click to show'}
+                  className={`p-2 rounded-lg border transition-colors ${
+                    doc.visible_to_customer
+                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                      : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  {doc.visible_to_customer ? <FiEye className="h-4 w-4" /> : <FiEyeOff className="h-4 w-4" />}
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id);
+                  }}
+                  title="Delete document"
+                  className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors"
+                >
+                  <FiTrash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
