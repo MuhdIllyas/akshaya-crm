@@ -6,23 +6,32 @@ import { logActivity } from '../utils/activityLogger.js';
 
 const router = express.Router();
 
-// 🔥 NEW: Subquery variable to handle corrections and reversals perfectly
-// Aliased as both 'amount' and 'received_amount' so it seamlessly replaces the old payments table everywhere
-const TRUE_PAYMENTS_SUBQUERY = `
-  (
-    SELECT reference_id AS service_entry_id, SUM(amount) AS amount, SUM(amount) AS received_amount
+// 🔥 FIXED: was an uncorrelated subquery that re-scanned the ENTIRE wallet_transactions
+// table (no staff_id/date/reference_id filter) on every single usage — 18 uses per file,
+// up to ~4 concurrent requests per page load. Cost grew with table size ("after some usage")
+// until it starved the pg pool. Now a LATERAL join filtered to ONE reference_id per row,
+// so Postgres can use an index seek instead of a full scan + sort each time.
+// Requires: CREATE INDEX idx_wallet_tx_service_payment ON wallet_transactions
+//   (reference_id, category, type, reference_type, created_at DESC)
+//   WHERE category = 'Service Payment' AND type = 'credit' AND reference_type = 'payment';
+const paymentsLateralJoin = (seAlias = 'se') => `
+  LEFT JOIN LATERAL (
+    SELECT
+      SUM(amount) AS amount,
+      SUM(amount) AS received_amount,
+      MAX(created_at) AS payment_date
     FROM (
       SELECT DISTINCT ON (COALESCE(NULLIF(correction_group_id::text, ''), id::text))
-        reference_id, amount, is_reversal
+        amount, is_reversal, created_at
       FROM wallet_transactions
-      WHERE category = 'Service Payment' 
-        AND type = 'credit' 
+      WHERE reference_id = ${seAlias}.id
+        AND category = 'Service Payment'
+        AND type = 'credit'
         AND reference_type = 'payment'
       ORDER BY COALESCE(NULLIF(correction_group_id::text, ''), id::text), created_at DESC, is_reversal ASC
     ) lt
     WHERE (lt.is_reversal IS NULL OR lt.is_reversal = FALSE)
-    GROUP BY reference_id
-  )
+  ) p ON true
 `;
 
 // Middleware to verify token
@@ -155,7 +164,7 @@ router.get('/dashboard', async (req, res) => {
         END as avg_daily_services
         
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -200,12 +209,7 @@ router.get('/dashboard', async (req, res) => {
           THEN se.id 
         END) as ontime_paid_services
       FROM service_entries se
-      LEFT JOIN LATERAL (
-        SELECT received_amount, created_at as payment_date
-        FROM ${TRUE_PAYMENTS_SUBQUERY} p_sub
-        WHERE p_sub.service_entry_id = se.id
-        LIMIT 1
-      ) p ON true
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -226,7 +230,7 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(CASE WHEN (CURRENT_DATE - se.created_at::date) > 7 
               THEN (se.total_charges - COALESCE(p.received_amount, 0)) ELSE 0 END), 0) as overdue_amount
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status != 'completed'
         AND (se.total_charges - COALESCE(p.received_amount, 0)) > 0
@@ -242,7 +246,7 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(p.amount), 0) as collected_amount,
         COALESCE(SUM(se.service_charges), 0) as service_charges
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -261,7 +265,7 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(se.service_charges), 0) as total_profit
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -279,7 +283,7 @@ router.get('/dashboard', async (req, res) => {
         COUNT(se.id) as service_count,
         COALESCE(SUM(p.amount), 0) as total_spent
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -309,7 +313,7 @@ router.get('/dashboard', async (req, res) => {
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND DATE(se.created_at) BETWEEN $2 AND $3
       ORDER BY se.created_at DESC
@@ -350,7 +354,7 @@ router.get('/dashboard', async (req, res) => {
         COALESCE(SUM(p.amount), 0) as total_collected,
         COALESCE(SUM(se.service_charges), 0) as service_charges
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND se.created_at >= (CURRENT_DATE - INTERVAL '6 months')
@@ -403,7 +407,7 @@ router.get('/dashboard', async (req, res) => {
         COUNT(*) as services_count,
         COALESCE(SUM(p.amount), 0) as total_collected
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -595,7 +599,7 @@ router.get('/compare', async (req, res) => {
         COALESCE(AVG(p.amount), 0) as avg_transaction,
         COUNT(DISTINCT se.customer_name) as unique_customers
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -677,7 +681,7 @@ router.get('/achievements', async (req, res) => {
         COUNT(DISTINCT se.customer_name) as unique_customers,
         COUNT(DISTINCT DATE(se.created_at)) as active_days
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
     `;
     const lifetime = await client.query(lifetimeQuery, [staffId]);
@@ -689,7 +693,7 @@ router.get('/achievements', async (req, res) => {
         COUNT(DISTINCT se.id) as services_count,
         COALESCE(SUM(p.amount), 0) as revenue
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
       GROUP BY DATE(se.created_at)
       ORDER BY revenue DESC
@@ -704,7 +708,7 @@ router.get('/achievements', async (req, res) => {
         COUNT(se.id) as services_count,
         COALESCE(SUM(p.amount), 0) as total_spent
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND se.customer_name IS NOT NULL
@@ -751,7 +755,7 @@ router.get('/achievements', async (req, res) => {
           DATE(se.created_at) as day,
           COALESCE(SUM(p.amount), 0) as revenue
         FROM service_entries se
-        LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+        ${paymentsLateralJoin()}
         WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
         GROUP BY DATE(se.created_at)
       ),
@@ -832,7 +836,7 @@ router.get('/achievements', async (req, res) => {
           ELSE 0 
         END as lifetime_collection_rate
       FROM service_entries se
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
     `;
     const collectionRateResult = await client.query(collectionRateQuery, [staffId]);
@@ -1198,7 +1202,7 @@ router.get('/service-breakdown', async (req, res) => {
         ROUND(COALESCE(SUM(p.amount), 0) / NULLIF(COUNT(se.id), 0), 2) as revenue_per_service
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
@@ -1270,7 +1274,7 @@ router.get('/daily-log', async (req, res) => {
       FROM service_entries se
       JOIN services s ON se.category_id = s.id
       LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
-      LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+      ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 AND DATE(se.created_at) = $2
       ORDER BY se.created_at DESC
     `;
@@ -1403,7 +1407,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
           COALESCE(SUM(se.total_charges), 0) as total_amount,
           COALESCE(SUM(p.received_amount), 0) as total_collected
         FROM service_entries se
-        LEFT JOIN ${TRUE_PAYMENTS_SUBQUERY} p ON p.service_entry_id = se.id
+        ${paymentsLateralJoin()}
         WHERE se.staff_id = $1 AND se.status = 'completed' ${dateFilter}
       `, [staffId]),
 
