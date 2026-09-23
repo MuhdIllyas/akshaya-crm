@@ -2,35 +2,26 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { 
-  FiUser, FiPhone, FiClock, FiCheckCircle, FiAlertCircle, 
-  FiRefreshCw, FiSearch, FiEdit, FiMessageSquare, FiChevronDown, 
-  FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
-  FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
-  FiPrinter, FiAward, FiTarget, FiPlus, FiGrid, FiCreditCard, FiFlag,
-  FiArrowLeft, FiMessageCircle, FiUpload, FiTrash2, FiEye, FiEyeOff,
-  FiPaperclip, FiX, FiCommand, FiChevronRight, FiChevronLeft,
-  FiExternalLink, FiSliders, FiSend, FiCheck, FiInbox, FiLayers,
-  FiActivity, FiSave, FiStar, FiCopy, FiZap
+import {
+  FiUser, FiPhone, FiClock, FiCheckCircle, FiAlertCircle,
+  FiRefreshCw, FiSearch, FiEdit, FiMessageSquare, FiChevronDown,
+  FiFileText, FiBarChart2, FiDollarSign, FiCalendar, FiTrendingUp,
+  FiMail, FiDownload, FiFilter, FiPrinter, FiAward, FiTarget, FiPlus,
+  FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiCommand,
+  FiChevronRight, FiExternalLink, FiSliders, FiSend, FiCheck,
+  FiLayers, FiActivity, FiSave, FiStar, FiUserCheck, FiPhoneCall,
+  FiCopy, FiZap, FiFile
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { 
-  getTrackingEntries, 
-  getTrackingEntryById,
-  updateTrackingEntry, 
-  updateTrackingStatus, 
-  notifyCustomer, 
-  getStaff, 
-  getCategories, 
-  getServiceEntries,
-  getTrackingStats, 
-  getTrackingActivity,
-  getTrackingDocuments,
-  uploadTrackingDocument,
-  toggleTrackingDocumentVisibility,
-  deleteTrackingDocument
+import {
+  getTrackingEntries, getTrackingEntryById, updateTrackingEntry,
+  updateTrackingStatus, notifyCustomer, getStaff, getCategories,
+  getServiceEntries, getTrackingStats, getTrackingActivity,
+  getTrackingDocuments, uploadTrackingDocument,
+  toggleTrackingDocumentVisibility, deleteTrackingDocument
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
@@ -40,44 +31,36 @@ import NotesPanel from '/src/components/notes/NotesPanel';
    ============================================================ */
 
 const STATUS_MAP = {
-  pending: 'Pending',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  rejected: 'Delayed',
-  resubmit: 'Resubmit',
-  paid: 'Paid'
+  pending: 'Pending', in_progress: 'In Progress', completed: 'Completed',
+  rejected: 'Delayed', resubmit: 'Resubmit', paid: 'Paid'
 };
 
 const REVERSE_STATUS_MAP = {
-  Pending: 'pending',
-  'In Progress': 'in_progress',
-  Completed: 'completed',
-  Delayed: 'rejected',
-  Resubmit: 'resubmit',
-  Paid: 'paid'
+  Pending: 'pending', 'In Progress': 'in_progress', Completed: 'completed',
+  Delayed: 'rejected', Resubmit: 'resubmit', Paid: 'paid'
 };
 
 const STATUS_CONFIG = {
-  Pending: { color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500' },
-  'In Progress': { color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', dot: 'bg-blue-500' },
-  Delayed: { color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200', dot: 'bg-rose-500' },
-  Completed: { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' },
-  Resubmit: { color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200', dot: 'bg-orange-500' },
-  Paid: { color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200', dot: 'bg-green-500' }
+  Pending:     { color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-500',   ring: 'ring-amber-500/20' },
+  'In Progress':{ color: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-200',    dot: 'bg-blue-500',    ring: 'ring-blue-500/20' },
+  Delayed:     { color: 'text-rose-700',    bg: 'bg-rose-50',    border: 'border-rose-200',    dot: 'bg-rose-500',    ring: 'ring-rose-500/20' },
+  Completed:   { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500', ring: 'ring-emerald-500/20' },
+  Resubmit:    { color: 'text-orange-700',  bg: 'bg-orange-50',  border: 'border-orange-200',  dot: 'bg-orange-500',  ring: 'ring-orange-500/20' },
+  Paid:        { color: 'text-teal-700',    bg: 'bg-teal-50',    border: 'border-teal-200',    dot: 'bg-teal-500',    ring: 'ring-teal-500/20' }
 };
 
 const PRIORITY_CONFIG = {
-  low: { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Low' },
-  medium: { color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', label: 'Medium' },
-  high: { color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200', label: 'High' }
+  low:    { color: 'text-slate-600',  bg: 'bg-slate-100',  border: 'border-slate-200',  label: 'Low' },
+  medium: { color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200',  label: 'Medium' },
+  high:   { color: 'text-rose-700',   bg: 'bg-rose-50',    border: 'border-rose-200',   label: 'High' }
 };
 
 const PAYMENT_STATUS_CONFIG = {
-  'Not Applicable': { color: 'text-slate-600', bg: 'bg-slate-100' },
-  Received: { color: 'text-emerald-700', bg: 'bg-emerald-50' },
-  Partial: { color: 'text-amber-700', bg: 'bg-amber-50' },
-  Pending: { color: 'text-rose-700', bg: 'bg-rose-50' },
-  Processing: { color: 'text-blue-700', bg: 'bg-blue-50' }
+  'Not Applicable': { color: 'text-slate-600',  bg: 'bg-slate-100' },
+  Received:         { color: 'text-emerald-700', bg: 'bg-emerald-50' },
+  Partial:          { color: 'text-amber-700',   bg: 'bg-amber-50' },
+  Pending:          { color: 'text-rose-700',    bg: 'bg-rose-50' },
+  Processing:       { color: 'text-blue-700',    bg: 'bg-blue-50' }
 };
 
 const STEP_OPTIONS = [
@@ -99,19 +82,19 @@ const STEP_ORDER_MAP = { Submitted: 1, 'Initial Review': 2, 'Document Verificati
    UTILITIES
    ============================================================ */
 
-const formatDate = (dateString) => {
-  if (!dateString) return 'Not set';
+const formatDate = (d) => {
+  if (!d) return 'Not set';
   try {
-    const date = new Date(dateString);
+    const date = new Date(d);
     if (isNaN(date.getTime())) return 'Invalid date';
     return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   } catch { return 'Invalid date'; }
 };
 
-const formatTimelineDate = (dateString) => {
-  if (!dateString) return 'Not set';
+const formatTimelineDate = (d) => {
+  if (!d) return 'Not set';
   try {
-    const date = new Date(dateString);
+    const date = new Date(d);
     if (isNaN(date.getTime())) return 'Invalid date';
     return new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
@@ -120,19 +103,33 @@ const formatTimelineDate = (dateString) => {
   } catch { return 'Invalid date'; }
 };
 
-const formatDateForInput = (dateString) => {
-  if (!dateString) return '';
+const formatDateForInput = (d) => {
+  if (!d) return '';
   try {
-    const date = new Date(dateString);
+    const date = new Date(d);
     if (isNaN(date.getTime())) return '';
     return date.toISOString().split('T')[0];
   } catch { return ''; }
 };
 
-const calculateProgress = (status, currentStep) => {
-  const stepProgress = { Submitted: 25, 'Initial Review': 50, 'Document Verification': 75, 'Final Approval': 100 };
+const calculateProgress = (status, step) => {
+  const m = { Submitted: 25, 'Initial Review': 50, 'Document Verification': 75, 'Final Approval': 100 };
   if (status === 'Completed' || status === 'Paid') return 100;
-  return stepProgress[currentStep] || 25;
+  return m[step] || 25;
+};
+
+const formatBytes = (b) => {
+  if (!b) return '';
+  const kb = b / 1024;
+  return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+};
+
+const fileIconFor = (name = '') => {
+  const n = name.toLowerCase();
+  if (n.endsWith('.pdf')) return { Icon: FiFileText, color: 'text-rose-600', bg: 'bg-rose-50' };
+  if (/\.(jpg|jpeg|png|gif|webp)$/.test(n)) return { Icon: FiEye, color: 'text-blue-600', bg: 'bg-blue-50' };
+  if (/\.(doc|docx)$/.test(n)) return { Icon: FiFileText, color: 'text-indigo-600', bg: 'bg-indigo-50' };
+  return { Icon: FiFileText, color: 'text-slate-600', bg: 'bg-slate-100' };
 };
 
 /* ============================================================
@@ -140,21 +137,22 @@ const calculateProgress = (status, currentStep) => {
    ============================================================ */
 
 class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  componentDidCatch(error, info) { console.error('Error caught by boundary:', error, info); }
+  constructor(p) { super(p); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(e) { return { hasError: true, error: e }; }
+  componentDidCatch(e, i) { console.error(e, i); }
   render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-8 max-w-md text-center">
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 max-w-sm text-center shadow-sm">
             <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <FiAlertCircle className="h-7 w-7 text-rose-600" />
             </div>
             <h2 className="text-lg font-semibold text-slate-900 mb-2">Something went wrong</h2>
-            <p className="text-sm text-slate-600 mb-4">There was an error loading the page.</p>
-            <button onClick={() => window.location.reload()} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
-              Refresh Page
+            <p className="text-sm text-slate-500 mb-4">Please refresh to try again.</p>
+            <button onClick={() => window.location.reload()}
+              className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
+              Refresh
             </button>
           </div>
         </div>
@@ -165,15 +163,15 @@ class ErrorBoundary extends React.Component {
 }
 
 /* ============================================================
-   SHARED SMALL COMPONENTS
+   SHARED UI
    ============================================================ */
 
 const StatusPill = ({ status, size = 'sm' }) => {
   const c = STATUS_CONFIG[status] || STATUS_CONFIG.Pending;
-  const padding = size === 'xs' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs';
+  const s = size === 'xs' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs';
   return (
-    <span className={`inline-flex items-center gap-1 ${padding} rounded-full font-medium ${c.bg} ${c.color} border ${c.border}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`}></span>
+    <span className={`inline-flex items-center gap-1.5 ${s} rounded-full font-semibold ${c.bg} ${c.color} border ${c.border} whitespace-nowrap`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
       {status}
     </span>
   );
@@ -182,135 +180,125 @@ const StatusPill = ({ status, size = 'sm' }) => {
 const PriorityPill = ({ priority }) => {
   const c = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.medium;
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${c.bg} ${c.color} border ${c.border}`}>
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${c.bg} ${c.color} border ${c.border}`}>
       <FiFlag className="h-2.5 w-2.5" />
       {c.label}
     </span>
   );
 };
 
+const SourceBadge = ({ source }) =>
+  source === 'online' ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Online
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500">
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Walk-in
+    </span>
+  );
+
+const KpiCard = ({ label, value, icon: Icon, accent = 'indigo', trend }) => {
+  const accents = {
+    indigo:  { bg: 'bg-indigo-50',  fg: 'text-indigo-600',  ring: 'ring-indigo-500/10' },
+    blue:    { bg: 'bg-blue-50',    fg: 'text-blue-600',    ring: 'ring-blue-500/10' },
+    emerald: { bg: 'bg-emerald-50', fg: 'text-emerald-600', ring: 'ring-emerald-500/10' },
+    rose:    { bg: 'bg-rose-50',    fg: 'text-rose-600',    ring: 'ring-rose-500/10' },
+    violet:  { bg: 'bg-violet-50',  fg: 'text-violet-600',  ring: 'ring-violet-500/10' },
+    amber:   { bg: 'bg-amber-50',   fg: 'text-amber-600',   ring: 'ring-amber-500/10' }
+  };
+  const a = accents[accent] || accents.indigo;
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm transition-all">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</p>
+        <div className={`w-8 h-8 rounded-lg ${a.bg} flex items-center justify-center`}>
+          <Icon className={`h-4 w-4 ${a.fg}`} />
+        </div>
+      </div>
+      <p className="text-2xl font-bold text-slate-900 leading-none">{value}</p>
+      {trend !== undefined && (
+        <div className="flex items-center gap-1 mt-2">
+          <FiTrendingUp className={`h-3 w-3 ${trend >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} />
+          <span className={`text-xs font-medium ${trend >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {trend >= 0 ? '+' : ''}{trend}%
+          </span>
+          <span className="text-[10px] text-slate-400">vs last period</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const FilterChip = ({ active, onClick, children, dot }) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border transition-all whitespace-nowrap ${
+  <button onClick={onClick}
+    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-all whitespace-nowrap ${
       active
-        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-    }`}
-  >
+    }`}>
     {dot && <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-white' : dot}`} />}
     {children}
   </button>
 );
 
-const IconButton = ({ icon: Icon, onClick, tooltip, variant = 'default', className = '' }) => {
-  const styles = {
-    default: 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-slate-200 bg-white',
-    primary: 'text-white bg-indigo-600 hover:bg-indigo-700 border border-indigo-600 shadow-sm',
-    ghost: 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
-  };
-  return (
-    <button onClick={onClick} title={tooltip}
-      className={`p-2 rounded-lg transition-all ${styles[variant]} ${className}`}>
-      <Icon className="h-4 w-4" />
-    </button>
-  );
-};
-
-const MiniStat = ({ label, value, icon: Icon, color = 'indigo' }) => {
-  const colors = {
-    indigo: 'text-indigo-600 bg-indigo-50',
-    blue: 'text-blue-600 bg-blue-50',
-    emerald: 'text-emerald-600 bg-emerald-50',
-    rose: 'text-rose-600 bg-rose-50',
-    violet: 'text-violet-600 bg-violet-50',
-    amber: 'text-amber-600 bg-amber-50'
-  };
-  return (
-    <div className="flex items-center gap-3 px-3 py-2 bg-white rounded-lg border border-slate-200">
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colors[color]}`}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">{label}</p>
-        <p className="text-base font-bold text-slate-900 leading-tight">{value}</p>
-      </div>
-    </div>
-  );
-};
-
-const EmptyState = ({ icon: Icon, title, message, action }) => (
+const EmptyState = ({ icon: Icon, title, message }) => (
   <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-3">
-      <Icon className="h-7 w-7 text-slate-400" />
+    <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-3">
+      <Icon className="h-6 w-6 text-slate-400" />
     </div>
     <p className="text-sm font-semibold text-slate-900 mb-1">{title}</p>
     <p className="text-xs text-slate-500 max-w-xs">{message}</p>
-    {action}
-  </div>
-);
-
-const Stars = ({ value }) => (
-  <div className="flex items-center gap-0.5">
-    {[1, 2, 3, 4, 5].map(i => (
-      <FiStar key={i} className={`h-3.5 w-3.5 ${i <= value ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
-    ))}
-    <span className="text-xs text-slate-500 ml-1.5">({value}/5)</span>
   </div>
 );
 
 /* ============================================================
-   INLINE EDITABLE ROW
+   INLINE EDITABLE CELL
    ============================================================ */
 
-const EditableRow = ({ label, value, displayValue, type = 'text', options, placeholder, multiline, onSave }) => {
+const InlineEdit = ({ value, displayValue, onSave, type = 'text', options, placeholder, className = '', align = 'left', icon: Icon }) => {
   const [editing, setEditing] = useState(false);
   const [temp, setTemp] = useState(value ?? '');
-  const inputRef = useRef(null);
+  const ref = useRef(null);
 
   useEffect(() => { setTemp(value ?? ''); }, [value]);
-  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+  useEffect(() => { if (editing && ref.current) ref.current.focus(); }, [editing]);
 
-  const commit = () => {
-    if (temp !== value) onSave(temp);
-    setEditing(false);
-  };
+  const commit = () => { if (temp !== value) onSave(temp); setEditing(false); };
   const cancel = () => { setTemp(value ?? ''); setEditing(false); };
   const onKey = (e) => {
-    if (e.key === 'Enter' && !multiline) { e.preventDefault(); commit(); }
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
     if (e.key === 'Escape') cancel();
   };
 
-  const displayText = displayValue !== undefined ? displayValue : (value || null);
+  if (editing) {
+    if (options) {
+      return (
+        <select ref={ref} value={temp} onChange={e => setTemp(e.target.value)}
+          onBlur={commit} onKeyDown={onKey}
+          className="w-full text-xs bg-white border border-indigo-400 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+          <option value="">— None —</option>
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      );
+    }
+    return (
+      <input ref={ref} type={type} value={temp} onChange={e => setTemp(e.target.value)}
+        onBlur={commit} onKeyDown={onKey}
+        className="w-full text-xs bg-white border border-indigo-400 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500/30" />
+    );
+  }
 
+  const txt = displayValue !== undefined ? displayValue : value;
   return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 group transition-colors">
-      <span className="text-xs text-slate-500 flex-shrink-0 pt-1">{label}</span>
-      {editing ? (
-        options ? (
-          <select ref={inputRef} value={temp} onChange={e => setTemp(e.target.value)}
-            onBlur={commit} onKeyDown={onKey}
-            className="text-sm bg-white border border-indigo-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none min-w-[140px]">
-            <option value="">— None —</option>
-            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        ) : multiline ? (
-          <textarea ref={inputRef} value={temp} onChange={e => setTemp(e.target.value)}
-            onBlur={commit} onKeyDown={onKey} rows={3}
-            className="text-sm bg-white border border-indigo-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none w-64 resize-none" />
-        ) : (
-          <input ref={inputRef} type={type} value={temp} onChange={e => setTemp(e.target.value)}
-            onBlur={commit} onKeyDown={onKey}
-            className="text-sm bg-white border border-indigo-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none w-48 text-right" />
-        )
-      ) : (
-        <button onClick={() => setEditing(true)}
-          className="text-sm font-medium text-slate-800 px-2 py-1 rounded-md hover:bg-indigo-50 hover:text-indigo-700 transition-colors flex items-center gap-1.5 max-w-[280px] text-right group-hover:bg-indigo-50/60">
-          <span className="truncate">{displayText || <span className="text-slate-400 italic">{placeholder || '—'}</span>}</span>
-          <FiEdit className="h-3 w-3 opacity-0 group-hover:opacity-60 flex-shrink-0" />
-        </button>
-      )}
-    </div>
+    <button onClick={() => setEditing(true)}
+      className={`group/edit flex items-center gap-1.5 w-full text-left px-1.5 py-1 -mx-1.5 rounded-md hover:bg-indigo-50/60 transition-colors ${align === 'right' ? 'justify-end' : ''} ${className}`}>
+      {Icon && <Icon className="h-3 w-3 text-slate-400 flex-shrink-0" />}
+      <span className={`truncate ${txt ? 'text-slate-800' : 'text-slate-400 italic'}`}>
+        {txt || placeholder || '—'}
+      </span>
+      <FiEdit className="h-3 w-3 text-slate-300 opacity-0 group-hover/edit:opacity-100 transition-opacity flex-shrink-0" />
+    </button>
   );
 };
 
@@ -320,106 +308,107 @@ const EditableRow = ({ label, value, displayValue, type = 'text', options, place
 
 const CommandPalette = ({ open, onClose, services, onSelect, onAction }) => {
   const [query, setQuery] = useState('');
-  const [index, setIndex] = useState(0);
+  const [idx, setIdx] = useState(0);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (open) { setQuery(''); setIndex(0); setTimeout(() => inputRef.current?.focus(), 50); }
+    if (open) { setQuery(''); setIdx(0); setTimeout(() => inputRef.current?.focus(), 60); }
   }, [open]);
+
+  const actions = useMemo(() => [
+    { id: 'excel',    label: 'Export to Excel',       icon: FiDownload,     run: () => onAction('excel') },
+    { id: 'pdf',      label: 'Export to PDF',         icon: FiFileText,     run: () => onAction('pdf') },
+    { id: 'refresh',  label: 'Refresh Data',          icon: FiRefreshCw,    run: () => onAction('refresh') },
+    { id: 'pending',  label: 'Show Pending',          icon: FiClock,        run: () => onAction('filter:Pending') },
+    { id: 'progress', label: 'Show In Progress',      icon: FiActivity,     run: () => onAction('filter:In Progress') },
+    { id: 'completed',label: 'Show Completed',        icon: FiCheckCircle,  run: () => onAction('filter:Completed') },
+    { id: 'delayed',  label: 'Show Delayed',          icon: FiAlertCircle,  run: () => onAction('filter:Delayed') }
+  ], [onAction]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q
-      ? services.filter(s =>
-          s.customerName?.toLowerCase().includes(q) ||
-          s.phone?.toString().includes(q) ||
-          s.applicationNumber?.toLowerCase().includes(q) ||
-          s.aadhaar?.toString().includes(q) ||
-          s.serviceType?.toLowerCase().includes(q) ||
-          s.assignedTo?.toLowerCase().includes(q)
-        )
-      : services;
-    return filtered.slice(0, 12);
+    if (!q) return [];
+    return services.filter(s =>
+      s.customerName?.toLowerCase().includes(q) ||
+      s.phone?.toString().includes(q) ||
+      s.applicationNumber?.toLowerCase().includes(q) ||
+      s.aadhaar?.toString().includes(q) ||
+      s.serviceType?.toLowerCase().includes(q) ||
+      s.assignedTo?.toLowerCase().includes(q)
+    ).slice(0, 10);
   }, [query, services]);
 
-  const quickActions = useMemo(() => [
-    { id: 'excel', label: 'Export to Excel', icon: FiDownload, run: () => onAction('excel') },
-    { id: 'pdf', label: 'Export to PDF', icon: FiFileText, run: () => onAction('pdf') },
-    { id: 'refresh', label: 'Refresh Data', icon: FiRefreshCw, run: () => onAction('refresh') },
-    { id: 'pending', label: 'Filter: Pending', icon: FiClock, run: () => onAction('filter:pending') },
-    { id: 'progress', label: 'Filter: In Progress', icon: FiActivity, run: () => onAction('filter:in_progress') },
-    { id: 'completed', label: 'Filter: Completed', icon: FiCheckCircle, run: () => onAction('filter:completed') }
-  ], [onAction]);
-
   const showingActions = !query.trim();
+  const list = showingActions ? actions : results;
 
-  useEffect(() => { setIndex(0); }, [query]);
+  useEffect(() => { setIdx(0); }, [query]);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e) => {
+    const h = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setIndex(i => Math.min(i + 1, (showingActions ? quickActions : results).length - 1)); }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setIndex(i => Math.max(i - 1, 0)); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setIdx(i => Math.min(i + 1, list.length - 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setIdx(i => Math.max(i - 1, 0)); }
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (showingActions) {
-          quickActions[index]?.run(); onClose();
-        } else if (results[index]) {
-          onSelect(results[index]); onClose();
-        }
+        if (showingActions) { actions[idx]?.run(); onClose(); }
+        else if (results[idx]) { onSelect(results[idx]); onClose(); }
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, index, results, quickActions, showingActions, onClose, onSelect]);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [open, idx, list, results, actions, showingActions, onClose, onSelect]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[12vh] bg-slate-900/40 backdrop-blur-sm px-4" onClick={onClose}>
-      <motion.div initial={{ opacity: 0, scale: 0.97, y: -8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.15 }}
-        className="w-full max-w-xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden"
+    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[12vh] bg-slate-900/30 backdrop-blur-sm px-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.12 }}
+        className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-2.5 px-4 border-b border-slate-100">
-          <FiSearch className="h-4 w-4 text-slate-400 flex-shrink-0" />
-          <input ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Search services, jump to anything…"
-            className="flex-1 py-3.5 text-sm bg-transparent outline-none placeholder:text-slate-400" />
-          <kbd className="px-1.5 py-0.5 text-[10px] bg-slate-100 rounded font-mono text-slate-500">ESC</kbd>
+        <div className="flex items-center gap-3 px-4 border-b border-slate-100">
+          <FiSearch className="h-4 w-4 text-slate-400" />
+          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Search services or run a command…"
+            className="flex-1 py-4 text-sm bg-transparent outline-none placeholder:text-slate-400" />
+          <kbd className="px-1.5 py-0.5 text-[10px] bg-slate-100 rounded font-mono text-slate-500 border border-slate-200">ESC</kbd>
         </div>
-        <div className="max-h-[380px] overflow-y-auto py-2">
+        <div className="max-h-[360px] overflow-y-auto py-2">
           {showingActions ? (
-            <div>
-              <p className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-slate-400 font-medium">Quick Actions</p>
-              {quickActions.map((a, i) => (
+            <>
+              <p className="px-4 py-1 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Quick Actions</p>
+              {actions.map((a, i) => (
                 <button key={a.id}
-                  onMouseEnter={() => setIndex(i)}
+                  onMouseEnter={() => setIdx(i)}
                   onClick={() => { a.run(); onClose(); }}
                   className={`w-[calc(100%-16px)] mx-2 text-left px-3 py-2 rounded-lg flex items-center gap-3 transition-colors ${
-                    i === index ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                    i === idx ? 'bg-slate-100' : 'hover:bg-slate-50'
                   }`}>
-                  <a.icon className={`h-4 w-4 ${i === index ? 'text-indigo-600' : 'text-slate-500'}`} />
+                  <a.icon className={`h-4 w-4 ${i === idx ? 'text-indigo-600' : 'text-slate-400'}`} />
                   <span className="text-sm text-slate-700">{a.label}</span>
                 </button>
               ))}
-            </div>
+            </>
           ) : results.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-slate-500">No results found for "{query}"</div>
+            <div className="px-4 py-10 text-center text-sm text-slate-500">No results</div>
           ) : (
-            <div>
-              <p className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-slate-400 font-medium">
-                Services ({results.length})
+            <>
+              <p className="px-4 py-1 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                {results.length} result{results.length !== 1 ? 's' : ''}
               </p>
               {results.map((s, i) => (
                 <button key={s.id}
-                  onMouseEnter={() => setIndex(i)}
+                  onMouseEnter={() => setIdx(i)}
                   onClick={() => { onSelect(s); onClose(); }}
                   className={`w-[calc(100%-16px)] mx-2 text-left px-3 py-2 rounded-lg flex items-center gap-3 transition-colors ${
-                    i === index ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                    i === idx ? 'bg-slate-100' : 'hover:bg-slate-50'
                   }`}>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${i === index ? 'bg-indigo-100' : 'bg-slate-100'}`}>
-                    <FiUser className={`h-4 w-4 ${i === index ? 'text-indigo-600' : 'text-slate-500'}`} />
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${i === idx ? 'bg-indigo-100' : 'bg-slate-100'}`}>
+                    <FiUser className={`h-4 w-4 ${i === idx ? 'text-indigo-600' : 'text-slate-500'}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -431,14 +420,12 @@ const CommandPalette = ({ open, onClose, services, onSelect, onAction }) => {
                   <StatusPill status={s.status} size="xs" />
                 </button>
               ))}
-            </div>
+            </>
           )}
         </div>
-        <div className="px-4 py-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-100 rounded font-mono text-slate-600">↑↓</kbd> Navigate</span>
-            <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-100 rounded font-mono text-slate-600">↵</kbd> Select</span>
-          </div>
+        <div className="px-4 py-2 border-t border-slate-100 flex items-center gap-4 text-[10px] text-slate-400">
+          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-100 rounded font-mono text-slate-600">↑↓</kbd> Navigate</span>
+          <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-slate-100 rounded font-mono text-slate-600">↵</kbd> Open</span>
         </div>
       </motion.div>
     </div>
@@ -446,101 +433,94 @@ const CommandPalette = ({ open, onClose, services, onSelect, onAction }) => {
 };
 
 /* ============================================================
-   FILTERS MODAL
+   FILTERS DRAWER
    ============================================================ */
 
-const FiltersModal = ({ open, onClose, staffList, categories, availableSubcategories, filters, setFilters, onClear }) => {
+const FiltersDrawer = ({ open, onClose, staffList, categories, availableSubcategories, values, setValues, onClear }) => {
   if (!open) return null;
-
-  const update = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
-
-  const fieldClass = "w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500";
-  const labelClass = "block text-xs font-medium text-slate-600 mb-1.5";
+  const update = (k, v) => setValues({ ...values, [k]: v });
+  const fc = "w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500";
+  const lc = "block text-xs font-semibold text-slate-600 mb-1.5";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
-      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'tween', duration: 0.2 }}
-        className="w-full max-w-md h-full bg-white shadow-2xl flex flex-col"
-        onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/30 backdrop-blur-sm" onClick={onClose}>
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+        transition={{ type: 'tween', duration: 0.2 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-md h-full bg-white shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <FiSliders className="h-4 w-4 text-indigo-600" />
-            <h3 className="text-sm font-semibold text-slate-900">Advanced Filters</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Filters</h3>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
-            <FiX className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className={labelClass}>Time Range</label>
-            <select value={filters.timeRange} onChange={e => update('timeRange', e.target.value)} className={fieldClass}>
+            <label className={lc}>Time Range</label>
+            <select value={values.timeRange} onChange={e => update('timeRange', e.target.value)} className={fc}>
               <option value="week">Last 7 Days</option>
               <option value="month">This Month</option>
               <option value="year">This Year</option>
               <option value="all">All Time</option>
             </select>
           </div>
-
           <div>
-            <label className={labelClass}>Specific Date</label>
-            <input type="date" value={filters.dateFilter} onChange={e => update('dateFilter', e.target.value)} className={fieldClass} />
+            <label className={lc}>Specific Date</label>
+            <input type="date" value={values.dateFilter} onChange={e => update('dateFilter', e.target.value)} className={fc} />
           </div>
-
           <div>
-            <label className={labelClass}>Service Category</label>
-            <select value={filters.serviceFilter} onChange={e => { update('serviceFilter', e.target.value); update('subcategoryFilter', 'all'); }} className={fieldClass}>
+            <label className={lc}>Service Category</label>
+            <select value={values.serviceFilter}
+              onChange={e => { update('serviceFilter', e.target.value); update('subcategoryFilter', 'all'); }}
+              className={fc}>
               <option value="all">All Services</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-
           <div>
-            <label className={labelClass}>Subcategory</label>
-            <select value={filters.subcategoryFilter} onChange={e => update('subcategoryFilter', e.target.value)}
-              disabled={filters.serviceFilter === 'all'}
-              className={`${fieldClass} ${filters.serviceFilter === 'all' ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <option value="all">{filters.serviceFilter === 'all' ? 'Select a category first' : 'All Subcategories'}</option>
+            <label className={lc}>Subcategory</label>
+            <select value={values.subcategoryFilter} onChange={e => update('subcategoryFilter', e.target.value)}
+              disabled={values.serviceFilter === 'all'}
+              className={`${fc} ${values.serviceFilter === 'all' ? 'opacity-50' : ''}`}>
+              <option value="all">{values.serviceFilter === 'all' ? 'Select category first' : 'All Subcategories'}</option>
               {availableSubcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-
           <div>
-            <label className={labelClass}>Assigned Staff</label>
-            <select value={filters.staffFilter} onChange={e => update('staffFilter', e.target.value)} className={fieldClass}>
+            <label className={lc}>Assigned Staff</label>
+            <select value={values.staffFilter} onChange={e => update('staffFilter', e.target.value)} className={fc}>
               <option value="all">Everyone</option>
               {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-
           <div>
-            <label className={labelClass}>Timeline</label>
-            <select value={filters.expiryFilter} onChange={e => update('expiryFilter', e.target.value)} className={fieldClass}>
+            <label className={lc}>Timeline</label>
+            <select value={values.expiryFilter} onChange={e => update('expiryFilter', e.target.value)} className={fc}>
               <option value="all">Any Timeline</option>
               <option value="upcoming">Upcoming Expiry</option>
               <option value="overdue">Overdue</option>
             </select>
           </div>
-
           <div>
-            <label className={labelClass}>Aadhaar Number</label>
+            <label className={lc}>Aadhaar Number</label>
             <div className="relative">
               <FiCreditCard className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
               <input type="text" maxLength={12} placeholder="Enter 12-digit Aadhaar"
-                value={filters.aadhaarSearch} onChange={e => update('aadhaarSearch', e.target.value)}
-                className={`${fieldClass} pl-10`} />
+                value={values.aadhaarSearch} onChange={e => update('aadhaarSearch', e.target.value)}
+                className={`${fc} pl-10`} />
             </div>
           </div>
         </div>
-
-        <div className="px-5 py-4 border-t border-slate-200 flex items-center gap-2 bg-slate-50">
+        <div className="px-5 py-4 border-t border-slate-100 flex gap-2 bg-slate-50">
           <button onClick={onClear}
             className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100">
             Clear All
           </button>
           <button onClick={onClose}
-            className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm">
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">
             Apply
           </button>
         </div>
@@ -550,57 +530,7 @@ const FiltersModal = ({ open, onClose, staffList, categories, availableSubcatego
 };
 
 /* ============================================================
-   SERVICE LIST ITEM
-   ============================================================ */
-
-const ServiceListItem = ({ service, selected, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`w-full text-left px-3 py-3 border-l-[3px] transition-all ${
-      selected
-        ? 'border-l-indigo-600 bg-indigo-50/70'
-        : 'border-l-transparent hover:border-l-slate-300 hover:bg-slate-50'
-    }`}
-  >
-    <div className="flex items-start justify-between gap-2 mb-1.5">
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center flex-shrink-0">
-          <FiUser className="h-3.5 w-3.5 text-white" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-900 truncate">{service.customerName}</p>
-          <p className="text-[11px] text-slate-500 truncate">{service.phone}</p>
-        </div>
-      </div>
-      <StatusPill status={service.status} size="xs" />
-    </div>
-    <div className="flex items-center gap-1.5 mb-1.5 pl-9">
-      <span className="text-xs text-slate-700 font-medium truncate">{service.serviceType}</span>
-      {service.subcategoryName && service.subcategoryName !== 'N/A' && (
-        <>
-          <span className="text-slate-300">·</span>
-          <span className="text-[11px] text-slate-500 truncate">{service.subcategoryName}</span>
-        </>
-      )}
-    </div>
-    <div className="flex items-center justify-between pl-9">
-      <div className="flex items-center gap-1.5">
-        <PriorityPill priority={service.priority} />
-        {service.workSource === 'online' ? (
-          <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Online</span>
-        ) : (
-          <span className="text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5">Walk-in</span>
-        )}
-      </div>
-      {service.applicationNumber && (
-        <span className="text-[10px] font-mono text-slate-400 truncate max-w-[100px]">{service.applicationNumber}</span>
-      )}
-    </div>
-  </button>
-);
-
-/* ============================================================
-   MAIN COMPONENT
+   MAIN
    ============================================================ */
 
 const TrackServicePage = () => {
@@ -623,27 +553,25 @@ const TrackServicePage = () => {
   const [commandOpen, setCommandOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const getSavedFilters = () => {
+  const getSaved = () => {
     try {
-      const saved = localStorage.getItem('staffServiceSavedView');
-      if (saved) return JSON.parse(saved);
-    } catch (e) { console.error(e); }
+      const s = localStorage.getItem('staffServiceSavedView');
+      if (s) return JSON.parse(s);
+    } catch {}
     return { status: 'all', staff: 'all', expiry: 'all', date: '', service: 'all', subcategory: 'all' };
   };
 
-  const initialFilters = getSavedFilters();
-
   const [searchTerm, setSearchTerm] = useState('');
   const [aadhaarSearch, setAadhaarSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState(initialFilters.status);
-  const [staffFilter, setStaffFilter] = useState(initialFilters.staff);
-  const [expiryFilter, setExpiryFilter] = useState(initialFilters.expiry);
-  const [dateFilter, setDateFilter] = useState(initialFilters.date || '');
-  const [serviceFilter, setServiceFilter] = useState(initialFilters.service || 'all');
-  const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
+  const [statusFilter, setStatusFilter] = useState(getSaved().status);
+  const [staffFilter, setStaffFilter] = useState(getSaved().staff);
+  const [expiryFilter, setExpiryFilter] = useState(getSaved().expiry);
+  const [dateFilter, setDateFilter] = useState(getSaved().date || '');
+  const [serviceFilter, setServiceFilter] = useState(getSaved().service || 'all');
+  const [subcategoryFilter, setSubcategoryFilter] = useState(getSaved().subcategory || 'all');
   const [timeRange, setTimeRange] = useState('month');
 
-  const [discoveredSubcategories, setDiscoveredSubcategories] = useState({});
+  const [discoveredSub, setDiscoveredSub] = useState({});
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -655,35 +583,22 @@ const TrackServicePage = () => {
 
   const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, delayed: 0, pending: 0, sla_compliance: 100 });
 
-  /* ---------------- Keyboard shortcut: Cmd/Ctrl + K ---------------- */
+  /* Keyboard shortcut ⌘K */
   useEffect(() => {
-    const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setCommandOpen(true);
-      }
+    const h = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCommandOpen(true); }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
   }, []);
 
-  /* ---------------- Debounce search ---------------- */
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchTerm), 400);
-    return () => clearTimeout(t);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedAadhaar(aadhaarSearch), 400);
-    return () => clearTimeout(t);
-  }, [aadhaarSearch]);
-
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(searchTerm), 400); return () => clearTimeout(t); }, [searchTerm]);
+  useEffect(() => { const t = setTimeout(() => setDebouncedAadhaar(aadhaarSearch), 400); return () => clearTimeout(t); }, [aadhaarSearch]);
   useEffect(() => { setCurrentPage(1); },
     [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
 
-  /* ---------------- Discover subcategories ---------------- */
   useEffect(() => {
-    setDiscoveredSubcategories(prev => {
+    setDiscoveredSub(prev => {
       const next = { ...prev };
       services.forEach(s => {
         if (s.categoryId && s.subcategoryId) {
@@ -697,19 +612,16 @@ const TrackServicePage = () => {
 
   const availableSubcategories = useMemo(() => {
     if (serviceFilter === 'all') return [];
-    const selectedCat = categories.find(c => c.id.toString() === serviceFilter.toString());
-    if (selectedCat && selectedCat.subcategories) return selectedCat.subcategories;
-    if (discoveredSubcategories[serviceFilter]) {
-      return Array.from(discoveredSubcategories[serviceFilter], ([id, name]) => ({ id, name }));
-    }
+    const cat = categories.find(c => c.id.toString() === serviceFilter.toString());
+    if (cat && cat.subcategories) return cat.subcategories;
+    if (discoveredSub[serviceFilter]) return Array.from(discoveredSub[serviceFilter], ([id, name]) => ({ id, name }));
     return [];
-  }, [serviceFilter, categories, discoveredSubcategories]);
+  }, [serviceFilter, categories, discoveredSub]);
 
-  /* ---------------- Transform backend data ---------------- */
-  const transformBackendData = useCallback((trackingData) => trackingData.map((entry) => {
-    const totalCharge = parseFloat(entry.total_charges || 0);
-    const totalReceived = parseFloat(entry.total_received || 0);
-    const payments = entry.payment_details_array || [];
+  const transformBackendData = useCallback((data) => data.map((e) => {
+    const totalCharge = parseFloat(e.total_charges || 0);
+    const totalReceived = parseFloat(e.total_received || 0);
+    const payments = e.payment_details_array || [];
 
     let paymentStatus = 'Pending';
     if (totalCharge <= 0) paymentStatus = 'Not Applicable';
@@ -720,66 +632,65 @@ const TrackServicePage = () => {
       ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
       : 'No payments recorded';
 
-    const createdDate = new Date(entry.created_at || entry.updated_at || Date.now());
-    const dateStr = createdDate.toISOString().split('T')[0];
-    const updatedDate = new Date(entry.updated_at || Date.now());
-    const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
+    const cd = new Date(e.created_at || e.updated_at || Date.now());
+    const dateStr = cd.toISOString().split('T')[0];
+    const ud = new Date(e.updated_at || Date.now());
+    const timeStr = ud.toTimeString().split(' ')[0].substring(0, 5);
 
-    const calculatedProgress = entry.progress || calculateProgress(STATUS_MAP[entry.status] || 'Pending', entry.current_step || 'Submitted');
-    const workSource = entry.work_source || (entry.customer_service_id ? 'online' : 'offline');
+    const progress = e.progress || calculateProgress(STATUS_MAP[e.status] || 'Pending', e.current_step || 'Submitted');
+    const workSource = e.work_source || (e.customer_service_id ? 'online' : 'offline');
 
     return {
-      id: entry.id.toString(),
-      serviceEntryId: entry.service_entry_id?.toString(),
-      trackingId: `TR-${entry.id}`,
-      applicationNumber: entry.application_number || `APP${entry.service_entry_id}`,
-      customerName: entry.customer_name || 'Unknown',
-      customerPhone: entry.phone || 'N/A',
-      serviceType: entry.service_name || 'Unknown',
-      subcategoryName: entry.subcategory_name || 'N/A',
-      categoryId: entry.category_id,
-      subcategoryId: entry.subcategory_id,
-      staffName: entry.assigned_to_name || 'Unassigned',
-      assignedTo: entry.assigned_to_name || 'Unassigned',
-      assignedToId: entry.assigned_to,
-      serviceCharge: parseFloat(entry.service_charges) || 0,
-      departmentCharge: parseFloat(entry.department_charges) || 0,
+      id: e.id.toString(),
+      serviceEntryId: e.service_entry_id?.toString(),
+      trackingId: `TR-${e.id}`,
+      applicationNumber: e.application_number || `APP${e.service_entry_id}`,
+      customerName: e.customer_name || 'Unknown',
+      customerPhone: e.phone || 'N/A',
+      serviceType: e.service_name || 'Unknown',
+      subcategoryName: e.subcategory_name || 'N/A',
+      categoryId: e.category_id,
+      subcategoryId: e.subcategory_id,
+      staffName: e.assigned_to_name || 'Unassigned',
+      assignedTo: e.assigned_to_name || 'Unassigned',
+      assignedToId: e.assigned_to,
+      serviceCharge: parseFloat(e.service_charges) || 0,
+      departmentCharge: parseFloat(e.department_charges) || 0,
       totalCharge,
       cost: totalCharge,
-      status: STATUS_MAP[entry.status] || 'Pending',
-      currentStep: entry.current_step || 'Submitted',
-      progress: calculatedProgress,
-      priority: entry.priority || 'medium',
+      status: STATUS_MAP[e.status] || 'Pending',
+      currentStep: e.current_step || 'Submitted',
+      progress,
+      priority: e.priority || 'medium',
       date: dateStr,
       time: timeStr,
-      estimatedDelivery: entry.estimated_delivery && !isNaN(new Date(entry.estimated_delivery)) ? formatDate(entry.estimated_delivery) : 'Not set',
-      expiryDate: entry.expiry_date && !isNaN(new Date(entry.expiry_date)) ? new Date(entry.expiry_date).toISOString() : 'N/A',
-      createdAt: entry.created_at || entry.updated_at,
-      updatedAt: entry.updated_at,
-      notes: entry.notes || '',
-      followUpRequired: entry.status === 'rejected' || entry.status === 'resubmit',
+      estimatedDelivery: e.estimated_delivery && !isNaN(new Date(e.estimated_delivery)) ? formatDate(e.estimated_delivery) : 'Not set',
+      expiryDate: e.expiry_date && !isNaN(new Date(e.expiry_date)) ? new Date(e.expiry_date).toISOString() : 'N/A',
+      createdAt: e.created_at || e.updated_at,
+      updatedAt: e.updated_at,
+      notes: e.notes || '',
+      followUpRequired: e.status === 'rejected' || e.status === 'resubmit',
       paymentStatus,
       paymentDetails: paymentDetailsStr,
       payments,
-      phone: entry.phone || 'N/A',
-      email: entry.email || '',
-      aadhaar: entry.aadhaar || '',
-      steps: Array.isArray(entry.steps) ? entry.steps.map(step => ({
-        id: step.id, name: step.name, completed: step.completed, date: step.date,
-        created_at: step.created_at, step_order: step.step_order, estimated_days: step.estimated_days
+      phone: e.phone || 'N/A',
+      email: e.email || '',
+      aadhaar: e.aadhaar || '',
+      steps: Array.isArray(e.steps) ? e.steps.map(s => ({
+        id: s.id, name: s.name, completed: s.completed, date: s.date,
+        created_at: s.created_at, step_order: s.step_order, estimated_days: s.estimated_days
       })) : [],
-      averageTime: entry.average_time || '7 days',
-      rawEstimatedDelivery: entry.estimated_delivery,
-      rawExpiryDate: entry.expiry_date,
+      averageTime: e.average_time || '7 days',
+      rawEstimatedDelivery: e.estimated_delivery,
+      rawExpiryDate: e.expiry_date,
       workSource,
-      serviceRating: entry.service_rating,
-      staffRating: entry.staff_rating,
-      reviewText: entry.review_text,
-      reviewSubmittedAt: entry.submitted_at
+      serviceRating: e.service_rating,
+      staffRating: e.staff_rating,
+      reviewText: e.review_text,
+      reviewSubmittedAt: e.submitted_at
     };
   }), []);
 
-  /* ---------------- Fetchers ---------------- */
   const fetchStats = async () => {
     const apiStatus = REVERSE_STATUS_MAP[statusFilter] || statusFilter;
     const data = await getTrackingStats({
@@ -797,28 +708,20 @@ const TrackServicePage = () => {
     if (!trackingId) { setActivityHistory([]); return; }
     try {
       setActivityLoading(true);
-      const response = await getTrackingActivity(trackingId);
-      setActivityHistory(Array.isArray(response?.activities) ? response.activities : []);
-    } catch (err) {
-      console.error(err);
-      setActivityHistory([]);
-    } finally {
-      setActivityLoading(false);
-    }
+      const res = await getTrackingActivity(trackingId);
+      setActivityHistory(Array.isArray(res?.activities) ? res.activities : []);
+    } catch { setActivityHistory([]); }
+    finally { setActivityLoading(false); }
   };
 
   const fetchDocuments = async (trackingId) => {
     if (!trackingId) { setDocuments([]); return; }
     try {
       setDocumentsLoading(true);
-      const data = await getTrackingDocuments(trackingId);
-      setDocuments(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error(err);
-      setDocuments([]);
-    } finally {
-      setDocumentsLoading(false);
-    }
+      const d = await getTrackingDocuments(trackingId);
+      setDocuments(Array.isArray(d) ? d : []);
+    } catch { setDocuments([]); }
+    finally { setDocumentsLoading(false); }
   };
 
   const fetchAllTrackingEntries = async () => {
@@ -839,41 +742,36 @@ const TrackServicePage = () => {
         aadhaar: debouncedAadhaar || undefined
       };
 
-      const [trackingRes, staffRes, categoriesRes] = await Promise.all([
+      const [trackRes, staffRes, catRes] = await Promise.all([
         getTrackingEntries(params), getStaff(), getCategories()
       ]);
 
-      if (trackingRes?.pagination) {
-        setTotalRecords(trackingRes.pagination.totalRecords);
-        setTotalPages(trackingRes.pagination.totalPages);
+      if (trackRes?.pagination) {
+        setTotalRecords(trackRes.pagination.totalRecords);
+        setTotalPages(trackRes.pagination.totalPages);
       }
 
-      const trackingData = Array.isArray(trackingRes?.data) ? trackingRes.data : Array.isArray(trackingRes) ? trackingRes : [];
-      const staffData = Array.isArray(staffRes?.data) ? staffRes.data : Array.isArray(staffRes) ? staffRes : [];
-      const categoriesData = Array.isArray(categoriesRes?.data) ? categoriesRes.data : Array.isArray(categoriesRes) ? categoriesRes : [];
+      const td = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
+      const sd = Array.isArray(staffRes?.data) ? staffRes.data : Array.isArray(staffRes) ? staffRes : [];
+      const cd = Array.isArray(catRes?.data) ? catRes.data : Array.isArray(catRes) ? catRes : [];
 
-      setStaffList(staffData);
-      setCategories(categoriesData);
+      setStaffList(sd); setCategories(cd);
 
-      let transformed = transformBackendData(trackingData);
-
+      let transformed = transformBackendData(td);
       if (serviceFilter !== 'all') transformed = transformed.filter(s => String(s.categoryId) === String(serviceFilter));
       if (subcategoryFilter !== 'all') transformed = transformed.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
 
       setServices(transformed);
       return transformed;
     } catch (err) {
-      console.error('Error fetching data:', err);
-      toast.error('Failed to fetch data');
-      setStaffList([]);
-      setCategories([]);
+      console.error(err); toast.error('Failed to fetch data');
+      setStaffList([]); setCategories([]);
       return [];
     }
   };
 
-  /* ---------------- Initial load ---------------- */
   useEffect(() => {
-    const loadInitial = async () => {
+    const init = async () => {
       setLoading(true);
       try {
         const [transformed] = await Promise.all([fetchAllTrackingEntries(), fetchStats()]);
@@ -881,24 +779,22 @@ const TrackServicePage = () => {
           const found = transformed.find(s => s.id === id);
           if (found) await handleServiceSelect(found, true);
         }
-      } catch (err) { console.error(err); }
+      } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
-    loadInitial();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    init();
+    // eslint-disable-next-line
   }, []);
 
-  /* ---------------- Filter reload ---------------- */
   useEffect(() => {
     const reload = async () => {
       try { await Promise.all([fetchAllTrackingEntries(), fetchStats()]); }
-      catch (err) { console.error(err); }
+      catch (e) { console.error(e); }
     };
     reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [currentPage, debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
 
-  /* ---------------- Handlers ---------------- */
   const handleServiceSelect = async (service, preventNav = false) => {
     setSelectedService(service);
     setActiveTab('overview');
@@ -918,9 +814,8 @@ const TrackServicePage = () => {
       await updateTrackingStatus(serviceId, apiStatus);
       await fetchActivityHistory(serviceId);
       toast.success(`Status updated to ${newStatus}`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to update status');
+    } catch (e) {
+      console.error(e); toast.error('Failed to update status');
     }
   };
 
@@ -939,15 +834,14 @@ const TrackServicePage = () => {
         progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
       };
 
-      const stepOrderMap = STEP_ORDER_MAP;
       if (updates.currentStep !== undefined && service.currentStep !== updates.currentStep) {
-        const targetOrder = stepOrderMap[updates.currentStep] || 1;
+        const targetOrder = STEP_ORDER_MAP[updates.currentStep] || 1;
         const nowIso = new Date().toISOString();
-        if (service.steps && service.steps.length > 0) {
+        if (service.steps?.length > 0) {
           updates.steps = service.steps.map(step => {
-            const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
-            if (currentOrder <= targetOrder) {
-              return { ...step, completed: true, date: (currentOrder === targetOrder) ? nowIso : (step.date || service.createdAt) };
+            const order = STEP_ORDER_MAP[step.name] || step.step_order || 1;
+            if (order <= targetOrder) {
+              return { ...step, completed: true, date: (order === targetOrder) ? nowIso : (step.date || service.createdAt) };
             }
             return { ...step, completed: false };
           });
@@ -981,9 +875,8 @@ const TrackServicePage = () => {
 
       await updateTrackingEntry(service.id, payload);
       await fetchActivityHistory(service.id);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to save change');
+    } catch (e) {
+      console.error(e); toast.error('Failed to save');
     }
   };
 
@@ -991,53 +884,38 @@ const TrackServicePage = () => {
     try {
       await notifyCustomer(service.id, `Dear ${service.customerName}, your ${service.serviceType} application (App No: ${service.applicationNumber || 'N/A'}) is now ${service.status}.`);
       toast.success(`Notification sent to ${service.customerName}`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to send notification');
-    }
+    } catch (e) { console.error(e); toast.error('Failed to send'); }
   };
 
   const handleUploadDocument = async (trackingId, file, label, visible) => {
     try {
       setUploadingDocument(true);
       const fd = new FormData();
-      fd.append('file', file);
-      fd.append('label', label);
+      fd.append('file', file); fd.append('label', label);
       fd.append('visible_to_customer', visible ? 'true' : 'false');
       await uploadTrackingDocument(trackingId, fd);
       await fetchDocuments(trackingId);
       toast.success('Document uploaded');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to upload document');
-    } finally {
-      setUploadingDocument(false);
-    }
+    } catch (e) { console.error(e); toast.error('Upload failed'); }
+    finally { setUploadingDocument(false); }
   };
 
   const handleToggleDocumentVisibility = async (trackingId, docId, visible) => {
     try {
       await toggleTrackingDocumentVisibility(trackingId, docId, visible);
       await fetchDocuments(trackingId);
-      toast.success(visible ? 'Document visible to customer' : 'Document hidden');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to update visibility');
-    }
+      toast.success(visible ? 'Visible to customer' : 'Hidden');
+    } catch (e) { console.error(e); toast.error('Update failed'); }
   };
 
   const handleDeleteDocument = async (trackingId, docId) => {
     try {
       await deleteTrackingDocument(trackingId, docId);
       await fetchDocuments(trackingId);
-      toast.success('Document deleted');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to delete document');
-    }
+      toast.success('Deleted');
+    } catch (e) { console.error(e); toast.error('Delete failed'); }
   };
 
-  /* ---------------- Export ---------------- */
   const fetchAllFilteredDataForExport = async () => {
     const apiStatus = REVERSE_STATUS_MAP[statusFilter] || statusFilter;
     const params = {
@@ -1056,22 +934,22 @@ const TrackServicePage = () => {
     };
     const res = await getTrackingEntries(params);
     const data = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-    let transformed = transformBackendData(data);
-    if (serviceFilter !== 'all') transformed = transformed.filter(s => String(s.categoryId) === String(serviceFilter));
-    if (subcategoryFilter !== 'all') transformed = transformed.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
-    return transformed;
+    let t = transformBackendData(data);
+    if (serviceFilter !== 'all') t = t.filter(s => String(s.categoryId) === String(serviceFilter));
+    if (subcategoryFilter !== 'all') t = t.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+    return t;
   };
 
   const handleExportExcel = async () => {
     try {
       if (totalRecords === 0) return toast.info('No data to export');
-      toast.info('Preparing Excel file…', { autoClose: 1500 });
+      toast.info('Preparing Excel…', { autoClose: 1500 });
       const data = await fetchAllFilteredDataForExport();
       const rows = data.map(s => ({
-        'App No': s.applicationNumber, 'Customer': s.customerName, 'Phone': s.phone,
-        'Email': s.email, 'Service': s.serviceType, 'Subcategory': s.subcategoryName,
-        'Status': s.status, 'Step': s.currentStep, 'Priority': s.priority,
-        'Assigned To': s.assignedTo, 'Created': s.date, 'Est. Delivery': s.estimatedDelivery,
+        'App No': s.applicationNumber, 'Customer': s.customerName, 'Phone': s.phone, 'Email': s.email,
+        'Service': s.serviceType, 'Subcategory': s.subcategoryName, 'Status': s.status,
+        'Step': s.currentStep, 'Priority': s.priority, 'Assigned': s.assignedTo,
+        'Created': s.date, 'Est. Delivery': s.estimatedDelivery,
         'Service Charge': s.serviceCharge, 'Dept Charge': s.departmentCharge,
         'Total': s.totalCharge, 'Payment': s.paymentStatus
       }));
@@ -1080,7 +958,7 @@ const TrackServicePage = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'Tracking');
       XLSX.writeFile(wb, `Service_Tracking_${new Date().toISOString().split('T')[0]}.xlsx`);
       toast.success('Excel exported');
-    } catch (err) { console.error(err); toast.error('Export failed'); }
+    } catch (e) { console.error(e); toast.error('Export failed'); }
   };
 
   const handleExportPDF = async () => {
@@ -1091,31 +969,26 @@ const TrackServicePage = () => {
       const doc = new jsPDF('landscape');
       doc.setFontSize(15);
       doc.text('Service Tracking Report', 14, 15);
-      doc.setFontSize(9);
-      doc.setTextColor(120);
+      doc.setFontSize(9); doc.setTextColor(120);
       doc.text(`Generated: ${new Date().toLocaleDateString()} | Records: ${data.length}`, 14, 22);
       autoTable(doc, {
         head: [['App No', 'Customer', 'Phone', 'Service', 'Status', 'Step', 'Assigned', 'Total']],
         body: data.map(s => [s.applicationNumber, s.customerName, s.phone, s.serviceType, s.status, s.currentStep, s.assignedTo, `Rs ${s.totalCharge || 0}`]),
         startY: 28, styles: { fontSize: 8 },
-        headStyles: { fillColor: [79, 70, 229] }, alternateRowStyles: { fillColor: [249, 250, 251] }
+        headStyles: { fillColor: [15, 23, 42] }, alternateRowStyles: { fillColor: [248, 250, 252] }
       });
       doc.save(`Service_Tracking_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success('PDF exported');
-    } catch (err) { console.error(err); toast.error('Export failed'); }
+    } catch (e) { console.error(e); toast.error('Export failed'); }
   };
 
-  /* ---------------- Command palette actions ---------------- */
   const handleCommandAction = (action) => {
     if (action === 'excel') handleExportExcel();
     else if (action === 'pdf') handleExportPDF();
     else if (action === 'refresh') window.location.reload();
-    else if (action === 'filter:pending') setStatusFilter('Pending');
-    else if (action === 'filter:in_progress') setStatusFilter('In Progress');
-    else if (action === 'filter:completed') setStatusFilter('Completed');
+    else if (action.startsWith('filter:')) setStatusFilter(action.split(':')[1]);
   };
 
-  /* ---------------- Derived ---------------- */
   const activeFiltersCount = useMemo(() => {
     let n = 0;
     if (statusFilter !== 'all') n++;
@@ -1134,13 +1007,28 @@ const TrackServicePage = () => {
     setServiceFilter('all'); setSubcategoryFilter('all'); setTimeRange('month');
   };
 
-  /* ---------------- Render ---------------- */
+  const handleSaveView = () => {
+    localStorage.setItem('staffServiceSavedView', JSON.stringify({
+      status: statusFilter, staff: staffFilter, expiry: expiryFilter,
+      date: dateFilter, service: serviceFilter, subcategory: subcategoryFilter
+    }));
+    toast.success('View saved');
+  };
+
+  /* Group services by date for table */
+  const servicesByDate = useMemo(() => services.reduce((g, s) => {
+    const k = s.date || 'Unknown Date';
+    if (!g[k]) g[k] = [];
+    g[k].push(s);
+    return g;
+  }, {}), [services]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-slate-600 font-medium">Loading services…</p>
+          <div className="w-12 h-12 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-slate-500 font-medium">Loading services…</p>
         </div>
       </div>
     );
@@ -1148,181 +1036,347 @@ const TrackServicePage = () => {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-slate-50">
 
-        {/* ================= TOP BAR ================= */}
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-          <div className="px-4 lg:px-6 py-3 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
-                <FiTarget className="h-5 w-5 text-white" />
+        {/* ================= HEADER ================= */}
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+          <div className="max-w-[1600px] mx-auto px-4 lg:px-6 py-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 bg-gradient-to-br from-slate-900 to-slate-700 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
+                  <FiTarget className="h-5 w-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-lg font-bold text-slate-900 leading-tight">Service Tracking</h1>
+                  <p className="text-xs text-slate-500">Track, edit and manage applications</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <h1 className="text-base font-semibold text-slate-900 truncate">Service Tracking</h1>
-                <p className="text-xs text-slate-500 truncate hidden sm:block">Manage, track and update service applications</p>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button onClick={() => setCommandOpen(true)}
-                className="hidden md:flex items-center gap-2.5 px-3 py-1.5 text-sm text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
-                <FiSearch className="h-3.5 w-3.5" />
-                <span className="text-xs">Search services…</span>
-                <kbd className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-white rounded border border-slate-200 font-mono text-slate-500">
-                  <FiCommand className="h-2.5 w-2.5" />K
-                </kbd>
-              </button>
-
-              <button onClick={() => setCommandOpen(true)} className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
-                <FiSearch className="h-4 w-4" />
-              </button>
-
-              {id && (
-                <button onClick={() => navigate('/dashboard/staff/track_service')}
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
-                  <FiArrowLeft className="h-3.5 w-3.5" />
-                  Back
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setCommandOpen(true)}
+                  className="hidden md:flex items-center gap-2 w-64 px-3 py-2 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-lg hover:border-slate-300 hover:bg-white transition-all">
+                  <FiSearch className="h-3.5 w-3.5" />
+                  <span className="text-xs flex-1 text-left">Search everything…</span>
+                  <kbd className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] bg-white rounded border border-slate-200 font-mono text-slate-500">
+                    <FiCommand className="h-2.5 w-2.5" />K
+                  </kbd>
                 </button>
-              )}
 
-              <button onClick={handleExportExcel}
-                className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
-                <FiDownload className="h-3.5 w-3.5" />
-                Export
-              </button>
+                <button onClick={() => setCommandOpen(true)}
+                  className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
+                  <FiSearch className="h-4 w-4" />
+                </button>
 
-              <button onClick={() => window.location.reload()}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm">
-                <FiRefreshCw className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Refresh</span>
-              </button>
+                {id && (
+                  <button onClick={() => navigate('/dashboard/staff/track_service')}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">
+                    <FiArrowLeft className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Back</span>
+                  </button>
+                )}
+
+                <button onClick={handleExportExcel}
+                  className="hidden lg:flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">
+                  <FiDownload className="h-3.5 w-3.5" />
+                  Export
+                </button>
+
+                <button onClick={() => window.location.reload()}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 shadow-sm">
+                  <FiRefreshCw className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Refresh</span>
+                </button>
+              </div>
             </div>
-          </div>
-
-          {/* KPI strip */}
-          <div className="px-4 lg:px-6 pb-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-            <MiniStat label="Total" value={globalStats.total || 0} icon={FiLayers} color="indigo" />
-            <MiniStat label="In Progress" value={globalStats.in_progress || 0} icon={FiActivity} color="blue" />
-            <MiniStat label="Completed" value={globalStats.completed || 0} icon={FiCheckCircle} color="emerald" />
-            <MiniStat label="Delayed" value={globalStats.delayed || 0} icon={FiAlertCircle} color="rose" />
-            <MiniStat label="SLA" value={`${Math.round(globalStats.sla_compliance || 100)}%`} icon={FiAward} color="violet" />
           </div>
         </header>
 
-        {/* ================= MAIN LAYOUT ================= */}
-        <div className="flex-1 flex overflow-hidden min-h-0" style={{ height: 'calc(100vh - 130px)' }}>
+        <div className="max-w-[1600px] mx-auto px-4 lg:px-6 py-6 space-y-6">
 
-          {/* ---------- LEFT SIDEBAR ---------- */}
-          <aside className={`w-full lg:w-[360px] xl:w-[400px] bg-white border-r border-slate-200 flex flex-col min-h-0 ${
-            selectedService ? 'hidden lg:flex' : 'flex'
-          }`}>
-            {/* Search + filter chips */}
-            <div className="px-3 pt-3 pb-2 border-b border-slate-200 space-y-2.5 flex-shrink-0">
-              <div className="relative">
-                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search name, phone, app no, Aadhaar…"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white transition-all"
-                />
-                {searchTerm && (
-                  <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600">
-                    <FiX className="h-3 w-3" />
+          {/* ================= KPI CARDS ================= */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <KpiCard label="Total Services" value={globalStats.total || 0} icon={FiLayers} accent="indigo" trend={12} />
+            <KpiCard label="In Progress" value={globalStats.in_progress || 0} icon={FiActivity} accent="blue" trend={8} />
+            <KpiCard label="Completed" value={globalStats.completed || 0} icon={FiCheckCircle} accent="emerald" trend={15} />
+            <KpiCard label="Delayed" value={globalStats.delayed || 0} icon={FiAlertCircle} accent="rose" trend={-3} />
+            <KpiCard label="SLA Compliance" value={`${Math.round(globalStats.sla_compliance || 100)}%`} icon={FiAward} accent="violet" trend={2} />
+          </div>
+
+          {/* ================= FILTER BAR ================= */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                <div className="relative flex-1 min-w-[240px] max-w-md">
+                  <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Search by name, phone, app no, Aadhaar…"
+                    className="w-full pl-9 pr-9 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white transition-all" />
+                  {searchTerm && (
+                    <button onClick={() => setSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-slate-200 text-slate-400">
+                      <FiX className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+                  <FilterChip active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>All</FilterChip>
+                  <FilterChip active={statusFilter === 'Pending'} onClick={() => setStatusFilter('Pending')} dot="bg-amber-500">Pending</FilterChip>
+                  <FilterChip active={statusFilter === 'In Progress'} onClick={() => setStatusFilter('In Progress')} dot="bg-blue-500">Active</FilterChip>
+                  <FilterChip active={statusFilter === 'Completed'} onClick={() => setStatusFilter('Completed')} dot="bg-emerald-500">Done</FilterChip>
+                  <FilterChip active={statusFilter === 'Delayed'} onClick={() => setStatusFilter('Delayed')} dot="bg-rose-500">Delayed</FilterChip>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {(activeFiltersCount > 0 || searchTerm) && (
+                  <button onClick={handleClearFilters}
+                    className="text-xs text-slate-500 hover:text-slate-800 font-medium px-2.5 py-1.5">
+                    Clear
                   </button>
                 )}
-              </div>
-
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
-                <FilterChip active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>All</FilterChip>
-                <FilterChip active={statusFilter === 'Pending'} onClick={() => setStatusFilter('Pending')} dot="bg-amber-500">Pending</FilterChip>
-                <FilterChip active={statusFilter === 'In Progress'} onClick={() => setStatusFilter('In Progress')} dot="bg-blue-500">Active</FilterChip>
-                <FilterChip active={statusFilter === 'Completed'} onClick={() => setStatusFilter('Completed')} dot="bg-emerald-500">Done</FilterChip>
-                <FilterChip active={statusFilter === 'Delayed'} onClick={() => setStatusFilter('Delayed')} dot="bg-rose-500">Delayed</FilterChip>
+                <button onClick={handleSaveView}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">
+                  <FiSave className="h-3.5 w-3.5" />
+                  Save view
+                </button>
                 <button onClick={() => setFiltersOpen(true)}
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 rounded-full hover:bg-slate-200 flex-shrink-0">
-                  <FiSliders className="h-3 w-3" />
-                  {activeFiltersCount > 0 ? `More (${activeFiltersCount})` : 'More'}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 shadow-sm">
+                  <FiSliders className="h-3.5 w-3.5" />
+                  Filters
+                  {activeFiltersCount > 0 && (
+                    <span className="ml-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-white text-slate-900 rounded-full">
+                      {activeFiltersCount}
+                    </span>
+                  )}
                 </button>
               </div>
-
-              {(statusFilter !== 'all' || searchTerm || staffFilter !== 'all' || serviceFilter !== 'all') && (
-                <div className="flex items-center justify-between text-[11px] text-slate-500">
-                  <span>
-                    <span className="font-semibold text-slate-700">{totalRecords}</span> result{totalRecords !== 1 ? 's' : ''}
-                  </span>
-                  <button onClick={handleClearFilters} className="text-indigo-600 hover:text-indigo-700 font-medium">
-                    Clear filters
-                  </button>
-                </div>
-              )}
             </div>
+          </div>
 
-            {/* List */}
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {services.length === 0 ? (
-                <EmptyState icon={FiInbox} title="No services found" message="Try adjusting your filters or search terms." />
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {services.map(s => (
-                    <ServiceListItem key={s.id} service={s} selected={selectedService?.id === s.id} onClick={() => handleServiceSelect(s)} />
+          {/* ================= TABLE ================= */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 font-semibold w-[280px]">Customer</th>
+                    <th className="px-4 py-3 font-semibold">Service</th>
+                    <th className="px-4 py-3 font-semibold w-[180px]">Application</th>
+                    <th className="px-4 py-3 font-semibold w-[160px]">Status</th>
+                    <th className="px-4 py-3 font-semibold w-[200px]">Assignment</th>
+                    <th className="px-4 py-3 font-semibold w-[140px] text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(servicesByDate).map(([date, dateServices]) => (
+                    <React.Fragment key={date}>
+                      <tr className="bg-slate-50/70">
+                        <td colSpan={6} className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <FiCalendar className="h-3.5 w-3.5 text-slate-400" />
+                            <span className="text-xs font-bold text-slate-700">
+                              {date === 'Unknown Date' ? date : formatDate(date)}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              · {dateServices.length} {dateServices.length === 1 ? 'entry' : 'entries'}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {dateServices.map(service => (
+                        <React.Fragment key={service.id}>
+                          <tr className={`border-b border-slate-100 transition-colors ${
+                            selectedService?.id === service.id ? 'bg-indigo-50/40' : 'hover:bg-slate-50/70'
+                          }`}>
+                            {/* Customer */}
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="relative flex-shrink-0">
+                                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
+                                    <FiUser className="h-4 w-4 text-white" />
+                                  </div>
+                                  <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${STATUS_CONFIG[service.status]?.dot || 'bg-slate-400'}`} />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-slate-900 truncate">{service.customerName}</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-xs text-slate-500 truncate">{service.phone}</span>
+                                    <SourceBadge source={service.workSource} />
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Service */}
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-slate-900 truncate">{service.serviceType}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-xs text-slate-500 truncate">{service.subcategoryName}</span>
+                                <PriorityPill priority={service.priority} />
+                              </div>
+                            </td>
+
+                            {/* Application */}
+                            <td className="px-4 py-3">
+                              <InlineEdit
+                                value={service.applicationNumber || ''}
+                                placeholder="Set app no"
+                                onSave={v => handleInlineTrackingUpdate(service, { applicationNumber: v })}
+                                className="text-xs font-mono"
+                              />
+                              <div className="mt-1 px-1.5">
+                                <span className="text-[10px] text-slate-400">ID · {service.trackingId}</span>
+                              </div>
+                            </td>
+
+                            {/* Status + Step */}
+                            <td className="px-4 py-3">
+                              <div className="space-y-1.5">
+                                <select
+                                  value={service.status}
+                                  onChange={e => handleUpdateStatus(service.id, e.target.value)}
+                                  className={`w-full text-xs font-semibold rounded-md px-2 py-1.5 border outline-none cursor-pointer transition-all ${
+                                    STATUS_CONFIG[service.status]?.bg
+                                  } ${STATUS_CONFIG[service.status]?.color} ${STATUS_CONFIG[service.status]?.border}`}>
+                                  {Object.keys(STATUS_CONFIG).map(k => <option key={k} value={k}>{k}</option>)}
+                                </select>
+                                <InlineEdit
+                                  value={service.currentStep || 'Submitted'}
+                                  options={STEP_OPTIONS}
+                                  onSave={v => handleInlineTrackingUpdate(service, { currentStep: v })}
+                                  className="text-xs text-slate-600"
+                                />
+                              </div>
+                            </td>
+
+                            {/* Assignment */}
+                            <td className="px-4 py-3">
+                              <div className="space-y-1.5">
+                                <InlineEdit
+                                  value={service.assignedToId || ''}
+                                  displayValue={service.assignedTo}
+                                  options={staffList.map(s => ({ value: s.id, label: s.name }))}
+                                  placeholder="Unassigned"
+                                  onSave={v => handleInlineTrackingUpdate(service, { assignedTo: v })}
+                                  icon={FiUserCheck}
+                                  className="text-xs"
+                                />
+                                <InlineEdit
+                                  value={formatDateForInput(service.rawEstimatedDelivery)}
+                                  displayValue={service.estimatedDelivery}
+                                  type="date"
+                                  onSave={v => handleInlineTrackingUpdate(service, { estimatedDelivery: v })}
+                                  icon={FiCalendar}
+                                  className="text-xs text-slate-600"
+                                />
+                              </div>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-1">
+                                <button onClick={() => handleNotifyCustomer(service)}
+                                  title="Notify customer"
+                                  className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors">
+                                  <FiSend className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (selectedService?.id === service.id) {
+                                      setSelectedService(null);
+                                      navigate('/dashboard/staff/track_service', { replace: true });
+                                    } else {
+                                      handleServiceSelect(service, true);
+                                    }
+                                  }}
+                                  title={selectedService?.id === service.id ? 'Collapse' : 'Expand'}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    selectedService?.id === service.id
+                                      ? 'bg-indigo-100 text-indigo-700'
+                                      : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                                  }`}>
+                                  <FiChevronDown className={`h-3.5 w-3.5 transform transition-transform duration-200 ${
+                                    selectedService?.id === service.id ? 'rotate-180' : ''
+                                  }`} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Expanded detail row */}
+                          {selectedService?.id === service.id && (
+                            <tr>
+                              <td colSpan={6} className="p-0 bg-slate-50/60">
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="overflow-hidden border-y border-indigo-100">
+                                  <div className="p-6">
+                                    <DetailView
+                                      service={selectedService}
+                                      activeTab={activeTab}
+                                      setActiveTab={setActiveTab}
+                                      staffList={staffList}
+                                      documents={documents}
+                                      documentsLoading={documentsLoading}
+                                      uploadingDocument={uploadingDocument}
+                                      activityHistory={activityHistory}
+                                      activityLoading={activityLoading}
+                                      onNotify={handleNotifyCustomer}
+                                      onUpdateStatus={handleUpdateStatus}
+                                      onInlineUpdate={handleInlineTrackingUpdate}
+                                      onUpload={(f, l, v) => handleUploadDocument(selectedService.id, f, l, v)}
+                                      onToggleVisibility={(d, v) => handleToggleDocumentVisibility(selectedService.id, d, v)}
+                                      onDeleteDoc={(d) => handleDeleteDocument(selectedService.id, d)}
+                                      onClose={() => { setSelectedService(null); navigate('/dashboard/staff/track_service', { replace: true }); }}
+                                    />
+                                  </div>
+                                </motion.div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </React.Fragment>
                   ))}
-                </div>
-              )}
+
+                  {services.length === 0 && (
+                    <tr>
+                      <td colSpan={6}>
+                        <EmptyState icon={FiInbox} title="No services found" message="Try adjusting your filters or search terms." />
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="px-3 py-2.5 border-t border-slate-200 flex items-center justify-between flex-shrink-0 bg-slate-50">
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                  className="p-1.5 rounded-md hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed text-slate-600">
-                  <FiChevronLeft className="h-4 w-4" />
-                </button>
-                <div className="text-xs text-slate-500">
-                  <span className="font-semibold text-slate-700">{currentPage}</span> / {totalPages}
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50">
+                <span className="text-xs text-slate-500">
+                  Showing <span className="font-semibold text-slate-700">{services.length}</span> of <span className="font-semibold text-slate-700">{totalRecords}</span>
+                </span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                    className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                    Previous
+                  </button>
+                  <span className="px-3 text-xs text-slate-500">
+                    Page <span className="font-semibold text-slate-700">{currentPage}</span> of {totalPages}
+                  </span>
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                    Next
+                  </button>
                 </div>
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                  className="p-1.5 rounded-md hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed text-slate-600">
-                  <FiChevronRight className="h-4 w-4" />
-                </button>
               </div>
             )}
-          </aside>
-
-          {/* ---------- RIGHT DETAIL ---------- */}
-          <main className={`flex-1 overflow-y-auto bg-slate-50 min-h-0 ${!selectedService ? 'hidden lg:block' : 'block'}`}>
-            {selectedService ? (
-              <DetailPanel
-                service={selectedService}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                staffList={staffList}
-                stepOptions={STEP_OPTIONS}
-                priorityOptions={PRIORITY_OPTIONS}
-                documents={documents}
-                documentsLoading={documentsLoading}
-                uploadingDocument={uploadingDocument}
-                activityHistory={activityHistory}
-                activityLoading={activityLoading}
-                onBack={() => navigate('/dashboard/staff/track_service')}
-                onNotify={handleNotifyCustomer}
-                onUpdateStatus={handleUpdateStatus}
-                onInlineUpdate={handleInlineTrackingUpdate}
-                onUpload={(file, label, visible) => handleUploadDocument(selectedService.id, file, label, visible)}
-                onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(selectedService.id, docId, visible)}
-                onDeleteDoc={(docId) => handleDeleteDocument(selectedService.id, docId)}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <EmptyState
-                  icon={FiUser}
-                  title="Select a service to begin"
-                  message="Choose any service from the list to view details, edit inline, manage documents and track history. Press ⌘K to search from anywhere."
-                />
-              </div>
-            )}
-          </main>
+          </div>
         </div>
 
         {/* ================= MODALS ================= */}
@@ -1336,28 +1390,21 @@ const TrackServicePage = () => {
 
         <AnimatePresence>
           {filtersOpen && (
-            <FiltersModal
+            <FiltersDrawer
               open={filtersOpen}
               onClose={() => setFiltersOpen(false)}
               staffList={staffList}
               categories={categories}
               availableSubcategories={availableSubcategories}
-              filters={{
-                timeRange, dateFilter, serviceFilter, subcategoryFilter,
-                staffFilter, expiryFilter, aadhaarSearch
-              }}
-              setFilters={(updater) => {
-                const next = typeof updater === 'function' ? updater({}) : updater;
-                // Handle direct key-value style updates
-                const prev = { timeRange, dateFilter, serviceFilter, subcategoryFilter, staffFilter, expiryFilter, aadhaarSearch };
-                const merged = { ...prev, ...next };
-                if (merged.timeRange !== undefined) setTimeRange(merged.timeRange);
-                if (merged.dateFilter !== undefined) setDateFilter(merged.dateFilter);
-                if (merged.serviceFilter !== undefined) setServiceFilter(merged.serviceFilter);
-                if (merged.subcategoryFilter !== undefined) setSubcategoryFilter(merged.subcategoryFilter);
-                if (merged.staffFilter !== undefined) setStaffFilter(merged.staffFilter);
-                if (merged.expiryFilter !== undefined) setExpiryFilter(merged.expiryFilter);
-                if (merged.aadhaarSearch !== undefined) setAadhaarSearch(merged.aadhaarSearch);
+              values={{ timeRange, dateFilter, serviceFilter, subcategoryFilter, staffFilter, expiryFilter, aadhaarSearch }}
+              setValues={(v) => {
+                setTimeRange(v.timeRange);
+                setDateFilter(v.dateFilter);
+                setServiceFilter(v.serviceFilter);
+                setSubcategoryFilter(v.subcategoryFilter);
+                setStaffFilter(v.staffFilter);
+                setExpiryFilter(v.expiryFilter);
+                setAadhaarSearch(v.aadhaarSearch);
               }}
               onClear={handleClearFilters}
             />
@@ -1367,7 +1414,6 @@ const TrackServicePage = () => {
         <style>{`
           .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
           .scrollbar-hide::-webkit-scrollbar { display: none; }
-          .border-3 { border-width: 3px; }
         `}</style>
       </div>
     </ErrorBoundary>
@@ -1375,87 +1421,205 @@ const TrackServicePage = () => {
 };
 
 /* ============================================================
-   DETAIL PANEL
+   DETAIL VIEW
    ============================================================ */
 
-const TABS = [
+const DETAIL_TABS = [
   { id: 'overview', label: 'Overview', icon: FiLayers },
-  { id: 'tracking', label: 'Edit', icon: FiEdit },
   { id: 'documents', label: 'Documents', icon: FiPaperclip },
   { id: 'history', label: 'History', icon: FiClock },
   { id: 'discussion', label: 'Discussion', icon: FiMessageCircle }
 ];
 
-const DetailPanel = ({
-  service, activeTab, setActiveTab, staffList, stepOptions, priorityOptions,
-  documents, documentsLoading, uploadingDocument, activityHistory, activityLoading,
-  onBack, onNotify, onUpdateStatus, onInlineUpdate,
-  onUpload, onToggleVisibility, onDeleteDoc
+const DetailView = ({
+  service, activeTab, setActiveTab, staffList, documents, documentsLoading,
+  uploadingDocument, activityHistory, activityLoading,
+  onNotify, onUpdateStatus, onInlineUpdate, onUpload, onToggleVisibility, onDeleteDoc, onClose
 }) => {
+  const displaySteps = useMemo(() => {
+    if (service.steps?.length > 0) return [...service.steps].sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
+    const cur = STEP_ORDER_MAP[service.currentStep] || 1;
+    return [
+      { id: 1, name: 'Submitted', completed: true, step_order: 1, date: service.createdAt },
+      { id: 2, name: 'Initial Review', completed: cur >= 2, step_order: 2, date: cur === 2 ? service.updatedAt : null },
+      { id: 3, name: 'Document Verification', completed: cur >= 3, step_order: 3, date: cur === 3 ? service.updatedAt : null },
+      { id: 4, name: 'Final Approval', completed: cur >= 4, step_order: 4, date: cur >= 4 ? service.updatedAt : null }
+    ];
+  }, [service]);
+
   return (
-    <div className="flex flex-col min-h-full">
-      {/* ---------- Detail header ---------- */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div className="px-4 lg:px-6 py-4">
-          <button onClick={onBack} className="lg:hidden flex items-center gap-1 text-xs text-slate-500 mb-3 hover:text-slate-700">
-            <FiArrowLeft className="h-3.5 w-3.5" /> Back to list
-          </button>
-
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0 flex-1">
-              <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
-                <FiUser className="h-5 w-5 text-white" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-lg font-semibold text-slate-900 truncate">{service.customerName}</h2>
-                  <StatusPill status={service.status} />
-                  <PriorityPill priority={service.priority} />
-                </div>
-                <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500 flex-wrap">
-                  <span className="flex items-center gap-1"><FiPhone className="h-3 w-3" />{service.phone}</span>
-                  {service.email && <span className="hidden sm:flex items-center gap-1"><FiMail className="h-3 w-3" />{service.email}</span>}
-                  {service.aadhaar && <span className="hidden md:flex items-center gap-1"><FiCreditCard className="h-3 w-3" />{service.aadhaar}</span>}
-                  {service.applicationNumber && (
-                    <span className="flex items-center gap-1 font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">
-                      <FiFileText className="h-3 w-3" />{service.applicationNumber}
-                    </span>
-                  )}
-                </div>
-              </div>
+    <div className="space-y-5">
+      {/* Sub-header */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-200">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm">
+            <FiUser className="h-5 w-5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold text-slate-900 truncate">{service.customerName}</h2>
+              <StatusPill status={service.status} />
+              <PriorityPill priority={service.priority} />
+              {service.followUpRequired && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                  <FiAlertCircle className="h-2.5 w-2.5" /> Follow-up
+                </span>
+              )}
             </div>
-
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button onClick={() => onNotify(service)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm">
-                <FiSend className="h-3.5 w-3.5" /> Notify
-              </button>
-              <button
-                onClick={() => { window.location.href = `/dashboard/staff/service-workspace/${service.id}`; }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200">
-                <FiGrid className="h-3.5 w-3.5" /> Workspace
-              </button>
+            <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500 flex-wrap">
+              <span className="flex items-center gap-1"><FiPhoneCall className="h-3 w-3" />{service.phone}</span>
+              {service.email && <span className="flex items-center gap-1"><FiMail className="h-3 w-3" />{service.email}</span>}
+              {service.aadhaar && <span className="flex items-center gap-1"><FiCreditCard className="h-3 w-3" />{service.aadhaar}</span>}
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="px-4 lg:px-6">
-          <div className="flex gap-0 overflow-x-auto scrollbar-hide -mb-px">
-            {TABS.map(tab => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => onNotify(service)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm">
+            <FiSend className="h-3.5 w-3.5" /> Notify Customer
+          </button>
+          <button onClick={() => { window.location.href = `/dashboard/staff/service-workspace/${service.id}`; }}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">
+            <FiGrid className="h-3.5 w-3.5" /> Workspace
+          </button>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+            <FiX className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-slate-200 -mt-1 pb-0">
+        {DETAIL_TABS.map(t => {
+          const Icon = t.icon;
+          const active = activeTab === t.id;
+          return (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`relative flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors ${
+                active ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+              }`}>
+              <Icon className="h-3.5 w-3.5" />
+              {t.label}
+              {active && (
+                <motion.div layoutId="detail-tab-underline"
+                  className="absolute -bottom-px left-2 right-2 h-0.5 bg-indigo-600 rounded-full" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div key={activeTab}
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.15 }}>
+          {activeTab === 'overview' && (
+            <OverviewTab service={service} staffList={staffList} displaySteps={displaySteps}
+              onUpdateStatus={onUpdateStatus} onInlineUpdate={onInlineUpdate} />
+          )}
+          {activeTab === 'documents' && (
+            <DocumentsTab documents={documents} loading={documentsLoading} uploading={uploadingDocument}
+              onUpload={onUpload} onToggleVisibility={onToggleVisibility} onDelete={onDeleteDoc} />
+          )}
+          {activeTab === 'history' && (
+            <HistoryTab activityHistory={activityHistory} loading={activityLoading} />
+          )}
+          {activeTab === 'discussion' && (
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <FiMessageCircle className="h-4 w-4 text-indigo-600" />
+                <h3 className="text-sm font-semibold text-slate-900">Internal Discussion & Tasks</h3>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">Tag staff using @ to assign tasks.</p>
+              <div className="bg-white rounded-xl p-2 sm:p-4 border border-slate-200">
+                <NotesPanel contextType="service_entry" contextId={service.serviceEntryId} embedded showHeader={false} />
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+};
+
+/* ============================================================
+   OVERVIEW TAB
+   ============================================================ */
+
+const OverviewTab = ({ service, staffList, displaySteps, onUpdateStatus, onInlineUpdate }) => {
+  const update = (u) => onInlineUpdate(service, u);
+
+  return (
+    <div className="space-y-5">
+      {/* Progress + Status bar */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <FiZap className="h-4 w-4 text-indigo-600" />
+            <h3 className="text-sm font-semibold text-slate-900">Progress</h3>
+            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+              {service.workSource === 'online' ? 'Online booking' : 'Walk-in'}
+            </span>
+          </div>
+          <span className="text-lg font-bold text-indigo-600">{service.progress}%</span>
+        </div>
+
+        <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-5">
+          <motion.div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500"
+            initial={{ width: 0 }} animate={{ width: `${service.progress}%` }}
+            transition={{ duration: 0.4, ease: 'easeOut' }} />
+        </div>
+
+        {/* Timeline */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          {displaySteps.map((step, i) => (
+            <div key={step.id || i}
+              className={`relative px-3 py-2.5 rounded-lg border text-xs transition-all ${
+                step.completed ? 'bg-emerald-50 border-emerald-200'
+                : step.name === service.currentStep ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-500/10'
+                : 'bg-slate-50 border-slate-200'
+              }`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                {step.completed ? (
+                  <FiCheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                ) : step.name === service.currentStep ? (
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-indigo-500 flex items-center justify-center flex-shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                  </span>
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 flex-shrink-0" />
+                )}
+                <span className={`font-semibold truncate ${
+                  step.completed ? 'text-emerald-800'
+                  : step.name === service.currentStep ? 'text-indigo-800'
+                  : 'text-slate-500'
+                }`}>{step.name}</span>
+              </div>
+              <p className="text-[10px] text-slate-500 truncate pl-[20px]">
+                {step.date ? formatTimelineDate(step.date) : 'Pending'}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Status update */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Update Status</p>
+          <div className="flex items-center flex-wrap gap-1.5">
+            {Object.keys(STATUS_CONFIG).map(key => {
+              const isCur = service.status === key;
+              const c = STATUS_CONFIG[key];
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-1.5 px-3 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    active ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+                <button key={key} onClick={() => !isCur && onUpdateStatus(service.id, key)}
+                  disabled={isCur}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                    isCur
+                      ? `${c.bg} ${c.color} ${c.border} cursor-default`
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}>
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                  {active && (
-                    <motion.div layoutId="tab-underline"
-                      className="absolute bottom-0 left-2 right-2 h-[2px] bg-indigo-600 rounded-t-full" />
-                  )}
+                  {isCur && <FiCheck className="inline h-3 w-3 mr-1 -mt-0.5" />}
+                  {key}
                 </button>
               );
             })}
@@ -1463,218 +1627,101 @@ const DetailPanel = ({
         </div>
       </div>
 
-      {/* ---------- Tab content ---------- */}
-      <div className="flex-1 overflow-y-auto">
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab}
-            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.15 }}
-            className="p-4 lg:p-6">
-            {activeTab === 'overview' && (
-              <OverviewPanel service={service} staffList={staffList} stepOptions={stepOptions}
-                priorityOptions={priorityOptions} onUpdateStatus={onUpdateStatus} onInlineUpdate={onInlineUpdate} />
-            )}
-            {activeTab === 'tracking' && (
-              <TrackingFormPanel service={service} staffList={staffList}
-                stepOptions={stepOptions} priorityOptions={priorityOptions}
-                onSave={(updates) => onInlineUpdate(service, updates)} />
-            )}
-            {activeTab === 'documents' && (
-              <DocumentsPanel documents={documents} loading={documentsLoading} uploading={uploadingDocument}
-                onUpload={onUpload} onToggleVisibility={onToggleVisibility} onDelete={onDeleteDoc} />
-            )}
-            {activeTab === 'history' && (
-              <HistoryPanel activityHistory={activityHistory} loading={activityLoading} />
-            )}
-            {activeTab === 'discussion' && (
-              <div className="max-w-4xl">
-                <div className="flex items-center gap-2 mb-1">
-                  <FiMessageCircle className="h-4 w-4 text-indigo-600" />
-                  <h3 className="text-sm font-semibold text-slate-900">Internal Discussion & Tasks</h3>
-                </div>
-                <p className="text-xs text-slate-500 mb-4">
-                  Notes here are internal. Tag staff using @ to assign them tasks.
-                </p>
-                <div className="bg-white rounded-xl p-2 sm:p-4 border border-slate-200">
-                  <NotesPanel contextType="service_entry" contextId={service.serviceEntryId} embedded showHeader={false} />
-                </div>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-};
-
-/* ============================================================
-   OVERVIEW PANEL
-   ============================================================ */
-
-const OverviewPanel = ({ service, staffList, stepOptions, priorityOptions, onUpdateStatus, onInlineUpdate }) => {
-  const update = (updates) => onInlineUpdate(service, updates);
-
-  const displaySteps = useMemo(() => {
-    if (service.steps && service.steps.length > 0) {
-      return [...service.steps].sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
-    }
-    const currentOrder = STEP_ORDER_MAP[service.currentStep] || 1;
-    return [
-      { id: 1, name: 'Submitted', completed: true, step_order: 1, date: service.createdAt },
-      { id: 2, name: 'Initial Review', completed: currentOrder >= 2, step_order: 2, date: currentOrder === 2 ? service.updatedAt : null },
-      { id: 3, name: 'Document Verification', completed: currentOrder >= 3, step_order: 3, date: currentOrder === 3 ? service.updatedAt : null },
-      { id: 4, name: 'Final Approval', completed: currentOrder >= 4, step_order: 4, date: currentOrder >= 4 ? service.updatedAt : null }
-    ];
-  }, [service]);
-
-  const staffOptions = staffList.map(s => ({ value: s.id, label: s.name }));
-
-  return (
-    <div className="space-y-4 max-w-6xl">
-
-      {/* Progress Card */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 lg:p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <FiZap className="h-4 w-4 text-indigo-600" />
-            <h3 className="text-sm font-semibold text-slate-900">Progress</h3>
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">
-              {service.workSource === 'online' ? 'Online booking' : 'Walk-in'}
-            </span>
-          </div>
-          <span className="text-lg font-bold text-indigo-600">{service.progress}%</span>
-        </div>
-
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-4">
-          <motion.div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
-            initial={{ width: 0 }} animate={{ width: `${service.progress}%` }} transition={{ duration: 0.4 }} />
-        </div>
-
-        {/* Quick status update */}
-        <div className="flex items-center flex-wrap gap-1.5 mb-4">
-          {Object.keys(STATUS_CONFIG).map(statusKey => {
-            const isCurrent = service.status === statusKey;
-            const c = STATUS_CONFIG[statusKey];
-            return (
-              <button key={statusKey} onClick={() => !isCurrent && onUpdateStatus(service.id, statusKey)}
-                disabled={isCurrent}
-                className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-all ${
-                  isCurrent
-                    ? `${c.bg} ${c.color} ${c.border} cursor-default opacity-90`
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                }`}>
-                {isCurrent && <FiCheck className="inline h-3 w-3 mr-1 -mt-0.5" />}
-                {statusKey}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Timeline */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {displaySteps.map((step, i) => (
-            <div key={step.id || i}
-              className={`px-3 py-2 rounded-lg border text-xs ${
-                step.completed
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : step.name === service.currentStep
-                  ? 'bg-indigo-50 border-indigo-200'
-                  : 'bg-slate-50 border-slate-200'
-              }`}>
-              <div className="flex items-center gap-1.5 mb-0.5">
-                {step.completed ? (
-                  <FiCheckCircle className="h-3 w-3 text-emerald-600 flex-shrink-0" />
-                ) : (
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.name === service.currentStep ? 'bg-indigo-500' : 'bg-slate-300'}`} />
-                )}
-                <span className={`font-medium truncate ${
-                  step.completed ? 'text-emerald-800' : step.name === service.currentStep ? 'text-indigo-800' : 'text-slate-500'
-                }`}>
-                  {step.name}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 truncate">
-                {step.date ? formatTimelineDate(step.date) : 'Pending'}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Editable Details + Financial */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-
-        {/* Editable Service Details */}
+      {/* Grid: Details + Financial */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Service details */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FiEdit className="h-3.5 w-3.5 text-indigo-600" />
-              <h3 className="text-sm font-semibold text-slate-900">Service Details</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Details</h3>
             </div>
-            <span className="text-[10px] text-slate-400 italic">Click any field to edit</span>
+            <span className="text-[10px] text-slate-400 italic">Click to edit</span>
           </div>
-          <div className="p-2">
-            <EditableRow label="Application No" value={service.applicationNumber} placeholder="Set app number"
-              onSave={v => update({ applicationNumber: v })} />
-            <EditableRow label="Service" value={service.serviceType} placeholder="—" onSave={() => {}} />
-            <EditableRow label="Subcategory" value={service.subcategoryName} placeholder="—" onSave={() => {}} />
-            <EditableRow label="Current Step" value={service.currentStep} options={stepOptions}
-              onSave={v => update({ currentStep: v })} />
-            <EditableRow label="Assigned To" value={service.assignedToId || ''} displayValue={service.assignedTo}
-              options={staffOptions} placeholder="Unassigned"
-              onSave={v => update({ assignedTo: v })} />
-            <EditableRow label="Priority" value={service.priority} options={priorityOptions}
-              displayValue={PRIORITY_CONFIG[service.priority]?.label}
-              onSave={v => update({ priority: v })} />
-            <EditableRow label="Est. Delivery" value={formatDateForInput(service.rawEstimatedDelivery)} type="date"
-              displayValue={service.estimatedDelivery}
-              onSave={v => update({ estimatedDelivery: v })} />
-            <EditableRow label="Aadhaar" value={service.aadhaar} placeholder="Not set"
-              onSave={v => update({ aadhaar: v })} />
-            <EditableRow label="Email" value={service.email} type="email" placeholder="Not set"
-              onSave={v => update({ email: v })} />
-            <EditableRow label="Remarks" value={service.notes} placeholder="No notes"
-              multiline onSave={v => update({ notes: v })} />
+          <div className="divide-y divide-slate-50">
+            <InfoRow label="Application No">
+              <InlineEdit value={service.applicationNumber || ''} placeholder="Not set"
+                onSave={v => update({ applicationNumber: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Service">
+              <span className="text-sm font-medium text-slate-800">{service.serviceType}</span>
+            </InfoRow>
+            <InfoRow label="Subcategory">
+              <span className="text-sm text-slate-700">{service.subcategoryName}</span>
+            </InfoRow>
+            <InfoRow label="Current Step">
+              <InlineEdit value={service.currentStep} options={STEP_OPTIONS}
+                onSave={v => update({ currentStep: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Assigned To">
+              <InlineEdit value={service.assignedToId || ''} displayValue={service.assignedTo}
+                options={staffList.map(s => ({ value: s.id, label: s.name }))}
+                placeholder="Unassigned" onSave={v => update({ assignedTo: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Priority">
+              <InlineEdit value={service.priority} displayValue={PRIORITY_CONFIG[service.priority]?.label}
+                options={PRIORITY_OPTIONS} onSave={v => update({ priority: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Est. Delivery">
+              <InlineEdit value={formatDateForInput(service.rawEstimatedDelivery)}
+                displayValue={service.estimatedDelivery} type="date"
+                onSave={v => update({ estimatedDelivery: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Avg Time">
+              <InlineEdit value={service.averageTime} placeholder="Not set"
+                onSave={v => update({ averageTime: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Aadhaar">
+              <InlineEdit value={service.aadhaar} placeholder="Not set"
+                onSave={v => update({ aadhaar: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Email">
+              <InlineEdit value={service.email} type="email" placeholder="Not set"
+                onSave={v => update({ email: v })} className="text-sm" />
+            </InfoRow>
+            <InfoRow label="Notes" align="start">
+              <InlineEdit value={service.notes} placeholder="No notes"
+                onSave={v => update({ notes: v })} className="text-sm" />
+            </InfoRow>
           </div>
         </div>
 
-        {/* Financial Summary */}
-        <div className="space-y-4">
+        {/* Financial + review */}
+        <div className="space-y-5">
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FiDollarSign className="h-3.5 w-3.5 text-emerald-600" />
-                <h3 className="text-sm font-semibold text-slate-900">Financial Summary</h3>
+                <h3 className="text-sm font-semibold text-slate-900">Financials</h3>
               </div>
-              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                 PAYMENT_STATUS_CONFIG[service.paymentStatus]?.bg || 'bg-slate-100'
               } ${PAYMENT_STATUS_CONFIG[service.paymentStatus]?.color || 'text-slate-600'}`}>
                 {service.paymentStatus}
               </span>
             </div>
             <div className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between">
                 <span className="text-xs text-slate-500">Service Charge</span>
                 <span className="text-sm font-medium text-slate-900 font-mono">₹{service.serviceCharge?.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between">
                 <span className="text-xs text-slate-500">Department Charge</span>
                 <span className="text-sm font-medium text-slate-900 font-mono">₹{service.departmentCharge?.toFixed(2)}</span>
               </div>
-              <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-700">Total</span>
+              <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
+                <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Total</span>
                 <span className="text-lg font-bold text-indigo-600 font-mono">₹{service.totalCharge?.toFixed(2)}</span>
               </div>
               {service.paymentDetails && service.paymentDetails !== 'No payments recorded' && (
-                <div className="bg-slate-50 rounded-lg p-3 mt-2">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium mb-1">Payment Records</p>
+                <div className="bg-slate-50 rounded-lg p-3 mt-1">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Payment Records</p>
                   <p className="text-xs text-slate-700 leading-relaxed">{service.paymentDetails}</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Customer Review */}
           {service.serviceRating && (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
@@ -1684,21 +1731,29 @@ const OverviewPanel = ({ service, staffList, stepOptions, priorityOptions, onUpd
               <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Service Rating</span>
-                  <Stars value={service.serviceRating} />
+                  <div className="flex items-center gap-0.5">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <FiStar key={i} className={`h-3.5 w-3.5 ${i <= service.serviceRating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                    ))}
+                    <span className="text-xs text-slate-500 ml-1.5">({service.serviceRating}/5)</span>
+                  </div>
                 </div>
                 {service.staffRating && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-500">Staff Rating</span>
-                    <Stars value={service.staffRating} />
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <FiStar key={i} className={`h-3.5 w-3.5 ${i <= service.staffRating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                      ))}
+                      <span className="text-xs text-slate-500 ml-1.5">({service.staffRating}/5)</span>
+                    </div>
                   </div>
                 )}
                 {service.reviewText && (
                   <div className="bg-slate-50 rounded-lg p-3">
-                    <p className="text-xs text-slate-700 leading-relaxed italic">"{service.reviewText}"</p>
+                    <p className="text-xs text-slate-700 italic leading-relaxed">"{service.reviewText}"</p>
                     {service.reviewSubmittedAt && (
-                      <p className="text-[10px] text-slate-400 mt-2">
-                        — {formatDate(service.reviewSubmittedAt)}
-                      </p>
+                      <p className="text-[10px] text-slate-400 mt-2">— {formatDate(service.reviewSubmittedAt)}</p>
                     )}
                   </div>
                 )}
@@ -1711,118 +1766,18 @@ const OverviewPanel = ({ service, staffList, stepOptions, priorityOptions, onUpd
   );
 };
 
-/* ============================================================
-   TRACKING FORM PANEL
-   ============================================================ */
-
-const TrackingFormPanel = ({ service, staffList, stepOptions, priorityOptions, onSave }) => {
-  const [form, setForm] = useState({
-    applicationNumber: service.applicationNumber || '',
-    currentStep: service.currentStep || 'Submitted',
-    estimatedDelivery: formatDateForInput(service.rawEstimatedDelivery) || '',
-    averageTime: service.averageTime || '7 days',
-    notes: service.notes || '',
-    assignedTo: service.assignedToId || '',
-    aadhaar: service.aadhaar || '',
-    email: service.email || '',
-    priority: service.priority || 'medium'
-  });
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (form.applicationNumber && form.applicationNumber.length > 50) return toast.error('Application number too long');
-    if (form.aadhaar && !/^\d{12}$/.test(form.aadhaar)) return toast.error('Aadhaar must be 12 digits');
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return toast.error('Invalid email');
-    onSave(form);
-    toast.success('Changes saved');
-  };
-
-  const fc = "w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all";
-  const lc = "block text-xs font-medium text-slate-600 mb-1.5";
-
-  return (
-    <form onSubmit={handleSubmit} className="max-w-4xl space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-          <FiEdit className="h-3.5 w-3.5 text-indigo-600" />
-          <h3 className="text-sm font-semibold text-slate-900">Edit Tracking Information</h3>
-        </div>
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label className={lc}>Application Number</label>
-            <input type="text" name="applicationNumber" value={form.applicationNumber} onChange={handleChange}
-              placeholder="e.g. APP12345" className={fc} />
-          </div>
-          <div>
-            <label className={lc}>Current Step</label>
-            <select name="currentStep" value={form.currentStep} onChange={handleChange} className={fc}>
-              {stepOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={lc}>Estimated Delivery</label>
-            <input type="date" name="estimatedDelivery" value={form.estimatedDelivery} onChange={handleChange} className={fc} />
-          </div>
-          <div>
-            <label className={lc}>Priority</label>
-            <select name="priority" value={form.priority} onChange={handleChange} className={fc}>
-              {priorityOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={lc}>Average Time</label>
-            <input type="text" name="averageTime" value={form.averageTime} onChange={handleChange}
-              placeholder="e.g. 7 days" className={fc} />
-          </div>
-          <div>
-            <label className={lc}>Assigned To</label>
-            <select name="assignedTo" value={form.assignedTo} onChange={handleChange} className={fc}>
-              <option value="">Unassigned</option>
-              {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={lc}>Aadhaar Number</label>
-            <input type="text" name="aadhaar" value={form.aadhaar} onChange={handleChange}
-              maxLength={12} placeholder="12-digit" className={fc} />
-          </div>
-          <div>
-            <label className={lc}>Email Address</label>
-            <input type="email" name="email" value={form.email} onChange={handleChange}
-              placeholder="customer@example.com" className={fc} />
-          </div>
-          <div className="md:col-span-2">
-            <label className={lc}>Customer Remarks <span className="text-slate-400 font-normal">(Sent via WhatsApp)</span></label>
-            <textarea name="notes" value={form.notes} onChange={handleChange}
-              placeholder="Enter remarks visible to the customer…" rows={3}
-              className={`${fc} resize-none`} />
-          </div>
-        </div>
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
-          <button type="button" onClick={() => onSave({})}
-            className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100">
-            Cancel
-          </button>
-          <button type="submit"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm">
-            <FiSave className="h-3.5 w-3.5" /> Save Changes
-          </button>
-        </div>
-      </div>
-    </form>
-  );
-};
+const InfoRow = ({ label, children, align = 'center' }) => (
+  <div className={`flex ${align === 'start' ? 'items-start' : 'items-center'} justify-between gap-3 px-4 py-2.5 hover:bg-slate-50/60 transition-colors`}>
+    <span className="text-xs text-slate-500 flex-shrink-0 pt-0.5">{label}</span>
+    <div className="min-w-0 flex-1 flex justify-end">{children}</div>
+  </div>
+);
 
 /* ============================================================
-   DOCUMENTS PANEL
+   DOCUMENTS TAB
    ============================================================ */
 
-const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggleVisibility, onDelete }) => {
+const DocumentsTab = ({ documents = [], loading, uploading, onUpload, onToggleVisibility, onDelete }) => {
   const [file, setFile] = useState(null);
   const [label, setLabel] = useState('');
   const [visible, setVisible] = useState(false);
@@ -1831,29 +1786,15 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
 
   const submit = (e) => {
     e.preventDefault();
-    if (!file || !label.trim()) return toast.error('Choose a file and enter a label');
+    if (!file || !label.trim()) return toast.error('Enter label and choose file');
     onUpload(file, label.trim(), visible);
     setFile(null); setLabel(''); setVisible(false);
     if (inputRef.current) inputRef.current.value = '';
   };
 
-  const formatBytes = (b) => {
-    if (!b) return '';
-    const kb = b / 1024;
-    return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
-  };
-
-  const fileIcon = (name = '') => {
-    const n = name.toLowerCase();
-    if (n.endsWith('.pdf')) return { Icon: FiFileText, color: 'text-rose-600', bg: 'bg-rose-50' };
-    if (/\.(jpg|jpeg|png|gif|webp)$/.test(n)) return { Icon: FiEye, color: 'text-blue-600', bg: 'bg-blue-50' };
-    if (/\.(doc|docx)$/.test(n)) return { Icon: FiFileText, color: 'text-indigo-600', bg: 'bg-indigo-50' };
-    return { Icon: FiFileText, color: 'text-slate-600', bg: 'bg-slate-100' };
-  };
-
   return (
     <div className="space-y-4">
-      {/* Upload form */}
+      {/* Upload card */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
           <FiUpload className="h-3.5 w-3.5 text-indigo-600" />
@@ -1862,13 +1803,13 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
         <form onSubmit={submit} className="p-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
             <div className="lg:col-span-4">
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Document Label <span className="text-rose-500">*</span></label>
-              <input type="text" value={label} onChange={e => setLabel(e.target.value)}
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Document Label <span className="text-rose-500">*</span></label>
+              <input value={label} onChange={e => setLabel(e.target.value)}
                 placeholder="e.g. Income Certificate"
                 className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500" />
             </div>
             <div className="lg:col-span-5">
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">File <span className="text-rose-500">*</span></label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">File <span className="text-rose-500">*</span></label>
               <div onDragOver={e => { e.preventDefault(); setDrag(true); }}
                 onDragLeave={e => { e.preventDefault(); setDrag(false); }}
                 onDrop={e => { e.preventDefault(); setDrag(false); if (e.dataTransfer.files?.[0]) setFile(e.dataTransfer.files[0]); }}
@@ -1882,23 +1823,21 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
                   onChange={e => setFile(e.target.files[0] || null)} className="hidden" />
                 {file ? (
                   <>
-                    <FiFileText className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <FiFileText className="h-4 w-4 text-emerald-600" />
                     <span className="text-sm text-slate-800 truncate flex-1">{file.name}</span>
-                    <span className="text-xs text-slate-500 flex-shrink-0">{formatBytes(file.size)}</span>
+                    <span className="text-xs text-slate-500">{formatBytes(file.size)}</span>
                   </>
                 ) : (
                   <>
-                    <FiUpload className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                    <span className="text-sm text-slate-500 truncate flex-1">
-                      {drag ? 'Drop file here' : 'Click or drag file'}
-                    </span>
-                    <span className="text-[10px] text-slate-400 flex-shrink-0 hidden sm:inline">PDF · DOC · IMG</span>
+                    <FiUpload className="h-4 w-4 text-slate-400" />
+                    <span className="text-sm text-slate-500 truncate flex-1">{drag ? 'Drop file here' : 'Click or drag file'}</span>
+                    <span className="text-[10px] text-slate-400 hidden sm:inline">PDF · DOC · IMG</span>
                   </>
                 )}
               </div>
             </div>
             <div className="lg:col-span-3 flex flex-col">
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Visibility</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Visibility</label>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setVisible(!visible)}
                   className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-all ${
@@ -1910,10 +1849,7 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
                 <button type="submit" disabled={uploading || !file || !label.trim()}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
                   {uploading ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Uploading
-                    </>
+                    <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Uploading</>
                   ) : (
                     <><FiUpload className="h-3.5 w-3.5" /> Upload</>
                   )}
@@ -1924,7 +1860,7 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
         </form>
       </div>
 
-      {/* List */}
+      {/* Documents table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1937,6 +1873,7 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
             </span>
           )}
         </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -1959,7 +1896,7 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {documents.map(doc => {
-                  const { Icon, color, bg } = fileIcon(doc.file_name || doc.label || '');
+                  const { Icon, color, bg } = fileIconFor(doc.file_name || doc.label || '');
                   return (
                     <tr key={doc.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-4 py-2.5">
@@ -1978,7 +1915,7 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
                       <td className="px-4 py-2.5 text-center text-xs text-slate-500 font-mono">{formatBytes(doc.file_size) || '—'}</td>
                       <td className="px-4 py-2.5 text-center">
                         <button onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all ${
                             doc.visible_to_customer
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                               : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
@@ -2014,10 +1951,10 @@ const DocumentsPanel = ({ documents = [], loading, uploading, onUpload, onToggle
 };
 
 /* ============================================================
-   HISTORY PANEL
+   HISTORY TAB
    ============================================================ */
 
-const HistoryPanel = ({ activityHistory, loading }) => {
+const HistoryTab = ({ activityHistory, loading }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -2027,7 +1964,7 @@ const HistoryPanel = ({ activityHistory, loading }) => {
     );
   }
   if (!activityHistory?.length) {
-    return <EmptyState icon={FiClock} title="No activity yet" message="Activity will appear here as changes are made" />;
+    return <EmptyState icon={FiClock} title="No activity yet" message="Activity will appear here as changes are made." />;
   }
 
   return (
@@ -2037,7 +1974,7 @@ const HistoryPanel = ({ activityHistory, loading }) => {
         <span className="text-xs text-slate-500">{activityHistory.length} event{activityHistory.length !== 1 ? 's' : ''}</span>
       </div>
       <div className="relative">
-        <div className="absolute left-[15px] top-2 bottom-2 w-px bg-slate-200" />
+        <div className="absolute left-[15px] top-3 bottom-3 w-px bg-slate-200" />
         <div className="space-y-4">
           {activityHistory.map(a => (
             <div key={a.id} className="relative flex gap-3">
