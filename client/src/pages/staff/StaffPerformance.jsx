@@ -1,1465 +1,1638 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  FiTrendingUp, FiTrendingDown, FiDollarSign, FiBriefcase,
-  FiUsers, FiStar, FiCalendar, FiClock, FiAward, FiTarget,
-  FiBarChart2, FiPieChart, FiCheckCircle, FiAlertCircle,
-  FiRefreshCw, FiDownload, FiFilter, FiChevronRight, FiChevronLeft,
-  FiUser, FiPhone, FiMail, FiMapPin, FiActivity, FiSmile,
-  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo, FiEye, FiZap, FiHeart, FiGift, FiX
-} from 'react-icons/fi';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ArcElement,
-  RadialLinearScale
-} from 'chart.js';
-import { Line, Bar, Doughnut, Radar } from 'react-chartjs-2';
-import { toast } from 'react-toastify';
+// backend/routes/staffPerformance.js
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import pool from '../db.js';
+import { logActivity } from '../utils/activityLogger.js';
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ArcElement,
-  RadialLinearScale
-);
+const router = express.Router();
 
-// Format currency
-const formatCurrency = (amount) => {
-  if (amount === undefined || amount === null) return '₹0';
-  return `₹${Number(amount).toLocaleString('en-IN', {
-    maximumFractionDigits: 0
-  })}`;
-};
+// 🔥 FIXED: was an uncorrelated subquery that re-scanned the ENTIRE wallet_transactions
+// table (no staff_id/date/reference_id filter) on every single usage — 18 uses per file,
+// up to ~4 concurrent requests per page load. Cost grew with table size ("after some usage")
+// until it starved the pg pool. Now a LATERAL join filtered to ONE reference_id per row,
+// so Postgres can use an index seek instead of a full scan + sort each time.
+// Requires: CREATE INDEX idx_wallet_tx_service_payment ON wallet_transactions
+//   (reference_id, category, type, reference_type, created_at DESC)
+//   WHERE category = 'Service Payment' AND type = 'credit' AND reference_type = 'payment';
+const paymentsLateralJoin = (seAlias = 'se') => `
+  LEFT JOIN LATERAL (
+    SELECT
+      SUM(amount) AS amount,
+      SUM(amount) AS received_amount,
+      MAX(created_at) AS payment_date
+    FROM (
+      SELECT DISTINCT ON (COALESCE(NULLIF(correction_group_id::text, ''), id::text))
+        amount, is_reversal, created_at
+      FROM wallet_transactions
+      WHERE reference_id = ${seAlias}.id
+        AND category = 'Service Payment'
+        AND type = 'credit'
+        AND reference_type = 'payment'
+      ORDER BY COALESCE(NULLIF(correction_group_id::text, ''), id::text), created_at DESC, is_reversal ASC
+    ) lt
+    WHERE (lt.is_reversal IS NULL OR lt.is_reversal = FALSE)
+  ) p ON true
+`;
 
-// Format date
-const formatDate = (date) => {
-  if (!date) return '—';
-  const d = new Date(date);
-  return d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
-};
-
-// Format time
-const formatTime = (time) => {
-  if (!time) return '—';
-  return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
-
-// Stat Card Component
-const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, loading, trendValue }) => (
-  <motion.div
-    whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 cursor-pointer p-5"
-    onClick={onClick}
-  >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
-        {loading ? (
-          <div className="h-8 w-24 bg-gray-200 animate-pulse rounded"></div>
-        ) : (
-          <p className="font-bold text-gray-900 mb-1 text-2xl">{value}</p>
-        )}
-        {subtitle && (
-          <p className="text-gray-500 text-sm">{subtitle}</p>
-        )}
-        {trend !== undefined && trendValue !== undefined && (
-          <p className={`font-medium text-sm mt-1 flex items-center ${trendValue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {trendValue >= 0 ? <FiTrendingUp className="mr-1 h-3 w-3" /> : <FiTrendingDown className="mr-1 h-3 w-3" />}
-            {Math.round(Math.abs(trendValue))}% {trend}
-          </p>
-        )}
-      </div>
-      <div className={`rounded-xl ${color} p-3`}>
-        <Icon className="text-white h-6 w-6" />
-      </div>
-    </div>
-  </motion.div>
-);
-
-// Performance Gauge Component
-const PerformanceGauge = ({ score, loading }) => {
-  const getScoreColor = () => {
-    if (score >= 80) return 'from-emerald-500 to-emerald-600';
-    if (score >= 60) return 'from-amber-500 to-amber-600';
-    return 'from-rose-500 to-rose-600';
-  };
+// Middleware to verify token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
   
-  const getScoreLabel = () => {
-    if (score >= 80) return 'Excellent';
-    if (score >= 60) return 'Good';
-    if (score >= 40) return 'Average';
-    return 'Needs Improvement';
-  };
-  
-  const getScoreMessage = () => {
-    if (score >= 80) return 'Outstanding! Keep up the great work!';
-    if (score >= 60) return 'Good performance. Aim higher!';
-    if (score >= 40) return 'Room for improvement. Stay focused!';
-    return 'Need to work harder. Ask for help if needed!';
-  };
-  
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-          <FiAward className="h-4 w-4 mr-2 text-indigo-600" />
-          Performance Score
-        </h3>
-        <div className="relative group">
-          <FiInfo className="h-4 w-4 text-gray-400 cursor-pointer" />
-          <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
-            Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
-          </div>
-        </div>
-      </div>
-      
-      {loading ? (
-        <div className="h-32 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-        </div>
-      ) : (
-        <div className="text-center">
-          <div className="relative inline-block">
-            <svg className="w-32 h-32">
-              <circle
-                className="text-gray-200"
-                strokeWidth="12"
-                stroke="currentColor"
-                fill="transparent"
-                r="54"
-                cx="64"
-                cy="64"
-              />
-              <circle
-                className="transition-all duration-1000"
-                strokeWidth="12"
-                strokeDasharray={339.292}
-                strokeDashoffset={339.292 * (1 - score / 100)}
-                strokeLinecap="round"
-                stroke={`url(#gradient)`}
-                fill="transparent"
-                r="54"
-                cx="64"
-                cy="64"
-              />
-              <defs>
-                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor={score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444'} />
-                  <stop offset="100%" stopColor={score >= 80 ? '#059669' : score >= 60 ? '#D97706' : '#DC2626'} />
-                </linearGradient>
-              </defs>
-            </svg>
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-              <p className="text-2xl font-bold text-gray-900">{score}%</p>
-              <p className="text-xs text-gray-500">{getScoreLabel()}</p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-600 mt-3">{getScoreMessage()}</p>
-        </div>
-      )}
-    </div>
-  );
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    console.error('Token verification error:', err.message);
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
 };
 
-// Rating Card Component
-const RatingCard = ({ rating, totalReviews, distribution, loading }) => (
-  <div className="bg-white rounded-xl border border-gray-200 p-5">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-        <FiStar className="h-4 w-4 mr-2 text-yellow-500" />
-        Customer Rating
-      </h3>
-    </div>
+// Middleware to restrict to staff role
+const requireStaff = (req, res, next) => {
+  if (req.user.role !== 'staff') {
+    return res.status(403).json({ error: 'Staff access required' });
+  }
+  next();
+};
+
+// Apply middleware to all routes
+router.use(authenticateToken);
+router.use(requireStaff);
+
+/* =========================================================
+   1️⃣ STAFF PERFORMANCE DASHBOARD
+   Comprehensive performance metrics for current staff member
+========================================================= */
+router.get('/dashboard', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const staffId = req.user.id;
+    const { from, to, period = 'monthly' } = req.query;
     
-    {loading ? (
-      <div className="space-y-3">
-        <div className="h-12 bg-gray-200 animate-pulse rounded"></div>
-        <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
-      </div>
-    ) : (
-      <>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-3xl font-bold text-gray-900">
-              {rating || '—'}
-            </div>
-            <div className="flex items-center mt-1">
-              {[1, 2, 3, 4, 5].map(star => (
-                <FiStar
-                  key={star}
-                  className={`h-4 w-4 ${star <= Math.round(rating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">{totalReviews || 0} reviews</p>
-            <p className="text-xs text-gray-500">Total feedback</p>
-          </div>
-        </div>
+    // Set date range based on period
+    let startDate, endDate = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    
+    if (from && to) {
+      startDate = from;
+      endDate = to;
+    } else if (period === 'today') {
+      startDate = endDate;
+    } else if (period === 'week') {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(now.getDate() - 7);
+      startDate = weekAgo.toISOString().split('T')[0];
+    } else if (period === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    } else if (period === 'quarter') {
+      const quarter = Math.floor(now.getMonth() / 3) * 3;
+      startDate = new Date(now.getFullYear(), quarter, 1).toISOString().split('T')[0];
+    } else if (period === 'year') {
+      startDate = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
+    } else {
+      // Default to last 30 days
+      const monthAgo = new Date(now);
+      monthAgo.setDate(now.getDate() - 30);
+      startDate = monthAgo.toISOString().split('T')[0];
+    }
+    
+    // 1️⃣ Get staff basic info
+    const staffInfoQuery = `
+      SELECT 
+        s.id,
+        s.name,
+        s.username,
+        s.email,
+        s.phone,
+        s.role,
+        s.join_date as "joinDate",
+        s.photo,
+        s.department,
+        s.centre_id as "centreId",
+        c.name as "centreName"
+      FROM staff s
+      LEFT JOIN centres c ON s.centre_id = c.id
+      WHERE s.id = $1
+    `;
+    const staffInfo = await client.query(staffInfoQuery, [staffId]);
+    
+    if (staffInfo.rows.length === 0) {
+      return res.status(404).json({ error: 'Staff not found' });
+    }
+    
+    // 2️⃣ Performance Summary - Includes both completed AND pending for true collection rate
+    const performanceQuery = `
+      SELECT 
+        COUNT(DISTINCT se.id) as total_services,
+        COUNT(DISTINCT se.customer_name) as unique_customers,
+        COUNT(DISTINCT DATE(se.created_at)) as active_days,
         
-        {/* Rating Distribution */}
-        {distribution && distribution.length > 0 && (
-          <div className="space-y-2 mt-4 pt-4 border-t border-gray-100">
-            {distribution.map((item, idx) => {
-              const percentage = totalReviews > 0 ? (item.count / totalReviews) * 100 : 0;
-              return (
-                <div key={idx} className="flex items-center text-xs">
-                  <span className="w-8 text-gray-600">{item.rating}★</span>
-                  <div className="flex-1 mx-2">
-                    <div className="w-full bg-gray-200 rounded-full h-1.5">
-                      <div
-                        className={`h-1.5 rounded-full ${
-                          item.rating >= 4 ? 'bg-emerald-500' :
-                          item.rating >= 3 ? 'bg-amber-500' : 'bg-rose-500'
-                        }`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="w-12 text-right text-gray-500">
-                    {Math.round(percentage)}% ({item.count})
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </>
-    )}
-  </div>
-);
+        COALESCE(SUM(se.total_charges), 0) as total_billed,
+        COALESCE(SUM(se.service_charges), 0) as total_service_charges,
+        COALESCE(SUM(se.department_charges), 0) as total_department_charges,
+        
+        COALESCE(SUM(p.amount), 0) as total_collected,
+        
+        COALESCE(AVG(p.amount), 0) as avg_transaction_value,
+        
+        -- Collection rate
+        CASE 
+          WHEN COALESCE(SUM(se.total_charges), 0) > 0 
+          THEN ROUND((COALESCE(SUM(p.amount), 0) / COALESCE(SUM(se.total_charges), 0)) * 100, 2)
+          ELSE 0 
+        END as collection_rate,
+        
+        -- Average daily revenue
+        CASE 
+          WHEN COUNT(DISTINCT DATE(se.created_at)) > 0 
+          THEN ROUND(COALESCE(SUM(p.amount), 0) / COUNT(DISTINCT DATE(se.created_at)), 2)
+          ELSE 0 
+        END as avg_daily_revenue,
+        
+        -- Average daily services
+        CASE 
+          WHEN COUNT(DISTINCT DATE(se.created_at)) > 0 
+          THEN ROUND(COUNT(DISTINCT se.id)::numeric / COUNT(DISTINCT DATE(se.created_at)), 2)
+          ELSE 0 
+        END as avg_daily_services
+        
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+    `;
+    const performanceData = await client.query(performanceQuery, [staffId, startDate, endDate]);
+    const perf = performanceData.rows[0];
+    
+    // 2b️⃣ Additional Metrics: Repeat Customer Rate
+    const repeatCustomerQuery = `
+      WITH customer_visits AS (
+        SELECT 
+          customer_name,
+          COUNT(DISTINCT se.id) as visit_count
+        FROM service_entries se
+        WHERE se.staff_id = $1 
+          AND se.status IN ('completed', 'pending')
+          AND DATE(se.created_at) BETWEEN $2 AND $3
+          AND se.customer_name IS NOT NULL
+          AND se.customer_name != ''
+        GROUP BY customer_name
+      )
+      SELECT 
+        COUNT(*) as total_customers,
+        COUNT(CASE WHEN visit_count > 1 THEN 1 END) as repeat_customers
+      FROM customer_visits
+    `;
+    const repeatCustomerData = await client.query(repeatCustomerQuery, [staffId, startDate, endDate]);
+    
+    const totalCustomersWithVisits = parseInt(repeatCustomerData.rows[0]?.total_customers || 0);
+    const repeatCustomers = parseInt(repeatCustomerData.rows[0]?.repeat_customers || 0);
+    const repeatCustomerRate = totalCustomersWithVisits > 0 ? (repeatCustomers / totalCustomersWithVisits) * 100 : 0;
+    
+    // 2c️⃣ Revenue Per Service
+    const revenuePerService = perf.total_services > 0 ? perf.total_collected / perf.total_services : 0;
+    
+    // 2d️⃣ Collection Efficiency (combines rate and speed - % of payments within 7 days)
+    const collectionEfficiencyQuery = `
+      SELECT 
+        COUNT(DISTINCT se.id) as total_services_with_payments,
+        COUNT(DISTINCT CASE 
+          WHEN p.received_amount > 0 AND (se.created_at::date + INTERVAL '7 days') >= p.payment_date
+          THEN se.id 
+        END) as ontime_paid_services
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND p.received_amount > 0
+    `;
+    const efficiencyData = await client.query(collectionEfficiencyQuery, [staffId, startDate, endDate]);
+    const paidServices = parseInt(efficiencyData.rows[0]?.total_services_with_payments || 0);
+    const ontimePaid = parseInt(efficiencyData.rows[0]?.ontime_paid_services || 0);
+    const collectionEfficiency = paidServices > 0 ? (ontimePaid / paidServices) * 100 : 0;
+    
+    // 3️⃣ Pending Payments
+    const pendingQuery = `
+      SELECT 
+        COUNT(se.id) as pending_count,
+        COALESCE(SUM(se.total_charges - COALESCE(p.received_amount, 0)), 0) as pending_amount,
+        COUNT(CASE WHEN (CURRENT_DATE - se.created_at::date) > 7 
+              AND (se.total_charges - COALESCE(p.received_amount, 0)) > 0 THEN 1 END) as overdue_count,
+        COALESCE(SUM(CASE WHEN (CURRENT_DATE - se.created_at::date) > 7 
+              THEN (se.total_charges - COALESCE(p.received_amount, 0)) ELSE 0 END), 0) as overdue_amount
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status != 'completed'
+        AND (se.total_charges - COALESCE(p.received_amount, 0)) > 0
+    `;
+    const pendingData = await client.query(pendingQuery, [staffId]);
+    
+    // 4️⃣ Daily Performance for Charts
+    const dailyPerformanceQuery = `
+      SELECT 
+        DATE(se.created_at) as date,
+        COUNT(DISTINCT se.id) as services_count,
+        COALESCE(SUM(se.total_charges), 0) as billed_amount,
+        COALESCE(SUM(p.amount), 0) as collected_amount,
+        COALESCE(SUM(se.service_charges), 0) as service_charges
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+      GROUP BY DATE(se.created_at)
+      ORDER BY date ASC
+    `;
+    const dailyData = await client.query(dailyPerformanceQuery, [staffId, startDate, endDate]);
+    
+    // 5️⃣ Service Category Breakdown
+    const categoryQuery = `
+      SELECT 
+        s.id as service_id,
+        s.name as service_name,
+        COUNT(se.id) as count,
+        COALESCE(SUM(p.amount), 0) as total_revenue,
+        COALESCE(SUM(se.service_charges), 0) as total_profit
+      FROM service_entries se
+      JOIN services s ON se.category_id = s.id
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+      GROUP BY s.id, s.name
+      ORDER BY total_revenue DESC
+      LIMIT 10
+    `;
+    const categoryData = await client.query(categoryQuery, [staffId, startDate, endDate]);
+    
+    // 6️⃣ Top Customers
+    const topCustomersQuery = `
+      SELECT 
+        se.customer_name,
+        se.phone,
+        COUNT(se.id) as service_count,
+        COALESCE(SUM(p.amount), 0) as total_spent
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.customer_name IS NOT NULL
+        AND se.customer_name != ''
+      GROUP BY se.customer_name, se.phone
+      ORDER BY total_spent DESC
+      LIMIT 5
+    `;
+    const topCustomers = await client.query(topCustomersQuery, [staffId, startDate, endDate]);
+    
+    // 7️⃣ Recent Services
+    const recentServicesQuery = `
+      SELECT 
+        se.id,
+        se.created_at,
+        se.customer_name,
+        se.phone as customer_phone,
+        s.name as service_name,
+        sc.name as subcategory_name,
+        se.status,
+        se.service_charges,
+        se.department_charges,
+        se.total_charges,
+        COALESCE(p.received_amount, 0) as received_amount,
+        (se.total_charges - COALESCE(p.received_amount, 0)) as pending_amount
+      FROM service_entries se
+      JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+      ORDER BY se.created_at DESC
+      LIMIT 20
+    `;
+    const recentServices = await client.query(recentServicesQuery, [staffId, startDate, endDate]);
+    
+    // 8️⃣ Rating Summary
+    const ratingQuery = `
+      SELECT 
+        COUNT(*) as total_reviews,
+        COALESCE(AVG(staff_rating), 0) as avg_staff_rating,
+        COALESCE(AVG(service_rating), 0) as avg_service_rating,
+        COUNT(CASE WHEN staff_rating >= 4 THEN 1 END) as positive_reviews,
+        COUNT(CASE WHEN staff_rating <= 2 THEN 1 END) as negative_reviews,
+        COUNT(CASE WHEN staff_rating = 5 THEN 1 END) as five_star,
+        COUNT(CASE WHEN staff_rating = 4 THEN 1 END) as four_star,
+        COUNT(CASE WHEN staff_rating = 3 THEN 1 END) as three_star,
+        COUNT(CASE WHEN staff_rating = 2 THEN 1 END) as two_star,
+        COUNT(CASE WHEN staff_rating = 1 THEN 1 END) as one_star
+      FROM service_reviews
+      WHERE staff_id = $1 
+        AND is_submitted = true
+        AND DATE(created_at) BETWEEN $2 AND $3
+    `;
+    const ratingData = await client.query(ratingQuery, [staffId, startDate, endDate]);
+    
+    // CSAT Score (percentage of 4 & 5 star reviews)
+    const totalReviews = parseInt(ratingData.rows[0]?.total_reviews || 0);
+    const positiveReviews = parseInt(ratingData.rows[0]?.positive_reviews || 0);
+    const csatScore = totalReviews > 0 ? (positiveReviews / totalReviews) * 100 : 0;
+    
+    // 9️⃣ Monthly Trends
+    const monthlyTrendsQuery = `
+      SELECT 
+        TO_CHAR(se.created_at, 'YYYY-MM') as month,
+        COUNT(*) as total_services,
+        COALESCE(SUM(p.amount), 0) as total_collected,
+        COALESCE(SUM(se.service_charges), 0) as service_charges
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND se.created_at >= (CURRENT_DATE - INTERVAL '6 months')
+      GROUP BY TO_CHAR(se.created_at, 'YYYY-MM')
+      ORDER BY month ASC
+    `;
+    const monthlyTrends = await client.query(monthlyTrendsQuery, [staffId]);
+    
+    // 🔟 Calculate Incentive Score
+    const activeDays = perf.active_days || 1;
+    const totalDaysInPeriod = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1;
+    const consistencyScore = Math.min((activeDays / totalDaysInPeriod) * 100, 100);
+    const collectionScore = Math.min(perf.collection_rate || 0, 100);
+    const revenueScore = Math.min((perf.avg_daily_revenue / 5000) * 100, 100); // ₹5000 target per day
+    
+    const incentiveScore = Math.round(
+      (collectionScore * 0.5) + (revenueScore * 0.3) + (consistencyScore * 0.2)
+    );
+    
+    // 1️⃣1️⃣ Rating Distribution for Chart
+    const ratingDistribution = [
+      { rating: 5, count: ratingData.rows[0]?.five_star || 0 },
+      { rating: 4, count: ratingData.rows[0]?.four_star || 0 },
+      { rating: 3, count: ratingData.rows[0]?.three_star || 0 },
+      { rating: 2, count: ratingData.rows[0]?.two_star || 0 },
+      { rating: 1, count: ratingData.rows[0]?.one_star || 0 }
+    ];
+    
+    // 1️⃣2️⃣ Attendance Summary
+    const attendanceQuery = `
+      SELECT 
+        COUNT(*) as total_days,
+        COUNT(CASE WHEN status = 'present' THEN 1 END) as present_days,
+        COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent_days,
+        COUNT(CASE WHEN status = 'late' THEN 1 END) as late_days,
+        COALESCE(SUM(hours), 0) as total_hours,
+        COALESCE(SUM(late_minutes), 0) as total_late_minutes,
+        COALESCE(SUM(extra_minutes), 0) as total_extra_minutes
+      FROM attendance
+      WHERE staff_id = $1 
+        AND date BETWEEN $2::date AND $3::date
+    `;
+    const attendanceData = await client.query(attendanceQuery, [staffId, startDate, endDate]);
+    
+    // 1️⃣3️⃣ Weekly Performance Breakdown
+    const weeklyBreakdownQuery = `
+      SELECT 
+        EXTRACT(WEEK FROM se.created_at) as week_number,
+        MIN(DATE(se.created_at)) as week_start,
+        COUNT(*) as services_count,
+        COALESCE(SUM(p.amount), 0) as total_collected
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+      GROUP BY EXTRACT(WEEK FROM se.created_at)
+      ORDER BY week_start ASC
+    `;
+    const weeklyBreakdown = await client.query(weeklyBreakdownQuery, [staffId, startDate, endDate]);
+    
+    // Calculate average rating
+    const avgRating = ratingData.rows[0]?.total_reviews > 0 
+      ? parseFloat(ratingData.rows[0].avg_staff_rating).toFixed(1)
+      : '0.0';
+    
+    // Prepare response
+    res.json({
+      success: true,
+      data: {
+        staff: staffInfo.rows[0],
+        period: { 
+          from: startDate, 
+          to: endDate, 
+          period,
+          total_days: totalDaysInPeriod
+        },
+        summary: {
+          total_services: parseInt(perf.total_services || 0),
+          total_billed: parseFloat(perf.total_billed || 0),
+          total_collected: parseFloat(perf.total_collected || 0),
+          total_service_charges: parseFloat(perf.total_service_charges || 0),
+          total_department_charges: parseFloat(perf.total_department_charges || 0),
+          collection_rate: parseFloat(perf.collection_rate || 0),
+          avg_transaction_value: parseFloat(perf.avg_transaction_value || 0),
+          active_days: parseInt(perf.active_days || 0),
+          unique_customers: parseInt(perf.unique_customers || 0),
+          avg_daily_revenue: parseFloat(perf.avg_daily_revenue || 0),
+          avg_daily_services: parseFloat(perf.avg_daily_services || 0),
+          incentive_score: incentiveScore,
+          // New metrics
+          repeat_customer_rate: parseFloat(repeatCustomerRate.toFixed(2)),
+          revenue_per_service: parseFloat(revenuePerService.toFixed(2)),
+          collection_efficiency: parseFloat(collectionEfficiency.toFixed(2)),
+          csat_score: parseFloat(csatScore.toFixed(2))
+        },
+        pending: {
+          pending_count: parseInt(pendingData.rows[0]?.pending_count || 0),
+          pending_amount: parseFloat(pendingData.rows[0]?.pending_amount || 0),
+          overdue_count: parseInt(pendingData.rows[0]?.overdue_count || 0),
+          overdue_amount: parseFloat(pendingData.rows[0]?.overdue_amount || 0)
+        },
+        daily_performance: dailyData.rows.map(row => ({
+          date: row.date,
+          services_count: parseInt(row.services_count),
+          billed_amount: parseFloat(row.billed_amount),
+          collected_amount: parseFloat(row.collected_amount),
+          service_charges: parseFloat(row.service_charges)
+        })),
+        category_breakdown: categoryData.rows.map(row => ({
+          service_id: row.service_id,
+          service_name: row.service_name,
+          count: parseInt(row.count),
+          total_revenue: parseFloat(row.total_revenue),
+          total_profit: parseFloat(row.total_profit)
+        })),
+        top_customers: topCustomers.rows.map(row => ({
+          customer_name: row.customer_name,
+          phone: row.phone,
+          service_count: parseInt(row.service_count),
+          total_spent: parseFloat(row.total_spent)
+        })),
+        recent_services: recentServices.rows.map(row => ({
+          id: row.id,
+          created_at: row.created_at,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          service_name: row.service_name,
+          subcategory_name: row.subcategory_name,
+          received_amount: parseFloat(row.received_amount || 0),
+          pending_amount: parseFloat(row.pending_amount || 0),
+          total_charges: parseFloat(row.total_charges || 0),
+          service_charges: parseFloat(row.service_charges || 0),
+          department_charges: parseFloat(row.department_charges || 0),
+          status: row.status
+        })),
+        ratings: {
+          total_reviews: parseInt(ratingData.rows[0]?.total_reviews || 0),
+          avg_rating: parseFloat(avgRating),
+          avg_service_rating: parseFloat(ratingData.rows[0]?.avg_service_rating || 0),
+          positive_reviews: parseInt(ratingData.rows[0]?.positive_reviews || 0),
+          negative_reviews: parseInt(ratingData.rows[0]?.negative_reviews || 0),
+          distribution: ratingDistribution
+        },
+        monthly_trends: monthlyTrends.rows.map(row => ({
+          month: row.month,
+          total_services: parseInt(row.total_services),
+          total_collected: parseFloat(row.total_collected),
+          service_charges: parseFloat(row.service_charges)
+        })),
+        weekly_breakdown: weeklyBreakdown.rows.map(row => ({
+          week_number: parseInt(row.week_number),
+          week_start: row.week_start,
+          services_count: parseInt(row.services_count),
+          total_collected: parseFloat(row.total_collected)
+        })),
+        attendance: {
+          total_days: parseInt(attendanceData.rows[0]?.total_days || 0),
+          present_days: parseInt(attendanceData.rows[0]?.present_days || 0),
+          absent_days: parseInt(attendanceData.rows[0]?.absent_days || 0),
+          late_days: parseInt(attendanceData.rows[0]?.late_days || 0),
+          attendance_rate: attendanceData.rows[0]?.total_days > 0 
+            ? Math.round((attendanceData.rows[0].present_days / attendanceData.rows[0].total_days) * 100)
+            : 0,
+          total_hours: parseFloat(attendanceData.rows[0]?.total_hours || 0),
+          total_late_minutes: parseInt(attendanceData.rows[0]?.total_late_minutes || 0),
+          total_extra_minutes: parseInt(attendanceData.rows[0]?.total_extra_minutes || 0)
+        }
+      }
+    });
+    
+    // Log activity
+    await logActivity({
+      centre_id: staffInfo.rows[0].centreId,
+      related_type: 'staff_performance',
+      related_id: staffId,
+      action: 'Performance Viewed',
+      description: `Staff ${staffInfo.rows[0].name} viewed their performance dashboard`,
+      performed_by: staffId,
+      performed_by_role: 'staff'
+    });
+    
+  } catch (err) {
+    console.error('Staff performance dashboard error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load performance data',
+      details: err.message 
+    });
+  } finally {
+    client.release();
+  }
+});
 
-// Achievement Card Component
-const AchievementCard = ({ achievement, index }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: index * 0.05 }}
-    className={`bg-white rounded-xl border p-4 ${
-      achievement.earned ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200'
-    }`}
-  >
-    <div className="flex items-center space-x-3">
-      <div className={`text-2xl ${achievement.earned ? 'opacity-100' : 'opacity-50'}`}>
-        {achievement.icon}
-      </div>
-      <div className="flex-1">
-        <h4 className={`font-semibold text-sm ${achievement.earned ? 'text-emerald-800' : 'text-gray-700'}`}>
-          {achievement.name}
-        </h4>
-        <p className="text-xs text-gray-500">{achievement.description}</p>
-        {!achievement.earned && achievement.progress !== undefined && (
-          <div className="mt-2">
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-gray-600">Progress</span>
-              <span className="text-gray-600">{Math.round((achievement.progress / achievement.target) * 100)}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-1.5">
-              <div
-                className="bg-indigo-500 h-1.5 rounded-full"
-                style={{ width: `${(achievement.progress / achievement.target) * 100}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {achievement.progress.toLocaleString()} / {achievement.target.toLocaleString()}
-            </p>
-          </div>
-        )}
-      </div>
-      {achievement.earned && (
-        <FiCheckCircle className="h-5 w-5 text-emerald-600" />
-      )}
-    </div>
-  </motion.div>
-);
-
-// Main Staff Performance Component
-const StaffPerformance = () => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('month');
-  const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [achievements, setAchievements] = useState(null);
-  const [comparison, setComparison] = useState(null);
-  const [serviceBreakdown, setServiceBreakdown] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [showDailyLog, setShowDailyLog] = useState(false);
-  const [dailyLog, setDailyLog] = useState(null);
-  const [staffInfo, setStaffInfo] = useState(null);
+/* =========================================================
+   2️⃣ STAFF PERFORMANCE COMPARISON
+   Compare current performance with previous period
+========================================================= */
+router.get('/compare', async (req, res) => {
+  const client = await pool.connect();
   
-  // Fetch staff info from JWT
-  useEffect(() => {
-    try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setStaffInfo({
-          id: payload.id,
-          name: payload.name || payload.username,
-          role: payload.role,
-          centre_id: payload.centre_id
+  try {
+    const staffId = req.user.id;
+    const { period = 'month' } = req.query;
+    
+    // Get current period dates
+    const now = new Date();
+    let currentStart, currentEnd = now.toISOString().split('T')[0];
+    let previousStart, previousEnd;
+    
+    if (period === 'week') {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(now.getDate() - 7);
+      currentStart = weekAgo.toISOString().split('T')[0];
+      const twoWeeksAgo = new Date(now);
+      twoWeeksAgo.setDate(now.getDate() - 14);
+      previousStart = twoWeeksAgo.toISOString().split('T')[0];
+      previousEnd = weekAgo.toISOString().split('T')[0];
+    } else if (period === 'month') {
+      currentStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      previousStart = prevMonth.toISOString().split('T')[0];
+      previousEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+    } else if (period === 'quarter') {
+      const quarter = Math.floor(now.getMonth() / 3) * 3;
+      currentStart = new Date(now.getFullYear(), quarter, 1).toISOString().split('T')[0];
+      const prevQuarterStart = new Date(now.getFullYear(), quarter - 3, 1);
+      previousStart = prevQuarterStart.toISOString().split('T')[0];
+      previousEnd = new Date(now.getFullYear(), quarter, 0).toISOString().split('T')[0];
+    } else {
+      currentStart = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
+      previousStart = new Date(now.getFullYear() - 1, 0, 1).toISOString().split('T')[0];
+      previousEnd = new Date(now.getFullYear() - 1, 11, 31).toISOString().split('T')[0];
+    }
+    
+    // Get current period performance
+    const currentQuery = `
+      SELECT 
+        COUNT(DISTINCT se.id) as total_services,
+        COALESCE(SUM(p.amount), 0) as total_collected,
+        COALESCE(SUM(se.service_charges), 0) as total_profit,
+        COALESCE(AVG(p.amount), 0) as avg_transaction,
+        COUNT(DISTINCT se.customer_name) as unique_customers
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+    `;
+    const currentResult = await client.query(currentQuery, [staffId, currentStart, currentEnd]);
+    
+    // Get previous period performance
+    const previousResult = await client.query(currentQuery, [staffId, previousStart, previousEnd]);
+    
+    // Calculate changes
+    const calculateChange = (current, previous) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return ((current - previous) / previous) * 100;
+    };
+    
+    const current = currentResult.rows[0];
+    const previous = previousResult.rows[0];
+    
+    res.json({
+      success: true,
+      data: {
+        period: {
+          current: { from: currentStart, to: currentEnd },
+          previous: { from: previousStart, to: previousEnd }
+        },
+        metrics: {
+          services: {
+            current: parseInt(current.total_services || 0),
+            previous: parseInt(previous.total_services || 0),
+            change: calculateChange(current.total_services, previous.total_services)
+          },
+          revenue: {
+            current: parseFloat(current.total_collected || 0),
+            previous: parseFloat(previous.total_collected || 0),
+            change: calculateChange(current.total_collected, previous.total_collected)
+          },
+          profit: {
+            current: parseFloat(current.total_profit || 0),
+            previous: parseFloat(previous.total_profit || 0),
+            change: calculateChange(current.total_profit, previous.total_profit)
+          },
+          avgTransaction: {
+            current: parseFloat(current.avg_transaction || 0),
+            previous: parseFloat(previous.avg_transaction || 0),
+            change: calculateChange(current.avg_transaction, previous.avg_transaction)
+          },
+          customers: {
+            current: parseInt(current.unique_customers || 0),
+            previous: parseInt(previous.unique_customers || 0),
+            change: calculateChange(current.unique_customers, previous.unique_customers)
+          }
+        }
+      }
+    });
+    
+  } catch (err) {
+    console.error('Performance comparison error:', err);
+    res.status(500).json({ success: false, error: 'Failed to load comparison data' });
+  } finally {
+    client.release();
+  }
+});
+
+/* =========================================================
+   3️⃣ STAFF ACHIEVEMENTS & MILESTONES
+   Track staff achievements and milestones (ENHANCED)
+========================================================= */
+router.get('/achievements', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const staffId = req.user.id;
+    
+    // Get lifetime totals
+    const lifetimeQuery = `
+      SELECT 
+        COUNT(DISTINCT se.id) as total_services,
+        COALESCE(SUM(p.amount), 0) as total_revenue,
+        COUNT(DISTINCT se.customer_name) as unique_customers,
+        COUNT(DISTINCT DATE(se.created_at)) as active_days
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+    `;
+    const lifetime = await client.query(lifetimeQuery, [staffId]);
+    
+    // Get best day
+    const bestDayQuery = `
+      SELECT 
+        DATE(se.created_at) as date,
+        COUNT(DISTINCT se.id) as services_count,
+        COALESCE(SUM(p.amount), 0) as revenue
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+      GROUP BY DATE(se.created_at)
+      ORDER BY revenue DESC
+      LIMIT 1
+    `;
+    const bestDay = await client.query(bestDayQuery, [staffId]);
+    
+    // Get top customer
+    const topCustomerQuery = `
+      SELECT 
+        se.customer_name,
+        COUNT(se.id) as services_count,
+        COALESCE(SUM(p.amount), 0) as total_spent
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND se.customer_name IS NOT NULL
+        AND se.customer_name != ''
+      GROUP BY se.customer_name
+      ORDER BY total_spent DESC
+      LIMIT 1
+    `;
+    const topCustomer = await client.query(topCustomerQuery, [staffId]);
+    
+    // Get weekly streak (consecutive weeks with at least one service)
+    const weeklyStreakQuery = `
+      WITH weekly_activity AS (
+        SELECT 
+          DATE_TRUNC('week', se.created_at) as week_start,
+          COUNT(*) as services_count
+        FROM service_entries se
+        WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+        GROUP BY DATE_TRUNC('week', se.created_at)
+      ),
+      streak_calc AS (
+        SELECT 
+          week_start,
+          services_count,
+          ROW_NUMBER() OVER (ORDER BY week_start) as rn,
+          week_start - (ROW_NUMBER() OVER (ORDER BY week_start) * INTERVAL '7 days') as streak_group
+        FROM weekly_activity
+      )
+      SELECT COUNT(*) as current_streak FROM (
+        SELECT streak_group, COUNT(*) as streak_length
+        FROM streak_calc
+        GROUP BY streak_group
+        ORDER BY MAX(week_start) DESC
+        LIMIT 1
+      ) current_streak
+    `;
+    const weeklyStreakResult = await client.query(weeklyStreakQuery, [staffId]);
+    const weeklyStreak = parseInt(weeklyStreakResult.rows[0]?.current_streak || 0);
+    
+    // Get daily revenue streak (consecutive days with revenue > 0)
+    const dailyStreakQuery = `
+      WITH daily_revenue AS (
+        SELECT 
+          DATE(se.created_at) as day,
+          COALESCE(SUM(p.amount), 0) as revenue
+        FROM service_entries se
+        ${paymentsLateralJoin()}
+        WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+        GROUP BY DATE(se.created_at)
+      ),
+      streak_calc AS (
+        SELECT 
+          day,
+          revenue,
+          ROW_NUMBER() OVER (ORDER BY day) as rn,
+          day - (ROW_NUMBER() OVER (ORDER BY day) * INTERVAL '1 day') as streak_group
+        FROM daily_revenue
+        WHERE revenue > 0
+      )
+      SELECT COUNT(*) as current_streak FROM (
+        SELECT streak_group, COUNT(*) as streak_length
+        FROM streak_calc
+        GROUP BY streak_group
+        ORDER BY MAX(day) DESC
+        LIMIT 1
+      ) current_streak
+    `;
+    const dailyStreakResult = await client.query(dailyStreakQuery, [staffId]);
+    const dailyRevenueStreak = parseInt(dailyStreakResult.rows[0]?.current_streak || 0);
+    
+    // Get service variety (distinct service categories)
+    const varietyQuery = `
+      SELECT COUNT(DISTINCT se.category_id) as distinct_categories
+      FROM service_entries se
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+    `;
+    const varietyResult = await client.query(varietyQuery, [staffId]);
+    const distinctCategories = parseInt(varietyResult.rows[0]?.distinct_categories || 0);
+    
+    // Get top service category
+    const topCategoryQuery = `
+      SELECT 
+        s.name as category_name,
+        COUNT(se.id) as services_count
+      FROM service_entries se
+      JOIN services s ON se.category_id = s.id
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+      GROUP BY s.id, s.name
+      ORDER BY services_count DESC
+      LIMIT 1
+    `;
+    const topCategory = await client.query(topCategoryQuery, [staffId]);
+    
+    // Get rating achievements
+    const ratingAchievementsQuery = `
+      SELECT 
+        COUNT(*) as total_5_star,
+        COUNT(DISTINCT DATE(created_at)) as days_with_5_star,
+        DATE_TRUNC('month', created_at) as month,
+        COUNT(CASE WHEN staff_rating = 5 THEN 1 END) as five_star_count
+      FROM service_reviews
+      WHERE staff_id = $1 AND is_submitted = true AND staff_rating = 5
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month DESC
+    `;
+    const ratingAchievements = await client.query(ratingAchievementsQuery, [staffId]);
+    const totalFiveStar = ratingAchievements.rows.reduce((sum, row) => sum + parseInt(row.five_star_count || 0), 0);
+    const perfectMonths = ratingAchievements.rows.filter(row => {
+      const totalReviewsQuery = `
+        SELECT COUNT(*) as total
+        FROM service_reviews
+        WHERE staff_id = $1 AND is_submitted = true 
+          AND DATE_TRUNC('month', created_at) = $2::timestamp
+      `;
+      // Simplified - we'll calculate later
+      return false;
+    });
+    
+    // Get collection rate achievements
+    const collectionRateQuery = `
+      SELECT 
+        CASE 
+          WHEN SUM(se.total_charges) > 0 
+          THEN (SUM(p.amount) / SUM(se.total_charges)) * 100 
+          ELSE 0 
+        END as lifetime_collection_rate
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+    `;
+    const collectionRateResult = await client.query(collectionRateQuery, [staffId]);
+    const lifetimeCollectionRate = parseFloat(collectionRateResult.rows[0]?.lifetime_collection_rate || 0);
+    
+    // Calculate achievements
+    const achievements = [];
+    const totalServices = parseInt(lifetime.rows[0].total_services || 0);
+    const totalRevenue = parseFloat(lifetime.rows[0].total_revenue || 0);
+    const uniqueCustomers = parseInt(lifetime.rows[0].unique_customers || 0);
+    const activeDays = parseInt(lifetime.rows[0].active_days || 0);
+    
+    // ----- SERVICE COUNT ACHIEVEMENTS -----
+    const serviceMilestones = [
+      { threshold: 10, name: 'First Steps', description: 'Completed 10 services', icon: '🎯' },
+      { threshold: 50, name: 'Silver Service', description: 'Completed 50 services', icon: '🥈' },
+      { threshold: 100, name: 'Century Club', description: 'Completed 100 services', icon: '🏆' },
+      { threshold: 500, name: 'Service Master', description: 'Completed 500 services', icon: '👑' },
+      { threshold: 1000, name: 'Legendary Service', description: 'Completed 1000+ services', icon: '💎' }
+    ];
+    
+    serviceMilestones.forEach(milestone => {
+      if (totalServices >= milestone.threshold) {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: true,
+          icon: milestone.icon,
+          earned_at: null
+        });
+      } else {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: false,
+          icon: milestone.icon,
+          progress: totalServices,
+          target: milestone.threshold
         });
       }
-    } catch (err) {
-      console.error('Error decoding token:', err);
-    }
-  }, []);
-  
-  const fetchPerformance = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      
-      // Build query params
-      let params = new URLSearchParams();
-      
-      if (period === 'custom' && customDateRange.from && customDateRange.to) {
-        params.append('from', customDateRange.from);
-        params.append('to', customDateRange.to);
-        params.append('period', 'custom');
+    });
+    
+    // ----- REVENUE ACHIEVEMENTS -----
+    const revenueMilestones = [
+      { threshold: 10000, name: '₹10K Club', description: 'Generated ₹10,000+ revenue', icon: '💰' },
+      { threshold: 50000, name: '₹50K Club', description: 'Generated ₹50,000+ revenue', icon: '💵' },
+      { threshold: 100000, name: '₹1 Lakh Club', description: 'Generated ₹1,00,000+ revenue', icon: '🌟' },
+      { threshold: 500000, name: '₹5 Lakh Club', description: 'Generated ₹5,00,000+ revenue', icon: '⭐' },
+      { threshold: 1000000, name: '₹10 Lakh Club', description: 'Generated ₹10,00,000+ revenue', icon: '🏅' }
+    ];
+    
+    revenueMilestones.forEach(milestone => {
+      if (totalRevenue >= milestone.threshold) {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: true,
+          icon: milestone.icon,
+          earned_at: null
+        });
       } else {
-        params.append('period', period);
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: false,
+          icon: milestone.icon,
+          progress: totalRevenue,
+          target: milestone.threshold
+        });
       }
-      
-      // Fetch dashboard data
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      
-      if (!response.ok) throw new Error('Failed to fetch performance data');
-      
-      const result = await response.json();
-      setData(result.data);
-      
-      // Fetch achievements
-      const achievementsResponse = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/achievements`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      if (achievementsResponse.ok) {
-        const achievementsResult = await achievementsResponse.json();
-        setAchievements(achievementsResult.data);
-      }
-      
-      // Fetch comparison data
-      const comparisonResponse = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/compare?period=${period}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      if (comparisonResponse.ok) {
-        const comparisonResult = await comparisonResponse.json();
-        setComparison(comparisonResult.data);
-      }
-      
-      // Fetch service breakdown
-      const breakdownResponse = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/service-breakdown?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      if (breakdownResponse.ok) {
-        const breakdownResult = await breakdownResponse.json();
-        setServiceBreakdown(breakdownResult.data);
-      }
-      
-    } catch (error) {
-      console.error('Error fetching performance:', error);
-      toast.error('Failed to load performance data');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const fetchDailyLog = async (date) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/daily-log?date=${date}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      
-      if (!response.ok) throw new Error('Failed to fetch daily log');
-      
-      const result = await response.json();
-      setDailyLog(result.data);
-      setShowDailyLog(true);
-    } catch (error) {
-      console.error('Error fetching daily log:', error);
-      toast.error('Failed to load daily log');
-    }
-  };
-  
-  useEffect(() => {
-    if (staffInfo?.id) {
-      fetchPerformance();
-    }
-  }, [period, customDateRange, staffInfo]);
-  
-  // Chart data for daily performance
-  const dailyChartData = useMemo(() => {
-    if (!data?.daily_performance?.length) return null;
+    });
     
-    return {
-      labels: data.daily_performance.map(d => formatDate(d.date)),
-      datasets: [
-        {
-          label: 'Revenue Collected (₹)',
-          data: data.daily_performance.map(d => d.collected_amount),
-          borderColor: 'rgb(99, 102, 241)',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y',
+    // ----- CUSTOMER ACHIEVEMENTS -----
+    const customerMilestones = [
+      { threshold: 10, name: 'Welcome Host', description: 'Served 10 unique customers', icon: '🤝' },
+      { threshold: 50, name: 'People\'s Choice', description: 'Served 50 unique customers', icon: '👥' },
+      { threshold: 100, name: 'Customer Magnet', description: 'Served 100 unique customers', icon: '🧲' },
+      { threshold: 250, name: 'Community Hero', description: 'Served 250+ unique customers', icon: '🦸' }
+    ];
+    
+    customerMilestones.forEach(milestone => {
+      if (uniqueCustomers >= milestone.threshold) {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: true,
+          icon: milestone.icon,
+          earned_at: null
+        });
+      } else {
+        achievements.push({
+          name: milestone.name,
+          description: milestone.description,
+          earned: false,
+          icon: milestone.icon,
+          progress: uniqueCustomers,
+          target: milestone.threshold
+        });
+      }
+    });
+    
+    // ----- STREAK ACHIEVEMENTS -----
+    if (weeklyStreak >= 4) {
+      achievements.push({
+        name: 'Weekly Warrior',
+        description: `Maintained ${weeklyStreak} week streak of service`,
+        earned: true,
+        icon: '⚡',
+        earned_at: null
+      });
+    } else if (weeklyStreak > 0) {
+      achievements.push({
+        name: 'Weekly Warrior',
+        description: 'Maintain 4+ weeks of continuous service',
+        earned: false,
+        icon: '⚡',
+        progress: weeklyStreak,
+        target: 4
+      });
+    }
+    
+    if (dailyRevenueStreak >= 5) {
+      achievements.push({
+        name: 'Revenue Streak',
+        description: `${dailyRevenueStreak} consecutive days with revenue`,
+        earned: true,
+        icon: '📈',
+        earned_at: null
+      });
+    } else if (dailyRevenueStreak > 0) {
+      achievements.push({
+        name: 'Revenue Streak',
+        description: '5 consecutive days with revenue',
+        earned: false,
+        icon: '📈',
+        progress: dailyRevenueStreak,
+        target: 5
+      });
+    }
+    
+    // ----- SERVICE VARIETY ACHIEVEMENTS -----
+    if (distinctCategories >= 5) {
+      achievements.push({
+        name: 'Versatile Pro',
+        description: `Expert in ${distinctCategories} different service categories`,
+        earned: true,
+        icon: '🎨',
+        earned_at: null
+      });
+    } else if (distinctCategories >= 3) {
+      achievements.push({
+        name: 'Multi-Talented',
+        description: `Skilled in ${distinctCategories} service categories`,
+        earned: true,
+        icon: '🎭',
+        earned_at: null
+      });
+    } else {
+      achievements.push({
+        name: 'Specialist',
+        description: 'Master one service category first',
+        earned: false,
+        icon: '🎯',
+        progress: distinctCategories,
+        target: 3
+      });
+    }
+    
+    // Top category specialization
+    if (topCategory.rows[0] && topCategory.rows[0].services_count >= 50) {
+      achievements.push({
+        name: `${topCategory.rows[0].category_name} Specialist`,
+        description: `Completed ${topCategory.rows[0].services_count}+ ${topCategory.rows[0].category_name} services`,
+        earned: true,
+        icon: '🏅',
+        earned_at: null
+      });
+    }
+    
+    // ----- RATING ACHIEVEMENTS -----
+    if (totalFiveStar >= 10) {
+      achievements.push({
+        name: 'Star Performer',
+        description: `Received ${totalFiveStar} five-star ratings`,
+        earned: true,
+        icon: '⭐',
+        earned_at: null
+      });
+    } else if (totalFiveStar >= 5) {
+      achievements.push({
+        name: 'Rising Star',
+        description: `Received ${totalFiveStar} five-star ratings`,
+        earned: true,
+        icon: '✨',
+        earned_at: null
+      });
+    } else if (totalFiveStar > 0) {
+      achievements.push({
+        name: 'First Five-Star',
+        description: 'Receive your first five-star rating',
+        earned: true,
+        icon: '🌟',
+        earned_at: null
+      });
+    } else {
+      achievements.push({
+        name: 'First Five-Star',
+        description: 'Receive your first five-star rating',
+        earned: false,
+        icon: '🌟',
+        progress: 0,
+        target: 1
+      });
+    }
+    
+    // ----- COLLECTION ACHIEVEMENTS -----
+    if (lifetimeCollectionRate >= 95) {
+      achievements.push({
+        name: 'Collection Master',
+        description: `${lifetimeCollectionRate.toFixed(1)}% collection rate - Excellent!`,
+        earned: true,
+        icon: '💯',
+        earned_at: null
+      });
+    } else if (lifetimeCollectionRate >= 90) {
+      achievements.push({
+        name: 'Collection Expert',
+        description: `${lifetimeCollectionRate.toFixed(1)}% collection rate - Great!`,
+        earned: true,
+        icon: '✅',
+        earned_at: null
+      });
+    } else if (lifetimeCollectionRate >= 80) {
+      achievements.push({
+        name: 'Good Collector',
+        description: `${lifetimeCollectionRate.toFixed(1)}% collection rate`,
+        earned: true,
+        icon: '📊',
+        earned_at: null
+      });
+    } else if (lifetimeCollectionRate > 0) {
+      achievements.push({
+        name: 'Perfect Collection',
+        description: 'Achieve 90%+ collection rate',
+        earned: false,
+        icon: '🎯',
+        progress: lifetimeCollectionRate,
+        target: 90
+      });
+    }
+    
+    // ----- ATTENDANCE/DEDICATION ACHIEVEMENTS -----
+    if (activeDays >= 200) {
+      achievements.push({
+        name: 'Dedication Diamond',
+        description: `${activeDays} active service days - Incredible dedication!`,
+        earned: true,
+        icon: '💎',
+        earned_at: null
+      });
+    } else if (activeDays >= 100) {
+      achievements.push({
+        name: 'Dedication Gold',
+        description: `${activeDays} active service days`,
+        earned: true,
+        icon: '🏅',
+        earned_at: null
+      });
+    } else if (activeDays >= 50) {
+      achievements.push({
+        name: 'Dedication Silver',
+        description: `${activeDays} active service days`,
+        earned: true,
+        icon: '🥈',
+        earned_at: null
+      });
+    } else if (activeDays >= 25) {
+      achievements.push({
+        name: 'Dedication Bronze',
+        description: `${activeDays} active service days`,
+        earned: true,
+        icon: '🥉',
+        earned_at: null
+      });
+    } else {
+      achievements.push({
+        name: 'Getting Started',
+        description: 'Complete 25 active service days',
+        earned: false,
+        icon: '🌱',
+        progress: activeDays,
+        target: 25
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        lifetime: {
+          total_services: totalServices,
+          total_revenue: totalRevenue,
+          unique_customers: uniqueCustomers,
+          active_days: activeDays,
+          lifetime_collection_rate: lifetimeCollectionRate,
+          weekly_streak: weeklyStreak,
+          daily_revenue_streak: dailyRevenueStreak,
+          distinct_categories: distinctCategories,
+          total_five_star_ratings: totalFiveStar
         },
-        {
-          label: 'Services Count',
-          data: data.daily_performance.map(d => d.services_count),
-          borderColor: 'rgb(16, 185, 129)',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y1',
-        }
-      ]
-    };
-  }, [data]);
-  
-  const dailyChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { position: 'top', labels: { font: { size: 11 } } },
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            let label = context.dataset.label || '';
-            let value = context.raw;
-            if (context.dataset.label?.includes('Revenue')) {
-              return `${label}: ${formatCurrency(value)}`;
-            }
-            return `${label}: ${value}`;
-          }
-        }
+        best_day: bestDay.rows[0] ? {
+          date: bestDay.rows[0].date,
+          services_count: parseInt(bestDay.rows[0].services_count),
+          revenue: parseFloat(bestDay.rows[0].revenue)
+        } : null,
+        top_customer: topCustomer.rows[0] ? {
+          name: topCustomer.rows[0].customer_name,
+          services_count: parseInt(topCustomer.rows[0].services_count),
+          total_spent: parseFloat(topCustomer.rows[0].total_spent)
+        } : null,
+        top_category: topCategory.rows[0] ? {
+          name: topCategory.rows[0].category_name,
+          services_count: parseInt(topCategory.rows[0].services_count)
+        } : null,
+        achievements
       }
-    },
-    scales: {
-      y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
-        title: { display: true, text: 'Revenue (₹)', font: { size: 10 } },
-        ticks: { callback: (value) => `₹${value/1000}k`, font: { size: 10 } }
-      },
-      y1: {
-        type: 'linear',
-        display: true,
-        position: 'right',
-        title: { display: true, text: 'Services', font: { size: 10 } },
-        grid: { drawOnChartArea: false },
-        ticks: { font: { size: 10 } }
-      },
-      x: {
-        ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 45 }
-      }
-    }
-  };
-  
-  // Category breakdown chart - FIXED: Added responsive wrapper with proper height
-  const categoryChartData = useMemo(() => {
-    if (!serviceBreakdown?.length) return null;
+    });
     
-    const top5 = serviceBreakdown.slice(0, 5);
-    const colors = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
-    
-    return {
-      labels: top5.map(c => c.service_name),
-      datasets: [{
-        data: top5.map(c => c.total_revenue),
-        backgroundColor: colors,
-        borderWidth: 0,
-        hoverOffset: 10
-      }]
-    };
-  }, [serviceBreakdown]);
-  
-  const doughnutOptions = {
-    responsive: true,
-    maintainAspectRatio: true,
-    cutout: '60%',
-    plugins: {
-      legend: {
-        position: 'bottom',
-        labels: { font: { size: 10 }, boxWidth: 10 }
-      },
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            const label = context.label || '';
-            const value = context.raw;
-            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-            const percentage = ((value / total) * 100).toFixed(1);
-            return `${label}: ${formatCurrency(value)} (${percentage}%)`;
-          }
-        }
-      }
-    }
-  };
-  
-  // Monthly trends chart
-  const monthlyTrendsChart = useMemo(() => {
-    if (!data?.monthly_trends?.length) return null;
-    
-    return {
-      labels: data.monthly_trends.map(t => t.month),
-      datasets: [
-        {
-          label: 'Revenue',
-          data: data.monthly_trends.map(t => t.total_collected),
-          borderColor: 'rgb(99, 102, 241)',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          fill: true,
-          tension: 0.4,
-        },
-        {
-          label: 'Profit',
-          data: data.monthly_trends.map(t => t.service_charges),
-          borderColor: 'rgb(16, 185, 129)',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          fill: true,
-          tension: 0.4,
-        }
-      ]
-    };
-  }, [data]);
-  
-  const summary = data?.summary || {};
-  const pending = data?.pending || {};
-  const ratings = data?.ratings || {};
-  const attendance = data?.attendance || {};
-  
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: FiBarChart2 },
-    { id: 'services', label: 'Services', icon: FiBriefcase },
-    { id: 'achievements', label: 'Achievements', icon: FiAward },
-    { id: 'attendance', label: 'Attendance', icon: FiClock }
-  ];
-  
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
-        <div className="px-6 py-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <FiTrendingUp className="text-white h-6 w-6" />
-              </div>
-              <div>
-                <h1 className="font-bold text-gray-900 text-2xl">My Performance Dashboard</h1>
-                <p className="text-gray-600 flex items-center text-sm">
-                  <FiBriefcase className="h-3 w-3 mr-1" />
-                  Track your revenue, services, and customer satisfaction
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              {/* Period Selector */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <FiCalendar className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm">
-                    {period === 'today' && 'Today'}
-                    {period === 'week' && 'This Week'}
-                    {period === 'month' && 'This Month'}
-                    {period === 'quarter' && 'This Quarter'}
-                    {period === 'year' && 'This Year'}
-                    {period === 'custom' && 'Custom Range'}
-                  </span>
-                  <FiChevronRight className="h-4 w-4 text-gray-500 transform rotate-90" />
-                </button>
-                
-                <AnimatePresence>
-                  {showDatePicker && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowDatePicker(false)} />
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64"
-                      >
-                        <div className="p-3">
-                          <button
-                            onClick={() => { setPeriod('today'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'today' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            Today
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('week'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'week' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Week
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('month'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'month' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Month
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('quarter'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'quarter' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Quarter
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('year'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'year' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Year
-                          </button>
-                          <div className="border-t border-gray-200 my-2"></div>
-                          <div className="space-y-2">
-                            <input
-                              type="date"
-                              value={customDateRange.from}
-                              onChange={(e) => setCustomDateRange(prev => ({ ...prev, from: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                              placeholder="From Date"
-                            />
-                            <input
-                              type="date"
-                              value={customDateRange.to}
-                              onChange={(e) => setCustomDateRange(prev => ({ ...prev, to: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                              placeholder="To Date"
-                            />
-                            <button
-                              onClick={() => { setPeriod('custom'); setShowDatePicker(false); }}
-                              className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
-                            >
-                              Apply
-                            </button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-              
-              <button
-                onClick={fetchPerformance}
-                className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                disabled={loading}
-              >
-                <FiRefreshCw className={`h-4 w-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-          </div>
-          
-          {/* Staff Info */}
-          {staffInfo && (
-            <div className="mt-4 flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                <span className="text-indigo-600 font-bold text-lg">
-                  {staffInfo.name?.charAt(0) || 'S'}
-                </span>
-              </div>
-              <div>
-                <h2 className="font-semibold text-gray-900">{staffInfo.name}</h2>
-                <div className="flex flex-wrap gap-3 mt-1">
-                  <span className="text-xs text-gray-500 flex items-center">
-                    <FiBriefcase className="h-3 w-3 mr-1" />
-                    {staffInfo.role || 'Staff'}
-                  </span>
-                  <span className="text-xs text-gray-500 flex items-center">
-                    <FiTarget className="h-3 w-3 mr-1" />
-                    Staff ID: {staffInfo.id}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Period Info */}
-          {data?.period && (
-            <div className="mt-3 text-sm text-gray-500 flex items-center">
-              <FiCalendar className="h-4 w-4 mr-1" />
-              Showing data from {formatDate(data.period.from)} to {formatDate(data.period.to)} ({data.period.total_days} days)
-            </div>
-          )}
-        </div>
-        
-        {/* Tabs */}
-        <div className="border-t border-gray-200 px-6">
-          <div className="flex space-x-6 overflow-x-auto">
-            {tabs.map(tab => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 py-3 border-b-2 text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'border-indigo-500 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      
-      {/* Main Content */}
-      <div className="px-6 py-6">
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <FiLoader className="animate-spin h-8 w-8 text-indigo-600 mx-auto mb-3" />
-              <p className="text-gray-500">Loading your performance data...</p>
-            </div>
-          </div>
-        ) : !data ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <FiBarChart2 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Data Available</h3>
-            <p className="text-gray-500">
-              No service records found for the selected period. Try selecting a different date range.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Overview Tab */}
-            {activeTab === 'overview' && (
-              <>
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <StatCard
-                    title="Revenue Collected"
-                    value={formatCurrency(summary.total_collected)}
-                    subtitle={`Billed: ${formatCurrency(summary.total_billed)}`}
-                    icon={FiDollarSign}
-                    color="bg-emerald-600"
-                    loading={loading}
-                    trend="vs last period"
-                    trendValue={comparison?.metrics?.revenue?.change}
-                  />
-                  <StatCard
-                    title="Services Completed"
-                    value={summary.total_services || 0}
-                    subtitle="Total services"
-                    icon={FiBriefcase}
-                    color="bg-blue-600"
-                    loading={loading}
-                    trend="vs last period"
-                    trendValue={comparison?.metrics?.services?.change}
-                  />
-                  <StatCard
-                    title="Collection Rate"
-                    value={`${summary.collection_rate || 0}%`}
-                    subtitle="Of total billed"
-                    icon={FiTarget}
-                    color="bg-purple-600"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="Service Charge Earned"
-                    value={formatCurrency(summary.total_service_charges)}
-                    subtitle="Your profit"
-                    icon={FiTrendingUp}
-                    color="bg-amber-600"
-                    loading={loading}
-                    trend="vs last period"
-                    trendValue={comparison?.metrics?.profit?.change}
-                  />
-                </div>
-                
-                {/* Second Row - Enhanced Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <StatCard
-                    title="Avg Daily Revenue"
-                    value={formatCurrency(summary.avg_daily_revenue)}
-                    subtitle="Per active day"
-                    icon={FiActivity}
-                    color="bg-indigo-600"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="Avg Transaction Value"
-                    value={formatCurrency(summary.avg_transaction_value)}
-                    subtitle="Per service"
-                    icon={FiTrendingUp}
-                    color="bg-cyan-600"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="Repeat Customer Rate"
-                    value={`${summary.repeat_customer_rate || 0}%`}
-                    subtitle="Returning customers"
-                    icon={FiUsers}
-                    color="bg-pink-600"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="CSAT Score"
-                    value={`${summary.csat_score || 0}%`}
-                    subtitle="Customer satisfaction"
-                    icon={FiSmile}
-                    color="bg-orange-600"
-                    loading={loading}
-                  />
-                </div>
-                
-                {/* Performance & Ratings Row */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                  <PerformanceGauge score={summary.incentive_score} loading={loading} />
-                  <RatingCard 
-                    rating={ratings.avg_rating} 
-                    totalReviews={ratings.total_reviews}
-                    distribution={ratings.distribution}
-                    loading={loading}
-                  />
-                </div>
-                
-                {/* Pending Payments Alert */}
-                {pending.pending_count > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3">
-                        <div className="p-2 bg-amber-100 rounded-lg">
-                          <FiClock className="h-5 w-5 text-amber-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-amber-800">Pending Payments</h3>
-                          <p className="text-amber-700 text-sm mt-1">
-                            You have {pending.pending_count} pending payment{pending.pending_count !== 1 ? 's' : ''} totaling {formatCurrency(pending.pending_amount)}
-                          </p>
-                          {pending.overdue_count > 0 && (
-                            <p className="text-rose-600 text-sm mt-1">
-                              {pending.overdue_count} overdue payment{pending.overdue_count !== 1 ? 's' : ''} ({formatCurrency(pending.overdue_amount)})
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Daily Performance Chart */}
-                {dailyChartData && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-                          <FiBarChart2 className="h-4 w-4 mr-2 text-indigo-600" />
-                          Daily Performance
-                        </h3>
-                        <p className="text-gray-500 text-xs">Revenue & Services Trend</p>
-                      </div>
-                      <button
-                        onClick={() => setActiveTab('services')}
-                        className="text-xs text-indigo-600 hover:text-indigo-800"
-                      >
-                        View Details →
-                      </button>
-                    </div>
-                    <div className="h-80">
-                      <Line data={dailyChartData} options={dailyChartOptions} />
-                    </div>
-                  </div>
-                )}
-                
-                {/* Monthly Trends */}
-                {monthlyTrendsChart && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiTrendingUp className="h-4 w-4 mr-2 text-indigo-600" />
-                      Monthly Performance Trend
-                    </h3>
-                    <div className="h-64">
-                      <Line data={monthlyTrendsChart} options={{ responsive: true, maintainAspectRatio: false }} />
-                    </div>
-                  </div>
-                )}
-                
-                {/* Recent Services */}
-                {data?.recent_services?.length > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiClock className="h-4 w-4 mr-2 text-indigo-600" />
-                      Recent Services
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                          <tr>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Date</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Customer</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Service</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Amount</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Your Profit</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.recent_services.slice(0, 10).map((service, idx) => (
-                            <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => fetchDailyLog(service.created_at?.split('T')[0])}>
-                              <td className="py-2 px-3 text-sm text-gray-600">{formatDate(service.created_at)}</td>
-                              <td className="py-2 px-3 text-sm text-gray-900">{service.customer_name}</td>
-                              <td className="py-2 px-3 text-sm text-gray-600">{service.service_name}</td>
-                              <td className="py-2 px-3 font-semibold text-emerald-600 text-sm">{formatCurrency(service.received_amount)}</td>
-                              <td className="py-2 px-3 font-semibold text-indigo-600 text-sm">{formatCurrency(service.service_charges)}</td>
-                              <td className="py-2 px-3">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  service.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                  service.pending_amount > 0 ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {service.status === 'completed' ? 'Completed' : 
-                                   service.pending_amount > 0 ? `Pending (${formatCurrency(service.pending_amount)})` : 'Completed'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {data.recent_services.length > 10 && (
-                      <div className="mt-4 text-center">
-                        <button className="text-sm text-indigo-600 hover:text-indigo-800">
-                          View All Services →
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-            
-            {/* Services Tab */}
-            {activeTab === 'services' && (
-              <>
-                {/* Category Breakdown - FIXED Responsive Layout */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiPieChart className="h-4 w-4 mr-2 text-indigo-600" />
-                      Revenue by Service Category
-                    </h3>
-                    {categoryChartData && serviceBreakdown?.length > 0 ? (
-                      <div className="flex flex-col md:flex-row items-center h-auto md:h-80">
-                        <div className="w-full md:w-1/2 flex justify-center">
-                          <div className="w-48 h-48 md:w-56 md:h-56">
-                            <Doughnut data={categoryChartData} options={doughnutOptions} />
-                          </div>
-                        </div>
-                        <div className="w-full md:w-1/2 pl-0 md:pl-4 mt-4 md:mt-0">
-                          <div className="space-y-2 max-h-56 overflow-y-auto">
-                            {serviceBreakdown.slice(0, 5).map((cat, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-sm">
-                                <div className="flex items-center">
-                                  <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: categoryChartData.datasets[0].backgroundColor[idx] }} />
-                                  <span className="text-gray-700 truncate max-w-[120px]">{cat.service_name}</span>
-                                </div>
-                                <div className="text-right">
-                                  <p className="font-semibold text-gray-900">{formatCurrency(cat.total_revenue)}</p>
-                                  <p className="text-xs text-gray-500">{cat.total_services} services</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="h-64 flex items-center justify-center text-gray-500">
-                        <p>No service data available</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Service Performance Metrics */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
-                      Service Performance Metrics
-                    </h3>
-                    {serviceBreakdown?.length > 0 ? (
-                      <div className="space-y-4 max-h-96 overflow-y-auto">
-                        {serviceBreakdown.map((service, idx) => (
-                          <div key={idx} className="border-b border-gray-100 pb-3 last:border-0">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium text-gray-900 text-sm">{service.service_name}</span>
-                              <span className="text-xs font-semibold text-emerald-600">{formatCurrency(service.total_revenue)}</span>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 text-xs">
-                              <div>
-                                <p className="text-gray-500">Services</p>
-                                <p className="font-semibold text-gray-700">{service.total_services}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500">Avg Revenue</p>
-                                <p className="font-semibold text-gray-700">{formatCurrency(service.avg_revenue)}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500">Profit</p>
-                                <p className="font-semibold text-indigo-600">{formatCurrency(service.total_profit)}</p>
-                              </div>
-                            </div>
-                            <div className="mt-2">
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-500">Revenue Share</span>
-                                <span className="text-gray-500">{Math.round(service.revenue_percentage)}%</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                <div
-                                  className="bg-indigo-500 h-1.5 rounded-full"
-                                  style={{ width: `${service.revenue_percentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="h-64 flex items-center justify-center text-gray-500">
-                        <p>No service data available</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Top Customers */}
-                {data?.top_customers?.length > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiUsers className="h-4 w-4 mr-2 text-indigo-600" />
-                      Top Customers
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {data.top_customers.map((customer, idx) => (
-                        <div key={idx} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                              <FiUser className="h-5 w-5 text-indigo-600" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-900 text-sm truncate">{customer.customer_name}</p>
-                              <p className="text-xs text-gray-500">{customer.phone}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-emerald-600 text-sm">{formatCurrency(customer.total_spent)}</p>
-                              <p className="text-xs text-gray-500">{customer.service_count} services</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-            
-            {/* Achievements Tab */}
-            {activeTab === 'achievements' && achievements && (
-              <>
-                {/* Lifetime Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-4 text-white">
-                    <p className="text-indigo-100 text-xs">Lifetime Services</p>
-                    <p className="text-2xl font-bold">{achievements.lifetime?.total_services || 0}</p>
-                  </div>
-                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-4 text-white">
-                    <p className="text-emerald-100 text-xs">Lifetime Revenue</p>
-                    <p className="text-2xl font-bold">{formatCurrency(achievements.lifetime?.total_revenue || 0)}</p>
-                  </div>
-                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white">
-                    <p className="text-purple-100 text-xs">Unique Customers</p>
-                    <p className="text-2xl font-bold">{achievements.lifetime?.unique_customers || 0}</p>
-                  </div>
-                  <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-4 text-white">
-                    <p className="text-amber-100 text-xs">Active Days</p>
-                    <p className="text-2xl font-bold">{achievements.lifetime?.active_days || 0}</p>
-                  </div>
-                </div>
-                
-                {/* Additional Lifetime Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Collection Rate</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.lifetime_collection_rate?.toFixed(1) || 0}%</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Weekly Streak</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.weekly_streak || 0} weeks</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Revenue Streak</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.daily_revenue_streak || 0} days</p>
-                  </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Categories Mastered</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.distinct_categories || 0}</p>
-                  </div>
-                </div>
-                
-                {/* Best Day & Top Customer */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  {achievements.best_day && (
-                    <div className="bg-white rounded-xl border border-gray-200 p-5">
-                      <div className="flex items-center space-x-3 mb-3">
-                        <div className="p-2 bg-amber-100 rounded-lg">
-                          <FiZap className="h-5 w-5 text-amber-600" />
-                        </div>
-                        <h3 className="font-semibold text-gray-900">Best Day Ever!</h3>
-                      </div>
-                      <p className="text-sm text-gray-600">On {formatDate(achievements.best_day.date)}</p>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
-                        <div>
-                          <p className="text-xs text-gray-500">Services</p>
-                          <p className="text-xl font-bold text-gray-900">{achievements.best_day.services_count}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Revenue</p>
-                          <p className="text-xl font-bold text-emerald-600">{formatCurrency(achievements.best_day.revenue)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {achievements.top_customer && (
-                    <div className="bg-white rounded-xl border border-gray-200 p-5">
-                      <div className="flex items-center space-x-3 mb-3">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                          <FiHeart className="h-5 w-5 text-purple-600" />
-                        </div>
-                        <h3 className="font-semibold text-gray-900">Top Customer</h3>
-                      </div>
-                      <p className="text-sm font-medium text-gray-900">{achievements.top_customer.name}</p>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
-                        <div>
-                          <p className="text-xs text-gray-500">Services</p>
-                          <p className="text-xl font-bold text-gray-900">{achievements.top_customer.services_count}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Total Spent</p>
-                          <p className="text-xl font-bold text-emerald-600">{formatCurrency(achievements.top_customer.total_spent)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Achievements Grid */}
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                    <FiAward className="h-4 w-4 mr-2 text-yellow-500" />
-                    Your Achievements
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {achievements.achievements?.map((achievement, idx) => (
-                      <AchievementCard key={idx} achievement={achievement} index={idx} />
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-            
-            {/* Attendance Tab */}
-            {activeTab === 'attendance' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Attendance Stats */}
-                <div className="lg:col-span-1 space-y-4">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiClock className="h-4 w-4 mr-2 text-indigo-600" />
-                      Attendance Summary
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Days</span>
-                        <span className="font-semibold text-gray-900">{attendance.total_days || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Present Days</span>
-                        <span className="font-semibold text-emerald-600">{attendance.present_days || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Absent Days</span>
-                        <span className="font-semibold text-rose-600">{attendance.absent_days || 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Late Days</span>
-                        <span className="font-semibold text-amber-600">{attendance.late_days || 0}</span>
-                      </div>
-                      <div className="pt-3 border-t border-gray-100">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600 text-sm">Attendance Rate</span>
-                          <span className={`font-bold text-lg ${
-                            attendance.attendance_rate >= 90 ? 'text-emerald-600' :
-                            attendance.attendance_rate >= 75 ? 'text-amber-600' : 'text-rose-600'
-                          }`}>
-                            {attendance.attendance_rate || 0}%
-                          </span>
-                        </div>
-                        <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              attendance.attendance_rate >= 90 ? 'bg-emerald-500' :
-                              attendance.attendance_rate >= 75 ? 'bg-amber-500' : 'bg-rose-500'
-                            }`}
-                            style={{ width: `${attendance.attendance_rate || 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
-                      Time Metrics
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Hours Worked</span>
-                        <span className="font-semibold text-gray-900">{attendance.total_hours?.toFixed(1) || 0} hrs</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Late Minutes</span>
-                        <span className="font-semibold text-rose-600">{attendance.total_late_minutes || 0} min</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Extra Minutes</span>
-                        <span className="font-semibold text-emerald-600">{attendance.total_extra_minutes || 0} min</span>
-                      </div>
-                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                        <span className="text-gray-600 text-sm">Avg Daily Hours</span>
-                        <span className="font-semibold text-gray-900">
-                          {attendance.present_days > 0 ? (attendance.total_hours / attendance.present_days).toFixed(1) : 0} hrs
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Weekly Breakdown */}
-                <div className="lg:col-span-2">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiBarChart2 className="h-4 w-4 mr-2 text-indigo-600" />
-                      Weekly Performance
-                    </h3>
-                    {data?.weekly_breakdown?.length > 0 ? (
-                      <div className="space-y-3">
-                        {data.weekly_breakdown.map((week, idx) => (
-                          <div key={idx} className="border-b border-gray-100 pb-3 last:border-0">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-gray-700">
-                                Week {week.week_number} ({formatDate(week.week_start)})
-                              </span>
-                              <span className="text-sm font-bold text-emerald-600">
-                                {formatCurrency(week.total_collected)}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-4 text-xs">
-                              <span className="text-gray-500">{week.services_count} services</span>
-                              <span className="text-gray-500">
-                                Avg: {formatCurrency(week.total_collected / week.services_count)}
-                              </span>
-                            </div>
-                            <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
-                              <div
-                                className="bg-indigo-500 h-1.5 rounded-full"
-                                style={{ width: `${Math.min((week.total_collected / (data?.summary?.total_collected || 1)) * 100, 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="h-48 flex items-center justify-center text-gray-500">
-                        <p>No weekly data available</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      
-      {/* Daily Log Modal */}
-      <AnimatePresence>
-        {showDailyLog && dailyLog && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowDailyLog(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            >
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
-                <div className="border-b border-gray-200 p-4 flex items-center justify-between bg-gray-50">
-                  <div>
-                    <h3 className="font-bold text-gray-900">Daily Activity Log</h3>
-                    <p className="text-sm text-gray-600">{formatDate(dailyLog.date)}</p>
-                  </div>
-                  <button
-                    onClick={() => setShowDailyLog(false)}
-                    className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                  >
-                    <FiX className="h-5 w-5 text-gray-500" />
-                  </button>
-                </div>
-                
-                <div className="p-4 overflow-y-auto max-h-[calc(80vh-80px)]">
-                  {/* Attendance Info */}
-                  {dailyLog.attendance && (
-                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                      <h4 className="font-medium text-gray-900 text-sm mb-2">Attendance</h4>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="text-gray-500">Punch In:</span>
-                          <span className="ml-2 font-medium">{formatTime(dailyLog.attendance.punch_in)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Punch Out:</span>
-                          <span className="ml-2 font-medium">{formatTime(dailyLog.attendance.punch_out)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Hours Worked:</span>
-                          <span className="ml-2 font-medium">{dailyLog.attendance.hours?.toFixed(1)} hrs</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Status:</span>
-                          <span className={`ml-2 font-medium ${
-                            dailyLog.attendance.status === 'present' ? 'text-emerald-600' : 'text-rose-600'
-                          }`}>
-                            {dailyLog.attendance.status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Services */}
-                  {dailyLog.services.length > 0 ? (
-                    <div>
-                      <h4 className="font-medium text-gray-900 text-sm mb-3">
-                        Services ({dailyLog.services.length})
-                      </h4>
-                      <div className="space-y-3">
-                        {dailyLog.services.map((service, idx) => (
-                          <div key={idx} className="border border-gray-200 rounded-lg p-3">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="font-medium text-gray-900">{service.service_name}</p>
-                                <p className="text-sm text-gray-600">{service.customer_name}</p>
-                                <p className="text-xs text-gray-500 mt-1">{service.time}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="font-bold text-emerald-600">{formatCurrency(service.amount)}</p>
-                                <p className="text-xs text-gray-500">Profit: {formatCurrency(service.service_charge)}</p>
-                              </div>
-                            </div>
-                            {service.pending > 0 && (
-                              <div className="mt-2 text-xs text-amber-600">
-                                Pending: {formatCurrency(service.pending)}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <div className="mt-4 p-3 bg-indigo-50 rounded-lg">
-                        <div className="flex justify-between text-sm">
-                          <span className="font-medium text-gray-700">Daily Summary</span>
-                          <span className="font-bold text-indigo-600">{formatCurrency(dailyLog.summary.total_collected)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm mt-1">
-                          <span className="text-gray-600">Services:</span>
-                          <span className="font-medium">{dailyLog.summary.total_services}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Your Profit:</span>
-                          <span className="font-medium text-emerald-600">{formatCurrency(dailyLog.summary.total_profit)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Avg Transaction:</span>
-                          <span className="font-medium">{formatCurrency(dailyLog.summary.avg_transaction)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <FiCalendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                      <p>No services recorded on this day</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
+  } catch (err) {
+    console.error('Achievements error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load achievements',
+      details: err.message 
+    });
+  } finally {
+    client.release();
+  }
+});
 
-export default StaffPerformance;
+/* =========================================================
+   4️⃣ STAFF PERFORMANCE BY SERVICE TYPE
+   Detailed breakdown by service category
+========================================================= */
+router.get('/service-breakdown', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const staffId = req.user.id;
+    const { from, to } = req.query;
+    
+    let startDate = from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    let endDate = to || new Date().toISOString().split('T')[0];
+    
+    const breakdownQuery = `
+      SELECT 
+        s.id as service_id,
+        s.name as service_name,
+        COUNT(se.id) as total_services,
+        COALESCE(SUM(p.amount), 0) as total_revenue,
+        COALESCE(SUM(se.service_charges), 0) as total_profit,
+        COALESCE(AVG(p.amount), 0) as avg_revenue,
+        COUNT(DISTINCT se.customer_name) as unique_customers,
+        ROUND(COALESCE(SUM(p.amount), 0) / NULLIF(COUNT(se.id), 0), 2) as revenue_per_service
+      FROM service_entries se
+      JOIN services s ON se.category_id = s.id
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+      GROUP BY s.id, s.name
+      ORDER BY total_revenue DESC
+    `;
+    const breakdown = await client.query(breakdownQuery, [staffId, startDate, endDate]);
+    
+    // Calculate total for percentages
+    const totalRevenue = breakdown.rows.reduce((sum, row) => sum + parseFloat(row.total_revenue), 0);
+    const totalServices = breakdown.rows.reduce((sum, row) => sum + parseInt(row.total_services), 0);
+    
+    res.json({
+      success: true,
+      data: breakdown.rows.map(row => ({
+        service_id: row.service_id,
+        service_name: row.service_name,
+        total_services: parseInt(row.total_services),
+        total_revenue: parseFloat(row.total_revenue),
+        total_profit: parseFloat(row.total_profit),
+        avg_revenue: parseFloat(row.avg_revenue),
+        unique_customers: parseInt(row.unique_customers),
+        revenue_per_service: parseFloat(row.revenue_per_service),
+        revenue_percentage: totalRevenue > 0 ? (parseFloat(row.total_revenue) / totalRevenue) * 100 : 0,
+        service_percentage: totalServices > 0 ? (parseInt(row.total_services) / totalServices) * 100 : 0
+      })),
+      totals: {
+        total_revenue: totalRevenue,
+        total_services: totalServices,
+        total_profit: breakdown.rows.reduce((sum, row) => sum + parseFloat(row.total_profit), 0)
+      }
+    });
+    
+  } catch (err) {
+    console.error('Service breakdown error:', err);
+    res.status(500).json({ success: false, error: 'Failed to load service breakdown' });
+  } finally {
+    client.release();
+  }
+});
+
+/* =========================================================
+   5️⃣ STAFF DAILY LOG
+   Detailed daily activity log
+========================================================= */
+router.get('/daily-log', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const staffId = req.user.id;
+    const { date } = req.query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    // Get services for the day
+    const servicesQuery = `
+      SELECT 
+        se.id,
+        se.created_at,
+        se.customer_name,
+        se.phone as customer_phone,
+        s.name as service_name,
+        sc.name as subcategory_name,
+        se.service_charges,
+        se.department_charges,
+        se.total_charges,
+        se.status,
+        COALESCE(p.received_amount, 0) as received_amount,
+        (se.total_charges - COALESCE(p.received_amount, 0)) as pending_amount
+      FROM service_entries se
+      JOIN services s ON se.category_id = s.id
+      LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 AND DATE(se.created_at) = $2
+      ORDER BY se.created_at DESC
+    `;
+    const services = await client.query(servicesQuery, [staffId, targetDate]);
+    
+    // Get attendance for the day
+    const attendanceQuery = `
+      SELECT 
+        id,
+        punch_in,
+        punch_out,
+        breaks,
+        hours,
+        status,
+        late_minutes,
+        extra_minutes
+      FROM attendance
+      WHERE staff_id = $1 AND date = $2
+    `;
+    const attendance = await client.query(attendanceQuery, [staffId, targetDate]);
+    
+    // Calculate daily totals
+    const dailyTotal = services.rows.reduce((sum, row) => sum + parseFloat(row.received_amount || 0), 0);
+    const dailyServiceCount = services.rows.length;
+    const dailyProfit = services.rows.reduce((sum, row) => sum + parseFloat(row.service_charges || 0), 0);
+    
+    res.json({
+      success: true,
+      data: {
+        date: targetDate,
+        attendance: attendance.rows[0] || null,
+        services: services.rows.map(row => ({
+          id: row.id,
+          time: row.created_at ? new Date(row.created_at).toLocaleTimeString() : null,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          service_name: row.service_name,
+          subcategory_name: row.subcategory_name,
+          amount: parseFloat(row.received_amount || 0),
+          service_charge: parseFloat(row.service_charges || 0),
+          department_charge: parseFloat(row.department_charges || 0),
+          total: parseFloat(row.total_charges || 0),
+          status: row.status,
+          pending: parseFloat(row.pending_amount || 0)
+        })),
+        summary: {
+          total_services: dailyServiceCount,
+          total_collected: dailyTotal,
+          total_profit: dailyProfit,
+          avg_transaction: dailyServiceCount > 0 ? dailyTotal / dailyServiceCount : 0
+        }
+      }
+    });
+    
+  } catch (err) {
+    console.error('Daily log error:', err);
+    res.status(500).json({ success: false, error: 'Failed to load daily log' });
+  } finally {
+    client.release();
+  }
+});
+
+/* ==============================================================
+   HYBRID BFF WORKSPACE INIT ROUTE
+   Aggregates Performance, Tasks, Events, Recent Activity & Bookings
+============================================================== */
+router.get('/workspace-init', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const staffId = req.user.id;
+    const centreId = req.user.centre_id;
+    const { period = 'month', from, to } = req.query;
+
+    // Date Filtering Logic
+    let dateFilter = '';
+    let eventDateFilter = ''; 
+
+    // Safely sanitize custom dates for direct SQL injection
+    const safeFrom = from ? from.replace(/[^0-9-]/g, '') : null;
+    const safeTo = to ? to.replace(/[^0-9-]/g, '') : null;
+
+    if (period === 'today') {
+      dateFilter = `AND se.created_at::date = CURRENT_DATE`;
+      eventDateFilter = `AND {col}::date = CURRENT_DATE`;
+    }
+    else if (period === 'week') {
+      dateFilter = `AND se.created_at >= date_trunc('week', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('week', CURRENT_DATE) AND {col}::date < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')`;
+    }
+    else if (period === 'month') {
+      dateFilter = `AND se.created_at >= date_trunc('month', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('month', CURRENT_DATE) AND {col}::date < (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')`;
+    }
+    else if (period === 'quarter') {
+      dateFilter = `AND se.created_at >= date_trunc('quarter', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('quarter', CURRENT_DATE) AND {col}::date < (date_trunc('quarter', CURRENT_DATE) + INTERVAL '3 months')`;
+    }
+    else if (period === 'year') {
+      dateFilter = `AND se.created_at >= date_trunc('year', CURRENT_DATE)`;
+      eventDateFilter = `AND {col}::date >= date_trunc('year', CURRENT_DATE) AND {col}::date < (date_trunc('year', CURRENT_DATE) + INTERVAL '1 year')`;
+    }
+    else if (period === 'custom' && safeFrom && safeTo) {
+      dateFilter = `AND se.created_at::date BETWEEN '${safeFrom}' AND '${safeTo}'`;
+      eventDateFilter = `AND {col}::date BETWEEN '${safeFrom}' AND '${safeTo}'`;
+    }
+
+    // Helper to dynamically apply the event date filter to different table columns
+    const applyEventFilter = (colName) => {
+      if (!eventDateFilter) return '';
+      return eventDateFilter.replace(/\{col\}/g, colName);
+    };
+
+    // Fire ALL queries concurrently in PostgreSQL
+    const [
+      performanceRes,
+      ratingsRes,
+      tasksRes,
+      eventsRes,
+      recentActivityRes,
+      onlinePendingRes,
+      onlineProcessingRes,
+      deliveriesRes,
+      expiriesRes,
+      todayAttendanceRes
+    ] = await Promise.all([
+      // 1. Performance Summary
+      client.query(`
+        SELECT
+          COUNT(se.id) as total_services,
+          COALESCE(SUM(se.total_charges), 0) as total_amount,
+          COALESCE(SUM(p.received_amount), 0) as total_collected
+        FROM service_entries se
+        ${paymentsLateralJoin()}
+        WHERE se.staff_id = $1 AND se.status = 'completed' ${dateFilter}
+      `, [staffId]),
+
+      // 2. Ratings
+      client.query(`
+        SELECT
+          COUNT(sr.id) as total_reviews,
+          COALESCE(AVG(sr.staff_rating), 0) as avg_rating
+        FROM service_reviews sr
+        WHERE sr.staff_id = $1 AND sr.is_submitted = true
+      `, [staffId]),
+
+      // 3. Tasks
+      client.query(`
+        -- 🔥 FIX: Added 'assigned_to' so the frontend filter can read it
+        SELECT id, title, description, priority, due_date, status, assigned_to
+        FROM tasks
+        WHERE assigned_to = $1 AND status != 'completed'
+        ORDER BY due_date ASC NULLS LAST
+      `, [staffId]),
+
+      // 4. Events (Sorted descending: largest dates first)
+      client.query(`
+        SELECT 
+          id, 
+          COALESCE(title, description, type, 'Event') AS title, 
+          description, 
+          date, 
+          start_datetime, 
+          type, 
+          event_type, 
+          CASE 
+            WHEN type ILIKE '%delivery%' OR event_type ILIKE '%delivery%' THEN 'service_delivery'
+            WHEN type ILIKE '%expiry%' OR event_type ILIKE '%expiry%' THEN 'service_expiry'
+            ELSE 'calendar_event'
+          END as source, 
+          related_service_id as tracking_id
+        FROM calendar_events
+        WHERE related_task_id IS NULL 
+          AND (
+            visibility = 'global' 
+            OR (visibility = 'centre' AND centre_id = $1 AND (assigned_to IS NULL OR assigned_to = $2))
+          )
+          ${applyEventFilter('COALESCE(date, start_datetime::date)')}
+        ORDER BY COALESCE(date, start_datetime::date) DESC
+        LIMIT 50
+      `, [centreId, staffId]),
+
+      // 5. Recent Activity
+      client.query(`
+        SELECT
+          se.id, 
+          se.created_at, 
+          se.customer_name as "customerName", 
+          se.phone, 
+          se.status,
+          se.category_id as category, 
+          se.token_id as "tokenId",
+          se.is_edited, 
+          se.work_source as "workSource", 
+          (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) as tracking_id
+        FROM service_entries se
+        WHERE se.staff_id = $1
+        ORDER BY se.created_at DESC
+        LIMIT 20
+      `, [staffId]),
+
+      // 6. Online Bookings (Pending)
+      client.query(`
+        SELECT cs.*, c.name as customer_name, c.primary_phone as phone
+        FROM customer_services cs
+        LEFT JOIN customers c ON cs.customer_id = c.id
+        WHERE cs.status = 'under_review'
+        ORDER BY cs.applied_at DESC
+      `),
+
+      // 7. Online Bookings (Processing)
+      client.query(`
+        SELECT cs.*, c.name as customer_name, c.primary_phone as phone
+        FROM customer_services cs
+        LEFT JOIN customers c ON cs.customer_id = c.id
+        WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1
+        ORDER BY cs.taken_at DESC
+      `, [staffId]),
+
+      // 8. Deliveries (Dynamically respects the dropdown period!)
+      client.query(`
+        SELECT
+          tr.id as tracking_id,
+          tr.service_entry_id as related_service_id,
+          se.customer_name,
+          sv.name AS service_name,
+          sc.name AS subcategory_name,
+          tr.estimated_delivery as date
+        FROM service_tracking tr
+        LEFT JOIN service_entries se ON se.id = tr.service_entry_id
+        LEFT JOIN services sv ON sv.id = se.category_id
+        LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+        WHERE tr.status NOT IN ('completed', 'paid', 'delivered')
+          AND tr.assigned_to = $1
+          AND tr.estimated_delivery IS NOT NULL
+          ${applyEventFilter('tr.estimated_delivery')}
+      `, [staffId]),
+
+      // 9. Expiries (Dynamically respects the dropdown period!)
+      client.query(`
+        SELECT
+          se.id as related_service_id,
+          se.customer_name,
+          sv.name AS service_name,
+          sc.name AS subcategory_name,
+          se.expiry_date as date,
+          (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) AS tracking_id
+        FROM service_entries se
+        LEFT JOIN services sv ON sv.id = se.category_id
+        LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+        WHERE se.staff_id = $1
+          AND se.expiry_date IS NOT NULL
+          AND se.is_expiry_dismissed = FALSE
+          ${applyEventFilter('se.expiry_date')}
+      `, [staffId]),
+
+      // 10. Today's Latest Attendance Session
+      client.query(`
+        SELECT id, status, punch_in, punch_out, hours as total_hours
+        FROM attendance
+        WHERE staff_id = $1 AND date = CURRENT_DATE
+        ORDER BY id DESC
+        LIMIT 1
+      `, [staffId])
+
+    ]);
+
+    // --- FORMAT DYNAMIC EVENTS ---
+    const formattedDeliveries = deliveriesRes.rows.map(row => ({
+      id: `delivery-${row.tracking_id}`,
+      title: `${row.subcategory_name ? row.service_name + ' - ' + row.subcategory_name : row.service_name} Delivery`,
+      description: row.customer_name ? `Customer: ${row.customer_name}` : null,
+      date: row.date,
+      source: 'service_delivery',
+      related_service_id: row.related_service_id,
+      tracking_id: row.tracking_id
+    }));
+
+    const formattedExpiries = expiriesRes.rows.map(row => ({
+      id: `expiry-${row.related_service_id}`,
+      title: `${row.subcategory_name ? row.service_name + ' - ' + row.subcategory_name : row.service_name} Expiry`,
+      description: row.customer_name ? `Customer: ${row.customer_name}` : null,
+      date: row.date,
+      source: 'service_expiry',
+      related_service_id: row.related_service_id,
+      tracking_id: row.tracking_id
+    }));
+
+    // 🔥 FIX: Map actual tasks into the calendar events feed
+    const formattedTasks = tasksRes.rows
+      .filter(t => t.due_date) // Only tasks with a due date show on the calendar
+      .map(t => ({
+        id: `task-${t.id}`,
+        title: t.title,
+        description: t.description,
+        date: t.due_date,
+        type: 'task',
+        event_type: 'deadline',
+        source: 'task',
+        priority: t.priority || 'medium'
+      }));
+
+    // Combine all event streams
+    const combinedEvents = [
+      ...eventsRes.rows,
+      ...formattedTasks,       // 👈 Real tasks now included!
+      ...formattedDeliveries,
+      ...formattedExpiries
+    ];
+
+    const summary = performanceRes.rows[0];
+    const ratings = ratingsRes.rows[0];
+
+    const totalServices = parseInt(summary.total_services) || 0;
+    const totalCollected = parseFloat(summary.total_collected) || 0;
+    const totalAmount = parseFloat(summary.total_amount) || 0;
+
+    const collectionRate = totalAmount > 0 ? Math.round((totalCollected / totalAmount) * 100) : 0;
+    const avgTransactionValue = totalServices > 0 ? Math.round(totalCollected / totalServices) : 0;
+    const avgRating = parseFloat(ratings.avg_rating) || 0;
+
+    // Basic Incentive Score Calculation
+    const incentiveScore = Math.min(100, Math.round(
+      (collectionRate * 0.5) +
+      (totalServices > 10 ? 30 : totalServices * 3) +
+      (avgRating * 4) // 5 * 4 = 20
+    ));
+
+    res.json({
+      success: true,
+      data: {
+        todayAttendance: todayAttendanceRes.rows[0] || null,
+        performance: {
+          summary: {
+            total_services: totalServices,
+            total_collected: totalCollected,
+            collection_rate: collectionRate,
+            avg_transaction_value: avgTransactionValue,
+            incentive_score: incentiveScore
+          },
+          ratings: {
+            avg_rating: avgRating.toFixed(1),
+            total_reviews: parseInt(ratings.total_reviews)
+          }
+        },
+        tasks: tasksRes.rows,
+        events: combinedEvents,
+        recentActivity: recentActivityRes.rows,
+        onlinePending: onlinePendingRes.rows,
+        onlineProcessing: onlineProcessingRes.rows
+      }
+    });
+
+  } catch (err) {
+    console.error('Workspace Init Error:', err);
+    res.status(500).json({ error: 'Failed to initialize workspace' });
+  } finally {
+    client.release();
+  }
+});
+
+export default router;
