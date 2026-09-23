@@ -298,6 +298,10 @@ export const toggleTrackingDocumentVisibility = async (trackingId, docId, visibl
   return (await trackingApi.patch(`/${trackingId}/documents/${docId}`, { visible_to_customer: visible })).data;
 };
 
+export const updateTrackingDocumentRemark = async (trackingId, docId, remark) => {
+  return (await trackingApi.patch(`/${trackingId}/documents/${docId}/remark`, { remark })).data;
+};
+
 export const deleteTrackingDocument = async (trackingId, docId) => {
   return (await trackingApi.delete(`/${trackingId}/documents/${docId}`)).data;
 };

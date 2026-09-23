@@ -550,13 +550,14 @@ const TrackServicePage = () => {
     }
   };
 
-  const handleUploadDocument = async (trackingId, file, label, visibleToCustomer) => {
+  const handleUploadDocument = async (trackingId, file, label, visibleToCustomer, remark) => {
     try {
       setUploadingDocument(true);
       const formData = new FormData();
       formData.append('file', file);
       formData.append('label', label);
       formData.append('visible_to_customer', visibleToCustomer ? 'true' : 'false');
+      if (remark && remark.trim()) formData.append('remark', remark.trim());
       await uploadTrackingDocument(trackingId, formData);
       await fetchDocuments(trackingId);
       toast.success('Document uploaded');
@@ -576,6 +577,17 @@ const TrackServicePage = () => {
     } catch (error) {
       console.error('Error updating document visibility:', error);
       toast.error('Failed to update document visibility');
+    }
+  };
+
+  const handleUpdateDocumentRemark = async (trackingId, docId, remark) => {
+    try {
+      await updateTrackingDocumentRemark(trackingId, docId, remark);
+      await fetchDocuments(trackingId);
+      toast.success('Remark saved');
+    } catch (error) {
+      console.error('Error updating remark:', error);
+      toast.error('Failed to save remark');
     }
   };
 
@@ -1135,7 +1147,8 @@ const TrackServicePage = () => {
                     documents={documents}
                     documentsLoading={documentsLoading}
                     uploadingDocument={uploadingDocument}
-                    onUpload={(file, label, visible) => handleUploadDocument(selectedService.id, file, label, visible)}
+                    onUpload={(file, label, visible, remark) => handleUploadDocument(selectedService.id, file, label, visible, remark)}
+                    onUpdateRemark={(docId, remark) => handleUpdateDocumentRemark(selectedService.id, docId, remark)}
                     onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(selectedService.id, docId, visible)}
                     onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)}
                   />
@@ -2317,12 +2330,58 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
   </div>
 );
 
+const DocumentRemarkEditor = ({ doc, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(doc.remark || '');
+
+  useEffect(() => { setValue(doc.remark || ''); }, [doc.remark]);
+
+  if (editing) {
+    return (
+      <div className="mt-1.5 flex items-start gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Remark for the customer..."
+          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500"
+          autoFocus
+        />
+        <button
+          onClick={() => { onSave(value); setEditing(false); }}
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+        >
+          Save
+        </button>
+        <button
+          onClick={() => { setValue(doc.remark || ''); setEditing(false); }}
+          className="text-xs text-gray-400 hover:text-gray-600"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return doc.remark ? (
+    <p onClick={() => setEditing(true)} className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block cursor-pointer" title="Click to edit">
+      {doc.remark}
+    </p>
+  ) : (
+    <button onClick={() => setEditing(true)} className="mt-1 text-xs text-gray-400 hover:text-indigo-600">
+      + Add remark
+    </button>
+  );
+};
+
 const EnhancedDocumentsView = ({ 
-  documents = [], documentsLoading, uploadingDocument, onUpload, onToggleVisibility, onDelete
+  service, entryServices, categories, formatPayments, priorityConfig,
+  documents = [], documentsLoading, uploadingDocument, onUpload, onToggleVisibility, onDelete, onUpdateRemark
 }) => {
   const [file, setFile] = useState(null);
   const [label, setLabel] = useState('');
   const [visibleToCustomer, setVisibleToCustomer] = useState(false);
+  const [remark, setRemark] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = React.useRef(null);
 
@@ -2332,11 +2391,12 @@ const EnhancedDocumentsView = ({
       toast.error('Choose a file and enter a label first');
       return;
     }
-    onUpload(file, label.trim(), visibleToCustomer);
+    onUpload(file, label.trim(), visibleToCustomer, remark);
     setFile(null);
     setLabel('');
     setVisibleToCustomer(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setRemark('');
+    e.target.reset();
   };
 
   const handleDrop = (e) => {
@@ -2466,6 +2526,13 @@ const EnhancedDocumentsView = ({
                   </>
                 )}
               </div>
+              <textarea
+                placeholder="Remark for the customer (e.g. Password: 1234) — optional"
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
             </div>
 
             {/* Visibility + Button */}
@@ -2631,6 +2698,14 @@ const EnhancedDocumentsView = ({
                           >
                             <FiTrash2 className="h-4 w-4" />
                           </button>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{doc.label}</p>
+                            <p className="text-xs text-gray-500">
+                              {formatBytes(doc.file_size)} · Uploaded by {doc.uploaded_by_name || 'Staff'} · {formatDate(doc.created_at)}
+                            </p>
+                            <DocumentRemarkEditor doc={doc} onSave={(text) => onUpdateRemark(doc.id, text)} />
+                          </div>
                         </div>
                       </td>
                     </tr>

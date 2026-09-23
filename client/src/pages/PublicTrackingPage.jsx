@@ -122,16 +122,25 @@ const DocumentsCard = ({ documents, trackingId, apiUrl }) => {
       </div>
       <div className="space-y-2">
         {documents.map((doc) => (
-          <a
+          <div
             key={doc.id}
-            href={`${apiUrl}/api/servicetracking/public/status/${encodeURIComponent(trackingId)}/documents/${doc.id}/download`}
-            className="flex items-center justify-between rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4 transition hover:border-teal-200 hover:bg-teal-50/50"
+            className="rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4"
           >
-            <span className="min-w-0 truncate text-sm font-bold text-[#0F2B5B]">{doc.label}</span>
-            <span className="ml-3 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[#0F2B5B] ring-1 ring-slate-200/70">
-              <FiDownload className="h-4 w-4" />
-            </span>
-          </a>
+            
+              href={`${apiUrl}/api/servicetracking/public/status/${encodeURIComponent(trackingId)}/documents/${doc.id}/download`}
+              className="flex items-center justify-between"
+            >
+              <span className="min-w-0 truncate text-sm font-bold text-[#0F2B5B]">{doc.label}</span>
+              <span className="ml-3 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[#0F2B5B] ring-1 ring-slate-200/70">
+                <FiDownload className="h-4 w-4" />
+              </span>
+            </a>
+            {doc.remark && (
+              <p className="mt-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                {doc.remark}
+              </p>
+            )}
+          </div>
         ))}
       </div>
     </section>

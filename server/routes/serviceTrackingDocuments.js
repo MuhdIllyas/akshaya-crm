@@ -80,7 +80,7 @@ router.post("/:trackingId/documents", authenticateToken, upload.single("file"), 
       if (req.file) fs.unlinkSync(req.file.path);
       return;
     }
-    const { label, visible_to_customer } = req.body;
+    const { label, visible_to_customer, remark } = req.body;
 
     const access = await checkTrackingAccess(req, trackingId);
     if (!access) {
@@ -95,11 +95,11 @@ router.post("/:trackingId/documents", authenticateToken, upload.single("file"), 
 
     const result = await pool.query(
       `INSERT INTO service_tracking_documents
-       (service_tracking_id, label, file_path, file_size, mime_type, visible_to_customer, uploaded_by, uploaded_by_role)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       RETURNING id, label, visible_to_customer, created_at`,
+       (service_tracking_id, label, file_path, file_size, mime_type, visible_to_customer, remark, uploaded_by, uploaded_by_role)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id, label, visible_to_customer, remark, created_at`,
       [trackingId, label.trim(), req.file.path, req.file.size, req.file.mimetype,
-       visible_to_customer === "true", req.user.id, req.user.role]
+       visible_to_customer === "true", remark?.trim() || null, req.user.id, req.user.role]
     );
 
     await logActivity({
@@ -129,7 +129,7 @@ router.get("/:trackingId/documents", authenticateToken, async (req, res) => {
     return res.status(403).json({ error: "Access denied" });
   }
   const result = await pool.query(
-    `SELECT d.id, d.label, d.file_size, d.mime_type, d.visible_to_customer, d.created_at,
+    `SELECT d.id, d.label, d.file_size, d.mime_type, d.visible_to_customer, d.remark, d.created_at,
             s.name AS uploaded_by_name
      FROM service_tracking_documents d
      LEFT JOIN staff s ON d.uploaded_by = s.id
@@ -164,6 +164,37 @@ router.patch("/:trackingId/documents/:docId", authenticateToken, async (req, res
     related_id: trackingId,
     action: "Document visibility changed",
     description: `"${result.rows[0].label}" is now ${visible ? "visible" : "hidden"} to the customer`,
+    performed_by: req.user.id,
+    performed_by_role: req.user.role
+  });
+
+  res.json(result.rows[0]);
+});
+
+// UPDATE REMARK
+router.patch("/:trackingId/documents/:docId/remark", authenticateToken, async (req, res) => {
+  const trackingId = validTrackingId(req, res);
+  if (trackingId === null) return;
+  const { docId } = req.params;
+
+  const access = await checkTrackingAccess(req, trackingId);
+  if (!access) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  const remark = (req.body.remark || "").trim() || null;
+  const result = await pool.query(
+    `UPDATE service_tracking_documents SET remark = $1
+     WHERE id = $2 AND service_tracking_id = $3 RETURNING *`,
+    [remark, docId, trackingId]
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: "Not found" });
+
+  await logActivity({
+    centre_id: access.centre_id,
+    related_type: "service_tracking",
+    related_id: trackingId,
+    action: "Document remark updated",
+    description: `Remark updated for "${result.rows[0].label}"`,
     performed_by: req.user.id,
     performed_by_role: req.user.role
   });

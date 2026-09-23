@@ -118,7 +118,7 @@ router.get('/public/status/:identifier', async (req, res) => {
     }));
 
     const docsResult = await pool.query(
-      `SELECT id, label
+      `SELECT id, label, remark
        FROM service_tracking_documents
        WHERE service_tracking_id = $1 AND visible_to_customer = true
        ORDER BY created_at DESC`,
