@@ -119,6 +119,20 @@ const formatTimelineDate = (dateString) => {
   }
 };
 
+// Static version of formatDateForInput — usable by standalone components
+// that don't have access to the parent component scope.
+const formatDateForInputStatic = (dateString) => {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+  } catch (error) {
+    console.error('Error formatting date for input:', error);
+    return '';
+  }
+};
+
 const TrackServicePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1129,6 +1143,10 @@ const TrackServicePage = () => {
                     service={selectedService} 
                     onUpdateStatus={handleUpdateStatus}
                     priorityConfig={priorityConfig}
+                    staffList={staffList}
+                    stepOptions={stepOptions}
+                    priorityOptions={priorityOptions}
+                    onInlineUpdate={(updates) => handleInlineTrackingUpdate(selectedService, updates)}
                   />
                 )}
                 {activeTab === 'tracking' && (
@@ -1348,7 +1366,7 @@ const TrackServicePage = () => {
     </div>
   );
 
-  const OverviewView = ({ service, onUpdateStatus, priorityConfig }) => {
+  const OverviewView = ({ service, onUpdateStatus, priorityConfig, staffList, stepOptions, priorityOptions, onInlineUpdate }) => {
     // Dynamic fallback structure to avoid copying a single timestamp across uncompleted steps
     const getDisplaySteps = () => {
       if (service.steps && service.steps.length > 0) {
@@ -1454,22 +1472,61 @@ const TrackServicePage = () => {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gray-50 rounded-xl border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Service Details</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">Service Details</h3>
+              <span className="text-[10px] text-gray-400 italic">Click any field to edit</span>
+            </div>
             <div className="space-y-3">
               <DetailRow label="Service Type" value={service.serviceType || 'Unknown'} />
               <DetailRow label="Subcategory" value={service.subcategoryName || 'N/A'} />
               <DetailRow label="Average Time" value={service.averageTime || 'Not set'} />
               <DetailRow label="Expiry Date" value={service.expiryDate || 'N/A'} />
-              <div className="flex justify-between items-center py-1">
-                <span className="text-sm text-gray-600">Priority</span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${priorityConfig[service.priority]?.bg} ${priorityConfig[service.priority]?.border}`}>
-                  <FiFlag className={`h-3 w-3 ${priorityConfig[service.priority]?.color}`} />
-                  <span className={priorityConfig[service.priority]?.color}>{priorityConfig[service.priority]?.label}</span>
-                </span>
-              </div>
+
+              <InlineEditField
+                label="Current Step"
+                value={service.currentStep || 'Submitted'}
+                type="select"
+                options={stepOptions}
+                noneLabel="— Select step —"
+                onSave={(newValue) => onInlineUpdate({ currentStep: newValue })}
+              />
+
+              <InlineEditField
+                label="Assigned To"
+                value={service.assignedToId ?? ''}
+                displayValue={service.assignedTo || 'Unassigned'}
+                type="select"
+                options={staffList.map(staff => ({ value: String(staff.id), label: staff.name }))}
+                noneLabel="— Unassigned —"
+                onSave={(newValue) => onInlineUpdate({ assignedTo: newValue })}
+              />
+
+              <InlineEditField
+                label="Estimated Delivery"
+                value={formatDateForInputStatic(service.rawEstimatedDelivery)}
+                displayValue={service.estimatedDelivery || 'Not set'}
+                type="date"
+                placeholder="Not set"
+                onSave={(newValue) => onInlineUpdate({ estimatedDelivery: newValue })}
+              />
+
+              <InlineEditField
+                label="Priority"
+                value={service.priority || 'medium'}
+                displayValue={
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium inline-flex items-center space-x-1 ${priorityConfig[service.priority]?.bg} ${priorityConfig[service.priority]?.border}`}>
+                    <FiFlag className={`h-3 w-3 ${priorityConfig[service.priority]?.color}`} />
+                    <span className={priorityConfig[service.priority]?.color}>{priorityConfig[service.priority]?.label}</span>
+                  </span>
+                }
+                type="select"
+                options={priorityOptions}
+                noneLabel="— Select priority —"
+                onSave={(newValue) => onInlineUpdate({ priority: newValue })}
+              />
+
               <DetailRow label="Last Updated" value={formatDate(service.updatedAt) || 'N/A'} />
               <DetailRow label="Notes" value={service.notes || 'No notes'} />
-              <DetailRow label="Assigned To" value={service.assignedTo || 'Unassigned'} />
             </div>
           </div>
           <div className="bg-gray-50 rounded-xl border border-gray-200 p-6">
@@ -2156,6 +2213,111 @@ const StatItem = ({ label, value }) => (
     <p className="text-lg font-semibold text-gray-900">{value}</p>
   </div>
 );
+
+/* ============================================================
+   INLINE EDIT FIELD — click-to-edit primitive used in Overview
+   ============================================================ */
+const InlineEditField = ({
+  label,
+  value,
+  displayValue,
+  type = 'text',
+  options,
+  placeholder = 'Not set',
+  noneLabel = '— None —',
+  onSave,
+}) => {
+  const [editing, setEditing] = useState(false);
+  const [tempValue, setTempValue] = useState(value ?? '');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    setTempValue(value ?? '');
+  }, [value]);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const next = tempValue ?? '';
+    const current = value ?? '';
+    if (String(next) !== String(current)) {
+      onSave(next);
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setTempValue(value ?? '');
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && type !== 'select') {
+      e.preventDefault();
+      commit();
+    }
+    if (e.key === 'Escape') {
+      cancel();
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex justify-between items-center py-1 gap-2">
+        <span className="text-sm text-gray-600 flex-shrink-0">{label}</span>
+        {type === 'select' ? (
+          <select
+            ref={inputRef}
+            value={tempValue}
+            onChange={(e) => setTempValue(e.target.value)}
+            onBlur={commit}
+            onKeyDown={handleKeyDown}
+            className="text-sm font-medium border border-indigo-400 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 min-w-0 max-w-[65%] flex-1"
+          >
+            <option value="">{noneLabel}</option>
+            {options?.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            ref={inputRef}
+            type={type}
+            value={tempValue}
+            onChange={(e) => setTempValue(e.target.value)}
+            onBlur={commit}
+            onKeyDown={handleKeyDown}
+            className="text-sm font-medium border border-indigo-400 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 min-w-0 max-w-[65%] flex-1 text-right"
+          />
+        )}
+      </div>
+    );
+  }
+
+  const displayNode = displayValue !== undefined
+    ? displayValue
+    : (value !== undefined && value !== null && value !== '')
+      ? value
+      : <span className="text-gray-400 italic">{placeholder}</span>;
+
+  return (
+    <div
+      className="flex justify-between items-center py-1 gap-2 cursor-pointer rounded-md px-1.5 -mx-1.5 hover:bg-indigo-50/60 transition-colors group"
+      onClick={() => setEditing(true)}
+      title="Click to edit"
+    >
+      <span className="text-sm text-gray-600 flex-shrink-0">{label}</span>
+      <div className="flex items-center gap-1.5 min-w-0 justify-end">
+        <span className="text-sm font-medium text-gray-900 truncate">{displayNode}</span>
+        <FiEdit className="h-3 w-3 text-gray-300 group-hover:text-indigo-500 flex-shrink-0 transition-colors" />
+      </div>
+    </div>
+  );
+};
 
 const FinancialRow = ({ label, amount, currency, isTotal = false }) => (
   <div className="flex justify-between items-center">
