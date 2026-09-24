@@ -9,8 +9,7 @@ import {
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
   FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
-  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave,
-  FiChevronLeft, FiChevronRight, FiMaximize2, FiCopy
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -35,13 +34,21 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
 
-/* ============================================================
-   ERROR BOUNDARY
-   ============================================================ */
+// Error Boundary Component
 class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  componentDidCatch(error, info) { console.error('Error caught by boundary:', error, info); }
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -51,45 +58,67 @@ class ErrorBoundary extends React.Component {
               <FiAlertCircle className="h-8 w-8 text-rose-600" />
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Something went wrong</h2>
-            <p className="text-gray-600 mb-4">There was an error loading the service tracking. Please try refreshing the page.</p>
-            <button onClick={() => window.location.reload()} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+            <p className="text-gray-600 mb-4">
+              There was an error loading the service tracking. Please try refreshing the page.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
               Refresh Page
             </button>
           </div>
         </div>
       );
     }
+
     return this.props.children;
   }
 }
 
-/* ============================================================
-   UTILITIES
-   ============================================================ */
+// Date formatting utility
 const formatDate = (dateString) => {
   if (!dateString) return 'Not set';
   try {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return 'Invalid date';
-    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch { return 'Invalid date'; }
+    return date.toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid date';
+  }
 };
 
+// Timeline date formatting utility - Fixes UTC parsing issues
 const formatTimelineDate = (dateString) => {
   if (!dateString) return 'Not set';
   try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Invalid date';
+
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+
     return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: false
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
     }).format(date).replace(',', ' at');
-  } catch { return 'Invalid date'; }
+
+  } catch (error) {
+    console.error('Error formatting timeline date:', error);
+    return 'Invalid date';
+  }
 };
 
-/* ============================================================
-   MAIN COMPONENT
-   ============================================================ */
 const TrackServicePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -101,11 +130,11 @@ const TrackServicePage = () => {
   const [staffList, setStaffList] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  const [showDetailModal, setShowDetailModal] = useState(false);
-
+  //for showing tracking history
   const [activityHistory, setActivityHistory] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
+  //for document session
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -114,7 +143,9 @@ const TrackServicePage = () => {
     try {
       const saved = localStorage.getItem('staffServiceSavedView');
       if (saved) return JSON.parse(saved);
-    } catch (e) { console.error('Could not load saved filters', e); }
+    } catch (e) {
+      console.error('Could not load saved filters', e);
+    }
     return { status: 'all', staff: 'all', expiry: 'all', date: '', service: 'all', subcategory: 'all' };
   };
 
@@ -130,10 +161,15 @@ const TrackServicePage = () => {
   const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  const [timeRange, setTimeRange] = useState('month');
+  // Default to this month to prevent huge initial loading times
+  const [timeRange, setTimeRange] = useState('month'); 
 
-  useEffect(() => { setSubcategoryFilter('all'); }, [serviceFilter]);
+  // Auto-reset subcategory when service changes
+  useEffect(() => {
+    setSubcategoryFilter('all');
+  }, [serviceFilter]);
 
+  // Safely remember all discovered subcategories so the dropdown never shrinks
   const [discoveredSubcategories, setDiscoveredSubcategories] = useState({});
 
   useEffect(() => {
@@ -149,43 +185,58 @@ const TrackServicePage = () => {
     });
   }, [services]);
 
+  // Compute available subcategories safely
   const availableSubcategories = useMemo(() => {
     if (serviceFilter === 'all') return [];
+    
+    // 1. Try to get it from the Categories API if provided
     const selectedCat = categories.find(c => c.id.toString() === serviceFilter.toString());
     if (selectedCat && selectedCat.subcategories) return selectedCat.subcategories;
+    
+    // 2. Fallback to our remembered subcategories
     if (discoveredSubcategories[serviceFilter]) {
       return Array.from(discoveredSubcategories[serviceFilter], ([id, name]) => ({ id, name }));
     }
+    
     return [];
   }, [serviceFilter, categories, discoveredSubcategories]);
 
-  const currentIndex = useMemo(() => {
-    if (!selectedService) return -1;
-    return services.findIndex(s => s.id === selectedService.id);
-  }, [services, selectedService]);
-
-  const hasPrev = currentIndex > 0;
-  const hasNext = currentIndex >= 0 && currentIndex < services.length - 1;
-
   const handleSaveView = () => {
     const filtersToSave = {
-      status: statusFilter, staff: staffFilter, expiry: expiryFilter,
-      date: dateFilter, service: serviceFilter, subcategory: subcategoryFilter
+      status: statusFilter,
+      staff: staffFilter,
+      expiry: expiryFilter,
+      date: dateFilter,
+      service: serviceFilter,
+      subcategory: subcategoryFilter
     };
     localStorage.setItem('staffServiceSavedView', JSON.stringify(filtersToSave));
     toast.success('Your custom view has been saved!');
   };
 
   const handleClearFilters = () => {
-    setStatusFilter('all'); setStaffFilter('all'); setExpiryFilter('all');
-    setSearchTerm(''); setAadhaarSearch(''); setDateFilter('');
-    setServiceFilter('all'); setSubcategoryFilter('all'); setTimeRange('month');
+    setStatusFilter('all');
+    setStaffFilter('all');
+    setExpiryFilter('all');
+    setSearchTerm('');
+    setAadhaarSearch('');
+    setDateFilter('');
+    setServiceFilter('all');
+    setSubcategoryFilter('all');
+    setTimeRange('month'); // Reset time range to default too
   };
 
   const [activeTab, setActiveTab] = useState('overview');
   const [trackingFormData, setTrackingFormData] = useState({
-    applicationNumber: '', currentStep: '', estimatedDelivery: '', averageTime: '',
-    notes: '', assignedTo: '', aadhaar: '', email: '', priority: 'medium'
+    applicationNumber: '',
+    currentStep: '',
+    estimatedDelivery: '',
+    averageTime: '',
+    notes: '',
+    assignedTo: '',
+    aadhaar: '',
+    email: '',
+    priority: 'medium'
   });
   
   const [viewMode, setViewMode] = useState('grid');
@@ -201,61 +252,102 @@ const TrackServicePage = () => {
 
   const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, delayed: 0, pending: 0, sla_compliance: 100 });
 
-  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(searchTerm), 500); return () => clearTimeout(t); }, [searchTerm]);
-  useEffect(() => { const t = setTimeout(() => setDebouncedAadhaar(aadhaarSearch), 500); return () => clearTimeout(t); }, [aadhaarSearch]);
-  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
-
-  /* ============================================================
-     KEYBOARD SHORTCUTS for modal
-     ============================================================ */
   useEffect(() => {
-    if (!showDetailModal) return;
-    const handler = (e) => {
-      const tag = (e.target?.tagName || '').toLowerCase();
-      const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable;
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setShowDetailModal(false);
-        return;
-      }
-      if (isTyping) return;
-      if (e.key === 'ArrowLeft' && hasPrev) {
-        e.preventDefault();
-        goToPrev();
-      }
-      if (e.key === 'ArrowRight' && hasNext) {
-        e.preventDefault();
-        goToNext();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDetailModal, hasPrev, hasNext, currentIndex, services]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedAadhaar(aadhaarSearch), 500);
+    return () => clearTimeout(timer);
+  }, [aadhaarSearch]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
 
   const statusMap = {
-    'pending': 'Pending', 'in_progress': 'In Progress', 'completed': 'Completed',
-    'rejected': 'Delayed', 'resubmit': 'Resubmit', 'paid': 'Paid'
+    'pending': 'Pending',
+    'in_progress': 'In Progress',
+    'completed': 'Completed',
+    'rejected': 'Delayed',
+    'resubmit': 'Resubmit',
+    'paid': 'Paid'
   };
+
   const reverseStatusMap = {
-    'Pending': 'pending', 'In Progress': 'in_progress', 'Completed': 'completed',
-    'Delayed': 'rejected', 'Resubmit': 'resubmit', 'Paid': 'paid'
+    'Pending': 'pending',
+    'In Progress': 'in_progress',
+    'Completed': 'completed',
+    'Delayed': 'rejected',
+    'Resubmit': 'resubmit',
+    'Paid': 'paid'
   };
 
   const statusConfig = {
-    'Pending': { color: 'text-amber-800', bg: 'bg-amber-100', border: 'border-amber-300', dot: 'bg-amber-600', button: 'bg-amber-600 hover:bg-amber-700 text-white' },
-    'In Progress': { color: 'text-blue-800', bg: 'bg-blue-100', border: 'border-blue-300', dot: 'bg-blue-600', button: 'bg-blue-600 hover:bg-blue-700 text-white' },
-    'Delayed': { color: 'text-rose-800', bg: 'bg-rose-100', border: 'border-rose-300', dot: 'bg-rose-600', button: 'bg-rose-600 hover:bg-rose-700 text-white' },
-    'Completed': { color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300', dot: 'bg-emerald-600', button: 'bg-emerald-600 hover:bg-emerald-700 text-white' },
-    'Resubmit': { color: 'text-orange-800', bg: 'bg-orange-100', border: 'border-orange-300', dot: 'bg-orange-600', button: 'bg-orange-600 hover:bg-orange-700 text-white' },
-    'Paid': { color: 'text-green-700', bg: 'bg-green-100', border: 'border-green-300', dot: 'bg-green-600', button: 'bg-green-600 hover:bg-green-700 text-white' }
+    'Pending': { 
+      color: 'text-amber-800', 
+      bg: 'bg-amber-100', 
+      border: 'border-amber-300',
+      dot: 'bg-amber-600',
+      button: 'bg-amber-600 hover:bg-amber-700 text-white'
+    },
+    'In Progress': { 
+      color: 'text-blue-800', 
+      bg: 'bg-blue-100', 
+      border: 'border-blue-300',
+      dot: 'bg-blue-600',
+      button: 'bg-blue-600 hover:bg-blue-700 text-white'
+    },
+    'Delayed': { 
+      color: 'text-rose-800', 
+      bg: 'bg-rose-100', 
+      border: 'border-rose-300',
+      dot: 'bg-rose-600',
+      button: 'bg-rose-600 hover:bg-rose-700 text-white'
+    },
+    'Completed': { 
+      color: 'text-emerald-800', 
+      bg: 'bg-emerald-100', 
+      border: 'border-emerald-300',
+      dot: 'bg-emerald-600',
+      button: 'bg-emerald-600 hover:bg-emerald-700 text-white'
+    },
+    'Resubmit': { 
+      color: 'text-orange-800', 
+      bg: 'bg-orange-100', 
+      border: 'border-orange-300',
+      dot: 'bg-orange-600',
+      button: 'bg-orange-600 hover:bg-orange-700 text-white'
+    },
+    'Paid': { 
+      color: 'text-green-700', 
+      bg: 'bg-green-100', 
+      border: 'border-green-300',
+      dot: 'bg-green-600',
+      button: 'bg-green-600 hover:bg-green-700 text-white'
+    }
   };
 
   const priorityConfig = {
-    'low': { color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Low' },
-    'medium': { color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', label: 'Medium' },
-    'high': { color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', label: 'High' }
+    'low': { 
+      color: 'text-emerald-600', 
+      bg: 'bg-emerald-50', 
+      border: 'border-emerald-200',
+      label: 'Low'
+    },
+    'medium': { 
+      color: 'text-amber-600', 
+      bg: 'bg-amber-50', 
+      border: 'border-amber-200',
+      label: 'Medium'
+    },
+    'high': { 
+      color: 'text-rose-600', 
+      bg: 'bg-rose-50', 
+      border: 'border-rose-200',
+      label: 'High'
+    }
   };
 
   const paymentStatusConfig = {
@@ -275,11 +367,18 @@ const TrackServicePage = () => {
   ];
 
   const priorityOptions = [
-    { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' }
   ];
 
   const calculateProgress = (status, currentStep) => {
-    const stepProgress = { 'Submitted': 25, 'Initial Review': 50, 'Document Verification': 75, 'Final Approval': 100 };
+    const stepProgress = {
+      'Submitted': 25,
+      'Initial Review': 50,
+      'Document Verification': 75,
+      'Final Approval': 100
+    };
     if (status === 'Completed' || status === 'Paid') return 100;
     return stepProgress[currentStep] || 25;
   };
@@ -298,120 +397,158 @@ const TrackServicePage = () => {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return '';
       return date.toISOString().split('T')[0];
-    } catch { return ''; }
+    } catch (error) {
+      console.error('Error formatting date for input:', error);
+      return '';
+    }
   };
 
-  const transformBackendData = async (trackingData) => trackingData.map((trackingEntry) => {
-    const totalCharge = parseFloat(trackingEntry.total_charges || 0);
-    const totalReceived = parseFloat(trackingEntry.total_received || 0);
-    const payments = trackingEntry.payment_details_array || [];
+  // Transform backend data (Instantly process using pre-calculated backend data)
+  const transformBackendData = async (trackingData) => {
+    return trackingData.map((trackingEntry) => {
+      // Extract payments directly from backend JSON
+      const totalCharge = parseFloat(trackingEntry.total_charges || 0);
+      const totalReceived = parseFloat(trackingEntry.total_received || 0);
+      const payments = trackingEntry.payment_details_array || [];
 
-    let paymentStatus = 'Pending';
-    if (totalCharge <= 0) paymentStatus = 'Not Applicable';
-    else if (totalReceived >= totalCharge) paymentStatus = 'Received';
-    else if (totalReceived > 0) paymentStatus = 'Partial';
+      let paymentStatus = 'Pending';
+      if (totalCharge <= 0) paymentStatus = 'Not Applicable';
+      else if (totalReceived >= totalCharge) paymentStatus = 'Received';
+      else if (totalReceived > 0) paymentStatus = 'Partial';
 
-    const paymentDetailsStr = payments.length > 0
-      ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
-      : 'No payments recorded';
+      const paymentDetailsStr = payments.length > 0 
+        ? payments.map(p => `${p.method === 'cash' ? 'Cash' : p.method === 'digital_wallet' ? 'Digital Wallet' : p.method}: ₹${Number(p.amount).toFixed(2)} (${p.status})`).join(', ')
+        : 'No payments recorded';
 
-    const createdDate = new Date(trackingEntry.created_at || trackingEntry.updated_at || Date.now());
-    const dateStr = createdDate.toISOString().split('T')[0];
-    const updatedDate = new Date(trackingEntry.updated_at || Date.now());
-    const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
+      // Grouping date must strictly use created_at to avoid moving items to "today" when updated
+      const createdDate = new Date(trackingEntry.created_at || trackingEntry.updated_at || Date.now());
+      const dateStr = createdDate.toISOString().split('T')[0];
+      
+      const updatedDate = new Date(trackingEntry.updated_at || Date.now());
+      const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
 
-    const calculatedProgress = trackingEntry.progress || calculateProgress(
-      statusMap[trackingEntry.status] || 'Pending', trackingEntry.current_step || 'Submitted'
-    );
-    const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
+      const calculatedProgress = trackingEntry.progress || calculateProgress(
+        statusMap[trackingEntry.status] || 'Pending',
+        trackingEntry.current_step || 'Submitted'
+      );
 
-    return {
-      id: trackingEntry.id.toString(),
-      serviceEntryId: trackingEntry.service_entry_id?.toString(),
-      trackingId: `TR-${trackingEntry.id}`,
-      applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
-      customerName: trackingEntry.customer_name || 'Unknown',
-      customerPhone: trackingEntry.phone || 'N/A',
-      customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
-      serviceType: trackingEntry.service_name || 'Unknown',
-      serviceName: trackingEntry.service_name || 'Unknown',
-      subcategoryName: trackingEntry.subcategory_name || 'N/A',
-      categoryId: trackingEntry.category_id,
-      subcategoryId: trackingEntry.subcategory_id,
-      staffName: trackingEntry.assigned_to_name || 'Unassigned',
-      staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
-      assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
-      assignedToId: trackingEntry.assigned_to,
-      serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
-      departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
-      totalCharge,
-      cost: totalCharge,
-      status: statusMap[trackingEntry.status] || 'Pending',
-      currentStep: trackingEntry.current_step || 'Submitted',
-      progress: calculatedProgress,
-      priority: trackingEntry.priority || 'medium',
-      date: dateStr,
-      time: timeStr,
-      estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? formatDate(trackingEntry.estimated_delivery) : 'Not set',
-      expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'N/A',
-      createdAt: trackingEntry.created_at || trackingEntry.updated_at,
-      updatedAt: trackingEntry.updated_at,
-      duration: null,
-      notes: trackingEntry.notes || 'No notes available',
-      rating: null,
-      followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
-      paymentStatus,
-      paymentDetails: paymentDetailsStr,
-      payments,
-      phone: trackingEntry.phone || 'N/A',
-      email: trackingEntry.email || '',
-      aadhaar: trackingEntry.aadhaar || '',
-      steps: Array.isArray(trackingEntry.steps) ? trackingEntry.steps.map(step => ({
-        id: step.id, name: step.name, completed: step.completed, date: step.date,
-        created_at: step.created_at, step_order: step.step_order, estimated_days: step.estimated_days
-      })) : [],
-      averageTime: trackingEntry.average_time || '7 days',
-      rawEstimatedDelivery: trackingEntry.estimated_delivery,
-      rawExpiryDate: trackingEntry.expiry_date,
-      workSource,
-      serviceRating: trackingEntry.service_rating,
-      staffRating: trackingEntry.staff_rating,
-      reviewText: trackingEntry.review_text,
-      reviewSubmittedAt: trackingEntry.submitted_at
-    };
-  });
+      const workSource = trackingEntry.work_source || (trackingEntry.customer_service_id ? 'online' : 'offline');
+
+      return {
+        id: trackingEntry.id.toString(),
+        serviceEntryId: trackingEntry.service_entry_id?.toString(),
+        trackingId: `TR-${trackingEntry.id}`,
+        applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
+        customerName: trackingEntry.customer_name || 'Unknown',
+        customerPhone: trackingEntry.phone || 'N/A',
+        customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
+        serviceType: trackingEntry.service_name || 'Unknown',
+        serviceName: trackingEntry.service_name || 'Unknown',
+        subcategoryName: trackingEntry.subcategory_name || 'N/A',
+        categoryId: trackingEntry.category_id,
+        subcategoryId: trackingEntry.subcategory_id,
+        staffName: trackingEntry.assigned_to_name || 'Unassigned',
+        staffId: trackingEntry.assigned_to ? `EMP-${trackingEntry.assigned_to}` : 'EMP-0000',
+        assignedTo: trackingEntry.assigned_to_name || 'Unassigned',
+        assignedToId: trackingEntry.assigned_to,
+        serviceCharge: parseFloat(trackingEntry.service_charges) || 0,
+        departmentCharge: parseFloat(trackingEntry.department_charges) || 0,
+        totalCharge: totalCharge,
+        cost: totalCharge,
+        status: statusMap[trackingEntry.status] || 'Pending',
+        currentStep: trackingEntry.current_step || 'Submitted',
+        progress: calculatedProgress,
+        priority: trackingEntry.priority || 'medium',
+        date: dateStr, // Safely bound to creation date now
+        time: timeStr,
+        // Format ISO String instantly so it doesn't show 2026-09-21T00:00:00.000Z in UI
+        estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? formatDate(trackingEntry.estimated_delivery) : 'Not set',
+        expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'N/A',
+        createdAt: trackingEntry.created_at || trackingEntry.updated_at,
+        updatedAt: trackingEntry.updated_at,
+        duration: null,
+        notes: trackingEntry.notes || 'No notes available',
+        rating: null,
+        followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
+        paymentStatus: paymentStatus,
+        paymentDetails: paymentDetailsStr,
+        payments: payments,
+        phone: trackingEntry.phone || 'N/A',
+        email: trackingEntry.email || '',
+        aadhaar: trackingEntry.aadhaar || '',
+        steps: Array.isArray(trackingEntry.steps) ? trackingEntry.steps.map(step => ({
+          id: step.id,
+          name: step.name,
+          completed: step.completed,
+          date: step.date,
+          created_at: step.created_at,
+          step_order: step.step_order,
+          estimated_days: step.estimated_days
+        })) : [],
+        averageTime: trackingEntry.average_time || '7 days',
+        rawEstimatedDelivery: trackingEntry.estimated_delivery,
+        rawExpiryDate: trackingEntry.expiry_date,
+        workSource: workSource,
+        serviceRating: trackingEntry.service_rating,
+        staffRating: trackingEntry.staff_rating,
+        reviewText: trackingEntry.review_text,
+        reviewSubmittedAt: trackingEntry.submitted_at
+      };
+    });
+  };
 
   const fetchStats = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
-    const data = await getTrackingStats({
-      timeRange: timeRange === 'all' ? undefined : timeRange,
-      date: dateFilter || undefined,
-      service: serviceFilter === 'all' ? undefined : serviceFilter,
-      subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
-      status: statusFilter === 'all' ? undefined : apiStatus,
-      staff: staffFilter === 'all' ? undefined : staffFilter,
-    });
+    const data = await getTrackingStats({ 
+        timeRange: timeRange === 'all' ? undefined : timeRange, 
+        date: dateFilter || undefined,
+        service: serviceFilter === 'all' ? undefined : serviceFilter,
+        subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
+        status: statusFilter === 'all' ? undefined : apiStatus,
+        staff: staffFilter === 'all' ? undefined : staffFilter,
+      });
     setGlobalStats(data);
   };
 
   const fetchActivityHistory = async (trackingId) => {
-    if (!trackingId) { setActivityHistory([]); return; }
+    if (!trackingId) {
+      setActivityHistory([]);
+      return;
+    }
+
     try {
       setActivityLoading(true);
+
       const response = await getTrackingActivity(trackingId);
-      setActivityHistory(Array.isArray(response?.activities) ? response.activities : []);
-    } catch { setActivityHistory([]); }
-    finally { setActivityLoading(false); }
+
+      const activities = Array.isArray(response?.activities)
+        ? response.activities
+        : [];
+
+      setActivityHistory(activities);
+    } catch (error) {
+      console.error('Error fetching activity history:', error);
+      setActivityHistory([]);
+    } finally {
+      setActivityLoading(false);
+    }
   };
 
-  const fetchDocuments = async (trackingId) => {
-    if (!trackingId) { setDocuments([]); return; }
+    const fetchDocuments = async (trackingId) => {
+    if (!trackingId) {
+      setDocuments([]);
+      return;
+    }
     try {
       setDocumentsLoading(true);
       const data = await getTrackingDocuments(trackingId);
       setDocuments(Array.isArray(data) ? data : []);
-    } catch { setDocuments([]); }
-    finally { setDocumentsLoading(false); }
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      setDocuments([]);
+    } finally {
+      setDocumentsLoading(false);
+    }
   };
 
   const handleUploadDocument = async (trackingId, file, label, visibleToCustomer, remark) => {
@@ -426,8 +563,11 @@ const TrackServicePage = () => {
       await fetchDocuments(trackingId);
       toast.success('Document uploaded');
     } catch (error) {
+      console.error('Error uploading document:', error);
       toast.error('Failed to upload document: ' + (error.response?.data?.error || error.message));
-    } finally { setUploadingDocument(false); }
+    } finally {
+      setUploadingDocument(false);
+    }
   };
 
   const handleToggleDocumentVisibility = async (trackingId, docId, visible) => {
@@ -435,7 +575,10 @@ const TrackServicePage = () => {
       await toggleTrackingDocumentVisibility(trackingId, docId, visible);
       await fetchDocuments(trackingId);
       toast.success(visible ? 'Document is now visible to the customer' : 'Document hidden from the customer');
-    } catch { toast.error('Failed to update document visibility'); }
+    } catch (error) {
+      console.error('Error updating document visibility:', error);
+      toast.error('Failed to update document visibility');
+    }
   };
 
   const handleUpdateDocumentRemark = async (trackingId, docId, remark) => {
@@ -443,7 +586,10 @@ const TrackServicePage = () => {
       await updateTrackingDocumentRemark(trackingId, docId, remark);
       await fetchDocuments(trackingId);
       toast.success('Remark saved');
-    } catch { toast.error('Failed to save remark'); }
+    } catch (error) {
+      console.error('Error updating remark:', error);
+      toast.error('Failed to save remark');
+    }
   };
 
   const handleDeleteDocument = async (trackingId, docId) => {
@@ -451,21 +597,34 @@ const TrackServicePage = () => {
       await deleteTrackingDocument(trackingId, docId);
       await fetchDocuments(trackingId);
       toast.success('Document deleted');
-    } catch { toast.error('Failed to delete document'); }
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Failed to delete document');
+    }
   };
 
   const fetchSingleTrackingEntry = async (entryId) => {
     try {
-      const [response, staffResponse] = await Promise.all([getTrackingEntryById(entryId), getStaff()]);
-      const staffData = Array.isArray(staffResponse) ? staffResponse : Array.isArray(staffResponse?.data) ? staffResponse.data : [];
+      console.log('Fetching single tracking entry:', entryId);
+      const [response, staffResponse] = await Promise.all([
+        getTrackingEntryById(entryId),
+        getStaff()
+      ]);
+      
+      const staffData = Array.isArray(staffResponse) ? staffResponse : 
+                      Array.isArray(staffResponse?.data) ? staffResponse.data : [];
       setStaffList(staffData);
+      
       const transformed = await transformBackendData([response]);
+      
       if (transformed.length > 0) {
         setServices(transformed);
         setSelectedService(transformed[0]);
         await fetchActivityHistory(transformed[0].id);
         await fetchDocuments(transformed[0].id);
+        
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
+        
         setTrackingFormData({
           applicationNumber: transformed[0].applicationNumber || `APP${transformed[0].serviceEntryId}`,
           currentStep: transformed[0].currentStep || 'Submitted',
@@ -477,10 +636,19 @@ const TrackServicePage = () => {
           email: transformed[0].email || '',
           priority: transformed[0].priority || 'medium',
         });
-        if (assignedStaff) setSelectedService(prev => ({ ...prev, assignedTo: assignedStaff.name, assignedToId: assignedStaff.id }));
+        
+        if (assignedStaff) {
+          setSelectedService(prev => ({
+            ...prev,
+            assignedTo: assignedStaff.name,
+            assignedToId: assignedStaff.id
+          }));
+        }
+        
         setIsSidebarVisible(false);
       }
-    } catch {
+    } catch (error) {
+      console.error('Error fetching single tracking entry:', error);
       toast.error('Failed to load the specific application');
       await fetchAllTrackingEntries();
     }
@@ -489,12 +657,14 @@ const TrackServicePage = () => {
   const fetchAllTrackingEntries = async () => {
     try {
       const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+
       const params = {
-        page: currentPage, limit,
+        page: currentPage,
+        limit: limit,
         timeRange: timeRange === 'all' ? undefined : timeRange,
         date: dateFilter || undefined,
         service: serviceFilter === 'all' ? undefined : serviceFilter,
-        categoryId: serviceFilter === 'all' ? undefined : serviceFilter,
+        categoryId: serviceFilter === 'all' ? undefined : serviceFilter, 
         subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
         subcategoryId: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
         status: statusFilter === 'all' ? undefined : apiStatus,
@@ -503,25 +673,46 @@ const TrackServicePage = () => {
         search: debouncedSearch || undefined,
         aadhaar: debouncedAadhaar || undefined
       };
+
       const [trackingResponse, staffResponse, categoriesResponse] = await Promise.all([
-        getTrackingEntries(params), getStaff(), getCategories()
+        getTrackingEntries(params),
+        getStaff(),
+        getCategories()
       ]);
+
       if (trackingResponse && trackingResponse.pagination) {
         setTotalRecords(trackingResponse.pagination.totalRecords);
         setTotalPages(trackingResponse.pagination.totalPages);
       }
-      const trackingData = Array.isArray(trackingResponse?.data) ? trackingResponse.data : Array.isArray(trackingResponse) ? trackingResponse : [];
+
+      const trackingData = Array.isArray(trackingResponse?.data) 
+        ? trackingResponse.data 
+        : Array.isArray(trackingResponse) ? trackingResponse : [];
+
       const staffData = Array.isArray(staffResponse?.data) ? staffResponse.data : Array.isArray(staffResponse) ? staffResponse : [];
       const categoriesData = Array.isArray(categoriesResponse?.data) ? categoriesResponse.data : Array.isArray(categoriesResponse) ? categoriesResponse : [];
-      setStaffList(staffData); setCategories(categoriesData);
+
+      setStaffList(staffData);
+      setCategories(categoriesData);
+
       let transformedServices = await transformBackendData(trackingData);
-      if (serviceFilter !== 'all') transformedServices = transformedServices.filter(s => String(s.categoryId) === String(serviceFilter));
-      if (subcategoryFilter !== 'all') transformedServices = transformedServices.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+
+      // Explicit local fallback for category & subcategory filtering to enforce selection
+      if (serviceFilter !== 'all') {
+        transformedServices = transformedServices.filter(s => String(s.categoryId) === String(serviceFilter));
+      }
+      if (subcategoryFilter !== 'all') {
+        transformedServices = transformedServices.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+      }
+
       setServices(transformedServices);
       setIsSidebarVisible(true);
-    } catch {
+      
+    } catch (error) {
+      console.error('TrackServicePage: Error fetching data:', error);
       toast.error('Failed to fetch data');
-      setStaffList([]); setCategories([]);
+      setStaffList([]);
+      setCategories([]);
     }
   };
 
@@ -529,10 +720,19 @@ const TrackServicePage = () => {
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        if (id) await fetchSingleTrackingEntry(id);
-        else await Promise.all([fetchAllTrackingEntries(), fetchStats()]);
-      } catch (error) { console.error(error); }
-      finally { setLoading(false); }
+        if (id) {
+          await fetchSingleTrackingEntry(id);
+        } else {
+          await Promise.all([
+            fetchAllTrackingEntries(),
+            fetchStats()
+          ]);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
     loadInitialData();
   }, []);
@@ -540,24 +740,55 @@ const TrackServicePage = () => {
   useEffect(() => {
     if (id) return;
     const reloadFilteredData = async () => {
-      try { await Promise.all([fetchAllTrackingEntries(), fetchStats()]); }
-      catch (error) { console.error(error); }
+      try {
+        await Promise.all([
+          fetchAllTrackingEntries(),
+          fetchStats()
+        ]);
+      } catch (error) {
+        console.error('Filter reload error:', error);
+      }
     };
     reloadFilteredData();
-  }, [currentPage, debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
+  }, [
+    currentPage,
+    debouncedSearch,
+    debouncedAadhaar,
+    statusFilter,
+    staffFilter,
+    expiryFilter,
+    timeRange,
+    dateFilter,
+    serviceFilter,
+    subcategoryFilter
+  ]);
 
   const handleUpdateStatus = async (serviceId, newStatus) => {
     try {
       const apiStatus = reverseStatusMap[newStatus] || newStatus;
       const service = services.find(s => s.id === serviceId);
+      
       const newProgress = calculateProgress(newStatus, service.currentStep);
-      if (service) { service.status = newStatus; service.progress = newProgress; }
-      setServices(prev => prev.map(s => s.id === serviceId ? { ...s, status: newStatus, progress: newProgress } : s));
-      if (selectedService?.id === serviceId) setSelectedService(prev => ({ ...prev, status: newStatus, progress: newProgress }));
+      
+      if (service) {
+          service.status = newStatus;
+          service.progress = newProgress;
+      }
+
+      setServices(prevServices => prevServices.map(s =>
+        s.id === serviceId ? { ...s, status: newStatus, progress: newProgress } : s
+      ));
+      
+      if (selectedService?.id === serviceId) {
+        setSelectedService(prev => ({ ...prev, status: newStatus, progress: newProgress }));
+      }
+
       await updateTrackingStatus(serviceId, apiStatus);
       await fetchActivityHistory(serviceId);
       toast.success(`Status updated to ${newStatus}`);
+      
     } catch (error) {
+      console.error('TrackServicePage: Error updating status:', error);
       toast.error('Failed to update status: ' + (error.response?.data?.error || error.message));
     }
   };
@@ -576,28 +807,39 @@ const TrackServicePage = () => {
         priority: updates.priority !== undefined ? updates.priority : service.priority,
         progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
       };
+
+      // Handle Optimistic UI injection for Timeline
       const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
       if (updates.currentStep !== undefined && service.currentStep !== updates.currentStep) {
-        const targetOrder = stepOrderMap[updates.currentStep] || 1;
-        const nowIso = new Date().toISOString();
-        if (service.steps && service.steps.length > 0) {
-          updates.steps = service.steps.map(step => {
-            const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
-            if (currentOrder <= targetOrder) {
-              return { ...step, completed: true, date: (currentOrder === targetOrder) ? nowIso : (step.date || service.createdAt) };
-            }
-            return { ...step, completed: false };
-          });
-        }
-        updates.updatedAt = nowIso;
+          const targetOrder = stepOrderMap[updates.currentStep] || 1;
+          const nowIso = new Date().toISOString();
+          
+          if (service.steps && service.steps.length > 0) {
+              updates.steps = service.steps.map(step => {
+                  const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
+                  if (currentOrder <= targetOrder) {
+                      return { 
+                          ...step, 
+                          completed: true, 
+                          // Only assign the brand new time if it's the specific step we just clicked
+                          date: (currentOrder === targetOrder) ? nowIso : (step.date || service.createdAt)
+                      };
+                  }
+                  return { ...step, completed: false };
+              });
+          }
+          updates.updatedAt = nowIso;
       }
+
       Object.assign(service, updates);
       if (updates.applicationNumber !== undefined) service.applicationNumber = updates.applicationNumber;
       if (updates.currentStep !== undefined) service.currentStep = updates.currentStep;
-      setServices(prev => prev.map(s => {
+
+      setServices(prevServices => prevServices.map(s => {
         if (s.id === service.id) {
           return {
-            ...s, ...updates,
+            ...s,
+            ...updates,
             steps: updates.steps || s.steps,
             updatedAt: updates.updatedAt || s.updatedAt,
             assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
@@ -609,21 +851,42 @@ const TrackServicePage = () => {
         }
         return s;
       }));
+      
       if (selectedService?.id === service.id) {
-        setSelectedService(prev => ({ ...prev, ...updates, steps: updates.steps || prev.steps, updatedAt: updates.updatedAt || prev.updatedAt, progress: payload.progress }));
+        setSelectedService(prev => ({ 
+            ...prev, 
+            ...updates, 
+            steps: updates.steps || prev.steps,
+            updatedAt: updates.updatedAt || prev.updatedAt,
+            progress: payload.progress 
+        }));
         setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
+
       await updateTrackingEntry(service.id, payload);
       await fetchActivityHistory(service.id);
       toast.success('Details updated successfully');
-    } catch { toast.error('Failed to update tracking details'); }
+
+    } catch (error) {
+      console.error('Error updating details:', error);
+      toast.error('Failed to update tracking details');
+    }
   };
 
   const handleNotifyCustomer = async (service) => {
     try {
+      console.log('TrackServicePage: Sending notification for service:', {
+        id: service.id,
+        serviceEntryId: service.serviceEntryId,
+        customerName: service.customerName,
+        applicationNumber: service.applicationNumber,
+        status: service.status
+      });
+      
       await notifyCustomer(service.id, `Dear ${service.customerName}, your ${service.serviceType} application (App No: ${service.applicationNumber || 'N/A'}) is now ${service.status}.`);
       toast.success(`Notification sent to ${service.customerName} via WhatsApp`);
     } catch (error) {
+      console.error('TrackServicePage: Error sending notification:', error);
       toast.error('Failed to send notification: ' + (error.response?.data?.error || error.message));
     }
   };
@@ -636,10 +899,20 @@ const TrackServicePage = () => {
   const handleTrackingFormSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (trackingFormData.applicationNumber && trackingFormData.applicationNumber.length > 50) throw new Error('Application number must be 50 characters or less');
-      if (trackingFormData.aadhaar && !/^\d{12}$/.test(trackingFormData.aadhaar)) throw new Error('Aadhaar number must be exactly 12 digits');
-      if (trackingFormData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trackingFormData.email)) throw new Error('Please enter a valid email address');
+      if (trackingFormData.applicationNumber && trackingFormData.applicationNumber.length > 50) {
+        throw new Error('Application number must be 50 characters or less');
+      }
+
+      if (trackingFormData.aadhaar && !/^\d{12}$/.test(trackingFormData.aadhaar)) {
+        throw new Error('Aadhaar number must be exactly 12 digits');
+      }
+
+      if (trackingFormData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trackingFormData.email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
       const newProgress = calculateProgress(selectedService.status, trackingFormData.currentStep);
+      
       const payload = {
         applicationNumber: trackingFormData.applicationNumber || null,
         currentStep: trackingFormData.currentStep || null,
@@ -652,21 +925,33 @@ const TrackServicePage = () => {
         priority: trackingFormData.priority || 'medium',
         progress: newProgress
       };
+      
+      // Optimitic Timeline injection
       const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
       const targetOrder = stepOrderMap[trackingFormData.currentStep] || 1;
       const nowIso = new Date().toISOString();
+      
       let updatedSteps = selectedService.steps;
       if (updatedSteps && updatedSteps.length > 0 && selectedService.currentStep !== trackingFormData.currentStep) {
-        updatedSteps = updatedSteps.map(step => {
-          const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
-          if (currentOrder <= targetOrder) return { ...step, completed: true, date: (currentOrder === targetOrder) ? nowIso : (step.date || selectedService.createdAt) };
-          return { ...step, completed: false };
-        });
+          updatedSteps = updatedSteps.map(step => {
+              const currentOrder = stepOrderMap[step.name] || step.step_order || 1;
+              if (currentOrder <= targetOrder) {
+                  return { 
+                      ...step, 
+                      completed: true, 
+                      date: (currentOrder === targetOrder) ? nowIso : (step.date || selectedService.createdAt)
+                  };
+              }
+              return { ...step, completed: false };
+          });
       }
-      await updateTrackingEntry(selectedService.id, payload);
+
+      const response = await updateTrackingEntry(selectedService.id, payload);
       await fetchActivityHistory(selectedService.id);
       await fetchDocuments(selectedService.id);
+
       toast.success('Tracking details updated successfully');
+      
       const updatedServices = services.map(service =>
         service.id === selectedService.id ? {
           ...service,
@@ -686,10 +971,29 @@ const TrackServicePage = () => {
           updatedAt: (selectedService.currentStep !== trackingFormData.currentStep) ? nowIso : service.updatedAt
         } : service
       );
+      
       setServices(updatedServices);
-      setSelectedService({ ...selectedService, applicationNumber: trackingFormData.applicationNumber || `APP${selectedService.serviceEntryId}`, currentStep: trackingFormData.currentStep || 'Submitted', estimatedDelivery: formatDate(trackingFormData.estimatedDelivery), averageTime: trackingFormData.averageTime || '7 days', notes: trackingFormData.notes || '', assignedTo: staffList.find(staff => staff.id === parseInt(trackingFormData.assignedTo))?.name || trackingFormData.assignedTo || 'Unassigned', assignedToId: trackingFormData.assignedTo, aadhaar: trackingFormData.aadhaar || '', email: trackingFormData.email || '', priority: trackingFormData.priority || 'medium', progress: newProgress, rawEstimatedDelivery: trackingFormData.estimatedDelivery, steps: updatedSteps, updatedAt: (selectedService.currentStep !== trackingFormData.currentStep) ? nowIso : selectedService.updatedAt });
+      setSelectedService({
+        ...selectedService,
+        applicationNumber: trackingFormData.applicationNumber || `APP${selectedService.serviceEntryId}`,
+        currentStep: trackingFormData.currentStep || 'Submitted',
+        estimatedDelivery: formatDate(trackingFormData.estimatedDelivery),
+        averageTime: trackingFormData.averageTime || '7 days',
+        notes: trackingFormData.notes || '',
+        assignedTo: staffList.find(staff => staff.id === parseInt(trackingFormData.assignedTo))?.name || trackingFormData.assignedTo || 'Unassigned',
+        assignedToId: trackingFormData.assignedTo,
+        aadhaar: trackingFormData.aadhaar || '',
+        email: trackingFormData.email || '',
+        priority: trackingFormData.priority || 'medium',
+        progress: newProgress,
+        rawEstimatedDelivery: trackingFormData.estimatedDelivery,
+        steps: updatedSteps,
+        updatedAt: (selectedService.currentStep !== trackingFormData.currentStep) ? nowIso : selectedService.updatedAt
+      });
+      
       setActiveTab('overview');
     } catch (error) {
+      console.error('TrackServicePage: Error updating tracking details:', error);
       toast.error('Failed to update tracking details: ' + (error.response?.data?.error || error.message));
     }
   };
@@ -698,6 +1002,7 @@ const TrackServicePage = () => {
     setSelectedService(service);
     await fetchActivityHistory(service.id);
     await fetchDocuments(service.id);
+
     setTrackingFormData({
       applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
       currentStep: service.currentStep || 'Submitted',
@@ -710,30 +1015,10 @@ const TrackServicePage = () => {
       priority: service.priority || 'medium',
     });
     setActiveTab('overview');
+    
     if (!id && !preventNav && viewMode === 'list') {
       navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
     }
-  };
-
-  const openDetailModal = async (service) => {
-    if (!selectedService || selectedService.id !== service.id) {
-      await handleServiceSelect(service, true);
-    }
-    setShowDetailModal(true);
-  };
-
-  const goToPrev = async () => {
-    if (!hasPrev) return;
-    const prevService = services[currentIndex - 1];
-    if (!prevService) return;
-    await handleServiceSelect(prevService, true);
-  };
-
-  const goToNext = async () => {
-    if (!hasNext) return;
-    const nextService = services[currentIndex + 1];
-    if (!nextService) return;
-    await handleServiceSelect(nextService, true);
   };
 
   const renderDetailPane = () => {
@@ -780,19 +1065,22 @@ const TrackServicePage = () => {
             <div className="flex space-x-2 mt-4 lg:mt-0">
               <button
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-                onClick={() => handleNotifyCustomer(selectedService)}>
+                onClick={() => handleNotifyCustomer(selectedService)}
+              >
                 <FiMessageSquare className="h-4 w-4" />
                 <span>Notify</span>
               </button>
               <button
                 onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm">
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+              >
                 <FiGrid className="h-4 w-4" />
                 <span>Workspace</span>
               </button>
               <button 
                 onClick={() => setActiveTab('tracking')}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm">
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
+              >
                 <FiEdit className="h-4 w-4" />
                 <span>Edit</span>
               </button>
@@ -813,13 +1101,15 @@ const TrackServicePage = () => {
           <div className="border-b border-gray-200 bg-gray-50/50">
             <nav className="flex -mb-px overflow-x-auto hide-scrollbar">
               {['overview', 'tracking', 'documents', 'history', 'discussion'].map((tab) => (
-                <button key={tab}
+                <button
+                  key={tab}
                   className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
                     activeTab === tab
                       ? 'border-indigo-500 text-indigo-600 bg-white'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                   }`}
-                  onClick={() => setActiveTab(tab)}>
+                  onClick={() => setActiveTab(tab)}
+                >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
               ))}
@@ -827,31 +1117,48 @@ const TrackServicePage = () => {
           </div>
           <div className="p-6">
             <AnimatePresence mode="wait">
-              <motion.div key={activeTab}
+              <motion.div
+                key={activeTab}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}>
+                transition={{ duration: 0.2 }}
+              >
                 {activeTab === 'overview' && (
-                  <OverviewView service={selectedService} onUpdateStatus={handleUpdateStatus} priorityConfig={priorityConfig} />
+                  <OverviewView 
+                    service={selectedService} 
+                    onUpdateStatus={handleUpdateStatus}
+                    priorityConfig={priorityConfig}
+                  />
                 )}
                 {activeTab === 'tracking' && (
-                  <TrackingView service={selectedService} formData={trackingFormData}
-                    onFormChange={handleTrackingFormChange} staffList={staffList}
-                    stepOptions={stepOptions} priorityOptions={priorityOptions}
+                  <TrackingView 
+                    service={selectedService}
+                    formData={trackingFormData}
+                    onFormChange={handleTrackingFormChange}
+                    staffList={staffList}
+                    stepOptions={stepOptions}
+                    priorityOptions={priorityOptions}
                     onSave={handleTrackingFormSubmit}
-                    onCancel={() => setActiveTab('overview')} />
+                    onCancel={() => setActiveTab('overview')}
+                  />
                 )}
                 {activeTab === 'documents' && (
-                  <EnhancedDocumentsView documents={documents} documentsLoading={documentsLoading}
+                  <EnhancedDocumentsView 
+                    documents={documents}
+                    documentsLoading={documentsLoading}
                     uploadingDocument={uploadingDocument}
                     onUpload={(file, label, visible, remark) => handleUploadDocument(selectedService.id, file, label, visible, remark)}
                     onUpdateRemark={(docId, remark) => handleUpdateDocumentRemark(selectedService.id, docId, remark)}
                     onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(selectedService.id, docId, visible)}
-                    onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)} />
+                    onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)}
+                  />
                 )}
                 {activeTab === 'history' && (
-                  <HistoryView activityHistory={activityHistory} activityLoading={activityLoading} />
+                  <HistoryView
+                    activityHistory={activityHistory}
+                    activityLoading={activityLoading}
+                  />
                 )}
                 {activeTab === 'discussion' && (
                   <div className="space-y-4">
@@ -859,9 +1166,16 @@ const TrackServicePage = () => {
                       <FiMessageCircle className="h-5 w-5 text-indigo-600" />
                       <h3 className="font-semibold text-gray-900">Internal Discussion & Tasks</h3>
                     </div>
-                    <p className="text-sm text-gray-500 mb-4">These notes are strictly internal. Tag staff using @ to assign them tasks.</p>
+                    <p className="text-sm text-gray-500 mb-4">
+                      These notes are strictly internal. Tag staff using @ to assign them tasks.
+                    </p>
                     <div className="bg-gray-50 rounded-xl p-2 sm:p-4 border border-gray-100">
-                      <NotesPanel contextType="service_entry" contextId={selectedService.serviceEntryId} embedded={true} showHeader={false} />
+                      <NotesPanel 
+                        contextType="service_entry" 
+                        contextId={selectedService.serviceEntryId} 
+                        embedded={true} 
+                        showHeader={false}
+                      />
                     </div>
                   </div>
                 )}
@@ -875,8 +1189,10 @@ const TrackServicePage = () => {
 
   const fetchAllFilteredDataForExport = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
+    
     const params = {
-      page: 1, limit: totalRecords > 0 ? totalRecords : 10000,
+      page: 1,
+      limit: totalRecords > 0 ? totalRecords : 10000, 
       timeRange: timeRange === 'all' ? undefined : timeRange,
       date: dateFilter || undefined,
       service: serviceFilter === 'all' ? undefined : serviceFilter,
@@ -889,73 +1205,159 @@ const TrackServicePage = () => {
       search: debouncedSearch || undefined,
       aadhaar: debouncedAadhaar || undefined
     };
+
     try {
       const trackingResponse = await getTrackingEntries(params);
-      const trackingData = Array.isArray(trackingResponse?.data) ? trackingResponse.data : Array.isArray(trackingResponse) ? trackingResponse : [];
-      let transformedData = await transformBackendData(trackingData);
-      if (serviceFilter !== 'all') transformedData = transformedData.filter(s => String(s.categoryId) === String(serviceFilter));
-      if (subcategoryFilter !== 'all') transformedData = transformedData.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
-      return transformedData;
-    } catch { throw new Error('Failed to fetch complete dataset'); }
-  };
+      const trackingData = Array.isArray(trackingResponse?.data) 
+        ? trackingResponse.data 
+        : Array.isArray(trackingResponse) ? trackingResponse : [];
 
+      let transformedData = await transformBackendData(trackingData);
+
+      // Explicit local fallback for category & subcategory filtering
+      if (serviceFilter !== 'all') {
+        transformedData = transformedData.filter(s => String(s.categoryId) === String(serviceFilter));
+      }
+      if (subcategoryFilter !== 'all') {
+        transformedData = transformedData.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
+      }
+
+      return transformedData;
+    } catch (error) {
+      console.error('Error fetching export data:', error);
+      throw new Error('Failed to fetch complete dataset');
+    }
+  };
+  
   const handleExportExcel = async () => {
     try {
-      if (totalRecords === 0) { toast.info("No data to export"); return; }
-      toast.info("Preparing Excel file...", { autoClose: 2000 });
+      if (totalRecords === 0) {
+        toast.info("No data to export");
+        return;
+      }
+      
+      toast.info("Preparing Excel file... This might take a moment.", { autoClose: 2000 });
+      
       const fullDataset = await fetchAllFilteredDataForExport();
+
       const exportData = fullDataset.map(s => ({
-        'Application No': s.applicationNumber || 'N/A', 'Customer Name': s.customerName || 'Unknown',
-        'Phone': s.phone || 'N/A', 'Email': s.email || 'N/A', 'Service Type': s.serviceType || 'Unknown',
-        'Subcategory': s.subcategoryName || 'N/A', 'Status': s.status || 'Pending',
-        'Current Step': s.currentStep || 'Submitted', 'Priority': s.priority || 'Medium',
-        'Assigned To': s.assignedTo || 'Unassigned', 'Created Date': s.date || 'N/A',
-        'Estimated Delivery': s.estimatedDelivery || 'Not set', 'Service Charge': s.serviceCharge || 0,
-        'Department Charge': s.departmentCharge || 0, 'Total Charge': s.totalCharge || 0,
+        'Application No': s.applicationNumber || 'N/A',
+        'Customer Name': s.customerName || 'Unknown',
+        'Phone': s.phone || 'N/A',
+        'Email': s.email || 'N/A',
+        'Service Type': s.serviceType || 'Unknown',
+        'Subcategory': s.subcategoryName || 'N/A',
+        'Status': s.status || 'Pending',
+        'Current Step': s.currentStep || 'Submitted',
+        'Priority': s.priority || 'Medium',
+        'Assigned To': s.assignedTo || 'Unassigned',
+        'Created Date': s.date || 'N/A',
+        'Estimated Delivery': s.estimatedDelivery || 'Not set',
+        'Service Charge': s.serviceCharge || 0,
+        'Department Charge': s.departmentCharge || 0,
+        'Total Charge': s.totalCharge || 0,
         'Payment Status': s.paymentStatus || 'Pending'
       }));
+
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Tracked Services");
       XLSX.writeFile(workbook, `Service_Tracking_${new Date().toISOString().split('T')[0]}.xlsx`);
       toast.success("Excel exported successfully!");
-    } catch { toast.error("Failed to export Excel. Ensure xlsx is installed."); }
+    } catch (error) {
+      console.error("Export Error:", error);
+      toast.error("Failed to export Excel. Ensure xlsx is installed.");
+    }
   };
 
   const handleExportPDF = async () => {
     try {
-      if (totalRecords === 0) { toast.info("No data to export"); return; }
-      toast.info("Generating PDF...", { autoClose: 2000 });
+      if (totalRecords === 0) {
+        toast.info("No data to export");
+        return;
+      }
+      
+      toast.info("Generating PDF... This might take a moment.", { autoClose: 2000 });
+      
       const fullDataset = await fetchAllFilteredDataForExport();
+      
       const doc = new jsPDF('landscape');
-      doc.setFontSize(16); doc.text("Service Tracking Report", 14, 15);
-      doc.setFontSize(10); doc.setTextColor(100);
+      
+      // Document Header
+      doc.setFontSize(16);
+      doc.text("Service Tracking Report", 14, 15);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleDateString()} | Total Records: ${fullDataset.length}`, 14, 22);
+
       const tableColumn = ["App No", "Customer Name", "Phone", "Service", "Status", "Step", "Assigned To", "Total"];
-      const tableRows = fullDataset.map(s => [s.applicationNumber || 'N/A', s.customerName || 'Unknown', s.phone || 'N/A', s.serviceType || 'Unknown', s.status || 'Pending', s.currentStep || 'Submitted', s.assignedTo || 'Unassigned', `Rs ${s.totalCharge || 0}`]);
-      autoTable(doc, { head: [tableColumn], body: tableRows, startY: 28, styles: { fontSize: 8 }, headStyles: { fillColor: [79, 70, 229] }, alternateRowStyles: { fillColor: [249, 250, 251] } });
+      const tableRows = [];
+
+      fullDataset.forEach(s => {
+        const rowData = [
+          s.applicationNumber || 'N/A',
+          s.customerName || 'Unknown',
+          s.phone || 'N/A',
+          s.serviceType || 'Unknown',
+          s.status || 'Pending',
+          s.currentStep || 'Submitted',
+          s.assignedTo || 'Unassigned',
+          `Rs ${s.totalCharge || 0}`
+        ];
+        tableRows.push(rowData);
+      });
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 28,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [79, 70, 229] },
+        alternateRowStyles: { fillColor: [249, 250, 251] }
+      });
+
       doc.save(`Service_Tracking_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.success("PDF exported successfully!");
-    } catch { toast.error("Failed to export PDF. Please check the console for details."); }
+    } catch (error) {
+      console.error("Export Error:", error);
+      toast.error("Failed to export PDF. Please check the console for details.");
+    }
   };
 
-  const handleBackToList = () => navigate('/dashboard/staff/track_service');
+  const handleBackToList = () => {
+    navigate('/dashboard/staff/track_service');
+  };
+
+  const stats = {
+    total: services.length,
+    completed: services.filter(s => s.status === 'Completed').length,
+    inProgress: services.filter(s => s.status === 'In Progress').length,
+    delayed: services.filter(s => s.status === 'Delayed').length,
+    pending: services.filter(s => s.status === 'Pending').length
+  };
 
   const TimelineItem = ({ title, dateTime, completed, current }) => (
     <div className="flex items-center space-x-3">
       <div className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-500' : current ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
       <div className="flex-1">
-        <p className={`text-sm font-medium ${completed || current ? 'text-gray-900' : 'text-gray-500'}`}>{title}</p>
+        <p className={`text-sm font-medium ${completed || current ? 'text-gray-900' : 'text-gray-500'}`}>
+          {title}
+        </p>
         <p className="text-xs text-gray-500">{dateTime}</p>
       </div>
     </div>
   );
 
   const OverviewView = ({ service, onUpdateStatus, priorityConfig }) => {
+    // Dynamic fallback structure to avoid copying a single timestamp across uncompleted steps
     const getDisplaySteps = () => {
-      if (service.steps && service.steps.length > 0) return service.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
+      if (service.steps && service.steps.length > 0) {
+        return service.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
+      }
+      
       const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
       const currentOrder = stepOrderMap[service.currentStep] || 1;
+
       return [
         { id: 1, name: 'Submitted', completed: true, step_order: 1, date: service.createdAt },
         { id: 2, name: 'Initial Review', completed: currentOrder >= 2, step_order: 2, date: currentOrder === 2 ? service.updatedAt : null },
@@ -963,15 +1365,20 @@ const TrackServicePage = () => {
         { id: 4, name: 'Final Approval', completed: currentOrder >= 4, step_order: 4, date: currentOrder >= 4 ? service.updatedAt : null }
       ];
     };
+
     const displaySteps = getDisplaySteps();
 
     return (
       <div className="space-y-6">
         <div className="flex justify-end">
           {service.workSource === "online" ? (
-            <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full border border-green-200">Online Booking</span>
+            <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full border border-green-200">
+              Online Booking
+            </span>
           ) : (
-            <span className="px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full border border-blue-200">Offline Walk-in</span>
+            <span className="px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full border border-blue-200">
+              Offline Walk-in
+            </span>
           )}
         </div>
 
@@ -984,7 +1391,10 @@ const TrackServicePage = () => {
                 <span className="text-indigo-600 font-semibold">{service.progress}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-500" style={{ width: `${service.progress}%` }}></div>
+                <div 
+                  className="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${service.progress}%` }}
+                ></div>
               </div>
               <div className="grid grid-cols-4 gap-2 text-xs text-gray-600">
                 <div className="text-center">Submitted</div>
@@ -997,14 +1407,16 @@ const TrackServicePage = () => {
               <h4 className="font-semibold text-gray-900 mb-3">Update Status</h4>
               <div className="flex flex-wrap gap-2">
                 {Object.keys(statusConfig).map(statusKey => (
-                  <button key={statusKey}
+                  <button
+                    key={statusKey}
                     className={`px-4 py-2 rounded-lg flex items-center text-sm transition-colors ${
                       service.status === statusKey 
                         ? 'bg-gray-600 text-white cursor-not-allowed opacity-75' 
                         : `${statusConfig[statusKey].button} hover:shadow-md transform hover:scale-105`
                     }`}
                     onClick={() => onUpdateStatus(service.id, statusKey)}
-                    disabled={service.status === statusKey}>
+                    disabled={service.status === statusKey}
+                  >
                     {statusKey === 'In Progress' && <FiTrendingUp className="mr-2" />}
                     {statusKey === 'Delayed' && <FiAlertCircle className="mr-2" />}
                     {statusKey === 'Completed' && <FiCheckCircle className="mr-2" />}
@@ -1023,11 +1435,15 @@ const TrackServicePage = () => {
               {displaySteps.length > 0 ? (
                 displaySteps.map((step) => {
                   const dateTimeStr = step.date ? formatTimelineDate(step.date) : 'Pending';
+                  
                   return (
-                    <TimelineItem key={step.id} title={step.name}
+                    <TimelineItem 
+                      key={step.id}
+                      title={step.name}
                       dateTime={step.completed ? dateTimeStr : 'Pending'}
                       completed={step.completed}
-                      current={step.name === service.currentStep} />
+                      current={step.name === service.currentStep}
+                    />
                   );
                 })
               ) : (
@@ -1064,7 +1480,11 @@ const TrackServicePage = () => {
               <div className="border-t border-gray-300 pt-3">
                 <FinancialRow label="Total Amount" amount={service.totalCharge} currency="₹" isTotal={true} />
               </div>
-              <DetailRow label="Payment Status" value={service.paymentStatus} valueClass={paymentStatusConfig[service.paymentStatus]?.color || paymentStatusConfig['default'].color} />
+              <DetailRow 
+                label="Payment Status" 
+                value={service.paymentStatus} 
+                valueClass={paymentStatusConfig[service.paymentStatus]?.color || paymentStatusConfig['default'].color} 
+              />
             </div>
           </div>
         </div>
@@ -1076,26 +1496,43 @@ const TrackServicePage = () => {
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-medium text-gray-700">Service Rating:</span>
                 <div className="flex items-center space-x-1">
-                  {[...Array(5)].map((_, i) => <span key={i} className={i < service.serviceRating ? 'text-yellow-400' : 'text-gray-300'}>★</span>)}
+                  {[...Array(5)].map((_, i) => (
+                    <span key={i} className={i < service.serviceRating ? 'text-yellow-400' : 'text-gray-300'}>
+                      ★
+                    </span>
+                  ))}
                   <span className="ml-2 text-sm text-gray-600">({service.serviceRating}/5)</span>
                 </div>
               </div>
+
               {service.staffRating && (
                 <div className="flex items-center space-x-2">
                   <span className="text-sm font-medium text-gray-700">Staff Rating:</span>
                   <div className="flex items-center space-x-1">
-                    {[...Array(5)].map((_, i) => <span key={i} className={i < service.staffRating ? 'text-yellow-400' : 'text-gray-300'}>★</span>)}
+                    {[...Array(5)].map((_, i) => (
+                      <span key={i} className={i < service.staffRating ? 'text-yellow-400' : 'text-gray-300'}>
+                        ★
+                      </span>
+                    ))}
                     <span className="ml-2 text-sm text-gray-600">({service.staffRating}/5)</span>
                   </div>
                 </div>
               )}
+
               {service.reviewText && (
                 <div className="mt-3">
                   <p className="text-sm font-medium text-gray-700 mb-1">Review:</p>
-                  <p className="text-sm text-gray-600 bg-white p-3 rounded-lg border border-gray-200">"{service.reviewText}"</p>
+                  <p className="text-sm text-gray-600 bg-white p-3 rounded-lg border border-gray-200">
+                    "{service.reviewText}"
+                  </p>
                 </div>
               )}
-              {service.reviewSubmittedAt && <p className="text-xs text-gray-500 mt-2">Submitted on {formatDate(service.reviewSubmittedAt)}</p>}
+
+              {service.reviewSubmittedAt && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Submitted on {formatDate(service.reviewSubmittedAt)}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1104,14 +1541,18 @@ const TrackServicePage = () => {
   };
 
   const KPIStat = ({ title, value, subtitle, trend, icon: Icon, color }) => (
-    <motion.div whileHover={{ y: -2 }}
-      className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group">
+    <motion.div 
+      whileHover={{ y: -2 }}
+      className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group"
+    >
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
           <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
           <div className="flex items-center space-x-2">
-            <span className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{trend > 0 ? '+' : ''}{trend}%</span>
+            <span className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {trend > 0 ? '+' : ''}{trend}%
+            </span>
             <span className="text-xs text-gray-500">{subtitle}</span>
           </div>
         </div>
@@ -1125,12 +1566,17 @@ const TrackServicePage = () => {
   const ServiceCard = ({ service, isSelected, onClick }) => {
     const config = statusConfig[service.status] || statusConfig['Pending'];
     const priority = priorityConfig[service.priority || 'medium'];
+    
     return (
-      <motion.div whileHover={{ y: -2 }}
+      <motion.div
+        whileHover={{ y: -2 }}
         className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-          isSelected ? 'border-indigo-500 bg-indigo-50 shadow-md' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+          isSelected 
+            ? 'border-indigo-500 bg-indigo-50 shadow-md' 
+            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
         }`}
-        onClick={onClick}>
+        onClick={onClick}
+      >
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             <div className="relative flex-shrink-0">
@@ -1140,14 +1586,22 @@ const TrackServicePage = () => {
               <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${config.dot}`}></div>
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-gray-900 text-sm truncate">{service.customerName || 'Unknown'}</h3>
-              <p className="text-xs text-gray-500 truncate">{service.phone || 'N/A'}</p>
+              <h3 className="font-semibold text-gray-900 text-sm truncate" title={service.customerName || 'Unknown'}>
+                {service.customerName || 'Unknown'}
+              </h3>
+              <p className="text-xs text-gray-500 truncate" title={service.phone || 'N/A'}>
+                {service.phone || 'N/A'}
+              </p>
             </div>
           </div>
         </div>
         <div className="mb-2">
-          <p className="text-sm font-medium text-gray-900 truncate">{service.serviceType || 'Unknown'}</p>
-          <p className="text-xs text-gray-600 truncate">{service.subcategoryName || 'N/A'}</p>
+          <p className="text-sm font-medium text-gray-900 truncate" title={service.serviceType || 'Unknown'}>
+            {service.serviceType || 'Unknown'}
+          </p>
+          <p className="text-xs text-gray-600 truncate" title={service.subcategoryName || 'N/A'}>
+            {service.subcategoryName || 'N/A'}
+          </p>
         </div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -1162,14 +1616,22 @@ const TrackServicePage = () => {
           </div>
         </div>
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-          <div className="text-xs text-gray-500 truncate flex-1 min-w-0 mr-2">{service.applicationNumber ? `App: ${service.applicationNumber}` : 'No App Number'}</div>
-          <div className="text-xs font-medium text-indigo-600 whitespace-nowrap flex-shrink-0">{service.averageTime || 'Not set'}</div>
+          <div className="text-xs text-gray-500 truncate flex-1 min-w-0 mr-2">
+            {service.applicationNumber ? `App: ${service.applicationNumber}` : 'No App Number'}
+          </div>
+          <div className="text-xs font-medium text-indigo-600 whitespace-nowrap flex-shrink-0">
+            {service.averageTime || 'Not set'}
+          </div>
         </div>
         <div className="mt-2">
           {service.workSource === "online" ? (
-            <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full border border-green-200">Online</span>
+            <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full border border-green-200">
+              Online
+            </span>
           ) : (
-            <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full border border-blue-200">Offline</span>
+            <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full border border-blue-200">
+              Offline
+            </span>
           )}
         </div>
       </motion.div>
@@ -1181,33 +1643,50 @@ const TrackServicePage = () => {
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900">Quick Actions</h3>
         <div className="flex space-x-1">
-          <button onClick={() => setViewMode('grid')}
+          <button 
+            onClick={() => setViewMode('grid')}
             className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-            title="Spreadsheet View">
+            title="Spreadsheet View"
+          >
             <FiGrid className="h-4 w-4" />
           </button>
-          <button onClick={() => setViewMode('list')}
+          <button 
+            onClick={() => setViewMode('list')}
             className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-            title="Detail View">
+            title="Detail View"
+          >
             <FiList className="h-4 w-4" />
           </button>
         </div>
       </div>
+      
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
-          <FiPlus className="h-5 w-5 mb-1" /><span className="text-xs font-medium">New</span>
+          <FiPlus className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">New</span>
         </button>
-        <button onClick={handleExportExcel} className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
-          <FiDownload className="h-5 w-5 mb-1" /><span className="text-xs font-medium">Excel</span>
+        
+        <button 
+          onClick={handleExportExcel}
+          className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
+          <FiDownload className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">Excel</span>
         </button>
-        <button onClick={handleExportPDF} className="p-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors flex flex-col items-center justify-center">
-          <FiFileText className="h-5 w-5 mb-1" /><span className="text-xs font-medium">PDF</span>
+        
+        <button 
+          onClick={handleExportPDF}
+          className="p-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors flex flex-col items-center justify-center">
+          <FiFileText className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">PDF</span>
         </button>
+        
         <button className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex flex-col items-center justify-center">
-          <FiFilter className="h-5 w-5 mb-1" /><span className="text-xs font-medium">Filters</span>
+          <FiFilter className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">Filters</span>
         </button>
         <button className="p-3 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors flex flex-col items-center justify-center">
-          <FiPrinter className="h-5 w-5 mb-1" /><span className="text-xs font-medium">Print</span>
+          <FiPrinter className="h-5 w-5 mb-1" />
+          <span className="text-xs font-medium">Print</span>
         </button>
       </div>
     </div>
@@ -1219,76 +1698,118 @@ const TrackServicePage = () => {
         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
           <FiFilter className="text-indigo-600" /> Filters
         </h3>
-        <button onClick={handleSaveView}
-          className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-md hover:bg-indigo-100 transition-colors">
+        <button 
+          onClick={handleSaveView}
+          className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-md hover:bg-indigo-100 transition-colors"
+        >
           Save My View
         </button>
       </div>
       <div className="space-y-4">
         <div className="relative">
           <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <input type="text" placeholder="Search name, phone, app no..."
+          <input
+            type="text"
+            placeholder="Search name, phone, app no..."
             className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
-        <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-          className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-indigo-600 py-2 border-b border-gray-100 transition-colors">
+        <button
+          onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+          className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-indigo-600 py-2 border-b border-gray-100 transition-colors"
+        >
           <span>Advanced Filters</span>
           <FiChevronDown className={`transition-transform duration-300 ${showAdvancedFilters ? 'rotate-180' : ''}`} />
         </button>
         <AnimatePresence>
           {showAdvancedFilters && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Data Range</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer" value={timeRange} onChange={(e) => setTimeRange(e.target.value)}>
-                  <option value="week">Last 7 Days</option><option value="month">This Month</option><option value="year">This Year</option><option value="all">All Time</option>
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
+            >
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Data Range</label>
+                <select 
+                  className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" 
+                  value={timeRange} 
+                  onChange={(e) => setTimeRange(e.target.value)}
+                >
+                  <option value="week">Last 7 Days</option>
+                  <option value="month">This Month</option>
+                  <option value="year">This Year</option>
+                  <option value="all">All Time</option>
                 </select>
               </div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
+
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                 <div className="relative">
                   <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input type="date" className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+                  <input type="date" className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
                 </div>
               </div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Service Category</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
+
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Service Category</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
                   <option value="all">All Services</option>
                   {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
                 </select>
               </div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Subcategory</label>
-                <select className={`w-full px-3 py-2.5 text-sm border rounded-xl ${serviceFilter === 'all' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-50 cursor-pointer'}`}
-                  value={subcategoryFilter} onChange={(e) => setSubcategoryFilter(e.target.value)} disabled={serviceFilter === 'all'}>
+
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Subcategory</label>
+                <select 
+                  className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all ${serviceFilter === 'all' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-50 border-gray-200 cursor-pointer text-gray-900'}`} 
+                  value={subcategoryFilter} 
+                  onChange={(e) => setSubcategoryFilter(e.target.value)}
+                  disabled={serviceFilter === 'all'}
+                >
                   <option value="all">{serviceFilter === 'all' ? 'Select a Service first' : 'All Subcategories'}</option>
                   {availableSubcategories.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
                 </select>
               </div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="all">All Statuses</option>
-                  {Object.keys(statusConfig).map(k => <option key={k} value={k}>{k}</option>)}
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Delayed">Delayed</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Resubmit">Resubmit</option>
+                  <option value="Paid">Paid</option>
                 </select>
               </div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
                   <option value="all">Everyone</option>
                   {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
                 </select>
               </div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl cursor-pointer" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
-                  <option value="all">Any Date</option><option value="upcoming">Upcoming Expiry</option><option value="overdue">Overdue</option>
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
+                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
+                  <option value="all">Any Date</option>
+                  <option value="upcoming">Upcoming Expiry</option>
+                  <option value="overdue">Overdue</option>
                 </select>
               </div>
-              <div><label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
+              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
                 <div className="relative">
                   <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12" />
+                  <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
                 </div>
               </div>
               <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-3 lg:col-span-4' : ''}>
-                <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-xl transition-all">
+                <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
                   Clear All Filters
                 </button>
               </div>
@@ -1302,7 +1823,9 @@ const TrackServicePage = () => {
   const renderCardList = () => (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Services <span className="text-gray-500 font-normal">({totalRecords})</span></h3>
+        <h3 className="font-semibold text-gray-900">
+          Services <span className="text-gray-500 font-normal">({totalRecords})</span>
+        </h3>
         <div className="flex items-center space-x-2">
           <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
           <span className="text-xs text-gray-500">Active</span>
@@ -1310,9 +1833,12 @@ const TrackServicePage = () => {
       </div>
       <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
         {services.map(service => (
-          <ServiceCard key={service.id} service={service}
+          <ServiceCard
+            key={service.id}
+            service={service}
             isSelected={selectedService?.id === service.id}
-            onClick={() => handleServiceSelect(service)} />
+            onClick={() => handleServiceSelect(service)}
+          />
         ))}
         {services.length === 0 && (
           <div className="text-center py-8 text-gray-500">
@@ -1324,11 +1850,9 @@ const TrackServicePage = () => {
       </div>
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
-          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-            className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-50">Previous</button>
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Previous</button>
           <div className="text-xs text-gray-500 font-medium">Page {currentPage} of {totalPages}</div>
-          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-            className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-50">Next</button>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Next</button>
         </div>
       )}
     </div>
@@ -1355,6 +1879,7 @@ const TrackServicePage = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50">
+        
         <header className="bg-white border-b border-gray-200">
           <div className="max-w-[1600px] mx-auto px-6 py-4">
             <div className="flex items-center justify-between">
@@ -1369,14 +1894,19 @@ const TrackServicePage = () => {
               </div>
               <div className="flex items-center space-x-3">
                 {id && (
-                  <button onClick={handleBackToList}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-200">
+                  <button
+                    onClick={handleBackToList}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-200"
+                  >
                     <FiArrowLeft className="h-4 w-4" />
                     <span>Back to List</span>
                   </button>
                 )}
-                <button className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
-                  onClick={() => window.location.reload()}>
+                
+                <button
+                  className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
+                  onClick={() => window.location.reload()}
+                >
                   <FiRefreshCw className="h-4 w-4" />
                   <span>Refresh</span>
                 </button>
@@ -1396,8 +1926,12 @@ const TrackServicePage = () => {
           {viewMode === 'grid' ? (
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">{renderQuickActionsPanel()}</div>
-                <div className="lg:col-span-2">{renderFiltersPanel()}</div>
+                <div className="lg:col-span-1">
+                  {renderQuickActionsPanel()}
+                </div>
+                <div className="lg:col-span-2">
+                  {renderFiltersPanel()}
+                </div>
               </div>
               
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
@@ -1421,95 +1955,163 @@ const TrackServicePage = () => {
                               <div className="flex items-center gap-2">
                                 <FiCalendar className="h-4 w-4 text-indigo-500" />
                                 {date === 'Unknown Date' ? date : formatDate(date)}
-                                <span className="bg-gray-200 text-gray-600 py-0.5 px-2 rounded-full text-[10px] ml-2">{dateServices.length} items</span>
+                                <span className="bg-gray-200 text-gray-600 py-0.5 px-2 rounded-full text-[10px] ml-2">
+                                  {dateServices.length} items
+                                </span>
                               </div>
                             </td>
                            </tr>
                           
                           {dateServices.map(service => (
-                            <tr key={service.id}
-                              className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id && showDetailModal ? 'bg-indigo-50/20' : ''}`}>
-                              <td className="px-4 py-3">
-                                <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
-                                <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                  <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
-                                </div>
-                               </td>
-                              <td className="px-4 py-3">
-                                <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>{service.serviceType}</div>
-                                <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>{service.subcategoryName || '-'}</div>
-                               </td>
-                              <td className="px-4 py-3">
-                                <input type="text" defaultValue={service.applicationNumber || ''}
-                                  onBlur={(e) => { if (e.target.value !== service.applicationNumber) handleInlineTrackingUpdate(service, { applicationNumber: e.target.value }); }}
-                                  className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
-                                  placeholder="App No..." />
-                               </td>
-                              <td className="px-4 py-3 space-y-1.5">
-                                <select value={service.status} onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
-                                  className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${statusConfig[service.status]?.bg} ${statusConfig[service.status]?.color} ${statusConfig[service.status]?.border}`}>
-                                  {Object.keys(statusConfig).map(statusKey => <option key={statusKey} value={statusKey}>{statusKey}</option>)}
-                                </select>
-                                <select value={service.currentStep || 'Submitted'}
-                                  onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
-                                  className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none cursor-pointer">
-                                  {stepOptions.map(step => <option key={step.value} value={step.value}>{step.label}</option>)}
-                                </select>
-                               </td>
-                              <td className="px-4 py-3 space-y-1.5">
-                                <select value={service.assignedToId || ''}
-                                  onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
-                                  className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none cursor-pointer">
-                                  <option value="">Unassigned Staff</option>
-                                  {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
-                                </select>
-                                <input type="date" value={formatDateForInput(service.rawEstimatedDelivery)}
-                                  onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
-                                  className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none cursor-pointer" />
-                               </td>
-                              <td className="px-4 py-3 align-top">
-                                <div className="flex items-center justify-end gap-2 mt-1">
-                                  <button onClick={(e) => { e.stopPropagation(); handleNotifyCustomer(service); }}
-                                    title="Send WhatsApp Notification"
-                                    className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-green-600 hover:bg-green-50 hover:border-green-200">
-                                    <FiMessageSquare className="h-4 w-4" />
-                                  </button>
-                                  <button onClick={() => openDetailModal(service)}
-                                    title="Open Details"
-                                    className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200">
-                                    <FiMaximize2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                               </td>
-                             </tr>
+                            <React.Fragment key={service.id}>
+                              <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
+                                <td className="px-4 py-3">
+                                  <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
+                                  <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                    <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
+                                  </div>
+                                 </td>
+                                <td className="px-4 py-3">
+                                  <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
+                                    {service.serviceType}
+                                  </div>
+                                  <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
+                                    {service.subcategoryName || '-'}
+                                  </div>
+                                 </td>
+                                <td className="px-4 py-3">
+                                  <input 
+                                    type="text"
+                                    defaultValue={service.applicationNumber || ''}
+                                    onBlur={(e) => {
+                                        if(e.target.value !== service.applicationNumber) {
+                                            handleInlineTrackingUpdate(service, { applicationNumber: e.target.value });
+                                        }
+                                    }}
+                                    className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
+                                    placeholder="App No..."
+                                  />
+                                 </td>
+                                <td className="px-4 py-3 space-y-1.5">
+                                  <select 
+                                    value={service.status}
+                                    onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
+                                    className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
+                                        statusConfig[service.status]?.bg || 'bg-gray-100'
+                                    } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
+                                  >
+                                    {Object.keys(statusConfig).map(statusKey => (
+                                        <option key={statusKey} value={statusKey}>{statusKey}</option>
+                                    ))}
+                                  </select>
+                                  
+                                  <select
+                                    value={service.currentStep || 'Submitted'}
+                                    onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
+                                    className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                  >
+                                    {stepOptions.map(step => (
+                                        <option key={step.value} value={step.value}>{step.label}</option>
+                                    ))}
+                                  </select>
+                                 </td>
+                                <td className="px-4 py-3 space-y-1.5">
+                                  <select
+                                    value={service.assignedToId || ''}
+                                    onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
+                                    className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                  >
+                                    <option value="">Unassigned Staff</option>
+                                    {staffList.map(staff => (
+                                        <option key={staff.id} value={staff.id}>{staff.name}</option>
+                                    ))}
+                                  </select>
+                                  
+                                  <input 
+                                    type="date"
+                                    value={formatDateForInput(service.rawEstimatedDelivery)}
+                                    onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
+                                    className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
+                                  />
+                                 </td>
+                                <td className="px-4 py-3 align-top">
+                                  <div className="flex items-center justify-end gap-2 mt-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleNotifyCustomer(service);
+                                      }}
+                                      title="Send WhatsApp Notification"
+                                      className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-green-600 hover:bg-green-50 hover:border-green-200"
+                                    >
+                                      <FiMessageSquare className="h-4 w-4" />
+                                    </button>
+                                    
+                                    <button 
+                                      onClick={() => {
+                                          if (selectedService?.id === service.id) {
+                                              setSelectedService(null);
+                                          } else {
+                                              handleServiceSelect(service, true);
+                                          }
+                                      }} 
+                                      title={selectedService?.id === service.id ? "Collapse Details" : "Expand Details"}
+                                      className={`p-1.5 rounded-lg transition-colors border shadow-sm ${
+                                        selectedService?.id === service.id 
+                                          ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
+                                          : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
+                                      }`}
+                                    >
+                                      <FiChevronDown className={`h-4 w-4 transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
+                                    </button>
+                                  </div>
+                                 </td>
+                               </tr>
+                              
+                              {selectedService?.id === service.id && (
+                                 <tr>
+                                  <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
+                                    <div className="p-6 max-h-[600px] overflow-y-auto">
+                                        {renderDetailPane()}
+                                    </div>
+                                   </td>
+                                 </tr>
+                              )}
+                            </React.Fragment>
                           ))}
                         </React.Fragment>
                       ))}
                       
                       {services.length === 0 && (
-                        <tr>
+                         <tr>
                           <td colSpan="6" className="text-center py-16 text-gray-500">
                             <FiSearch className="mx-auto h-10 w-10 mb-3 opacity-30" />
                             <p className="text-base font-medium text-gray-900">No services found</p>
                             <p className="text-sm mt-1">Try adjusting your filters or search terms.</p>
-                          </td>
-                        </tr>
+                           </td>
+                         </tr>
                       )}
                     </tbody>
-                  </table>
+                   </table>
                 </div>
 
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    >
                       Previous Page
                     </button>
-                    <div className="text-sm text-gray-600 font-medium bg-white px-4 py-1.5 rounded-lg border border-gray-200">
+                    <div className="text-sm text-gray-600 font-medium bg-white px-4 py-1.5 rounded-lg border border-gray-200 shadow-sm">
                       Page {currentPage} of {totalPages}
                     </div>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    >
                       Next Page
                     </button>
                   </div>
@@ -1525,138 +2127,29 @@ const TrackServicePage = () => {
                   {renderCardList()}
                 </div>
               )}
+              
               <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
                 {renderDetailPane()}
               </div>
             </div>
           )}
+
         </div>
-
-        {/* ============================================================
-            DETAIL MODAL OVERLAY with edge-arrow navigation
-            ============================================================ */}
-        <AnimatePresence>
-          {showDetailModal && selectedService && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-16 sm:px-24"
-              onClick={() => setShowDetailModal(false)}>
-
-              {/* ============ FLOATING PREV ARROW (left edge) ============ */}
-              <button
-                onClick={(e) => { e.stopPropagation(); goToPrev(); }}
-                disabled={!hasPrev}
-                title="Previous application (←)"
-                className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-10 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white shadow-2xl border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-110 transition-all duration-150 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200 disabled:hover:scale-100">
-                <FiChevronLeft className="h-6 w-6" />
-              </button>
-
-              {/* ============ FLOATING NEXT ARROW (right edge) ============ */}
-              <button
-                onClick={(e) => { e.stopPropagation(); goToNext(); }}
-                disabled={!hasNext}
-                title="Next application (→)"
-                className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-10 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white shadow-2xl border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-110 transition-all duration-150 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200 disabled:hover:scale-100">
-                <FiChevronRight className="h-6 w-6" />
-              </button>
-
-              {/* ============ COUNTER BADGE (bottom center) ============ */}
-              {services.length > 0 && (
-                <div
-                  onClick={(e) => e.stopPropagation()}
-                  className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-white/95 backdrop-blur rounded-full shadow-lg border border-gray-200 text-xs font-semibold text-gray-700 tabular-nums">
-                  {currentIndex + 1} <span className="text-gray-400 font-normal">of</span> {services.length}
-                </div>
-              )}
-
-              {/* ============ MODAL PANEL ============ */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.97, y: 12 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97, y: 12 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="bg-white rounded-2xl w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden shadow-2xl"
-                onClick={(e) => e.stopPropagation()}>
-
-                {/* ============ MODAL HEADER (pinned) ============ */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
-                  <div className="relative flex-shrink-0">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-sm">
-                      <span className="text-white text-xs font-bold">
-                        {(selectedService.customerName || 'U').charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${statusConfig[selectedService.status]?.dot}`}></span>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h2 className="text-sm font-bold text-gray-900 truncate">{selectedService.customerName}</h2>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${statusConfig[selectedService.status]?.bg} ${statusConfig[selectedService.status]?.color} border ${statusConfig[selectedService.status]?.border}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusConfig[selectedService.status]?.dot}`}></span>
-                        {selectedService.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5">
-                      <span className="flex items-center gap-1"><FiPhone className="h-2.5 w-2.5" />{selectedService.phone}</span>
-                      <button
-                        onClick={() => { navigator.clipboard.writeText(selectedService.applicationNumber || ''); toast.success('App number copied'); }}
-                        className="flex items-center gap-1 hover:text-indigo-600 font-mono transition-colors"
-                        title="Click to copy app number">
-                        {selectedService.applicationNumber || 'N/A'}
-                        <FiCopy className="h-2.5 w-2.5 opacity-50" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={() => handleNotifyCustomer(selectedService)}
-                      title="Notify customer"
-                      className="p-1.5 rounded-md text-gray-500 hover:text-green-600 hover:bg-green-50 border border-gray-200 transition-colors">
-                      <FiMessageSquare className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                      title="Open workspace"
-                      className="hidden sm:flex p-1.5 rounded-md text-gray-500 hover:text-purple-600 hover:bg-purple-50 border border-gray-200 transition-colors">
-                      <FiGrid className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setShowDetailModal(false)}
-                      title="Close (Esc)"
-                      className="ml-1 p-1.5 rounded-md text-gray-500 hover:text-rose-600 hover:bg-rose-50 border border-gray-200 transition-colors">
-                      <FiX className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* ============ MODAL BODY (scrollable) ============ */}
-                <div className="flex-1 overflow-y-auto bg-gray-50">
-                  <div className="p-5">
-                    {renderDetailPane()}
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+        
         <style>{`
-          .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-          .scrollbar-hide::-webkit-scrollbar { display: none; }
+          .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+          .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+          }
         `}</style>
       </div>
     </ErrorBoundary>
   );
 };
 
-/* ============================================================
-   SMALL REUSABLE COMPONENTS
-   ============================================================ */
 const StatItem = ({ label, value }) => (
   <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
     <p className="text-sm font-medium text-gray-600 mb-1">{label}</p>
@@ -1666,7 +2159,9 @@ const StatItem = ({ label, value }) => (
 
 const FinancialRow = ({ label, amount, currency, isTotal = false }) => (
   <div className="flex justify-between items-center">
-    <span className={`text-sm ${isTotal ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{label}</span>
+    <span className={`text-sm ${isTotal ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
+      {label}
+    </span>
     <span className={`font-mono ${isTotal ? 'text-lg font-bold text-gray-900' : 'text-gray-900'}`}>
       {currency}{amount?.toFixed(2) || '0.00'}
     </span>
@@ -1683,18 +2178,31 @@ const DetailRow = ({ label, value, valueClass = "" }) => (
 const FormField = ({ label, name, value, onChange, type = 'text', placeholder, maxLength }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-    <input type={type} name={name} value={value} onChange={onChange} placeholder={placeholder} maxLength={maxLength}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+    <input
+      type={type}
+      name={name}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+    />
   </div>
 );
 
 const FormSelect = ({ label, name, value, onChange, options, placeholder }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-    <select name={name} value={value} onChange={onChange}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+    <select
+      name={name}
+      value={value}
+      onChange={onChange}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+    >
       <option value="">{placeholder}</option>
-      {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      {options.map(option => (
+        <option key={option.value} value={option.value}>{option.label}</option>
+      ))}
     </select>
   </div>
 );
@@ -1702,8 +2210,14 @@ const FormSelect = ({ label, name, value, onChange, options, placeholder }) => (
 const FormTextarea = ({ label, name, value, onChange, placeholder, rows = 4 }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-    <textarea name={name} value={value} onChange={onChange} placeholder={placeholder} rows={rows}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+    <textarea
+      name={name}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+    />
   </div>
 );
 
@@ -1726,23 +2240,90 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
     <h3 className="font-semibold text-gray-900">Update Tracking Information</h3>
     <form onSubmit={onSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <FormField label="Application Number" name="applicationNumber" value={formData.applicationNumber} onChange={onFormChange} placeholder="Enter application number (optional)" />
-        <FormSelect label="Current Step" name="currentStep" value={formData.currentStep} onChange={onFormChange} options={stepOptions} placeholder="Select current step" />
-        <FormField label="Estimated Delivery" name="estimatedDelivery" type="date" value={formData.estimatedDelivery} onChange={onFormChange} />
-        <FormSelect label="Priority" name="priority" value={formData.priority} onChange={onFormChange} options={priorityOptions} placeholder="Select priority" />
+        <FormField 
+          label="Application Number"
+          name="applicationNumber"
+          value={formData.applicationNumber}
+          onChange={onFormChange}
+          placeholder="Enter application number (optional)"
+        />
+        <FormSelect
+          label="Current Step"
+          name="currentStep"
+          value={formData.currentStep}
+          onChange={onFormChange}
+          options={stepOptions}
+          placeholder="Select current step"
+        />
+        <FormField 
+          label="Estimated Delivery"
+          name="estimatedDelivery"
+          type="date"
+          value={formData.estimatedDelivery}
+          onChange={onFormChange}
+        />
+        <FormSelect
+          label="Priority"
+          name="priority"
+          value={formData.priority}
+          onChange={onFormChange}
+          options={priorityOptions}
+          placeholder="Select priority"
+        />
       </div>
       <div className="space-y-4">
-        <FormField label="Average Time" name="averageTime" value={formData.averageTime} onChange={onFormChange} placeholder="e.g., 7 days" />
-        <FormSelect label="Assign To" name="assignedTo" value={formData.assignedTo} onChange={onFormChange} options={staffList.map(staff => ({ value: staff.id, label: staff.name }))} placeholder="Select staff member" />
-        <FormField label="Aadhaar Number" name="aadhaar" value={formData.aadhaar} onChange={onFormChange} placeholder="Enter 12-digit Aadhaar number" maxLength="12" />
-        <FormField label="Email Address" name="email" type="email" value={formData.email} onChange={onFormChange} placeholder="Enter customer email address" />
-        <FormTextarea label="Customer Remarks (Sent via WhatsApp)" name="notes" value={formData.notes} onChange={onFormChange} placeholder="Enter remarks visible to the customer..." rows={3} />
+        <FormField 
+          label="Average Time"
+          name="averageTime"
+          value={formData.averageTime}
+          onChange={onFormChange}
+          placeholder="e.g., 7 days"
+        />
+        <FormSelect
+          label="Assign To"
+          name="assignedTo"
+          value={formData.assignedTo}
+          onChange={onFormChange}
+          options={staffList.map(staff => ({ value: staff.id, label: staff.name }))}
+          placeholder="Select staff member"
+        />
+        <FormField 
+          label="Aadhaar Number"
+          name="aadhaar"
+          value={formData.aadhaar}
+          onChange={onFormChange}
+          placeholder="Enter 12-digit Aadhaar number"
+          maxLength="12"
+        />
+        <FormField 
+          label="Email Address"
+          name="email"
+          type="email"
+          value={formData.email}
+          onChange={onFormChange}
+          placeholder="Enter customer email address"
+        />
+        <FormTextarea
+          label="Customer Remarks (Sent via WhatsApp)"
+          name="notes"
+          value={formData.notes}
+          onChange={onFormChange}
+          placeholder="Enter remarks visible to the customer..."
+          rows={3}
+        />
       </div>
       <div className="md:col-span-2 flex justify-end space-x-3 pt-4 border-t border-gray-200">
-        <button type="button" className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors" onClick={onCancel}>
+        <button
+          type="button"
+          className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          onClick={onCancel}
+        >
           Cancel
         </button>
-        <button type="submit" className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+        <button
+          type="submit"
+          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
           Save Changes
         </button>
       </div>
@@ -1751,8 +2332,9 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
 );
 
 /* ============================================================
-   INLINE REMARK EDITOR
+   INLINE REMARK EDITOR — used inside Documents table
    ============================================================ */
+
 const DocumentRemarkEditor = ({ doc, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(doc.remark || '');
@@ -1761,7 +2343,10 @@ const DocumentRemarkEditor = ({ doc, onSave }) => {
   useEffect(() => { setValue(doc.remark || ''); }, [doc.remark]);
   useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
 
-  const commit = () => { if (value.trim() !== (doc.remark || '').trim()) onSave(value.trim()); setEditing(false); };
+  const commit = () => {
+    if (value.trim() !== (doc.remark || '').trim()) onSave(value.trim());
+    setEditing(false);
+  };
   const cancel = () => { setValue(doc.remark || ''); setEditing(false); };
 
   if (editing) {
@@ -1769,7 +2354,10 @@ const DocumentRemarkEditor = ({ doc, onSave }) => {
       <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
         <div className="relative flex-1 min-w-0">
           <FiMessageSquare className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-amber-500 pointer-events-none" />
-          <input ref={inputRef} type="text" value={value}
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); commit(); }
@@ -1777,25 +2365,32 @@ const DocumentRemarkEditor = ({ doc, onSave }) => {
             }}
             onBlur={commit}
             placeholder="Remark for customer (e.g. Password: 1234)"
-            className="w-full pl-7 pr-2 py-1 text-xs border border-amber-300 bg-amber-50/60 rounded-md focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all" />
+            className="w-full pl-7 pr-2 py-1 text-xs border border-amber-300 bg-amber-50/60 rounded-md focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all"
+          />
         </div>
       </div>
     );
   }
+
   if (doc.remark) {
     return (
-      <button onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      <button
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
         className="mt-1.5 group/remark inline-flex items-center gap-1.5 max-w-full text-left text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-0.5 hover:bg-amber-100 transition-colors"
-        title="Click to edit remark">
+        title="Click to edit remark"
+      >
         <FiMessageSquare className="h-3 w-3 text-amber-600 flex-shrink-0" />
         <span className="truncate">{doc.remark}</span>
         <FiEdit className="h-2.5 w-2.5 opacity-0 group-hover/remark:opacity-60 flex-shrink-0" />
       </button>
     );
   }
+
   return (
-    <button onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-      className="mt-1.5 text-[11px] text-gray-400 hover:text-indigo-600 flex items-center gap-1 transition-colors">
+    <button
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      className="mt-1.5 text-[11px] text-gray-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+    >
       <FiPlus className="h-2.5 w-2.5" />
       Add customer remark
     </button>
@@ -1805,6 +2400,7 @@ const DocumentRemarkEditor = ({ doc, onSave }) => {
 /* ============================================================
    ENHANCED DOCUMENTS VIEW
    ============================================================ */
+
 const EnhancedDocumentsView = ({ 
   documents = [], documentsLoading, uploadingDocument,
   onUpload, onToggleVisibility, onDelete, onUpdateRemark
@@ -1818,12 +2414,27 @@ const EnhancedDocumentsView = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!file || !label.trim()) { toast.error('Choose a file and enter a label first'); return; }
+    if (!file || !label.trim()) {
+      toast.error('Choose a file and enter a label first');
+      return;
+    }
     onUpload(file, label.trim(), visibleToCustomer, remark);
-    setFile(null); setLabel(''); setVisibleToCustomer(false); setRemark('');
+    setFile(null);
+    setLabel('');
+    setVisibleToCustomer(false);
+    setRemark('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
-  const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFile(e.dataTransfer.files[0]);
+    }
+  };
+
   const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); };
   const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); };
 
@@ -1832,6 +2443,7 @@ const EnhancedDocumentsView = ({
     const kb = bytes / 1024;
     return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
   };
+
   const getFileIcon = (doc) => {
     const name = (doc.file_name || doc.label || '').toLowerCase();
     if (name.endsWith('.pdf')) return { Icon: FiFileText, color: 'text-rose-600', bg: 'bg-rose-50' };
@@ -1842,6 +2454,7 @@ const EnhancedDocumentsView = ({
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -1850,18 +2463,25 @@ const EnhancedDocumentsView = ({
             </div>
             <h3 className="text-lg font-semibold text-gray-900">Customer Documents</h3>
           </div>
-          <p className="text-sm text-gray-500 ml-11">Upload and manage documents. Files marked visible and their remarks appear on the customer's public tracking page.</p>
+          <p className="text-sm text-gray-500 ml-11">
+            Upload and manage documents. Files marked visible and their remarks appear on the customer's public tracking page.
+          </p>
         </div>
         <div className="flex items-center gap-2 ml-11 sm:ml-0">
           <div className="px-3 py-1.5 bg-gray-100 rounded-lg">
-            <span className="text-xs font-medium text-gray-600">{documents.length} {documents.length === 1 ? 'file' : 'files'}</span>
+            <span className="text-xs font-medium text-gray-600">
+              {documents.length} {documents.length === 1 ? 'file' : 'files'}
+            </span>
           </div>
           <div className="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
-            <span className="text-xs font-medium text-emerald-700">{documents.filter(d => d.visible_to_customer).length} visible</span>
+            <span className="text-xs font-medium text-emerald-700">
+              {documents.filter(d => d.visible_to_customer).length} visible
+            </span>
           </div>
         </div>
       </div>
 
+      {/* Upload Form */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
           <FiUpload className="h-4 w-4 text-indigo-600" />
@@ -1869,22 +2489,45 @@ const EnhancedDocumentsView = ({
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Label */}
             <div className="lg:col-span-4">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Document Label <span className="text-rose-500">*</span></label>
-              <input type="text" placeholder="e.g. Income Certificate" value={label} onChange={(e) => setLabel(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 transition-all" />
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Document Label <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Income Certificate"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              />
             </div>
+
+            {/* File Drop Zone */}
             <div className="lg:col-span-5">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">File <span className="text-rose-500">*</span></label>
-              <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                File <span className="text-rose-500">*</span>
+              </label>
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={`relative flex items-center gap-3 px-3 py-2.5 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
-                  dragActive ? 'border-indigo-500 bg-indigo-50'
-                  : file ? 'border-emerald-400 bg-emerald-50/40'
-                  : 'border-gray-300 bg-gray-50 hover:border-indigo-400'
-                }`}>
-                <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                  onChange={(e) => setFile(e.target.files[0] || null)} className="hidden" />
+                  dragActive
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : file
+                    ? 'border-emerald-400 bg-emerald-50/40'
+                    : 'border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50/40'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  onChange={(e) => setFile(e.target.files[0] || null)}
+                  className="hidden"
+                />
                 {file ? (
                   <>
                     <FiFileText className="h-4 w-4 text-emerald-600 flex-shrink-0" />
@@ -1894,46 +2537,74 @@ const EnhancedDocumentsView = ({
                 ) : (
                   <>
                     <FiUpload className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <span className="text-sm text-gray-500 truncate flex-1">{dragActive ? 'Drop file here' : 'Click or drag file to upload'}</span>
+                    <span className="text-sm text-gray-500 truncate flex-1">
+                      {dragActive ? 'Drop file here' : 'Click or drag file to upload'}
+                    </span>
                     <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">PDF, DOC, IMG</span>
                   </>
                 )}
               </div>
             </div>
+
+            {/* Visibility + Button */}
             <div className="lg:col-span-3 flex flex-col">
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Visibility</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Visibility
+              </label>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setVisibleToCustomer(!visibleToCustomer)}
+                <button
+                  type="button"
+                  onClick={() => setVisibleToCustomer(!visibleToCustomer)}
                   className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium rounded-lg border transition-all ${
-                    visibleToCustomer ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
-                  }`}>
+                    visibleToCustomer
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                      : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                  }`}
+                  title={visibleToCustomer ? 'Visible to customer' : 'Hidden from customer'}
+                >
                   {visibleToCustomer ? <FiEye className="h-3.5 w-3.5" /> : <FiEyeOff className="h-3.5 w-3.5" />}
                   {visibleToCustomer ? 'Visible' : 'Hidden'}
                 </button>
-                <button type="submit" disabled={uploadingDocument || !file || !label.trim()}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
+                <button
+                  type="submit"
+                  disabled={uploadingDocument || !file || !label.trim()}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                >
                   {uploadingDocument ? (
-                    <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Uploading</>
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Uploading
+                    </>
                   ) : (
-                    <><FiUpload className="h-3.5 w-3.5" />Upload</>
+                    <>
+                      <FiUpload className="h-3.5 w-3.5" />
+                      Upload
+                    </>
                   )}
                 </button>
               </div>
             </div>
           </div>
+
+          {/* Remark row — full width, amber-tinted to signal customer-facing */}
           <div>
             <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1.5">
               <FiMessageSquare className="h-3.5 w-3.5 text-amber-500" />
               Customer Remark
               <span className="text-gray-400 font-normal">— optional, shown to the customer alongside the document</span>
             </label>
-            <input type="text" value={remark} onChange={(e) => setRemark(e.target.value)}
+            <input
+              type="text"
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
               placeholder="e.g. Password: 1234 — visible on the customer's tracking page"
-              className="w-full px-3 py-2 text-sm border border-amber-200 bg-amber-50/40 rounded-lg focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all placeholder:text-amber-700/40" />
+              className="w-full px-3 py-2 text-sm border border-amber-200 bg-amber-50/40 rounded-lg focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all placeholder:text-amber-700/40"
+            />
           </div>
         </form>
       </div>
 
+      {/* Documents List */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1941,7 +2612,9 @@ const EnhancedDocumentsView = ({
             <h4 className="text-sm font-semibold text-gray-900">Uploaded Documents</h4>
           </div>
           {documents.length > 0 && (
-            <span className="text-xs text-gray-500">{documents.length} {documents.length === 1 ? 'document' : 'documents'}</span>
+            <span className="text-xs text-gray-500">
+              {documents.length} {documents.length === 1 ? 'document' : 'documents'}
+            </span>
           )}
         </div>
 
@@ -1982,36 +2655,78 @@ const EnhancedDocumentsView = ({
                             <Icon className={`h-4 w-4 ${color}`} />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 truncate" title={doc.label}>{doc.label}</p>
-                            <p className="text-xs text-gray-500 truncate" title={doc.file_name}>{doc.file_name || 'document'}</p>
-                            <DocumentRemarkEditor doc={doc} onSave={(text) => onUpdateRemark(doc.id, text)} />
+                            <p className="text-sm font-medium text-gray-900 truncate" title={doc.label}>
+                              {doc.label}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate" title={doc.file_name}>
+                              {doc.file_name || 'document'}
+                            </p>
+                            <DocumentRemarkEditor
+                              doc={doc}
+                              onSave={(text) => onUpdateRemark(doc.id, text)}
+                            />
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4"><span className="text-sm text-gray-700">{doc.uploaded_by_name || 'Staff'}</span></td>
-                      <td className="px-5 py-4"><span className="text-sm text-gray-600">{formatDate(doc.created_at)}</span></td>
-                      <td className="px-5 py-4 text-center"><span className="text-xs text-gray-500 font-mono">{formatBytes(doc.file_size) || '—'}</span></td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm text-gray-700">
+                          {doc.uploaded_by_name || 'Staff'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm text-gray-600">
+                          {formatDate(doc.created_at)}
+                        </span>
+                      </td>
                       <td className="px-5 py-4 text-center">
-                        <button onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
+                        <span className="text-xs text-gray-500 font-mono">
+                          {formatBytes(doc.file_size) || '—'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <button
+                          onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
                             doc.visible_to_customer
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                               : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
-                          }`}>
-                          {doc.visible_to_customer ? (<><FiEye className="h-3 w-3" />Visible</>) : (<><FiEyeOff className="h-3 w-3" />Hidden</>)}
+                          }`}
+                          title={doc.visible_to_customer ? 'Click to hide from customer' : 'Click to make visible to customer'}
+                        >
+                          {doc.visible_to_customer ? (
+                            <>
+                              <FiEye className="h-3 w-3" />
+                              Visible
+                            </>
+                          ) : (
+                            <>
+                              <FiEyeOff className="h-3 w-3" />
+                              Hidden
+                            </>
+                          )}
                         </button>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center justify-end gap-1">
-                          <a href={doc.file_url || doc.url || '#'} target="_blank" rel="noopener noreferrer"
+                          <a
+                            href={doc.file_url || doc.url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                             title="View document"
-                            onClick={(e) => { if (!doc.file_url && !doc.url) e.preventDefault(); }}>
+                            onClick={(e) => {
+                              if (!doc.file_url && !doc.url) e.preventDefault();
+                            }}
+                          >
                             <FiEye className="h-4 w-4" />
                           </a>
-                          <button onClick={() => { if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id); }}
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id);
+                            }}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Delete document">
+                            title="Delete document"
+                          >
                             <FiTrash2 className="h-4 w-4" />
                           </button>
                         </div>
@@ -2033,35 +2748,57 @@ const HistoryView = ({ activityHistory, activityLoading }) => {
     return (
       <div className="space-y-6">
         <h3 className="font-semibold text-gray-900">Activity History</h3>
+
         <div className="flex items-center justify-center py-10">
           <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="ml-3 text-sm text-gray-500">Loading activity history...</span>
+          <span className="ml-3 text-sm text-gray-500">
+            Loading activity history...
+          </span>
         </div>
       </div>
     );
   }
+
   if (!activityHistory || activityHistory.length === 0) {
     return (
       <div className="space-y-6">
         <h3 className="font-semibold text-gray-900">Activity History</h3>
+
         <div className="text-center py-10 bg-gray-50 rounded-lg border border-gray-200">
           <FiClock className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-          <p className="text-sm text-gray-500">No activity history available</p>
+          <p className="text-sm text-gray-500">
+            No activity history available
+          </p>
         </div>
       </div>
     );
   }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900">Activity History</h3>
-        <span className="text-xs text-gray-500">{activityHistory.length} {activityHistory.length === 1 ? 'event' : 'events'}</span>
+        <h3 className="font-semibold text-gray-900">
+          Activity History
+        </h3>
+
+        <span className="text-xs text-gray-500">
+          {activityHistory.length} {activityHistory.length === 1 ? 'event' : 'events'}
+        </span>
       </div>
+
       <div className="space-y-3">
         {activityHistory.map((activity) => (
-          <ActivityItem key={activity.id} action={activity.action} description={activity.description}
-            time={activity.created_at ? formatTimelineDate(activity.created_at) : 'Unknown time'}
-            user={activity.performed_by_name || 'System'} />
+          <ActivityItem
+            key={activity.id}
+            action={activity.action}
+            description={activity.description}
+            time={
+              activity.created_at
+                ? formatTimelineDate(activity.created_at)
+                : 'Unknown time'
+            }
+            user={activity.performed_by_name || 'System'}
+          />
         ))}
       </div>
     </div>
