@@ -11,7 +11,8 @@ import {
   FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
   FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave,
   FiChevronRight, FiLayers, FiActivity, FiZap, FiSliders, FiExternalLink,
-  FiStar, FiUsers, FiInbox, FiColumns, FiMoreVertical, FiChevronsDown
+  FiStar, FiUsers, FiInbox, FiColumns, FiMoreVertical, FiChevronsDown,
+  FiMove
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -117,6 +118,10 @@ const TrackServicePage = () => {
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
 
+  // Drag state
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
+
   const getSavedFilters = () => {
     try {
       const saved = localStorage.getItem('staffServiceSavedView');
@@ -137,9 +142,6 @@ const TrackServicePage = () => {
   const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory || 'all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [timeRange, setTimeRange] = useState('month');
-
-  // Sort for card view
-  const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => { setSubcategoryFilter('all'); }, [serviceFilter]);
 
@@ -187,13 +189,13 @@ const TrackServicePage = () => {
     notes: '', assignedTo: '', aadhaar: '', email: '', priority: 'medium'
   });
   
-  // 'cards' = card grid (default), 'table' = spreadsheet
-  const [viewMode, setViewMode] = useState('cards');
+  // 'board' = draggable Kanban (default), 'table' = spreadsheet
+  const [viewMode, setViewMode] = useState('board');
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const limit = 200;
+  const limit = 500;
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [debouncedAadhaar, setDebouncedAadhaar] = useState('');
@@ -214,12 +216,12 @@ const TrackServicePage = () => {
   };
 
   const statusConfig = {
-    'Pending': { color: 'text-amber-800', bg: 'bg-amber-100', border: 'border-amber-300', dot: 'bg-amber-600', button: 'bg-amber-600 hover:bg-amber-700 text-white', bar: 'bg-amber-500', text: 'text-amber-700', ring: 'ring-amber-500/20' },
-    'In Progress': { color: 'text-blue-800', bg: 'bg-blue-100', border: 'border-blue-300', dot: 'bg-blue-600', button: 'bg-blue-600 hover:bg-blue-700 text-white', bar: 'bg-blue-500', text: 'text-blue-700', ring: 'ring-blue-500/20' },
-    'Delayed': { color: 'text-rose-800', bg: 'bg-rose-100', border: 'border-rose-300', dot: 'bg-rose-600', button: 'bg-rose-600 hover:bg-rose-700 text-white', bar: 'bg-rose-500', text: 'text-rose-700', ring: 'ring-rose-500/20' },
-    'Completed': { color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300', dot: 'bg-emerald-600', button: 'bg-emerald-600 hover:bg-emerald-700 text-white', bar: 'bg-emerald-500', text: 'text-emerald-700', ring: 'ring-emerald-500/20' },
-    'Resubmit': { color: 'text-orange-800', bg: 'bg-orange-100', border: 'border-orange-300', dot: 'bg-orange-600', button: 'bg-orange-600 hover:bg-orange-700 text-white', bar: 'bg-orange-500', text: 'text-orange-700', ring: 'ring-orange-500/20' },
-    'Paid': { color: 'text-green-700', bg: 'bg-green-100', border: 'border-green-300', dot: 'bg-green-600', button: 'bg-green-600 hover:bg-green-700 text-white', bar: 'bg-green-500', text: 'text-green-700', ring: 'ring-green-500/20' }
+    'Pending': { color: 'text-amber-800', bg: 'bg-amber-100', border: 'border-amber-300', dot: 'bg-amber-600', button: 'bg-amber-600 hover:bg-amber-700 text-white', bar: 'bg-amber-500', text: 'text-amber-700', column: 'bg-amber-50/40 border-amber-200', headerBg: 'bg-amber-100' },
+    'In Progress': { color: 'text-blue-800', bg: 'bg-blue-100', border: 'border-blue-300', dot: 'bg-blue-600', button: 'bg-blue-600 hover:bg-blue-700 text-white', bar: 'bg-blue-500', text: 'text-blue-700', column: 'bg-blue-50/40 border-blue-200', headerBg: 'bg-blue-100' },
+    'Delayed': { color: 'text-rose-800', bg: 'bg-rose-100', border: 'border-rose-300', dot: 'bg-rose-600', button: 'bg-rose-600 hover:bg-rose-700 text-white', bar: 'bg-rose-500', text: 'text-rose-700', column: 'bg-rose-50/40 border-rose-200', headerBg: 'bg-rose-100' },
+    'Completed': { color: 'text-emerald-800', bg: 'bg-emerald-100', border: 'border-emerald-300', dot: 'bg-emerald-600', button: 'bg-emerald-600 hover:bg-emerald-700 text-white', bar: 'bg-emerald-500', text: 'text-emerald-700', column: 'bg-emerald-50/40 border-emerald-200', headerBg: 'bg-emerald-100' },
+    'Resubmit': { color: 'text-orange-800', bg: 'bg-orange-100', border: 'border-orange-300', dot: 'bg-orange-600', button: 'bg-orange-600 hover:bg-orange-700 text-white', bar: 'bg-orange-500', text: 'text-orange-700', column: 'bg-orange-50/40 border-orange-200', headerBg: 'bg-orange-100' },
+    'Paid': { color: 'text-green-700', bg: 'bg-green-100', border: 'border-green-300', dot: 'bg-green-600', button: 'bg-green-600 hover:bg-green-700 text-white', bar: 'bg-green-500', text: 'text-green-700', column: 'bg-green-50/40 border-green-200', headerBg: 'bg-green-100' }
   };
 
   const BOARD_COLUMNS = ['Pending', 'In Progress', 'Resubmit', 'Delayed', 'Completed', 'Paid'];
@@ -521,15 +523,18 @@ const TrackServicePage = () => {
     try {
       const apiStatus = reverseStatusMap[newStatus] || newStatus;
       const service = services.find(s => s.id === serviceId);
+      if (!service) return;
       const newProgress = calculateProgress(newStatus, service.currentStep);
-      if (service) { service.status = newStatus; service.progress = newProgress; }
       setServices(prev => prev.map(s => s.id === serviceId ? { ...s, status: newStatus, progress: newProgress } : s));
       if (selectedService?.id === serviceId) setSelectedService(prev => ({ ...prev, status: newStatus, progress: newProgress }));
       await updateTrackingStatus(serviceId, apiStatus);
       await fetchActivityHistory(serviceId);
-      toast.success(`Status updated to ${newStatus}`);
+      toast.success(`Moved to ${newStatus}`);
     } catch (error) {
-      console.error(error); toast.error('Failed to update status: ' + (error.response?.data?.error || error.message));
+      console.error(error);
+      toast.error('Failed to update status: ' + (error.response?.data?.error || error.message));
+      // Revert on error
+      await fetchAllTrackingEntries();
     }
   };
 
@@ -756,26 +761,15 @@ const TrackServicePage = () => {
 
   const handleBackToList = () => navigate('/dashboard/staff/track_service');
 
-  // Sort services for card view
-  const sortedServices = useMemo(() => {
-    const arr = [...services];
-    switch (sortBy) {
-      case 'oldest':
-        return arr.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-      case 'priority':
-        const pMap = { high: 3, medium: 2, low: 1 };
-        return arr.sort((a, b) => (pMap[b.priority] || 0) - (pMap[a.priority] || 0));
-      case 'name':
-        return arr.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || ''));
-      case 'progress':
-        return arr.sort((a, b) => (b.progress || 0) - (a.progress || 0));
-      case 'amount':
-        return arr.sort((a, b) => (b.totalCharge || 0) - (a.totalCharge || 0));
-      case 'newest':
-      default:
-        return arr.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    }
-  }, [services, sortBy]);
+  // Group services by status for Kanban
+  const servicesByStatus = useMemo(() => {
+    const groups = {};
+    BOARD_COLUMNS.forEach(col => { groups[col] = []; });
+    services.forEach(s => {
+      if (groups[s.status]) groups[s.status].push(s);
+    });
+    return groups;
+  }, [services]);
 
   const servicesByDate = services.reduce((groups, service) => {
     const dateKey = service.date || 'Unknown Date';
@@ -786,6 +780,49 @@ const TrackServicePage = () => {
 
   const activeFilterCount = [staffFilter, expiryFilter, serviceFilter, subcategoryFilter].filter(f => f !== 'all').length
     + (dateFilter ? 1 : 0) + (aadhaarSearch ? 1 : 0);
+
+  /* ============ Drag handlers ============ */
+  const handleDragStart = (e, service) => {
+    setDraggingId(service.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', service.id);
+    // For a slightly nicer native drag ghost
+    if (e.dataTransfer.setDragImage && e.currentTarget) {
+      try { e.dataTransfer.setDragImage(e.currentTarget, 40, 20); } catch (err) {}
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggingId(null);
+    setDragOverColumn(null);
+  };
+
+  const handleDragOverColumn = (e, columnName) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverColumn !== columnName) setDragOverColumn(columnName);
+  };
+
+  const handleDragLeaveColumn = (e, columnName) => {
+    // Only clear if we're actually leaving the column (not entering a child)
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    if (dragOverColumn === columnName) setDragOverColumn(null);
+  };
+
+  const handleDropOnColumn = async (e, columnName) => {
+    e.preventDefault();
+    const droppedId = e.dataTransfer.getData('text/plain') || draggingId;
+    setDragOverColumn(null);
+    setDraggingId(null);
+    if (!droppedId) return;
+
+    const service = services.find(s => s.id === droppedId);
+    if (!service) return;
+    if (service.status === columnName) return; // no-op
+
+    // Optimistic UI already handled inside handleUpdateStatus
+    await handleUpdateStatus(droppedId, columnName);
+  };
 
   if (loading) {
     return (
@@ -800,19 +837,19 @@ const TrackServicePage = () => {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
 
         {/* ================= HEADER ================= */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-          <div className="max-w-[1600px] mx-auto px-6 py-4">
+        <header className="bg-white border-b border-gray-200 flex-shrink-0">
+          <div className="max-w-[1800px] mx-auto px-6 py-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
                   <FiTarget className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-gray-900 leading-tight">Service Management</h1>
-                  <p className="text-gray-500 text-xs">Track and manage service applications</p>
+                  <h1 className="text-lg font-bold text-gray-900 leading-tight">Service Board</h1>
+                  <p className="text-gray-500 text-xs">Drag cards between columns to update status</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -838,10 +875,10 @@ const TrackServicePage = () => {
           </div>
         </header>
 
-        <div className="max-w-[1600px] mx-auto px-6 py-6 space-y-5">
+        <div className="max-w-[1800px] w-full mx-auto px-6 py-5 space-y-4 flex-1 flex flex-col min-h-0">
 
           {/* ================= KPI STRIP ================= */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
             <KpiTile label="Total Services" value={globalStats.total || 0} trend={12} icon={FiBarChart2} tint="blue" sub="In selected period" />
             <KpiTile label="In Progress" value={globalStats.in_progress || 0} trend={8} icon={FiTrendingUp} tint="amber" sub="Active right now" />
             <KpiTile label="Completed" value={globalStats.completed || 0} trend={15} icon={FiCheckCircle} tint="emerald" sub="Successfully closed" />
@@ -849,7 +886,7 @@ const TrackServicePage = () => {
           </div>
 
           {/* ================= FILTER BAR ================= */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-shrink-0">
             <div className="p-4 flex flex-col lg:flex-row lg:items-center gap-3">
               <div className="relative flex-1 min-w-0">
                 <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -867,32 +904,14 @@ const TrackServicePage = () => {
                 )}
               </div>
 
-              {/* Sort dropdown (only for card view) */}
-              {viewMode === 'cards' && (
-                <div className="relative flex-shrink-0">
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="appearance-none pr-8 pl-3 py-2 text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 cursor-pointer text-gray-700">
-                    <option value="newest">Sort: Newest</option>
-                    <option value="oldest">Sort: Oldest</option>
-                    <option value="priority">Sort: Priority</option>
-                    <option value="progress">Sort: Progress</option>
-                    <option value="amount">Sort: Amount</option>
-                    <option value="name">Sort: Name A-Z</option>
-                  </select>
-                  <FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-                </div>
-              )}
-
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-                  <button onClick={() => setViewMode('cards')}
+                  <button onClick={() => setViewMode('board')}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                      viewMode === 'cards' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                      viewMode === 'board' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
                     }`}>
-                    <FiGrid className="h-3.5 w-3.5" />
-                    Cards
+                    <FiColumns className="h-3.5 w-3.5" />
+                    Board
                   </button>
                   <button onClick={() => setViewMode('table')}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
@@ -986,31 +1005,40 @@ const TrackServicePage = () => {
           </div>
 
           {/* ================= RESULTS HEADER ================= */}
-          <div className="flex items-center justify-between px-1">
+          <div className="flex items-center justify-between px-1 flex-shrink-0">
             <p className="text-xs text-gray-500">
               Showing <span className="font-semibold text-gray-800">{services.length}</span> of <span className="font-semibold text-gray-800">{totalRecords}</span> services
             </p>
-            <p className="text-[11px] text-gray-400 hidden sm:block">
-              Click any card to open details · Page {currentPage} of {totalPages}
+            <p className="text-[11px] text-gray-400 hidden sm:flex items-center gap-1">
+              <FiMove className="h-3 w-3" />
+              Drag any card to another column to change its status
             </p>
           </div>
 
           {/* ================= CONTENT ================= */}
-          {viewMode === 'cards' ? (
-            <CardGrid
-              services={sortedServices}
-              selectedServiceId={selectedService?.id}
-              onCardClick={handleServiceSelect}
-              onNotify={handleNotifyCustomer}
+          {viewMode === 'board' ? (
+            <KanbanBoard
+              columns={BOARD_COLUMNS}
+              servicesByStatus={servicesByStatus}
               statusConfig={statusConfig}
               priorityConfig={priorityConfig}
+              selectedServiceId={selectedService?.id}
+              draggingId={draggingId}
+              dragOverColumn={dragOverColumn}
+              onCardClick={handleServiceSelect}
+              onNotify={handleNotifyCustomer}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOverColumn={handleDragOverColumn}
+              onDragLeaveColumn={handleDragLeaveColumn}
+              onDropOnColumn={handleDropOnColumn}
             />
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex-1 min-h-0">
+              <div className="overflow-auto h-full">
                 <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50/70 border-b border-gray-200 text-[10px] text-gray-500 uppercase tracking-wider">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-gray-50 border-b border-gray-200 text-[10px] text-gray-500 uppercase tracking-wider">
                       <th className="px-4 py-3 font-semibold">Customer</th>
                       <th className="px-4 py-3 font-semibold">Service</th>
                       <th className="px-4 py-3 font-semibold w-[200px]">Application</th>
@@ -1062,7 +1090,6 @@ const TrackServicePage = () => {
                                 </div>
                               </div>
                             </td>
-
                             <td className="px-4 py-3">
                               <div className="text-sm font-medium text-gray-900 truncate max-w-[180px]">{service.serviceType}</div>
                               <div className="flex items-center gap-1.5 mt-0.5">
@@ -1074,12 +1101,10 @@ const TrackServicePage = () => {
                                 )}
                               </div>
                             </td>
-
                             <td className="px-4 py-3">
                               <div className="text-xs font-mono font-medium text-gray-800 truncate">{service.applicationNumber}</div>
                               <div className="text-[10px] text-gray-400 font-mono mt-0.5">{service.trackingId}</div>
                             </td>
-
                             <td className="px-4 py-3">
                               <div className="flex flex-col gap-1">
                                 <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold w-fit ${statusConfig[service.status]?.bg} ${statusConfig[service.status]?.color} border ${statusConfig[service.status]?.border}`}>
@@ -1089,7 +1114,6 @@ const TrackServicePage = () => {
                                 <span className="text-[10px] text-gray-500 truncate">{service.currentStep}</span>
                               </div>
                             </td>
-
                             <td className="px-4 py-3">
                               <div className="flex flex-col gap-1">
                                 <span className="text-xs font-medium text-gray-700 truncate">{service.assignedTo}</span>
@@ -1098,7 +1122,6 @@ const TrackServicePage = () => {
                                 </span>
                               </div>
                             </td>
-
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-1">
                                 <button
@@ -1135,22 +1158,6 @@ const TrackServicePage = () => {
                   </tbody>
                 </table>
               </div>
-
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                    className="px-3.5 py-1.5 text-xs font-semibold text-gray-700 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
-                    ← Previous
-                  </button>
-                  <div className="text-xs text-gray-600 font-medium">
-                    Page <span className="font-bold text-gray-900">{currentPage}</span> of {totalPages}
-                  </div>
-                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                    className="px-3.5 py-1.5 text-xs font-semibold text-gray-700 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
-                    Next →
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -1174,7 +1181,6 @@ const TrackServicePage = () => {
                 transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
                 className="fixed top-0 right-0 h-full w-full sm:w-[640px] lg:w-[720px] bg-white shadow-2xl z-50 flex flex-col">
 
-                {/* Drawer header */}
                 <div className="flex items-start justify-between gap-3 p-5 border-b border-indigo-700 bg-indigo-600 text-white">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div className="w-12 h-12 rounded-xl bg-indigo-700 flex items-center justify-center flex-shrink-0 border border-indigo-500">
@@ -1206,7 +1212,6 @@ const TrackServicePage = () => {
                   </div>
                 </div>
 
-                {/* Quick info strip */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border-b border-gray-100 bg-gray-50">
                   <QuickStat label="App No" value={selectedService.applicationNumber || 'N/A'} />
                   <QuickStat label="Step" value={selectedService.currentStep || 'N/A'} />
@@ -1214,7 +1219,6 @@ const TrackServicePage = () => {
                   <QuickStat label="Assigned" value={selectedService.assignedTo || 'Unassigned'} />
                 </div>
 
-                {/* Tabs */}
                 <div className="border-b border-gray-200 bg-gray-50/50 overflow-x-auto scrollbar-hide">
                   <nav className="flex -mb-px px-2">
                     {[
@@ -1242,7 +1246,6 @@ const TrackServicePage = () => {
                   </nav>
                 </div>
 
-                {/* Drawer body */}
                 <div className="flex-1 overflow-y-auto bg-gray-50/40">
                   <div className="p-5">
                     <AnimatePresence mode="wait">
@@ -1330,6 +1333,10 @@ const TrackServicePage = () => {
             border-color: #6366f1;
             box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
           }
+          .dragging-card {
+            opacity: 0.4;
+            transform: rotate(2deg);
+          }
         `}</style>
       </div>
     </ErrorBoundary>
@@ -1337,152 +1344,181 @@ const TrackServicePage = () => {
 };
 
 /* ============================================================
-   CARD GRID
+   KANBAN BOARD (draggable)
    ============================================================ */
-const CardGrid = ({ services, selectedServiceId, onCardClick, onNotify, statusConfig, priorityConfig }) => {
-  if (services.length === 0) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 text-center py-16">
-        <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <FiInbox className="h-6 w-6 text-gray-400" />
-        </div>
-        <p className="text-base font-semibold text-gray-900">No services found</p>
-        <p className="text-sm mt-1 text-gray-500">Try adjusting your filters or search terms</p>
-      </div>
-    );
-  }
-
+const KanbanBoard = ({
+  columns, servicesByStatus, statusConfig, priorityConfig, selectedServiceId,
+  draggingId, dragOverColumn,
+  onCardClick, onNotify,
+  onDragStart, onDragEnd, onDragOverColumn, onDragLeaveColumn, onDropOnColumn
+}) => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {services.map(service => (
-        <ServiceCard
-          key={service.id}
-          service={service}
-          isSelected={selectedServiceId === service.id}
-          onClick={() => onCardClick(service)}
-          onNotify={onNotify}
-          statusConfig={statusConfig}
-          priorityConfig={priorityConfig}
-        />
-      ))}
+    <div className="flex-1 min-h-0 overflow-x-auto">
+      <div className="flex gap-4 h-full" style={{ minWidth: 'max-content' }}>
+        {columns.map(columnName => {
+          const items = servicesByStatus[columnName] || [];
+          const cfg = statusConfig[columnName] || {};
+          const totalValue = items.reduce((sum, s) => sum + (s.totalCharge || 0), 0);
+          const isDragOver = dragOverColumn === columnName;
+
+          return (
+            <div
+              key={columnName}
+              onDragOver={(e) => onDragOverColumn(e, columnName)}
+              onDragLeave={(e) => onDragLeaveColumn(e, columnName)}
+              onDrop={(e) => onDropOnColumn(e, columnName)}
+              className={`flex flex-col w-[280px] flex-shrink-0 rounded-xl border-2 h-full min-h-0 transition-all duration-150 ${
+                isDragOver
+                  ? `${cfg.column} border-dashed shadow-md scale-[1.01]`
+                  : 'bg-gray-100/70 border-gray-200'
+              }`}>
+
+              {/* Column header */}
+              <div className="p-3 border-b border-gray-200 flex-shrink-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`}></span>
+                    <h3 className="text-xs font-bold text-gray-900 truncate uppercase tracking-wide">{columnName}</h3>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-white border border-gray-200 text-gray-600 rounded-full">
+                      {items.length}
+                    </span>
+                  </div>
+                </div>
+                {totalValue > 0 && (
+                  <div className={`text-[10px] font-semibold ${cfg.text || 'text-gray-500'}`}>
+                    {formatCurrency(totalValue)} value
+                  </div>
+                )}
+              </div>
+
+              {/* Column body (scrollable) */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                {items.length === 0 ? (
+                  <div className={`text-center py-8 text-[11px] text-gray-400 border-2 border-dashed rounded-lg transition-colors ${
+                    isDragOver ? 'border-gray-300 bg-white/60 text-gray-500' : 'border-gray-200'
+                  }`}>
+                    {isDragOver ? 'Drop here' : 'No services'}
+                  </div>
+                ) : (
+                  items.map(service => (
+                    <KanbanCard
+                      key={service.id}
+                      service={service}
+                      statusConfig={statusConfig}
+                      priorityConfig={priorityConfig}
+                      isSelected={selectedServiceId === service.id}
+                      isDragging={draggingId === service.id}
+                      onClick={() => onCardClick(service)}
+                      onNotify={onNotify}
+                      onDragStart={onDragStart}
+                      onDragEnd={onDragEnd}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
 
 /* ============================================================
-   SERVICE CARD
+   COMPACT KANBAN CARD (draggable)
    ============================================================ */
-const ServiceCard = ({ service, isSelected, onClick, onNotify, statusConfig, priorityConfig }) => {
+const KanbanCard = ({
+  service, statusConfig, priorityConfig, isSelected, isDragging,
+  onClick, onNotify, onDragStart, onDragEnd
+}) => {
   const config = statusConfig[service.status] || statusConfig['Pending'];
   const priority = priorityConfig[service.priority || 'medium'];
 
   return (
-    <motion.div
-      whileHover={{ y: -3 }}
-      transition={{ duration: 0.15 }}
-      onClick={onClick}
-      className={`group relative bg-white rounded-xl border-2 cursor-pointer transition-all duration-200 overflow-hidden flex flex-col ${
-        isSelected
-          ? 'border-indigo-500 shadow-lg ring-2 ring-indigo-500/10'
-          : 'border-gray-200 hover:border-gray-300 hover:shadow-lg'
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, service)}
+      onDragEnd={onDragEnd}
+      onClick={(e) => {
+        // Prevent click from firing if user was dragging
+        if (isDragging) return;
+        onClick();
+      }}
+      className={`group bg-white rounded-lg border p-2.5 cursor-grab active:cursor-grabbing transition-all duration-150 ${
+        isDragging
+          ? 'dragging-card border-indigo-400'
+          : isSelected
+          ? 'border-indigo-400 ring-2 ring-indigo-500/20 shadow-md'
+          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
       }`}>
 
-      {/* Top status color bar */}
-      <div className={`h-1 ${config.bar}`}></div>
-
-      <div className="p-4 flex-1 flex flex-col">
-        {/* Header: avatar + name + status badge */}
-        <div className="flex items-start gap-3 mb-3">
-          <div className="relative flex-shrink-0">
-            <div className="w-11 h-11 rounded-full bg-indigo-600 flex items-center justify-center shadow-sm">
-              <span className="text-white text-sm font-bold">
-                {(service.customerName || 'U').charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${config.dot}`}></span>
+      {/* Row 1: Avatar + name + priority */}
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="relative flex-shrink-0">
+          <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center">
+            <span className="text-white text-[10px] font-bold">
+              {(service.customerName || 'U').charAt(0).toUpperCase()}
+            </span>
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold text-gray-900 truncate" title={service.customerName}>
-              {service.customerName}
-            </h3>
-            <p className="text-xs text-gray-500 truncate">{service.phone}</p>
-          </div>
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${config.bg} ${config.color} border ${config.border} flex-shrink-0`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`}></span>
-            {service.status}
-          </span>
+          <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white ${config.dot}`}></span>
         </div>
+        <p className="text-xs font-bold text-gray-900 truncate flex-1" title={service.customerName}>
+          {service.customerName}
+        </p>
+        <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-bold uppercase flex-shrink-0 ${priority.bg} ${priority.color} border ${priority.border}`}>
+          <FiFlag className="h-1.5 w-1.5" />
+          {priority.label}
+        </span>
+      </div>
 
-        {/* Service type + subcategory */}
-        <div className="mb-3">
-          <p className="text-sm font-medium text-gray-800 truncate" title={service.serviceType}>
-            {service.serviceType}
-          </p>
-          <p className="text-xs text-gray-500 truncate">
-            {service.subcategoryName || 'N/A'}
-          </p>
+      {/* Row 2: Service type + subcategory */}
+      <p className="text-[11px] font-medium text-gray-700 truncate mb-0.5" title={service.serviceType}>
+        {service.serviceType}
+      </p>
+      <p className="text-[10px] text-gray-500 truncate mb-2">
+        {service.subcategoryName || 'N/A'}
+      </p>
+
+      {/* Row 3: App no + Amount */}
+      <div className="flex items-center justify-between gap-2 py-1.5 mb-1.5 border-y border-dashed border-gray-100 text-[10px]">
+        <span className="font-mono text-gray-600 truncate" title={service.applicationNumber}>
+          {service.applicationNumber}
+        </span>
+        <span className="font-bold text-gray-900 flex-shrink-0">{formatCurrency(service.totalCharge)}</span>
+      </div>
+
+      {/* Row 4: Progress bar */}
+      <div className="mb-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[9px] font-medium text-gray-500 truncate">{service.currentStep}</span>
+          <span className="text-[9px] font-bold text-indigo-600 flex-shrink-0 ml-1">{service.progress}%</span>
         </div>
-
-        {/* App no + Amount */}
-        <div className="flex items-center justify-between gap-2 py-2 mb-3 border-y border-dashed border-gray-100">
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold">App No</p>
-            <p className="text-xs font-mono font-medium text-gray-700 truncate" title={service.applicationNumber}>
-              {service.applicationNumber}
-            </p>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold">Amount</p>
-            <p className="text-xs font-bold text-gray-900">{formatCurrency(service.totalCharge)}</p>
-          </div>
+        <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
+          <div className={`h-full rounded-full ${config.bar}`} style={{ width: `${service.progress}%` }} />
         </div>
+      </div>
 
-        {/* Progress bar */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-medium text-gray-500 truncate">{service.currentStep}</span>
-            <span className="text-[10px] font-bold text-indigo-600 flex-shrink-0 ml-2">{service.progress}%</span>
-          </div>
-          <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-indigo-500 h-full rounded-full transition-all"
-              style={{ width: `${service.progress}%` }}></div>
-          </div>
+      {/* Row 5: Assigned + source + actions */}
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="flex items-center gap-1 text-[9px] text-gray-500 min-w-0 flex-1">
+          <FiUser className="h-2.5 w-2.5 flex-shrink-0" />
+          <span className="truncate">{service.assignedTo}</span>
         </div>
-
-        {/* Assigned + Priority */}
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-1.5 text-[11px] text-gray-600 min-w-0 flex-1">
-            <FiUser className="h-3 w-3 text-gray-400 flex-shrink-0" />
-            <span className="truncate">{service.assignedTo}</span>
-          </div>
-          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase flex-shrink-0 ${priority.bg} ${priority.color} border ${priority.border}`}>
-            <FiFlag className="h-2 w-2" />
-            {priority.label}
-          </span>
-        </div>
-
-        {/* Footer: source + actions */}
-        <div className="flex items-center justify-between pt-2.5 mt-auto border-t border-gray-100">
-          <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className={`text-[8px] font-bold uppercase tracking-wide px-1 py-0.5 rounded ${
             service.workSource === 'online' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
           }`}>
             {service.workSource === 'online' ? 'Online' : 'Walk-in'}
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); onNotify(service); }}
-              title="Notify customer"
-              className="p-1 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
-              <FiMessageSquare className="h-3.5 w-3.5" />
-            </button>
-            <div className="p-1 rounded-md text-gray-300 group-hover:text-indigo-600 group-hover:bg-indigo-50 transition-colors">
-              <FiChevronRight className="h-4 w-4" />
-            </div>
-          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onNotify(service); }}
+            title="Notify customer"
+            className="p-0.5 rounded text-gray-300 hover:text-green-600 hover:bg-green-50 transition-colors opacity-0 group-hover:opacity-100">
+            <FiMessageSquare className="h-3 w-3" />
+          </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 
