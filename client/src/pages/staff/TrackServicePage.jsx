@@ -138,6 +138,9 @@ const TrackServicePage = () => {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [timeRange, setTimeRange] = useState('month');
 
+  // Sort for card view
+  const [sortBy, setSortBy] = useState('newest');
+
   useEffect(() => { setSubcategoryFilter('all'); }, [serviceFilter]);
 
   const [discoveredSubcategories, setDiscoveredSubcategories] = useState({});
@@ -184,11 +187,8 @@ const TrackServicePage = () => {
     notes: '', assignedTo: '', aadhaar: '', email: '', priority: 'medium'
   });
   
-  // 'grouped' = accordion list (default), 'table' = spreadsheet
-  const [viewMode, setViewMode] = useState('grouped');
-
-  // Track which status sections are collapsed
-  const [collapsedSections, setCollapsedSections] = useState({});
+  // 'cards' = card grid (default), 'table' = spreadsheet
+  const [viewMode, setViewMode] = useState('cards');
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -688,10 +688,6 @@ const TrackServicePage = () => {
     if (id) navigate('/dashboard/staff/track_service', { replace: true });
   };
 
-  const toggleSection = (status) => {
-    setCollapsedSections(prev => ({ ...prev, [status]: !prev[status] }));
-  };
-
   const fetchAllFilteredDataForExport = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
     const params = {
@@ -760,14 +756,26 @@ const TrackServicePage = () => {
 
   const handleBackToList = () => navigate('/dashboard/staff/track_service');
 
-  const servicesByStatus = useMemo(() => {
-    const groups = {};
-    BOARD_COLUMNS.forEach(col => { groups[col] = []; });
-    services.forEach(s => {
-      if (groups[s.status]) groups[s.status].push(s);
-    });
-    return groups;
-  }, [services]);
+  // Sort services for card view
+  const sortedServices = useMemo(() => {
+    const arr = [...services];
+    switch (sortBy) {
+      case 'oldest':
+        return arr.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+      case 'priority':
+        const pMap = { high: 3, medium: 2, low: 1 };
+        return arr.sort((a, b) => (pMap[b.priority] || 0) - (pMap[a.priority] || 0));
+      case 'name':
+        return arr.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || ''));
+      case 'progress':
+        return arr.sort((a, b) => (b.progress || 0) - (a.progress || 0));
+      case 'amount':
+        return arr.sort((a, b) => (b.totalCharge || 0) - (a.totalCharge || 0));
+      case 'newest':
+      default:
+        return arr.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    }
+  }, [services, sortBy]);
 
   const servicesByDate = services.reduce((groups, service) => {
     const dateKey = service.date || 'Unknown Date';
@@ -859,14 +867,32 @@ const TrackServicePage = () => {
                 )}
               </div>
 
+              {/* Sort dropdown (only for card view) */}
+              {viewMode === 'cards' && (
+                <div className="relative flex-shrink-0">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="appearance-none pr-8 pl-3 py-2 text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 cursor-pointer text-gray-700">
+                    <option value="newest">Sort: Newest</option>
+                    <option value="oldest">Sort: Oldest</option>
+                    <option value="priority">Sort: Priority</option>
+                    <option value="progress">Sort: Progress</option>
+                    <option value="amount">Sort: Amount</option>
+                    <option value="name">Sort: Name A-Z</option>
+                  </select>
+                  <FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                </div>
+              )}
+
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-                  <button onClick={() => setViewMode('grouped')}
+                  <button onClick={() => setViewMode('cards')}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                      viewMode === 'grouped' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                      viewMode === 'cards' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'
                     }`}>
-                    <FiLayers className="h-3.5 w-3.5" />
-                    Grouped
+                    <FiGrid className="h-3.5 w-3.5" />
+                    Cards
                   </button>
                   <button onClick={() => setViewMode('table')}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
@@ -965,24 +991,19 @@ const TrackServicePage = () => {
               Showing <span className="font-semibold text-gray-800">{services.length}</span> of <span className="font-semibold text-gray-800">{totalRecords}</span> services
             </p>
             <p className="text-[11px] text-gray-400 hidden sm:block">
-              Click any row to open details · Page {currentPage} of {totalPages}
+              Click any card to open details · Page {currentPage} of {totalPages}
             </p>
           </div>
 
           {/* ================= CONTENT ================= */}
-          {viewMode === 'grouped' ? (
-            <GroupedList
-              columns={BOARD_COLUMNS}
-              servicesByStatus={servicesByStatus}
-              collapsedSections={collapsedSections}
-              onToggleSection={toggleSection}
+          {viewMode === 'cards' ? (
+            <CardGrid
+              services={sortedServices}
+              selectedServiceId={selectedService?.id}
+              onCardClick={handleServiceSelect}
+              onNotify={handleNotifyCustomer}
               statusConfig={statusConfig}
               priorityConfig={priorityConfig}
-              selectedServiceId={selectedService?.id}
-              onRowClick={handleServiceSelect}
-              onNotify={handleNotifyCustomer}
-              onStatusChange={handleUpdateStatus}
-              stepOptions={stepOptions}
             />
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1316,12 +1337,10 @@ const TrackServicePage = () => {
 };
 
 /* ============================================================
-   GROUPED LIST (accordion sections by status)
+   CARD GRID
    ============================================================ */
-const GroupedList = ({ columns, servicesByStatus, collapsedSections, onToggleSection, statusConfig, priorityConfig, selectedServiceId, onRowClick, onNotify, onStatusChange, stepOptions }) => {
-  const hasAnyItems = columns.some(col => (servicesByStatus[col] || []).length > 0);
-
-  if (!hasAnyItems) {
+const CardGrid = ({ services, selectedServiceId, onCardClick, onNotify, statusConfig, priorityConfig }) => {
+  if (services.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 text-center py-16">
         <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
@@ -1334,196 +1353,138 @@ const GroupedList = ({ columns, servicesByStatus, collapsedSections, onToggleSec
   }
 
   return (
-    <div className="space-y-3">
-      {columns.map(columnName => {
-        const items = servicesByStatus[columnName] || [];
-        if (items.length === 0) return null;
-
-        const cfg = statusConfig[columnName] || {};
-        const isCollapsed = collapsedSections[columnName];
-        const totalValue = items.reduce((sum, s) => sum + (s.totalCharge || 0), 0);
-
-        return (
-          <div key={columnName} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            {/* Section header */}
-            <button
-              onClick={() => onToggleSection(columnName)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left">
-              {/* Left colored bar */}
-              <div className={`w-1 h-8 rounded-full ${cfg.bar || 'bg-gray-300'}`}></div>
-
-              {/* Chevron */}
-              <FiChevronRight className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`} />
-
-              {/* Title */}
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <h3 className="text-sm font-bold text-gray-900">{columnName}</h3>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.bg || 'bg-gray-100'} ${cfg.color || 'text-gray-700'} border ${cfg.border || 'border-gray-200'}`}>
-                  {items.length}
-                </span>
-                {totalValue > 0 && (
-                  <span className={`text-[10px] font-semibold ${cfg.text || 'text-gray-500'} hidden sm:inline`}>
-                    · {formatCurrency(totalValue)} value
-                  </span>
-                )}
-              </div>
-
-              {/* Small preview of first few avatars when collapsed */}
-              {isCollapsed && items.length > 0 && (
-                <div className="flex items-center -space-x-2 flex-shrink-0">
-                  {items.slice(0, 4).map(s => (
-                    <div key={s.id} className="w-6 h-6 rounded-full bg-indigo-600 border-2 border-white flex items-center justify-center">
-                      <span className="text-white text-[9px] font-bold">{(s.customerName || 'U').charAt(0).toUpperCase()}</span>
-                    </div>
-                  ))}
-                  {items.length > 4 && (
-                    <div className="w-6 h-6 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center">
-                      <span className="text-gray-600 text-[9px] font-bold">+{items.length - 4}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </button>
-
-            {/* Section body */}
-            <AnimatePresence initial={false}>
-              {!isCollapsed && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden border-t border-gray-100">
-                  <div className="divide-y divide-gray-100">
-                    {items.map(service => (
-                      <ServiceRow
-                        key={service.id}
-                        service={service}
-                        statusConfig={statusConfig}
-                        priorityConfig={priorityConfig}
-                        isSelected={selectedServiceId === service.id}
-                        onClick={() => onRowClick(service)}
-                        onNotify={onNotify}
-                        onStatusChange={onStatusChange}
-                        stepOptions={stepOptions}
-                      />
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        );
-      })}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {services.map(service => (
+        <ServiceCard
+          key={service.id}
+          service={service}
+          isSelected={selectedServiceId === service.id}
+          onClick={() => onCardClick(service)}
+          onNotify={onNotify}
+          statusConfig={statusConfig}
+          priorityConfig={priorityConfig}
+        />
+      ))}
     </div>
   );
 };
 
 /* ============================================================
-   SERVICE ROW (compact horizontal row)
+   SERVICE CARD
    ============================================================ */
-const ServiceRow = ({ service, statusConfig, priorityConfig, isSelected, onClick, onNotify, onStatusChange, stepOptions }) => {
+const ServiceCard = ({ service, isSelected, onClick, onNotify, statusConfig, priorityConfig }) => {
   const config = statusConfig[service.status] || statusConfig['Pending'];
   const priority = priorityConfig[service.priority || 'medium'];
 
   return (
-    <div
+    <motion.div
+      whileHover={{ y: -3 }}
+      transition={{ duration: 0.15 }}
       onClick={onClick}
-      className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-colors ${
-        isSelected ? 'bg-indigo-50/60' : 'hover:bg-gray-50'
+      className={`group relative bg-white rounded-xl border-2 cursor-pointer transition-all duration-200 overflow-hidden flex flex-col ${
+        isSelected
+          ? 'border-indigo-500 shadow-lg ring-2 ring-indigo-500/10'
+          : 'border-gray-200 hover:border-gray-300 hover:shadow-lg'
       }`}>
 
-      {/* Avatar with status dot */}
-      <div className="relative flex-shrink-0">
-        <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center">
-          <span className="text-white text-xs font-bold">{(service.customerName || 'U').charAt(0).toUpperCase()}</span>
-        </div>
-        <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${config.dot}`}></span>
-      </div>
+      {/* Top status color bar */}
+      <div className={`h-1 ${config.bar}`}></div>
 
-      {/* Customer + service block */}
-      <div className="min-w-0 flex-1 grid grid-cols-12 gap-3 items-center">
-        {/* Customer */}
-        <div className="col-span-12 sm:col-span-5 lg:col-span-4 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-semibold text-gray-900 truncate">{service.customerName}</p>
-            <PriorityPill priority={priority} />
+      <div className="p-4 flex-1 flex flex-col">
+        {/* Header: avatar + name + status badge */}
+        <div className="flex items-start gap-3 mb-3">
+          <div className="relative flex-shrink-0">
+            <div className="w-11 h-11 rounded-full bg-indigo-600 flex items-center justify-center shadow-sm">
+              <span className="text-white text-sm font-bold">
+                {(service.customerName || 'U').charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${config.dot}`}></span>
           </div>
-          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
-            <span className="flex items-center gap-1"><FiPhone className="h-3 w-3" />{service.phone}</span>
-            <span className="text-gray-300">·</span>
-            <span className="truncate">{service.serviceType}</span>
-            {service.subcategoryName && service.subcategoryName !== 'N/A' && (
-              <>
-                <span className="text-gray-300">·</span>
-                <span className="truncate">{service.subcategoryName}</span>
-              </>
-            )}
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold text-gray-900 truncate" title={service.customerName}>
+              {service.customerName}
+            </h3>
+            <p className="text-xs text-gray-500 truncate">{service.phone}</p>
           </div>
-        </div>
-
-        {/* App No + tracking */}
-        <div className="hidden lg:block col-span-3 min-w-0">
-          <p className="text-xs font-mono text-gray-700 truncate">{service.applicationNumber}</p>
-          <p className="text-[10px] font-mono text-gray-400 mt-0.5 truncate">{service.trackingId}</p>
-        </div>
-
-        {/* Step + assigned */}
-        <div className="hidden md:block col-span-12 md:col-span-3 lg:col-span-2 min-w-0">
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-0.5">Step</p>
-          <p className="text-xs font-medium text-gray-700 truncate">{service.currentStep}</p>
-        </div>
-
-        {/* Assigned */}
-        <div className="hidden sm:block col-span-12 sm:col-span-3 md:col-span-2 lg:col-span-2 min-w-0">
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-0.5">Assigned</p>
-          <p className="text-xs font-medium text-gray-700 truncate">{service.assignedTo}</p>
-        </div>
-
-        {/* Progress */}
-        <div className="hidden xl:block col-span-1 min-w-0">
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${config.bg} ${config.color}`}>
-            {service.progress}%
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${config.bg} ${config.color} border ${config.border} flex-shrink-0`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`}></span>
+            {service.status}
           </span>
         </div>
-      </div>
 
-      {/* Right side: source badge + quick actions + chevron */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <span className={`hidden sm:inline-block text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
-          service.workSource === 'online' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-        }`}>
-          {service.workSource === 'online' ? 'Online' : 'Walk-in'}
-        </span>
+        {/* Service type + subcategory */}
+        <div className="mb-3">
+          <p className="text-sm font-medium text-gray-800 truncate" title={service.serviceType}>
+            {service.serviceType}
+          </p>
+          <p className="text-xs text-gray-500 truncate">
+            {service.subcategoryName || 'N/A'}
+          </p>
+        </div>
 
-        <button
-          onClick={(e) => { e.stopPropagation(); onNotify(service); }}
-          title="Notify customer"
-          className="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors opacity-0 group-hover:opacity-100">
-          <FiMessageSquare className="h-3.5 w-3.5" />
-        </button>
+        {/* App no + Amount */}
+        <div className="flex items-center justify-between gap-2 py-2 mb-3 border-y border-dashed border-gray-100">
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold">App No</p>
+            <p className="text-xs font-mono font-medium text-gray-700 truncate" title={service.applicationNumber}>
+              {service.applicationNumber}
+            </p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <p className="text-[9px] uppercase tracking-wider text-gray-400 font-semibold">Amount</p>
+            <p className="text-xs font-bold text-gray-900">{formatCurrency(service.totalCharge)}</p>
+          </div>
+        </div>
 
-        <div className={`p-1.5 rounded-md transition-colors ${
-          isSelected
-            ? 'bg-indigo-100 text-indigo-700'
-            : 'text-gray-300 group-hover:text-indigo-600 group-hover:bg-indigo-50'
-        }`}>
-          <FiChevronRight className="h-4 w-4" />
+        {/* Progress bar */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-medium text-gray-500 truncate">{service.currentStep}</span>
+            <span className="text-[10px] font-bold text-indigo-600 flex-shrink-0 ml-2">{service.progress}%</span>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-indigo-500 h-full rounded-full transition-all"
+              style={{ width: `${service.progress}%` }}></div>
+          </div>
+        </div>
+
+        {/* Assigned + Priority */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-1.5 text-[11px] text-gray-600 min-w-0 flex-1">
+            <FiUser className="h-3 w-3 text-gray-400 flex-shrink-0" />
+            <span className="truncate">{service.assignedTo}</span>
+          </div>
+          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase flex-shrink-0 ${priority.bg} ${priority.color} border ${priority.border}`}>
+            <FiFlag className="h-2 w-2" />
+            {priority.label}
+          </span>
+        </div>
+
+        {/* Footer: source + actions */}
+        <div className="flex items-center justify-between pt-2.5 mt-auto border-t border-gray-100">
+          <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+            service.workSource === 'online' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+          }`}>
+            {service.workSource === 'online' ? 'Online' : 'Walk-in'}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); onNotify(service); }}
+              title="Notify customer"
+              className="p-1 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
+              <FiMessageSquare className="h-3.5 w-3.5" />
+            </button>
+            <div className="p-1 rounded-md text-gray-300 group-hover:text-indigo-600 group-hover:bg-indigo-50 transition-colors">
+              <FiChevronRight className="h-4 w-4" />
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
-
-/* ============================================================
-   PRIORITY PILL
-   ============================================================ */
-const PriorityPill = ({ priority }) => (
-  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${priority.bg} ${priority.color} border ${priority.border}`}>
-    <FiFlag className="h-2 w-2" />
-    {priority.label}
-  </span>
-);
 
 /* ============================================================
    KPI + FILTER SUB-COMPONENTS
@@ -1593,7 +1554,6 @@ const OverviewView = ({ service, onUpdateStatus, statusConfig, priorityConfig, p
 
   return (
     <div className="space-y-4">
-      {/* Progress card */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
@@ -1660,7 +1620,6 @@ const OverviewView = ({ service, onUpdateStatus, statusConfig, priorityConfig, p
         </div>
       </div>
 
-      {/* Details + Financials grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <h3 className="font-semibold text-gray-900 text-sm mb-4 flex items-center gap-2">
@@ -1712,7 +1671,6 @@ const OverviewView = ({ service, onUpdateStatus, statusConfig, priorityConfig, p
         </div>
       </div>
 
-      {/* Customer review */}
       {service.serviceRating && (
         <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
           <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center gap-2">
