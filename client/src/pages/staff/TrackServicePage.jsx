@@ -101,14 +101,11 @@ const TrackServicePage = () => {
   const [staffList, setStaffList] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  // NEW: modal visibility state
   const [showDetailModal, setShowDetailModal] = useState(false);
 
-  //for showing tracking history
   const [activityHistory, setActivityHistory] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
-  //for document session
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -162,7 +159,6 @@ const TrackServicePage = () => {
     return [];
   }, [serviceFilter, categories, discoveredSubcategories]);
 
-  // Derived: current index in services array for prev/next navigation
   const currentIndex = useMemo(() => {
     if (!selectedService) return -1;
     return services.findIndex(s => s.id === selectedService.id);
@@ -210,12 +206,11 @@ const TrackServicePage = () => {
   useEffect(() => { setCurrentPage(1); }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
 
   /* ============================================================
-     KEYBOARD SHORTCUTS for modal (ArrowLeft / ArrowRight / Escape)
+     KEYBOARD SHORTCUTS for modal
      ============================================================ */
   useEffect(() => {
     if (!showDetailModal) return;
     const handler = (e) => {
-      // Avoid stealing keys while user is typing in a field
       const tag = (e.target?.tagName || '').toLowerCase();
       const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable;
 
@@ -720,26 +715,18 @@ const TrackServicePage = () => {
     }
   };
 
-  /* ============================================================
-     NEW: open the modal (used by table + card clicks)
-     ============================================================ */
   const openDetailModal = async (service) => {
-    // If a different service is being opened, load its data
     if (!selectedService || selectedService.id !== service.id) {
       await handleServiceSelect(service, true);
     }
     setShowDetailModal(true);
   };
 
-  /* ============================================================
-     NEW: prev/next navigation inside the modal
-     ============================================================ */
   const goToPrev = async () => {
     if (!hasPrev) return;
     const prevService = services[currentIndex - 1];
     if (!prevService) return;
     await handleServiceSelect(prevService, true);
-    // Keep activeTab as-is so staff flipping through docs stays on documents etc.
   };
 
   const goToNext = async () => {
@@ -793,22 +780,19 @@ const TrackServicePage = () => {
             <div className="flex space-x-2 mt-4 lg:mt-0">
               <button
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-                onClick={() => handleNotifyCustomer(selectedService)}
-              >
+                onClick={() => handleNotifyCustomer(selectedService)}>
                 <FiMessageSquare className="h-4 w-4" />
                 <span>Notify</span>
               </button>
               <button
                 onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-              >
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm">
                 <FiGrid className="h-4 w-4" />
                 <span>Workspace</span>
               </button>
               <button 
                 onClick={() => setActiveTab('tracking')}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-              >
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm">
                 <FiEdit className="h-4 w-4" />
                 <span>Edit</span>
               </button>
@@ -829,15 +813,13 @@ const TrackServicePage = () => {
           <div className="border-b border-gray-200 bg-gray-50/50">
             <nav className="flex -mb-px overflow-x-auto hide-scrollbar">
               {['overview', 'tracking', 'documents', 'history', 'discussion'].map((tab) => (
-                <button
-                  key={tab}
+                <button key={tab}
                   className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
                     activeTab === tab
                       ? 'border-indigo-500 text-indigo-600 bg-white'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                   }`}
-                  onClick={() => setActiveTab(tab)}
-                >
+                  onClick={() => setActiveTab(tab)}>
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
               ))}
@@ -845,48 +827,31 @@ const TrackServicePage = () => {
           </div>
           <div className="p-6">
             <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
+              <motion.div key={activeTab}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
+                transition={{ duration: 0.2 }}>
                 {activeTab === 'overview' && (
-                  <OverviewView 
-                    service={selectedService} 
-                    onUpdateStatus={handleUpdateStatus}
-                    priorityConfig={priorityConfig}
-                  />
+                  <OverviewView service={selectedService} onUpdateStatus={handleUpdateStatus} priorityConfig={priorityConfig} />
                 )}
                 {activeTab === 'tracking' && (
-                  <TrackingView 
-                    service={selectedService}
-                    formData={trackingFormData}
-                    onFormChange={handleTrackingFormChange}
-                    staffList={staffList}
-                    stepOptions={stepOptions}
-                    priorityOptions={priorityOptions}
+                  <TrackingView service={selectedService} formData={trackingFormData}
+                    onFormChange={handleTrackingFormChange} staffList={staffList}
+                    stepOptions={stepOptions} priorityOptions={priorityOptions}
                     onSave={handleTrackingFormSubmit}
-                    onCancel={() => setActiveTab('overview')}
-                  />
+                    onCancel={() => setActiveTab('overview')} />
                 )}
                 {activeTab === 'documents' && (
-                  <EnhancedDocumentsView 
-                    documents={documents}
-                    documentsLoading={documentsLoading}
+                  <EnhancedDocumentsView documents={documents} documentsLoading={documentsLoading}
                     uploadingDocument={uploadingDocument}
                     onUpload={(file, label, visible, remark) => handleUploadDocument(selectedService.id, file, label, visible, remark)}
                     onUpdateRemark={(docId, remark) => handleUpdateDocumentRemark(selectedService.id, docId, remark)}
                     onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(selectedService.id, docId, visible)}
-                    onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)}
-                  />
+                    onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)} />
                 )}
                 {activeTab === 'history' && (
-                  <HistoryView
-                    activityHistory={activityHistory}
-                    activityLoading={activityLoading}
-                  />
+                  <HistoryView activityHistory={activityHistory} activityLoading={activityLoading} />
                 )}
                 {activeTab === 'discussion' && (
                   <div className="space-y-4">
@@ -894,16 +859,9 @@ const TrackServicePage = () => {
                       <FiMessageCircle className="h-5 w-5 text-indigo-600" />
                       <h3 className="font-semibold text-gray-900">Internal Discussion & Tasks</h3>
                     </div>
-                    <p className="text-sm text-gray-500 mb-4">
-                      These notes are strictly internal. Tag staff using @ to assign them tasks.
-                    </p>
+                    <p className="text-sm text-gray-500 mb-4">These notes are strictly internal. Tag staff using @ to assign them tasks.</p>
                     <div className="bg-gray-50 rounded-xl p-2 sm:p-4 border border-gray-100">
-                      <NotesPanel 
-                        contextType="service_entry" 
-                        contextId={selectedService.serviceEntryId} 
-                        embedded={true} 
-                        showHeader={false}
-                      />
+                      <NotesPanel contextType="service_entry" contextId={selectedService.serviceEntryId} embedded={true} showHeader={false} />
                     </div>
                   </div>
                 )}
@@ -1516,7 +1474,6 @@ const TrackServicePage = () => {
                                     className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-green-600 hover:bg-green-50 hover:border-green-200">
                                     <FiMessageSquare className="h-4 w-4" />
                                   </button>
-                                  {/* ============ CHANGED: chevron opens modal ============ */}
                                   <button onClick={() => openDetailModal(service)}
                                     title="Open Details"
                                     className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200">
@@ -1576,7 +1533,7 @@ const TrackServicePage = () => {
         </div>
 
         {/* ============================================================
-            NEW: DETAIL MODAL OVERLAY
+            DETAIL MODAL OVERLAY with edge-arrow navigation
             ============================================================ */}
         <AnimatePresence>
           {showDetailModal && selectedService && (
@@ -1585,20 +1542,47 @@ const TrackServicePage = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+              className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-16 sm:px-24"
               onClick={() => setShowDetailModal(false)}>
 
+              {/* ============ FLOATING PREV ARROW (left edge) ============ */}
+              <button
+                onClick={(e) => { e.stopPropagation(); goToPrev(); }}
+                disabled={!hasPrev}
+                title="Previous application (←)"
+                className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-10 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white shadow-2xl border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-110 transition-all duration-150 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200 disabled:hover:scale-100">
+                <FiChevronLeft className="h-6 w-6" />
+              </button>
+
+              {/* ============ FLOATING NEXT ARROW (right edge) ============ */}
+              <button
+                onClick={(e) => { e.stopPropagation(); goToNext(); }}
+                disabled={!hasNext}
+                title="Next application (→)"
+                className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-10 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white shadow-2xl border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 hover:scale-110 transition-all duration-150 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700 disabled:hover:border-gray-200 disabled:hover:scale-100">
+                <FiChevronRight className="h-6 w-6" />
+              </button>
+
+              {/* ============ COUNTER BADGE (bottom center) ============ */}
+              {services.length > 0 && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-white/95 backdrop-blur rounded-full shadow-lg border border-gray-200 text-xs font-semibold text-gray-700 tabular-nums">
+                  {currentIndex + 1} <span className="text-gray-400 font-normal">of</span> {services.length}
+                </div>
+              )}
+
+              {/* ============ MODAL PANEL ============ */}
               <motion.div
                 initial={{ opacity: 0, scale: 0.97, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.97, y: 12 }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+                className="bg-white rounded-2xl w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden shadow-2xl"
                 onClick={(e) => e.stopPropagation()}>
 
                 {/* ============ MODAL HEADER (pinned) ============ */}
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
-                  {/* Avatar + identity */}
                   <div className="relative flex-shrink-0">
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-sm">
                       <span className="text-white text-xs font-bold">
@@ -1628,30 +1612,7 @@ const TrackServicePage = () => {
                     </div>
                   </div>
 
-                  {/* Prev / counter / Next */}
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={goToPrev}
-                      disabled={!hasPrev}
-                      title="Previous (←)"
-                      className="p-1.5 rounded-md text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border border-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
-                      <FiChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="text-[11px] font-medium text-gray-500 tabular-nums min-w-[48px] text-center">
-                      {currentIndex >= 0 ? `${currentIndex + 1} of ${services.length}` : ''}
-                    </span>
-                    <button
-                      onClick={goToNext}
-                      disabled={!hasNext}
-                      title="Next (→)"
-                      className="p-1.5 rounded-md text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 border border-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
-                      <FiChevronRight className="h-4 w-4" />
-                    </button>
-
-                    {/* Separator */}
-                    <div className="w-px h-5 bg-gray-200 mx-1"></div>
-
-                    {/* Quick actions */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => handleNotifyCustomer(selectedService)}
                       title="Notify customer"
@@ -1664,8 +1625,6 @@ const TrackServicePage = () => {
                       className="hidden sm:flex p-1.5 rounded-md text-gray-500 hover:text-purple-600 hover:bg-purple-50 border border-gray-200 transition-colors">
                       <FiGrid className="h-4 w-4" />
                     </button>
-
-                    {/* Close */}
                     <button
                       onClick={() => setShowDetailModal(false)}
                       title="Close (Esc)"
