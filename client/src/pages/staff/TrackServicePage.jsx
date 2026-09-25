@@ -2086,9 +2086,9 @@ const TrackServicePage = () => {
                                 {selectedService?.id === service.id && (
                                  <tr>
                                   <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
-                                    <div ref={detailPanelRef} className="max-h-[72vh] overflow-y-auto">
-                                      {/* Sticky nav toolbar — stays pinned while the panel content scrolls */}
-                                      <div className="sticky top-0 z-10 flex items-center justify-between bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2.5">
+                                    <div ref={detailPanelRef}>
+                                      {/* Sticky nav toolbar — stays pinned to the top of the screen while you scroll the page */}
+                                      <div className="sticky top-0 z-20 flex items-center justify-between bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2.5 shadow-sm">
                                         <button
                                           onClick={() => handleNavigateApplication(-1)}
                                           disabled={currentServiceIndex <= 0}
