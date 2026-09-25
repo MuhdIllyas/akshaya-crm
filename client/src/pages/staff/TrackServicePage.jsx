@@ -8,8 +8,8 @@ import {
   FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
-  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
-  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave
+  FiPlus, FiGrid, FiColumns, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave, FiMove
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -241,6 +241,9 @@ const TrackServicePage = () => {
   
   const [viewMode, setViewMode] = useState('grid');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+
+  const [draggedServiceId, setDraggedServiceId] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -1022,7 +1025,7 @@ const TrackServicePage = () => {
     });
     setActiveTab('overview');
     
-    if (!id && !preventNav && viewMode === 'list') {
+    if (!id && !preventNav && viewMode === 'kanban') {
       navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
     }
   };
@@ -1351,6 +1354,32 @@ const TrackServicePage = () => {
     pending: services.filter(s => s.status === 'Pending').length
   };
 
+  const kanbanColumns = ['Pending', 'In Progress', 'Resubmit', 'Delayed', 'Completed', 'Paid'];
+
+  const servicesByStatus = useMemo(() => {
+    const groups = {};
+    kanbanColumns.forEach(s => { groups[s] = []; });
+    services.forEach(s => {
+      if (!groups[s.status]) groups[s.status] = [];
+      groups[s.status].push(s);
+    });
+    return groups;
+  }, [services]);
+
+  const handleDragStart = (serviceId) => setDraggedServiceId(serviceId);
+  const handleDragEnd = () => { setDraggedServiceId(null); setDragOverColumn(null); };
+
+  const handleColumnDrop = (statusKey) => {
+    if (draggedServiceId) {
+      const service = services.find(s => s.id === draggedServiceId);
+      if (service && service.status !== statusKey) {
+        handleUpdateStatus(draggedServiceId, statusKey);
+      }
+    }
+    setDraggedServiceId(null);
+    setDragOverColumn(null);
+  };
+
   const TimelineItem = ({ title, dateTime, completed, current }) => (
     <div className="flex items-center space-x-3">
       <div className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-500' : current ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
@@ -1578,80 +1607,103 @@ const TrackServicePage = () => {
     </motion.div>
   );
 
-  const ServiceCard = ({ service, isSelected, onClick }) => {
-    const config = statusConfig[service.status] || statusConfig['Pending'];
+  const KanbanCard = ({ service, priorityConfig, isSelected, isDragging, onDragStart, onDragEnd, onClick }) => {
     const priority = priorityConfig[service.priority || 'medium'];
-    
+
     return (
-      <motion.div
-        whileHover={{ y: -2 }}
-        className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-          isSelected 
-            ? 'border-indigo-500 bg-indigo-50 shadow-md' 
-            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-        }`}
+      <div
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
         onClick={onClick}
+        className={`p-3 rounded-lg border bg-white cursor-grab active:cursor-grabbing transition-all ${
+          isDragging ? 'opacity-40' : ''
+        } ${
+          isSelected ? 'border-indigo-400 ring-2 ring-indigo-200 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+        }`}
       >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center space-x-2 min-w-0 flex-1">
-            <div className="relative flex-shrink-0">
-              <div className="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-600 rounded-lg flex items-center justify-center">
-                <FiUser className="h-4 w-4 text-white" />
-              </div>
-              <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${config.dot}`}></div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-gray-900 text-sm truncate" title={service.customerName || 'Unknown'}>
-                {service.customerName || 'Unknown'}
-              </h3>
-              <p className="text-xs text-gray-500 truncate" title={service.phone || 'N/A'}>
-                {service.phone || 'N/A'}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="mb-2">
-          <p className="text-sm font-medium text-gray-900 truncate" title={service.serviceType || 'Unknown'}>
-            {service.serviceType || 'Unknown'}
+        <div className="flex items-start justify-between gap-2 mb-1.5">
+          <p className="text-sm font-semibold text-gray-900 truncate" title={service.customerName}>
+            {service.customerName || 'Unknown'}
           </p>
-          <p className="text-xs text-gray-600 truncate" title={service.subcategoryName || 'N/A'}>
-            {service.subcategoryName || 'N/A'}
-          </p>
+          <FiMove className="h-3 w-3 text-gray-300 flex-shrink-0 mt-0.5" />
         </div>
+        <p className="text-xs text-gray-500 truncate mb-2" title={service.serviceType}>
+          {service.serviceType || 'Unknown'}
+        </p>
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 ${config.bg} ${config.border}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`}></span>
-              <span className={config.color}>{service.status}</span>
-            </span>
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 ${priority.bg} ${priority.border}`}>
-              <FiFlag className={`h-2.5 w-2.5 ${priority.color}`} />
-              <span className={priority.color}>{priority.label}</span>
-            </span>
-          </div>
+          <span className="text-[11px] font-mono text-gray-400 truncate">
+            {service.applicationNumber || 'N/A'}
+          </span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 flex-shrink-0 ${priority.bg} ${priority.border}`}>
+            <FiFlag className={`h-2.5 w-2.5 ${priority.color}`} />
+            <span className={priority.color}>{priority.label}</span>
+          </span>
         </div>
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-          <div className="text-xs text-gray-500 truncate flex-1 min-w-0 mr-2">
-            {service.applicationNumber ? `App: ${service.applicationNumber}` : 'No App Number'}
-          </div>
-          <div className="text-xs font-medium text-indigo-600 whitespace-nowrap flex-shrink-0">
-            {service.averageTime || 'Not set'}
-          </div>
+        <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
+          <span className="text-gray-400 truncate">{service.assignedTo || 'Unassigned'}</span>
+          <span className="text-indigo-500 font-medium flex-shrink-0">{service.estimatedDelivery}</span>
         </div>
-        <div className="mt-2">
-          {service.workSource === "online" ? (
-            <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full border border-green-200">
-              Online
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full border border-blue-200">
-              Offline
-            </span>
-          )}
-        </div>
-      </motion.div>
+      </div>
     );
   };
+
+  const renderKanbanBoard = () => (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex gap-4 min-w-max">
+        {kanbanColumns.map((statusKey) => {
+          const columnServices = servicesByStatus[statusKey] || [];
+          const cfg = statusConfig[statusKey];
+          const isDragOver = dragOverColumn === statusKey;
+
+          return (
+            <div
+              key={statusKey}
+              onDragOver={(e) => { e.preventDefault(); setDragOverColumn(statusKey); }}
+              onDragLeave={() => setDragOverColumn(null)}
+              onDrop={(e) => { e.preventDefault(); handleColumnDrop(statusKey); }}
+              className={`w-72 flex-shrink-0 rounded-xl border-2 transition-colors ${
+                isDragOver ? `${cfg.border} bg-indigo-50/50` : 'border-gray-200 bg-gray-50'
+              }`}
+            >
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-lg border-b-2 ${cfg.border} ${cfg.bg}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                  <span className={`text-xs font-bold uppercase tracking-wide ${cfg.color}`}>
+                    {statusKey}
+                  </span>
+                </div>
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full bg-white/70 ${cfg.color}`}>
+                  {columnServices.length}
+                </span>
+              </div>
+
+              <div className="p-2 space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto min-h-[80px]">
+                {columnServices.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-gray-400">
+                    No applications
+                  </div>
+                ) : (
+                  columnServices.map((service) => (
+                    <KanbanCard
+                      key={service.id}
+                      service={service}
+                      priorityConfig={priorityConfig}
+                      isSelected={selectedService?.id === service.id}
+                      isDragging={draggedServiceId === service.id}
+                      onDragStart={() => handleDragStart(service.id)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => handleServiceSelect(service)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   const renderQuickActionsPanel = () => (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm h-full flex flex-col justify-center">
@@ -1666,11 +1718,11 @@ const TrackServicePage = () => {
             <FiGrid className="h-4 w-4" />
           </button>
           <button 
-            onClick={() => setViewMode('list')}
-            className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-            title="Detail View"
+            onClick={() => setViewMode('kanban')}
+            className={`p-2 rounded-lg ${viewMode === 'kanban' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+            title="Board View"
           >
-            <FiList className="h-4 w-4" />
+            <FiColumns className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -1832,44 +1884,6 @@ const TrackServicePage = () => {
           )}
         </AnimatePresence>
       </div>
-    </div>
-  );
-
-  const renderCardList = () => (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">
-          Services <span className="text-gray-500 font-normal">({totalRecords})</span>
-        </h3>
-        <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-          <span className="text-xs text-gray-500">Active</span>
-        </div>
-      </div>
-      <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
-        {services.map(service => (
-          <ServiceCard
-            key={service.id}
-            service={service}
-            isSelected={selectedService?.id === service.id}
-            onClick={() => handleServiceSelect(service)}
-          />
-        ))}
-        {services.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm">No services found</p>
-            <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
-          </div>
-        )}
-      </div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
-          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Previous</button>
-          <div className="text-xs text-gray-500 font-medium">Page {currentPage} of {totalPages}</div>
-          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Next</button>
-        </div>
-      )}
     </div>
   );
 
@@ -2188,19 +2202,76 @@ const TrackServicePage = () => {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-              {isSidebarVisible && (
-                <div className="xl:col-span-1 flex flex-col space-y-6">
+                    ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
                   {renderQuickActionsPanel()}
+                </div>
+                <div className="lg:col-span-2">
                   {renderFiltersPanel()}
-                  {renderCardList()}
+                </div>
+              </div>
+
+              {renderKanbanBoard()}
+
+              {selectedService && (
+                <div className={`rounded-xl border-4 shadow-sm overflow-hidden ${statusConfig[selectedService.status]?.border || 'border-indigo-300'}`}>
+                  <div ref={detailPanelRef} className="bg-indigo-50/30">
+                    <div className={`sticky top-0 z-20 border-b-2 px-4 py-2.5 shadow-sm backdrop-blur bg-white/95 ${statusConfig[selectedService.status]?.border || 'border-indigo-200'}`}>
+                      <div className="flex items-center justify-between gap-4">
+                        <button
+                          onClick={() => handleNavigateApplication(-1)}
+                          disabled={currentServiceIndex <= 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                        >
+                          <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
+                          Previous
+                        </button>
+
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-center">
+                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusConfig[selectedService.status]?.dot || 'bg-indigo-500'}`} />
+                          <span className="text-sm font-bold text-gray-900 truncate">
+                            {selectedService.customerName}
+                          </span>
+                          <span className="text-xs text-gray-400 flex-shrink-0">·</span>
+                          <span className="text-xs font-mono text-gray-500 truncate flex-shrink-0">
+                            {selectedService.applicationNumber || 'N/A'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${statusConfig[selectedService.status]?.bg} ${statusConfig[selectedService.status]?.color}`}>
+                            {selectedService.status}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs font-medium text-gray-400">
+                            {currentServiceIndex + 1}/{services.length}
+                          </span>
+                          <button
+                            onClick={() => handleNavigateApplication(1)}
+                            disabled={currentServiceIndex >= services.length - 1}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Next
+                            <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedService(null)}
+                            title="Collapse"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            <FiX className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6">
+                      {renderDetailPane()}
+                    </div>
+                  </div>
                 </div>
               )}
-              
-              <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
-                {renderDetailPane()}
-              </div>
             </div>
           )}
 
