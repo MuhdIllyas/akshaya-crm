@@ -266,6 +266,12 @@ const TrackServicePage = () => {
     setCurrentPage(1);
   }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
 
+  useEffect(() => {
+    if (selectedService && detailPanelRef.current) {
+      detailPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [selectedService?.id]);
+
   const statusMap = {
     'pending': 'Pending',
     'in_progress': 'In Progress',
@@ -1019,6 +1025,15 @@ const TrackServicePage = () => {
     if (!id && !preventNav && viewMode === 'list') {
       navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
     }
+  };
+
+  const detailPanelRef = useRef(null);
+  const currentServiceIndex = services.findIndex(s => s.id === selectedService?.id);
+
+  const handleNavigateApplication = async (direction) => {
+    const nextIndex = currentServiceIndex + direction;
+    if (nextIndex < 0 || nextIndex >= services.length) return;
+    await handleServiceSelect(services[nextIndex], true);
   };
 
   const renderDetailPane = () => {
@@ -2068,11 +2083,47 @@ const TrackServicePage = () => {
                                  </td>
                                </tr>
                               
-                              {selectedService?.id === service.id && (
+                                {selectedService?.id === service.id && (
                                  <tr>
                                   <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
-                                    <div className="p-6 max-h-[600px] overflow-y-auto">
+                                    <div ref={detailPanelRef} className="max-h-[72vh] overflow-y-auto">
+                                      {/* Sticky nav toolbar — stays pinned while the panel content scrolls */}
+                                      <div className="sticky top-0 z-10 flex items-center justify-between bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2.5">
+                                        <button
+                                          onClick={() => handleNavigateApplication(-1)}
+                                          disabled={currentServiceIndex <= 0}
+                                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                          <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
+                                          Previous
+                                        </button>
+
+                                        <span className="text-xs font-medium text-gray-500">
+                                          {currentServiceIndex + 1} of {services.length}
+                                        </span>
+
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() => handleNavigateApplication(1)}
+                                            disabled={currentServiceIndex >= services.length - 1}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                          >
+                                            Next
+                                            <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                                          </button>
+                                          <button
+                                            onClick={() => setSelectedService(null)}
+                                            title="Collapse"
+                                            className="ml-1 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                          >
+                                            <FiX className="h-4 w-4" />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <div className="p-6">
                                         {renderDetailPane()}
+                                      </div>
                                     </div>
                                    </td>
                                  </tr>
