@@ -1979,7 +1979,11 @@ const TrackServicePage = () => {
                           
                           {dateServices.map(service => (
                             <React.Fragment key={service.id}>
-                              <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
+                              <tr className={`transition-colors group ${
+                                selectedService?.id === service.id
+                                  ? 'bg-indigo-50 ring-2 ring-inset ring-indigo-400'
+                                  : 'hover:bg-gray-50'
+                                }`}>
                                 <td className="px-4 py-3">
                                   <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
                                   <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
@@ -2083,41 +2087,56 @@ const TrackServicePage = () => {
                                  </td>
                                </tr>
                               
-                                {selectedService?.id === service.id && (
+                                                              {selectedService?.id === service.id && (
                                  <tr>
-                                  <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
-                                    <div ref={detailPanelRef}>
-                                      {/* Sticky nav toolbar — stays pinned to the top of the screen while you scroll the page */}
-                                      <div className="sticky top-0 z-20 flex items-center justify-between bg-white/95 backdrop-blur border-b border-gray-200 px-4 py-2.5 shadow-sm">
-                                        <button
-                                          onClick={() => handleNavigateApplication(-1)}
-                                          disabled={currentServiceIndex <= 0}
-                                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                          <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
-                                          Previous
-                                        </button>
-
-                                        <span className="text-xs font-medium text-gray-500">
-                                          {currentServiceIndex + 1} of {services.length}
-                                        </span>
-
-                                        <div className="flex items-center gap-1">
+                                  <td colSpan="6" className={`p-0 border-b-4 shadow-inner ${statusConfig[service.status]?.border || 'border-indigo-300'}`}>
+                                    <div ref={detailPanelRef} className="bg-indigo-50/30">
+                                      {/* Sticky nav toolbar — identity + status always visible while scrolling */}
+                                      <div className={`sticky top-0 z-20 border-b-2 px-4 py-2.5 shadow-sm backdrop-blur bg-white/95 ${statusConfig[service.status]?.border || 'border-indigo-200'}`}>
+                                        <div className="flex items-center justify-between gap-4">
                                           <button
-                                            onClick={() => handleNavigateApplication(1)}
-                                            disabled={currentServiceIndex >= services.length - 1}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            onClick={() => handleNavigateApplication(-1)}
+                                            disabled={currentServiceIndex <= 0}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                                           >
-                                            Next
-                                            <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                                            <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
+                                            Previous
                                           </button>
-                                          <button
-                                            onClick={() => setSelectedService(null)}
-                                            title="Collapse"
-                                            className="ml-1 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                                          >
-                                            <FiX className="h-4 w-4" />
-                                          </button>
+
+                                          <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-center">
+                                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusConfig[service.status]?.dot || 'bg-indigo-500'}`} />
+                                            <span className="text-sm font-bold text-gray-900 truncate">
+                                              {service.customerName}
+                                            </span>
+                                            <span className="text-xs text-gray-400 flex-shrink-0">·</span>
+                                            <span className="text-xs font-mono text-gray-500 truncate flex-shrink-0">
+                                              {service.applicationNumber || 'N/A'}
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${statusConfig[service.status]?.bg} ${statusConfig[service.status]?.color}`}>
+                                              {service.status}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            <span className="text-xs font-medium text-gray-400">
+                                              {currentServiceIndex + 1}/{services.length}
+                                            </span>
+                                            <button
+                                              onClick={() => handleNavigateApplication(1)}
+                                              disabled={currentServiceIndex >= services.length - 1}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                              Next
+                                              <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                                            </button>
+                                            <button
+                                              onClick={() => setSelectedService(null)}
+                                              title="Collapse"
+                                              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                            >
+                                              <FiX className="h-4 w-4" />
+                                            </button>
+                                          </div>
                                         </div>
                                       </div>
 
