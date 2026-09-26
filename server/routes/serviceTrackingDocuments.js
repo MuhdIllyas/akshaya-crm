@@ -6,6 +6,7 @@ import path from "path";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { triggerNotification } from "../utils/communication/notificationEngine.js";
 
 const router = express.Router();
 
@@ -76,47 +77,304 @@ const validTrackingId = (req, res) => {
 router.post("/:trackingId/documents", authenticateToken, upload.single("file"), async (req, res) => {
   try {
     const trackingId = validTrackingId(req, res);
+
     if (trackingId === null) {
       if (req.file) fs.unlinkSync(req.file.path);
       return;
     }
+
     const { label, visible_to_customer, remark } = req.body;
 
     const access = await checkTrackingAccess(req, trackingId);
+
     if (!access) {
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(403).json({ error: "Access denied" });
     }
-    if (!req.file) return res.status(400).json({ error: "File required" });
+
+    if (!req.file) {
+      return res.status(400).json({ error: "File required" });
+    }
+
     if (!label || !label.trim()) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: "Label is required" });
     }
 
+    const isVisibleToCustomer = visible_to_customer === "true";
+
+    // =========================================================
+    // 1. SAVE DOCUMENT
+    // =========================================================
+
     const result = await pool.query(
       `INSERT INTO service_tracking_documents
-       (service_tracking_id, label, file_path, file_size, mime_type, visible_to_customer, remark, uploaded_by, uploaded_by_role)
+       (
+         service_tracking_id,
+         label,
+         file_path,
+         file_size,
+         mime_type,
+         visible_to_customer,
+         remark,
+         uploaded_by,
+         uploaded_by_role
+       )
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING id, label, visible_to_customer, remark, created_at`,
-      [trackingId, label.trim(), req.file.path, req.file.size, req.file.mimetype,
-       visible_to_customer === "true", remark?.trim() || null, req.user.id, req.user.role]
+      [
+        trackingId,
+        label.trim(),
+        req.file.path,
+        req.file.size,
+        req.file.mimetype,
+        isVisibleToCustomer,
+        remark?.trim() || null,
+        req.user.id,
+        req.user.role
+      ]
     );
+
+    const uploadedDocument = result.rows[0];
+
+    // =========================================================
+    // 2. ACTIVITY LOG
+    // =========================================================
 
     await logActivity({
       centre_id: access.centre_id,
       related_type: "service_tracking",
       related_id: trackingId,
       action: "Document uploaded",
-      description: `Uploaded "${label.trim()}"${visible_to_customer === "true" ? " (visible to customer)" : ""}`,
+      description: `Uploaded "${label.trim()}"${
+        isVisibleToCustomer ? " (visible to customer)" : ""
+      }`,
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
 
-    res.json({ message: "Uploaded", document: result.rows[0] });
+    // =========================================================
+    // 3. SEND WHATSAPP ONLY IF CUSTOMER CAN SEE DOCUMENT
+    // =========================================================
+
+    let whatsappNotification = {
+      attempted: false,
+      success: false
+    };
+
+    if (isVisibleToCustomer) {
+      try {
+        // Get everything required for the WhatsApp template
+        const trackingInfo = await pool.query(
+          `
+          SELECT
+            st.public_token,
+            st.application_number,
+
+            se.customer_name,
+            se.phone,
+
+            s.name AS service_name,
+
+            se_staff.centre_id
+
+          FROM service_tracking st
+
+          JOIN service_entries se
+            ON st.service_entry_id = se.id
+
+          LEFT JOIN services s
+            ON se.category_id = s.id
+
+          JOIN staff se_staff
+            ON se.staff_id = se_staff.id
+
+          WHERE st.id = $1
+
+          LIMIT 1
+          `,
+          [trackingId]
+        );
+
+        if (trackingInfo.rows.length === 0) {
+          throw new Error(
+            `Tracking information not found for tracking ID ${trackingId}`
+          );
+        }
+
+        const tracking = trackingInfo.rows[0];
+
+        if (!tracking.public_token) {
+          throw new Error(
+            `No public_token found for tracking ID ${trackingId}`
+          );
+        }
+
+        if (!tracking.phone) {
+          throw new Error(
+            `Customer phone number not found for tracking ID ${trackingId}`
+          );
+        }
+
+        // =====================================================
+        // FORMAT PHONE
+        // =====================================================
+
+        const formattedPhone = tracking.phone.startsWith("+91")
+          ? tracking.phone
+          : `+91${tracking.phone.replace(/^\\+91/, "")}`;
+
+        // =====================================================
+        // TEMPLATE VARIABLES
+        //
+        // {{1}} = Customer Name
+        // {{2}} = Application No
+        // {{3}} = Service
+        // {{4}} = Document
+        // =====================================================
+
+        const templateParams = [
+          tracking.customer_name || "Customer",
+          tracking.application_number || `APP${trackingId}`,
+          tracking.service_name || "Service",
+          uploadedDocument.label || "Document"
+        ];
+
+        // =====================================================
+        // SEND THROUGH CENTRAL COMMUNICATION ENGINE
+        // =====================================================
+
+        whatsappNotification.attempted = true;
+
+        const response = await triggerNotification({
+          eventKey: "document_ready",
+
+          // Important:
+          // This makes the notification use the WhatsApp
+          // number belonging to this centre.
+          centreId: tracking.centre_id,
+
+          customerPhone: formattedPhone,
+
+          customComponents: [
+            {
+              type: "body",
+              parameters: templateParams.map((value) => ({
+                type: "text",
+                text: String(value || "-")
+              }))
+            },
+
+            // Dynamic URL button
+            // {{1}} = public_token
+            {
+              type: "button",
+              sub_type: "url",
+              index: "0",
+              parameters: [
+                {
+                  type: "text",
+                  text: String(tracking.public_token)
+                }
+              ]
+            }
+          ]
+        });
+
+        if (!response?.success) {
+          throw new Error(
+            response?.error ||
+            response?.reason ||
+            "WhatsApp notification failed"
+          );
+        }
+
+        whatsappNotification.success = true;
+
+        // =====================================================
+        // AUDIT LOG - SUCCESS
+        // =====================================================
+
+        await pool.query(
+          `
+          INSERT INTO audit_logs
+          (
+            action,
+            performed_by,
+            details,
+            centre_id,
+            created_at
+          )
+          VALUES ($1, $2, $3, $4, NOW())
+          `,
+          [
+            "WhatsApp Document Notification Sent",
+            "system",
+            `Document notification sent to ${formattedPhone} for tracking ID ${trackingId}. Document: "${uploadedDocument.label}"`,
+            tracking.centre_id || null
+          ]
+        );
+
+      } catch (whatsappError) {
+
+        // =====================================================
+        // IMPORTANT:
+        // DO NOT FAIL DOCUMENT UPLOAD IF WHATSAPP FAILS
+        // =====================================================
+        whatsappNotification.error = whatsappError.message;
+
+        console.warn(
+          `Document uploaded but WhatsApp notification failed for tracking ID ${trackingId}:`,
+          whatsappError.message
+        );
+
+        // Audit the failure
+        try {
+          await pool.query(
+            `
+            INSERT INTO audit_logs
+            (
+              action,
+              performed_by,
+              details,
+              centre_id,
+              created_at
+            )
+            VALUES ($1, $2, $3, $4, NOW())
+            `,
+            [
+              "WhatsApp Document Notification Failed",
+              "system",
+              `Document "${uploadedDocument.label}" was uploaded successfully, but WhatsApp notification failed for tracking ID ${trackingId}: ${whatsappError.message}`,
+              access.centre_id || null
+            ]
+          );
+        } catch (auditError) {
+          console.error(
+            "Failed to create WhatsApp failure audit log:",
+            auditError.message
+          );
+        }
+      }
+    }
+
+    // =========================================================
+    // 4. RESPONSE
+    // =========================================================
+    res.json({
+      message: "Uploaded",
+      document: uploadedDocument,
+      whatsappNotification
+    });
   } catch (err) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
     console.error("Document upload error:", err);
-    res.status(400).json({ error: err.message });
+    res.status(400).json({
+      error: err.message
+    });
   }
 });
 
