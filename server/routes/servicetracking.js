@@ -2777,7 +2777,7 @@ router.get('/', authenticateToken, async (req, res) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ` ORDER BY st.updated_at DESC`;
+    query += ` ORDER BY se.created_at DESC, st.id DESC`;
 
     console.log('servicetracking.js: Fetching service tracking entries with query:', query, 'values:', values);
 
