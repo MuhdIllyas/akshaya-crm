@@ -29,6 +29,7 @@ const CommunicationSettings = () => {
     { key: "review_request", label: "Customer Review Request" },
     { key: "token_generated", label: "New Token Generated" },
     { key: "reengagement_message", label: "Reengagement Request" },
+    { key: "document_ready", label: "Document Ready - Public" },
   ];
 
   useEffect(() => {
