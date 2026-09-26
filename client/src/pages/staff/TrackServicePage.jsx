@@ -1025,9 +1025,9 @@ const TrackServicePage = () => {
     });
     setActiveTab('overview');
     
-    if (!id && !preventNav && viewMode === 'kanban') {
+    /*if (!id && !preventNav && viewMode === 'kanban') {
       navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
-    }
+    }*/
   };
 
   const detailPanelRef = useRef(null);
@@ -1796,9 +1796,9 @@ const TrackServicePage = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
+                className="overflow-hidden pt-2 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end"
             >
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Data Range</label>
                 <select 
                   className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" 
@@ -1812,7 +1812,7 @@ const TrackServicePage = () => {
                 </select>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                 <div className="relative">
                   <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -1820,7 +1820,7 @@ const TrackServicePage = () => {
                 </div>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Service Category</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
                   <option value="all">All Services</option>
@@ -1828,7 +1828,7 @@ const TrackServicePage = () => {
                 </select>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Subcategory</label>
                 <select 
                   className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all ${serviceFilter === 'all' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-50 border-gray-200 cursor-pointer text-gray-900'}`} 
@@ -1841,7 +1841,7 @@ const TrackServicePage = () => {
                 </select>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="all">All Statuses</option>
@@ -1853,14 +1853,14 @@ const TrackServicePage = () => {
                   <option value="Paid">Paid</option>
                 </select>
               </div>
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
                   <option value="all">Everyone</option>
                   {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
                 </select>
               </div>
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
                   <option value="all">Any Date</option>
@@ -1868,14 +1868,14 @@ const TrackServicePage = () => {
                   <option value="overdue">Overdue</option>
                 </select>
               </div>
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
                 <div className="relative">
                   <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
                 </div>
               </div>
-              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-3 lg:col-span-4' : ''}>
+              <div className="col-span-1 md:col-span-3 lg:col-span-4">
                 <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
                   Clear All Filters
                 </button>
