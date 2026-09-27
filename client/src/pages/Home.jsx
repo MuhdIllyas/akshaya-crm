@@ -1086,7 +1086,7 @@ const Home = () => {
           <div className="pt-8 border-t border-white/10">
             <div className="flex flex-col md:flex-row justify-between items-center">
               <p className="text-navy-200 text-sm mb-4 md:mb-0">
-                © 2025 Muhammed Illyas. All rights reserved.
+                © 2026 Muhammed Illyas. All rights reserved.
               </p>
               <div className="flex space-x-6">
                 <a href="#" className="text-navy-200 hover:text-white text-sm transition-colors">Privacy Policy</a>
