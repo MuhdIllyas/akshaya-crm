@@ -1,3 +1,4 @@
+//for public TO tracking - 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -5,6 +6,7 @@ import {
   FiCalendar,
   FiCheck,
   FiCopy,
+  FiDownload,
   FiFileText,
   FiMessageSquare,
   FiRefreshCw,
@@ -106,6 +108,46 @@ const FactsCard = ({ data }) => (
     />
   </div>
 );
+
+const DocumentsCard = ({ documents, trackingId, apiUrl }) => {
+  if (!documents || documents.length === 0) return null;
+
+  return (
+    <section className="rounded-3xl border border-slate-200/70 bg-white p-6 sm:p-8">
+      <div className="mb-5 flex items-center gap-2.5">
+        <FiFileText className="h-4 w-4 text-[#0F2B5B]" />
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+          Documents ready for download
+        </h2>
+      </div>
+      <div className="space-y-2">
+        {documents.map((doc) => (
+          <div
+            key={doc.id}
+            className="rounded-2xl border border-slate-200/70 bg-slate-50/60 p-4"
+          >
+            <a
+              href={`${apiUrl}/api/servicetracking/public/status/${encodeURIComponent(trackingId)}/documents/${doc.id}/download`}
+              className="flex items-center justify-between"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span className="min-w-0 truncate text-sm font-bold text-[#0F2B5B]">{doc.label}</span>
+              <span className="ml-3 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[#0F2B5B] ring-1 ring-slate-200/70">
+                <FiDownload className="h-4 w-4" />
+              </span>
+            </a>
+            {doc.remark && (
+              <p className="mt-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                {doc.remark}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
@@ -562,6 +604,9 @@ const PublicTrackingPage = () => {
                 </p>
               )}
             </section>
+
+            {/* ---- Documents ---- */}
+            <DocumentsCard documents={data.documents} trackingId={trackingId} apiUrl={API_URL} />
 
             {/* ---- Note ---- */}
             {data.notes && (

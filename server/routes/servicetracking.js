@@ -2,6 +2,8 @@ import express from 'express';
 import pool from '../db.js';
 import jwt from 'jsonwebtoken';
 import { io } from '../server.js';
+import fs from 'fs';
+import path from 'path';
 import axios from 'axios';
 import { logActivity } from "../utils/activityLogger.js"; 
 
@@ -115,6 +117,14 @@ router.get('/public/status/:identifier', async (req, res) => {
       date: a.created_at
     }));
 
+    const docsResult = await pool.query(
+      `SELECT id, label, remark
+       FROM service_tracking_documents
+       WHERE service_tracking_id = $1 AND visible_to_customer = true
+       ORDER BY created_at DESC`,
+      [tracking.tracking_id]
+    );
+
     res.json({
       trackingId: tracking.tracking_id,
       applicationNumber: tracking.application_number || 'N/A',
@@ -132,10 +142,37 @@ router.get('/public/status/:identifier', async (req, res) => {
       handledBy: tracking.handled_by || null,
       notes: tracking.notes?.trim() || null,
       updates,
+      documents: docsResult.rows
     });
   } catch (err) {
     console.error('Public tracking error:', err);
     res.status(500).json({ error: 'Failed to retrieve application status' });
+  }
+});
+
+router.get('/public/status/:identifier/documents/:docId/download', async (req, res) => {
+  const { identifier, docId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT d.file_path, d.mime_type, d.label
+       FROM service_tracking_documents d
+       JOIN service_tracking st ON d.service_tracking_id = st.id
+       WHERE st.public_token = $1 AND d.id = $2 AND d.visible_to_customer = true`,
+      [identifier, docId]
+    );
+    if (result.rows.length === 0 || !fs.existsSync(result.rows[0].file_path)) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    const doc = result.rows[0];
+    const ext = path.extname(doc.file_path); // e.g. ".pdf"
+    const hasExt = path.extname(doc.label).toLowerCase() === ext.toLowerCase();
+    const downloadName = hasExt ? doc.label : `${doc.label}${ext}`;
+
+    res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+    res.sendFile(path.resolve(doc.file_path));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to download document' });
   }
 });
 
@@ -849,7 +886,7 @@ const {
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
       LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id) AND sr.is_submitted = true
       ${whereClause}
-      ORDER BY st.updated_at DESC
+      ORDER BY se.created_at DESC, st.updated_at DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
     
@@ -2740,7 +2777,7 @@ router.get('/', authenticateToken, async (req, res) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ` ORDER BY st.updated_at DESC`;
+    query += ` ORDER BY se.created_at DESC, st.id DESC`;
 
     console.log('servicetracking.js: Fetching service tracking entries with query:', query, 'values:', values);
 

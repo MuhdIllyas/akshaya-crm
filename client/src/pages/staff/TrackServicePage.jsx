@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -8,7 +8,8 @@ import {
   FiFileText, FiBarChart2, FiDollarSign, FiCalendar,
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
-  FiPlus, FiGrid, FiList, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle
+  FiPlus, FiGrid, FiColumns, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave, FiMove
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -23,7 +24,12 @@ import {
   getCategories, 
   getServiceEntries,
   getTrackingStats, 
-  getTrackingActivity
+  getTrackingActivity,
+  getTrackingDocuments,
+  uploadTrackingDocument,
+  toggleTrackingDocumentVisibility,
+  updateTrackingDocumentRemark,   
+  deleteTrackingDocument
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
@@ -128,6 +134,11 @@ const TrackServicePage = () => {
   const [activityHistory, setActivityHistory] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
+  //for document session
+  const [documents, setDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+
   const getSavedFilters = () => {
     try {
       const saved = localStorage.getItem('staffServiceSavedView');
@@ -231,6 +242,9 @@ const TrackServicePage = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
+  const [draggedServiceId, setDraggedServiceId] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -254,6 +268,12 @@ const TrackServicePage = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearch, debouncedAadhaar, statusFilter, staffFilter, expiryFilter, timeRange, dateFilter, serviceFilter, subcategoryFilter]);
+
+  useEffect(() => {
+    if (selectedService && detailPanelRef.current) {
+      detailPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [selectedService?.id]);
 
   const statusMap = {
     'pending': 'Pending',
@@ -523,6 +543,75 @@ const TrackServicePage = () => {
     }
   };
 
+    const fetchDocuments = async (trackingId) => {
+    if (!trackingId) {
+      setDocuments([]);
+      return;
+    }
+    try {
+      setDocumentsLoading(true);
+      const data = await getTrackingDocuments(trackingId);
+      setDocuments(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      setDocuments([]);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  const handleUploadDocument = async (trackingId, file, label, visibleToCustomer, remark) => {
+    try {
+      setUploadingDocument(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('label', label);
+      formData.append('visible_to_customer', visibleToCustomer ? 'true' : 'false');
+      if (remark && remark.trim()) formData.append('remark', remark.trim());
+      await uploadTrackingDocument(trackingId, formData);
+      await fetchDocuments(trackingId);
+      toast.success('Document uploaded');
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      toast.error('Failed to upload document: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleToggleDocumentVisibility = async (trackingId, docId, visible) => {
+    try {
+      await toggleTrackingDocumentVisibility(trackingId, docId, visible);
+      await fetchDocuments(trackingId);
+      toast.success(visible ? 'Document is now visible to the customer' : 'Document hidden from the customer');
+    } catch (error) {
+      console.error('Error updating document visibility:', error);
+      toast.error('Failed to update document visibility');
+    }
+  };
+
+  const handleUpdateDocumentRemark = async (trackingId, docId, remark) => {
+    try {
+      await updateTrackingDocumentRemark(trackingId, docId, remark);
+      await fetchDocuments(trackingId);
+      toast.success('Remark saved');
+    } catch (error) {
+      console.error('Error updating remark:', error);
+      toast.error('Failed to save remark');
+    }
+  };
+
+  const handleDeleteDocument = async (trackingId, docId) => {
+    try {
+      await deleteTrackingDocument(trackingId, docId);
+      await fetchDocuments(trackingId);
+      toast.success('Document deleted');
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Failed to delete document');
+    }
+  };
+
   const fetchSingleTrackingEntry = async (entryId) => {
     try {
       console.log('Fetching single tracking entry:', entryId);
@@ -541,6 +630,7 @@ const TrackServicePage = () => {
         setServices(transformed);
         setSelectedService(transformed[0]);
         await fetchActivityHistory(transformed[0].id);
+        await fetchDocuments(transformed[0].id);
         
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
@@ -867,6 +957,7 @@ const TrackServicePage = () => {
 
       const response = await updateTrackingEntry(selectedService.id, payload);
       await fetchActivityHistory(selectedService.id);
+      await fetchDocuments(selectedService.id);
 
       toast.success('Tracking details updated successfully');
       
@@ -918,8 +1009,8 @@ const TrackServicePage = () => {
 
   const handleServiceSelect = async (service, preventNav = false) => {
     setSelectedService(service);
-
     await fetchActivityHistory(service.id);
+    await fetchDocuments(service.id);
 
     setTrackingFormData({
       applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
@@ -934,9 +1025,18 @@ const TrackServicePage = () => {
     });
     setActiveTab('overview');
     
-    if (!id && !preventNav && viewMode === 'list') {
+    /*if (!id && !preventNav && viewMode === 'kanban') {
       navigate(`/dashboard/staff/track_service/${service.id}`, { replace: true });
-    }
+    }*/
+  };
+
+  const detailPanelRef = useRef(null);
+  const currentServiceIndex = services.findIndex(s => s.id === selectedService?.id);
+
+  const handleNavigateApplication = async (direction) => {
+    const nextIndex = currentServiceIndex + direction;
+    if (nextIndex < 0 || nextIndex >= services.length) return;
+    await handleServiceSelect(services[nextIndex], true);
   };
 
   const renderDetailPane = () => {
@@ -1063,11 +1163,13 @@ const TrackServicePage = () => {
                 )}
                 {activeTab === 'documents' && (
                   <EnhancedDocumentsView 
-                    service={selectedService}
-                    entryServices={entryServices}
-                    categories={categories}
-                    formatPayments={formatPayments}
-                    priorityConfig={priorityConfig}
+                    documents={documents}
+                    documentsLoading={documentsLoading}
+                    uploadingDocument={uploadingDocument}
+                    onUpload={(file, label, visible, remark) => handleUploadDocument(selectedService.id, file, label, visible, remark)}
+                    onUpdateRemark={(docId, remark) => handleUpdateDocumentRemark(selectedService.id, docId, remark)}
+                    onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(selectedService.id, docId, visible)}
+                    onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)}
                   />
                 )}
                 {activeTab === 'history' && (
@@ -1250,6 +1352,32 @@ const TrackServicePage = () => {
     inProgress: services.filter(s => s.status === 'In Progress').length,
     delayed: services.filter(s => s.status === 'Delayed').length,
     pending: services.filter(s => s.status === 'Pending').length
+  };
+
+  const kanbanColumns = ['Pending', 'In Progress', 'Resubmit', 'Delayed', 'Completed', 'Paid'];
+
+  const servicesByStatus = useMemo(() => {
+    const groups = {};
+    kanbanColumns.forEach(s => { groups[s] = []; });
+    services.forEach(s => {
+      if (!groups[s.status]) groups[s.status] = [];
+      groups[s.status].push(s);
+    });
+    return groups;
+  }, [services]);
+
+  const handleDragStart = (serviceId) => setDraggedServiceId(serviceId);
+  const handleDragEnd = () => { setDraggedServiceId(null); setDragOverColumn(null); };
+
+  const handleColumnDrop = (statusKey) => {
+    if (draggedServiceId) {
+      const service = services.find(s => s.id === draggedServiceId);
+      if (service && service.status !== statusKey) {
+        handleUpdateStatus(draggedServiceId, statusKey);
+      }
+    }
+    setDraggedServiceId(null);
+    setDragOverColumn(null);
   };
 
   const TimelineItem = ({ title, dateTime, completed, current }) => (
@@ -1479,80 +1607,113 @@ const TrackServicePage = () => {
     </motion.div>
   );
 
-  const ServiceCard = ({ service, isSelected, onClick }) => {
-    const config = statusConfig[service.status] || statusConfig['Pending'];
+  const KanbanCard = ({ service, priorityConfig, isSelected, isDragging, onDragStart, onDragEnd, onClick }) => {
     const priority = priorityConfig[service.priority || 'medium'];
-    
+    const cardRef = useRef(null);
+
+    const handleDragStart = (e) => {
+      if (cardRef.current) {
+        e.dataTransfer.setDragImage(cardRef.current, 20, 20);
+      }
+      e.dataTransfer.effectAllowed = 'move';
+      onDragStart();
+    };
+
     return (
-      <motion.div
-        whileHover={{ y: -2 }}
-        className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-          isSelected 
-            ? 'border-indigo-500 bg-indigo-50 shadow-md' 
-            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
-        }`}
+      <div
+        ref={cardRef}
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={onDragEnd}
         onClick={onClick}
+        className={`p-3 rounded-lg border bg-white cursor-grab active:cursor-grabbing transition-all ${
+          isDragging ? 'opacity-40' : ''
+        } ${
+          isSelected ? 'border-indigo-400 ring-2 ring-indigo-200 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+        }`}
       >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center space-x-2 min-w-0 flex-1">
-            <div className="relative flex-shrink-0">
-              <div className="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-600 rounded-lg flex items-center justify-center">
-                <FiUser className="h-4 w-4 text-white" />
-              </div>
-              <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${config.dot}`}></div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-gray-900 text-sm truncate" title={service.customerName || 'Unknown'}>
-                {service.customerName || 'Unknown'}
-              </h3>
-              <p className="text-xs text-gray-500 truncate" title={service.phone || 'N/A'}>
-                {service.phone || 'N/A'}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="mb-2">
-          <p className="text-sm font-medium text-gray-900 truncate" title={service.serviceType || 'Unknown'}>
-            {service.serviceType || 'Unknown'}
+        <div className="flex items-start justify-between gap-2 mb-1.5">
+          <p className="text-sm font-semibold text-gray-900 truncate" title={service.customerName}>
+            {service.customerName || 'Unknown'}
           </p>
-          <p className="text-xs text-gray-600 truncate" title={service.subcategoryName || 'N/A'}>
-            {service.subcategoryName || 'N/A'}
-          </p>
+          <FiMove className="h-3 w-3 text-gray-300 flex-shrink-0 mt-0.5" />
         </div>
+        <p className="text-xs text-gray-500 truncate mb-2" title={service.serviceType}>
+          {service.serviceType || 'Unknown'}
+        </p>
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 ${config.bg} ${config.border}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`}></span>
-              <span className={config.color}>{service.status}</span>
-            </span>
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 ${priority.bg} ${priority.border}`}>
-              <FiFlag className={`h-2.5 w-2.5 ${priority.color}`} />
-              <span className={priority.color}>{priority.label}</span>
-            </span>
-          </div>
+          <span className="text-[11px] font-mono text-gray-400 truncate">
+            {service.applicationNumber || 'N/A'}
+          </span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 flex-shrink-0 ${priority.bg} ${priority.border}`}>
+            <FiFlag className={`h-2.5 w-2.5 ${priority.color}`} />
+            <span className={priority.color}>{priority.label}</span>
+          </span>
         </div>
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-          <div className="text-xs text-gray-500 truncate flex-1 min-w-0 mr-2">
-            {service.applicationNumber ? `App: ${service.applicationNumber}` : 'No App Number'}
-          </div>
-          <div className="text-xs font-medium text-indigo-600 whitespace-nowrap flex-shrink-0">
-            {service.averageTime || 'Not set'}
-          </div>
+        <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
+          <span className="text-gray-400 truncate">{service.assignedTo || 'Unassigned'}</span>
+          <span className="text-indigo-500 font-medium flex-shrink-0">{service.estimatedDelivery}</span>
         </div>
-        <div className="mt-2">
-          {service.workSource === "online" ? (
-            <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full border border-green-200">
-              Online
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full border border-blue-200">
-              Offline
-            </span>
-          )}
-        </div>
-      </motion.div>
+      </div>
     );
   };
+
+  const renderKanbanBoard = () => (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex gap-4 min-w-max">
+        {kanbanColumns.map((statusKey) => {
+          const columnServices = servicesByStatus[statusKey] || [];
+          const cfg = statusConfig[statusKey];
+          const isDragOver = dragOverColumn === statusKey;
+
+          return (
+            <div
+              key={statusKey}
+              onDragOver={(e) => { e.preventDefault(); setDragOverColumn(statusKey); }}
+              onDragLeave={() => setDragOverColumn(null)}
+              onDrop={(e) => { e.preventDefault(); handleColumnDrop(statusKey); }}
+              className={`w-72 flex-shrink-0 rounded-xl border-2 transition-colors ${
+                isDragOver ? `${cfg.border} bg-indigo-50/50` : 'border-gray-200 bg-gray-50'
+              }`}
+            >
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-lg border-b-2 ${cfg.border} ${cfg.bg}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                  <span className={`text-xs font-bold uppercase tracking-wide ${cfg.color}`}>
+                    {statusKey}
+                  </span>
+                </div>
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full bg-white/70 ${cfg.color}`}>
+                  {columnServices.length}
+                </span>
+              </div>
+
+              <div className="p-2 space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto min-h-[80px]">
+                {columnServices.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-gray-400">
+                    No applications
+                  </div>
+                ) : (
+                  columnServices.map((service) => (
+                    <KanbanCard
+                      key={service.id}
+                      service={service}
+                      priorityConfig={priorityConfig}
+                      isSelected={selectedService?.id === service.id}
+                      isDragging={draggedServiceId === service.id}
+                      onDragStart={() => handleDragStart(service.id)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => handleServiceSelect(service)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   const renderQuickActionsPanel = () => (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm h-full flex flex-col justify-center">
@@ -1567,11 +1728,11 @@ const TrackServicePage = () => {
             <FiGrid className="h-4 w-4" />
           </button>
           <button 
-            onClick={() => setViewMode('list')}
-            className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-            title="Detail View"
+            onClick={() => setViewMode('kanban')}
+            className={`p-2 rounded-lg ${viewMode === 'kanban' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+            title="Board View"
           >
-            <FiList className="h-4 w-4" />
+            <FiColumns className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -1645,9 +1806,9 @@ const TrackServicePage = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className={`overflow-hidden pt-2 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end' : 'space-y-4'}`}
+                className="overflow-hidden pt-2 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end"
             >
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Data Range</label>
                 <select 
                   className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" 
@@ -1661,7 +1822,7 @@ const TrackServicePage = () => {
                 </select>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
                 <div className="relative">
                   <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -1669,7 +1830,7 @@ const TrackServicePage = () => {
                 </div>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Service Category</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
                   <option value="all">All Services</option>
@@ -1677,7 +1838,7 @@ const TrackServicePage = () => {
                 </select>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Subcategory</label>
                 <select 
                   className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all ${serviceFilter === 'all' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-50 border-gray-200 cursor-pointer text-gray-900'}`} 
@@ -1690,7 +1851,7 @@ const TrackServicePage = () => {
                 </select>
               </div>
 
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="all">All Statuses</option>
@@ -1702,14 +1863,14 @@ const TrackServicePage = () => {
                   <option value="Paid">Paid</option>
                 </select>
               </div>
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
                   <option value="all">Everyone</option>
                   {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
                 </select>
               </div>
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
                 <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
                   <option value="all">Any Date</option>
@@ -1717,14 +1878,14 @@ const TrackServicePage = () => {
                   <option value="overdue">Overdue</option>
                 </select>
               </div>
-              <div className={viewMode === 'grid' ? '' : 'space-y-1.5'}>
+              <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
                 <div className="relative">
                   <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
                 </div>
               </div>
-              <div className={viewMode === 'grid' ? 'col-span-1 md:col-span-3 lg:col-span-4' : ''}>
+              <div className="col-span-1 md:col-span-3 lg:col-span-4">
                 <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
                   Clear All Filters
                 </button>
@@ -1733,44 +1894,6 @@ const TrackServicePage = () => {
           )}
         </AnimatePresence>
       </div>
-    </div>
-  );
-
-  const renderCardList = () => (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">
-          Services <span className="text-gray-500 font-normal">({totalRecords})</span>
-        </h3>
-        <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-          <span className="text-xs text-gray-500">Active</span>
-        </div>
-      </div>
-      <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
-        {services.map(service => (
-          <ServiceCard
-            key={service.id}
-            service={service}
-            isSelected={selectedService?.id === service.id}
-            onClick={() => handleServiceSelect(service)}
-          />
-        ))}
-        {services.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm">No services found</p>
-            <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
-          </div>
-        )}
-      </div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
-          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Previous</button>
-          <div className="text-xs text-gray-500 font-medium">Page {currentPage} of {totalPages}</div>
-          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50 transition-colors">Next</button>
-        </div>
-      )}
     </div>
   );
 
@@ -1880,7 +2003,11 @@ const TrackServicePage = () => {
                           
                           {dateServices.map(service => (
                             <React.Fragment key={service.id}>
-                              <tr className={`hover:bg-gray-50 transition-colors group ${selectedService?.id === service.id ? 'bg-indigo-50/20' : ''}`}>
+                              <tr className={`transition-colors group ${
+                                selectedService?.id === service.id
+                                  ? 'bg-indigo-50 ring-2 ring-inset ring-indigo-400'
+                                  : 'hover:bg-gray-50'
+                                }`}>
                                 <td className="px-4 py-3">
                                   <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
                                   <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
@@ -1984,11 +2111,62 @@ const TrackServicePage = () => {
                                  </td>
                                </tr>
                               
-                              {selectedService?.id === service.id && (
+                                                              {selectedService?.id === service.id && (
                                  <tr>
-                                  <td colSpan="6" className="p-0 border-b-2 border-indigo-200 bg-gray-50/60 shadow-inner">
-                                    <div className="p-6 max-h-[600px] overflow-y-auto">
+                                  <td colSpan="6" className={`p-0 border-b-4 shadow-inner ${statusConfig[service.status]?.border || 'border-indigo-300'}`}>
+                                    <div ref={detailPanelRef} className="bg-indigo-50/30">
+                                      {/* Sticky nav toolbar — identity + status always visible while scrolling */}
+                                      <div className={`sticky top-0 z-20 border-b-2 px-4 py-2.5 shadow-sm backdrop-blur bg-white/95 ${statusConfig[service.status]?.border || 'border-indigo-200'}`}>
+                                        <div className="flex items-center justify-between gap-4">
+                                          <button
+                                            onClick={() => handleNavigateApplication(-1)}
+                                            disabled={currentServiceIndex <= 0}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                                          >
+                                            <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
+                                            Previous
+                                          </button>
+
+                                          <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-center">
+                                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusConfig[service.status]?.dot || 'bg-indigo-500'}`} />
+                                            <span className="text-sm font-bold text-gray-900 truncate">
+                                              {service.customerName}
+                                            </span>
+                                            <span className="text-xs text-gray-400 flex-shrink-0">·</span>
+                                            <span className="text-xs font-mono text-gray-500 truncate flex-shrink-0">
+                                              {service.applicationNumber || 'N/A'}
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${statusConfig[service.status]?.bg} ${statusConfig[service.status]?.color}`}>
+                                              {service.status}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            <span className="text-xs font-medium text-gray-400">
+                                              {currentServiceIndex + 1}/{services.length}
+                                            </span>
+                                            <button
+                                              onClick={() => handleNavigateApplication(1)}
+                                              disabled={currentServiceIndex >= services.length - 1}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                              Next
+                                              <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                                            </button>
+                                            <button
+                                              onClick={() => setSelectedService(null)}
+                                              title="Collapse"
+                                              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                            >
+                                              <FiX className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="p-6">
                                         {renderDetailPane()}
+                                      </div>
                                     </div>
                                    </td>
                                  </tr>
@@ -2034,19 +2212,76 @@ const TrackServicePage = () => {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-              {isSidebarVisible && (
-                <div className="xl:col-span-1 flex flex-col space-y-6">
+                    ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
                   {renderQuickActionsPanel()}
+                </div>
+                <div className="lg:col-span-2">
                   {renderFiltersPanel()}
-                  {renderCardList()}
+                </div>
+              </div>
+
+              {renderKanbanBoard()}
+
+              {selectedService && (
+                <div className={`rounded-xl border-4 shadow-sm overflow-hidden ${statusConfig[selectedService.status]?.border || 'border-indigo-300'}`}>
+                  <div ref={detailPanelRef} className="bg-indigo-50/30">
+                    <div className={`sticky top-0 z-20 border-b-2 px-4 py-2.5 shadow-sm backdrop-blur bg-white/95 ${statusConfig[selectedService.status]?.border || 'border-indigo-200'}`}>
+                      <div className="flex items-center justify-between gap-4">
+                        <button
+                          onClick={() => handleNavigateApplication(-1)}
+                          disabled={currentServiceIndex <= 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                        >
+                          <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
+                          Previous
+                        </button>
+
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-center">
+                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusConfig[selectedService.status]?.dot || 'bg-indigo-500'}`} />
+                          <span className="text-sm font-bold text-gray-900 truncate">
+                            {selectedService.customerName}
+                          </span>
+                          <span className="text-xs text-gray-400 flex-shrink-0">·</span>
+                          <span className="text-xs font-mono text-gray-500 truncate flex-shrink-0">
+                            {selectedService.applicationNumber || 'N/A'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${statusConfig[selectedService.status]?.bg} ${statusConfig[selectedService.status]?.color}`}>
+                            {selectedService.status}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs font-medium text-gray-400">
+                            {currentServiceIndex + 1}/{services.length}
+                          </span>
+                          <button
+                            onClick={() => handleNavigateApplication(1)}
+                            disabled={currentServiceIndex >= services.length - 1}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Next
+                            <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedService(null)}
+                            title="Collapse"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            <FiX className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6">
+                      {renderDetailPane()}
+                    </div>
+                  </div>
                 </div>
               )}
-              
-              <div className={isSidebarVisible ? "xl:col-span-3" : "xl:col-span-4"}>
-                {renderDetailPane()}
-              </div>
             </div>
           )}
 
@@ -2247,44 +2482,413 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
   </div>
 );
 
-const EnhancedDocumentsView = ({ service, entryServices, categories, formatPayments, priorityConfig }) => {
+/* ============================================================
+   INLINE REMARK EDITOR — used inside Documents table
+   ============================================================ */
+
+const DocumentRemarkEditor = ({ doc, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(doc.remark || '');
+  const inputRef = useRef(null);
+
+  useEffect(() => { setValue(doc.remark || ''); }, [doc.remark]);
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+
+  const commit = () => {
+    if (value.trim() !== (doc.remark || '').trim()) onSave(value.trim());
+    setEditing(false);
+  };
+  const cancel = () => { setValue(doc.remark || ''); setEditing(false); };
+
+  if (editing) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="relative flex-1 min-w-0">
+          <FiMessageSquare className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-amber-500 pointer-events-none" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') cancel();
+            }}
+            onBlur={commit}
+            placeholder="Remark for customer (e.g. Password: 1234)"
+            className="w-full pl-7 pr-2 py-1 text-xs border border-amber-300 bg-amber-50/60 rounded-md focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (doc.remark) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        className="mt-1.5 group/remark inline-flex items-center gap-1.5 max-w-full text-left text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-0.5 hover:bg-amber-100 transition-colors"
+        title="Click to edit remark"
+      >
+        <FiMessageSquare className="h-3 w-3 text-amber-600 flex-shrink-0" />
+        <span className="truncate">{doc.remark}</span>
+        <FiEdit className="h-2.5 w-2.5 opacity-0 group-hover/remark:opacity-60 flex-shrink-0" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      className="mt-1.5 text-[11px] text-gray-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+    >
+      <FiPlus className="h-2.5 w-2.5" />
+      Add customer remark
+    </button>
+  );
+};
+
+/* ============================================================
+   ENHANCED DOCUMENTS VIEW
+   ============================================================ */
+
+const EnhancedDocumentsView = ({ 
+  documents = [], documentsLoading, uploadingDocument,
+  onUpload, onToggleVisibility, onDelete, onUpdateRemark
+}) => {
+  const [file, setFile] = useState(null);
+  const [label, setLabel] = useState('');
+  const [visibleToCustomer, setVisibleToCustomer] = useState(false);
+  const [remark, setRemark] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!file || !label.trim()) {
+      toast.error('Choose a file and enter a label first');
+      return;
+    }
+    onUpload(file, label.trim(), visibleToCustomer, remark);
+    setFile(null);
+    setLabel('');
+    setVisibleToCustomer(false);
+    setRemark('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); };
+
+  const formatBytes = (bytes) => {
+    if (!bytes) return '';
+    const kb = bytes / 1024;
+    return kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+  };
+
+  const getFileIcon = (doc) => {
+    const name = (doc.file_name || doc.label || '').toLowerCase();
+    if (name.endsWith('.pdf')) return { Icon: FiFileText, color: 'text-rose-600', bg: 'bg-rose-50' };
+    if (name.match(/\.(jpg|jpeg|png|gif|webp)$/)) return { Icon: FiEye, color: 'text-blue-600', bg: 'bg-blue-50' };
+    if (name.match(/\.(doc|docx)$/)) return { Icon: FiFileText, color: 'text-indigo-600', bg: 'bg-indigo-50' };
+    return { Icon: FiFileText, color: 'text-gray-600', bg: 'bg-gray-50' };
+  };
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <h3 className="font-semibold text-gray-900">Service Information</h3>
-          <div className="space-y-3">
-            <DetailRow label="Token ID" value={service.trackingId || 'N/A'} />
-            <DetailRow label="Customer Name" value={service.customerName || 'Unknown'} />
-            <DetailRow label="Phone" value={service.phone || 'N/A'} />
-            <DetailRow label="Email" value={service.email || 'N/A'} />
-            <DetailRow label="Aadhaar" value={service.aadhaar || 'N/A'} />
-            <DetailRow label="Service" value={service.serviceType || 'Unknown'} />
-            <DetailRow label="Subcategory" value={service.subcategoryName || 'N/A'} />
-            <DetailRow label="Expiry Date" value={service.expiryDate || 'Not set'} />
-            <div className="flex justify-between items-center py-1">
-              <span className="text-sm text-gray-600">Priority</span>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${priorityConfig[service.priority]?.bg} ${priorityConfig[service.priority]?.border}`}>
-                <FiFlag className={`h-3 w-3 ${priorityConfig[service.priority]?.color}`} />
-                <span className={priorityConfig[service.priority]?.color}>{priorityConfig[service.priority]?.label}</span>
-              </span>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <FiPaperclip className="h-4 w-4 text-indigo-600" />
             </div>
+            <h3 className="text-lg font-semibold text-gray-900">Customer Documents</h3>
+          </div>
+          <p className="text-sm text-gray-500 ml-11">
+            Upload and manage documents. Files marked visible and their remarks appear on the customer's public tracking page.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 ml-11 sm:ml-0">
+          <div className="px-3 py-1.5 bg-gray-100 rounded-lg">
+            <span className="text-xs font-medium text-gray-600">
+              {documents.length} {documents.length === 1 ? 'file' : 'files'}
+            </span>
+          </div>
+          <div className="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+            <span className="text-xs font-medium text-emerald-700">
+              {documents.filter(d => d.visible_to_customer).length} visible
+            </span>
           </div>
         </div>
-        <div className="space-y-4">
-          <h3 className="font-semibold text-gray-900">Financial Information</h3>
-          <div className="space-y-3">
-            <FinancialRow label="Service Charge" amount={service.serviceCharge} currency="₹" />
-            <FinancialRow label="Department Charge" amount={service.departmentCharge} currency="₹" />
-            <FinancialRow label="Total Charge" amount={service.totalCharge} currency="₹" />
-            <div className="flex justify-between items-center py-2">
-              <span className="text-sm text-gray-600">Payments:</span>
-              <span className="text-sm text-gray-900">
-                {service.paymentDetails || 'No payments recorded'}
-              </span>
+      </div>
+
+      {/* Upload Form */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+          <FiUpload className="h-4 w-4 text-indigo-600" />
+          <h4 className="text-sm font-semibold text-gray-900">Upload New Document</h4>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Label */}
+            <div className="lg:col-span-4">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Document Label <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Income Certificate"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              />
+            </div>
+
+            {/* File Drop Zone */}
+            <div className="lg:col-span-5">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                File <span className="text-rose-500">*</span>
+              </label>
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative flex items-center gap-3 px-3 py-2.5 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                  dragActive
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : file
+                    ? 'border-emerald-400 bg-emerald-50/40'
+                    : 'border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50/40'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  onChange={(e) => setFile(e.target.files[0] || null)}
+                  className="hidden"
+                />
+                {file ? (
+                  <>
+                    <FiFileText className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <span className="text-sm text-gray-800 truncate flex-1">{file.name}</span>
+                    <span className="text-xs text-gray-500 flex-shrink-0">{formatBytes(file.size)}</span>
+                  </>
+                ) : (
+                  <>
+                    <FiUpload className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <span className="text-sm text-gray-500 truncate flex-1">
+                      {dragActive ? 'Drop file here' : 'Click or drag file to upload'}
+                    </span>
+                    <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">PDF, DOC, IMG</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Visibility + Button */}
+            <div className="lg:col-span-3 flex flex-col">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                Visibility
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibleToCustomer(!visibleToCustomer)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-medium rounded-lg border transition-all ${
+                    visibleToCustomer
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                      : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                  }`}
+                  title={visibleToCustomer ? 'Visible to customer' : 'Hidden from customer'}
+                >
+                  {visibleToCustomer ? <FiEye className="h-3.5 w-3.5" /> : <FiEyeOff className="h-3.5 w-3.5" />}
+                  {visibleToCustomer ? 'Visible' : 'Hidden'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingDocument || !file || !label.trim()}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                >
+                  {uploadingDocument ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Uploading
+                    </>
+                  ) : (
+                    <>
+                      <FiUpload className="h-3.5 w-3.5" />
+                      Upload
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Remark row — full width, amber-tinted to signal customer-facing */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1.5">
+              <FiMessageSquare className="h-3.5 w-3.5 text-amber-500" />
+              Customer Remark
+              <span className="text-gray-400 font-normal">— optional, shown to the customer alongside the document</span>
+            </label>
+            <input
+              type="text"
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              placeholder="e.g. Password: 1234 — visible on the customer's tracking page"
+              className="w-full px-3 py-2 text-sm border border-amber-200 bg-amber-50/40 rounded-lg focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 outline-none transition-all placeholder:text-amber-700/40"
+            />
+          </div>
+        </form>
+      </div>
+
+      {/* Documents List */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FiFileText className="h-4 w-4 text-indigo-600" />
+            <h4 className="text-sm font-semibold text-gray-900">Uploaded Documents</h4>
+          </div>
+          {documents.length > 0 && (
+            <span className="text-xs text-gray-500">
+              {documents.length} {documents.length === 1 ? 'document' : 'documents'}
+            </span>
+          )}
         </div>
+
+        {documentsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-12 px-6">
+            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <FiFileText className="h-7 w-7 text-gray-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-900 mb-1">No documents yet</p>
+            <p className="text-xs text-gray-500">Upload the first document using the form above</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/70 border-b border-gray-200 text-[11px] text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 font-semibold">Document & Remark</th>
+                  <th className="px-5 py-3 font-semibold w-40">Uploaded By</th>
+                  <th className="px-5 py-3 font-semibold w-32">Date</th>
+                  <th className="px-5 py-3 font-semibold w-28 text-center">Size</th>
+                  <th className="px-5 py-3 font-semibold w-32 text-center">Visibility</th>
+                  <th className="px-5 py-3 font-semibold w-24 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {documents.map((doc) => {
+                  const { Icon, color, bg } = getFileIcon(doc);
+                  return (
+                    <tr key={doc.id} className="hover:bg-gray-50/60 transition-colors group align-top">
+                      <td className="px-5 py-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${bg}`}>
+                            <Icon className={`h-4 w-4 ${color}`} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate" title={doc.label}>
+                              {doc.label}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate" title={doc.file_name}>
+                              {doc.file_name || 'document'}
+                            </p>
+                            <DocumentRemarkEditor
+                              doc={doc}
+                              onSave={(text) => onUpdateRemark(doc.id, text)}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm text-gray-700">
+                          {doc.uploaded_by_name || 'Staff'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm text-gray-600">
+                          {formatDate(doc.created_at)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <span className="text-xs text-gray-500 font-mono">
+                          {formatBytes(doc.file_size) || '—'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <button
+                          onClick={() => onToggleVisibility(doc.id, !doc.visible_to_customer)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                            doc.visible_to_customer
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                          }`}
+                          title={doc.visible_to_customer ? 'Click to hide from customer' : 'Click to make visible to customer'}
+                        >
+                          {doc.visible_to_customer ? (
+                            <>
+                              <FiEye className="h-3 w-3" />
+                              Visible
+                            </>
+                          ) : (
+                            <>
+                              <FiEyeOff className="h-3 w-3" />
+                              Hidden
+                            </>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <a
+                            href={doc.file_url || doc.url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            title="View document"
+                            onClick={(e) => {
+                              if (!doc.file_url && !doc.url) e.preventDefault();
+                            }}
+                          >
+                            <FiEye className="h-4 w-4" />
+                          </a>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Delete "${doc.label}"? This cannot be undone.`)) onDelete(doc.id);
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Delete document"
+                          >
+                            <FiTrash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
