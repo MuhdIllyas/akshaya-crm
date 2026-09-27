@@ -1609,11 +1609,21 @@ const TrackServicePage = () => {
 
   const KanbanCard = ({ service, priorityConfig, isSelected, isDragging, onDragStart, onDragEnd, onClick }) => {
     const priority = priorityConfig[service.priority || 'medium'];
+    const cardRef = useRef(null);
+
+    const handleDragStart = (e) => {
+      if (cardRef.current) {
+        e.dataTransfer.setDragImage(cardRef.current, 20, 20);
+      }
+      e.dataTransfer.effectAllowed = 'move';
+      onDragStart();
+    };
 
     return (
       <div
+        ref={cardRef}
         draggable
-        onDragStart={onDragStart}
+        onDragStart={handleDragStart}
         onDragEnd={onDragEnd}
         onClick={onClick}
         className={`p-3 rounded-lg border bg-white cursor-grab active:cursor-grabbing transition-all ${
