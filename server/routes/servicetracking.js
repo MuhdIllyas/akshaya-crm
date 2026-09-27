@@ -886,7 +886,7 @@ const {
       LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
       LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id) AND sr.is_submitted = true
       ${whereClause}
-      ORDER BY st.updated_at DESC
+      ORDER BY se.created_at DESC, st.updated_at DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
     
