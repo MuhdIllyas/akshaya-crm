@@ -169,8 +169,6 @@ router.get('/dashboard', async (req, res) => {
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
     `;
-    const performanceData = await client.query(performanceQuery, [staffId, startDate, endDate]);
-    const perf = performanceData.rows[0];
     
     // 2b️⃣ Additional Metrics: Repeat Customer Rate
     const repeatCustomerQuery = `
@@ -191,14 +189,6 @@ router.get('/dashboard', async (req, res) => {
         COUNT(CASE WHEN visit_count > 1 THEN 1 END) as repeat_customers
       FROM customer_visits
     `;
-    const repeatCustomerData = await client.query(repeatCustomerQuery, [staffId, startDate, endDate]);
-    
-    const totalCustomersWithVisits = parseInt(repeatCustomerData.rows[0]?.total_customers || 0);
-    const repeatCustomers = parseInt(repeatCustomerData.rows[0]?.repeat_customers || 0);
-    const repeatCustomerRate = totalCustomersWithVisits > 0 ? (repeatCustomers / totalCustomersWithVisits) * 100 : 0;
-    
-    // 2c️⃣ Revenue Per Service
-    const revenuePerService = perf.total_services > 0 ? perf.total_collected / perf.total_services : 0;
     
     // 2d️⃣ Collection Efficiency (combines rate and speed - % of payments within 7 days)
     const collectionEfficiencyQuery = `
@@ -215,10 +205,6 @@ router.get('/dashboard', async (req, res) => {
         AND DATE(se.created_at) BETWEEN $2 AND $3
         AND p.received_amount > 0
     `;
-    const efficiencyData = await client.query(collectionEfficiencyQuery, [staffId, startDate, endDate]);
-    const paidServices = parseInt(efficiencyData.rows[0]?.total_services_with_payments || 0);
-    const ontimePaid = parseInt(efficiencyData.rows[0]?.ontime_paid_services || 0);
-    const collectionEfficiency = paidServices > 0 ? (ontimePaid / paidServices) * 100 : 0;
     
     // 3️⃣ Pending Payments
     const pendingQuery = `
@@ -235,7 +221,6 @@ router.get('/dashboard', async (req, res) => {
         AND se.status != 'completed'
         AND (se.total_charges - COALESCE(p.received_amount, 0)) > 0
     `;
-    const pendingData = await client.query(pendingQuery, [staffId]);
     
     // 4️⃣ Daily Performance for Charts
     const dailyPerformanceQuery = `
@@ -253,7 +238,6 @@ router.get('/dashboard', async (req, res) => {
       GROUP BY DATE(se.created_at)
       ORDER BY date ASC
     `;
-    const dailyData = await client.query(dailyPerformanceQuery, [staffId, startDate, endDate]);
     
     // 5️⃣ Service Category Breakdown
     const categoryQuery = `
@@ -273,7 +257,6 @@ router.get('/dashboard', async (req, res) => {
       ORDER BY total_revenue DESC
       LIMIT 10
     `;
-    const categoryData = await client.query(categoryQuery, [staffId, startDate, endDate]);
     
     // 6️⃣ Top Customers
     const topCustomersQuery = `
@@ -293,7 +276,6 @@ router.get('/dashboard', async (req, res) => {
       ORDER BY total_spent DESC
       LIMIT 5
     `;
-    const topCustomers = await client.query(topCustomersQuery, [staffId, startDate, endDate]);
     
     // 7️⃣ Recent Services
     const recentServicesQuery = `
@@ -319,7 +301,6 @@ router.get('/dashboard', async (req, res) => {
       ORDER BY se.created_at DESC
       LIMIT 20
     `;
-    const recentServices = await client.query(recentServicesQuery, [staffId, startDate, endDate]);
     
     // 8️⃣ Rating Summary
     const ratingQuery = `
@@ -339,12 +320,6 @@ router.get('/dashboard', async (req, res) => {
         AND is_submitted = true
         AND DATE(created_at) BETWEEN $2 AND $3
     `;
-    const ratingData = await client.query(ratingQuery, [staffId, startDate, endDate]);
-    
-    // CSAT Score (percentage of 4 & 5 star reviews)
-    const totalReviews = parseInt(ratingData.rows[0]?.total_reviews || 0);
-    const positiveReviews = parseInt(ratingData.rows[0]?.positive_reviews || 0);
-    const csatScore = totalReviews > 0 ? (positiveReviews / totalReviews) * 100 : 0;
     
     // 9️⃣ Monthly Trends
     const monthlyTrendsQuery = `
@@ -361,7 +336,88 @@ router.get('/dashboard', async (req, res) => {
       GROUP BY TO_CHAR(se.created_at, 'YYYY-MM')
       ORDER BY month ASC
     `;
-    const monthlyTrends = await client.query(monthlyTrendsQuery, [staffId]);
+    
+    // 1️⃣2️⃣ Attendance Summary
+    const attendanceQuery = `
+      SELECT 
+        COUNT(*) as total_days,
+        COUNT(CASE WHEN status = 'present' THEN 1 END) as present_days,
+        COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent_days,
+        COUNT(CASE WHEN status = 'late' THEN 1 END) as late_days,
+        COALESCE(SUM(hours), 0) as total_hours,
+        COALESCE(SUM(late_minutes), 0) as total_late_minutes,
+        COALESCE(SUM(extra_minutes), 0) as total_extra_minutes
+      FROM attendance
+      WHERE staff_id = $1 
+        AND date BETWEEN $2::date AND $3::date
+    `;
+    
+    // 1️⃣3️⃣ Weekly Performance Breakdown
+    const weeklyBreakdownQuery = `
+      SELECT 
+        EXTRACT(WEEK FROM se.created_at) as week_number,
+        MIN(DATE(se.created_at)) as week_start,
+        COUNT(*) as services_count,
+        COALESCE(SUM(p.amount), 0) as total_collected
+      FROM service_entries se
+      ${paymentsLateralJoin()}
+      WHERE se.staff_id = $1 
+        AND se.status IN ('completed', 'pending')
+        AND DATE(se.created_at) BETWEEN $2 AND $3
+      GROUP BY EXTRACT(WEEK FROM se.created_at)
+      ORDER BY week_start ASC
+    `;
+
+    // 🔥 FIXED: these 12 queries are all independent of each other (none of them consume
+    // another's result), but were previously awaited one at a time on the same connection —
+    // 12 sequential network round trips stacked back to back. Firing them together lets
+    // node-postgres pipeline them over the single connection instead of waiting on each
+    // round trip before sending the next, without needing any extra pool connections.
+    const [
+      performanceData,
+      repeatCustomerData,
+      efficiencyData,
+      pendingData,
+      dailyData,
+      categoryData,
+      topCustomers,
+      recentServices,
+      ratingData,
+      monthlyTrends,
+      attendanceData,
+      weeklyBreakdown
+    ] = await Promise.all([
+      client.query(performanceQuery, [staffId, startDate, endDate]),
+      client.query(repeatCustomerQuery, [staffId, startDate, endDate]),
+      client.query(collectionEfficiencyQuery, [staffId, startDate, endDate]),
+      client.query(pendingQuery, [staffId]),
+      client.query(dailyPerformanceQuery, [staffId, startDate, endDate]),
+      client.query(categoryQuery, [staffId, startDate, endDate]),
+      client.query(topCustomersQuery, [staffId, startDate, endDate]),
+      client.query(recentServicesQuery, [staffId, startDate, endDate]),
+      client.query(ratingQuery, [staffId, startDate, endDate]),
+      client.query(monthlyTrendsQuery, [staffId]),
+      client.query(attendanceQuery, [staffId, startDate, endDate]),
+      client.query(weeklyBreakdownQuery, [staffId, startDate, endDate])
+    ]);
+
+    const perf = performanceData.rows[0];
+    
+    const totalCustomersWithVisits = parseInt(repeatCustomerData.rows[0]?.total_customers || 0);
+    const repeatCustomers = parseInt(repeatCustomerData.rows[0]?.repeat_customers || 0);
+    const repeatCustomerRate = totalCustomersWithVisits > 0 ? (repeatCustomers / totalCustomersWithVisits) * 100 : 0;
+    
+    // 2c️⃣ Revenue Per Service
+    const revenuePerService = perf.total_services > 0 ? perf.total_collected / perf.total_services : 0;
+    
+    const paidServices = parseInt(efficiencyData.rows[0]?.total_services_with_payments || 0);
+    const ontimePaid = parseInt(efficiencyData.rows[0]?.ontime_paid_services || 0);
+    const collectionEfficiency = paidServices > 0 ? (ontimePaid / paidServices) * 100 : 0;
+    
+    // CSAT Score (percentage of 4 & 5 star reviews)
+    const totalReviews = parseInt(ratingData.rows[0]?.total_reviews || 0);
+    const positiveReviews = parseInt(ratingData.rows[0]?.positive_reviews || 0);
+    const csatScore = totalReviews > 0 ? (positiveReviews / totalReviews) * 100 : 0;
     
     // 🔟 Calculate Incentive Score
     const activeDays = perf.active_days || 1;
@@ -382,39 +438,6 @@ router.get('/dashboard', async (req, res) => {
       { rating: 2, count: ratingData.rows[0]?.two_star || 0 },
       { rating: 1, count: ratingData.rows[0]?.one_star || 0 }
     ];
-    
-    // 1️⃣2️⃣ Attendance Summary
-    const attendanceQuery = `
-      SELECT 
-        COUNT(*) as total_days,
-        COUNT(CASE WHEN status = 'present' THEN 1 END) as present_days,
-        COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent_days,
-        COUNT(CASE WHEN status = 'late' THEN 1 END) as late_days,
-        COALESCE(SUM(hours), 0) as total_hours,
-        COALESCE(SUM(late_minutes), 0) as total_late_minutes,
-        COALESCE(SUM(extra_minutes), 0) as total_extra_minutes
-      FROM attendance
-      WHERE staff_id = $1 
-        AND date BETWEEN $2::date AND $3::date
-    `;
-    const attendanceData = await client.query(attendanceQuery, [staffId, startDate, endDate]);
-    
-    // 1️⃣3️⃣ Weekly Performance Breakdown
-    const weeklyBreakdownQuery = `
-      SELECT 
-        EXTRACT(WEEK FROM se.created_at) as week_number,
-        MIN(DATE(se.created_at)) as week_start,
-        COUNT(*) as services_count,
-        COALESCE(SUM(p.amount), 0) as total_collected
-      FROM service_entries se
-      ${paymentsLateralJoin()}
-      WHERE se.staff_id = $1 
-        AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
-      GROUP BY EXTRACT(WEEK FROM se.created_at)
-      ORDER BY week_start ASC
-    `;
-    const weeklyBreakdown = await client.query(weeklyBreakdownQuery, [staffId, startDate, endDate]);
     
     // Calculate average rating
     const avgRating = ratingData.rows[0]?.total_reviews > 0 
@@ -604,10 +627,13 @@ router.get('/compare', async (req, res) => {
         AND se.status IN ('completed', 'pending')
         AND DATE(se.created_at) BETWEEN $2 AND $3
     `;
-    const currentResult = await client.query(currentQuery, [staffId, currentStart, currentEnd]);
-    
-    // Get previous period performance
-    const previousResult = await client.query(currentQuery, [staffId, previousStart, previousEnd]);
+
+    // 🔥 FIXED: current and previous period are independent queries — run together
+    // instead of one after the other.
+    const [currentResult, previousResult] = await Promise.all([
+      client.query(currentQuery, [staffId, currentStart, currentEnd]),
+      client.query(currentQuery, [staffId, previousStart, previousEnd])
+    ]);
     
     // Calculate changes
     const calculateChange = (current, previous) => {
@@ -684,7 +710,6 @@ router.get('/achievements', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
     `;
-    const lifetime = await client.query(lifetimeQuery, [staffId]);
     
     // Get best day
     const bestDayQuery = `
@@ -699,7 +724,6 @@ router.get('/achievements', async (req, res) => {
       ORDER BY revenue DESC
       LIMIT 1
     `;
-    const bestDay = await client.query(bestDayQuery, [staffId]);
     
     // Get top customer
     const topCustomerQuery = `
@@ -717,16 +741,20 @@ router.get('/achievements', async (req, res) => {
       ORDER BY total_spent DESC
       LIMIT 1
     `;
-    const topCustomer = await client.query(topCustomerQuery, [staffId]);
     
     // Get weekly streak (consecutive weeks with at least one service)
+    // 🔥 Bounded to the last 2 years — an unbounded lifetime window-function scan here
+    // will slow down again as history grows, the same class of problem as the payments
+    // subquery. A "current streak" only ever needs recent history anyway.
     const weeklyStreakQuery = `
       WITH weekly_activity AS (
         SELECT 
           DATE_TRUNC('week', se.created_at) as week_start,
           COUNT(*) as services_count
         FROM service_entries se
-        WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+        WHERE se.staff_id = $1 
+          AND se.status IN ('completed', 'pending')
+          AND se.created_at >= (CURRENT_DATE - INTERVAL '2 years')
         GROUP BY DATE_TRUNC('week', se.created_at)
       ),
       streak_calc AS (
@@ -745,10 +773,9 @@ router.get('/achievements', async (req, res) => {
         LIMIT 1
       ) current_streak
     `;
-    const weeklyStreakResult = await client.query(weeklyStreakQuery, [staffId]);
-    const weeklyStreak = parseInt(weeklyStreakResult.rows[0]?.current_streak || 0);
     
     // Get daily revenue streak (consecutive days with revenue > 0)
+    // 🔥 Bounded to the last 6 months for the same reason as above.
     const dailyStreakQuery = `
       WITH daily_revenue AS (
         SELECT 
@@ -756,7 +783,9 @@ router.get('/achievements', async (req, res) => {
           COALESCE(SUM(p.amount), 0) as revenue
         FROM service_entries se
         ${paymentsLateralJoin()}
-        WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
+        WHERE se.staff_id = $1 
+          AND se.status IN ('completed', 'pending')
+          AND se.created_at >= (CURRENT_DATE - INTERVAL '6 months')
         GROUP BY DATE(se.created_at)
       ),
       streak_calc AS (
@@ -776,8 +805,6 @@ router.get('/achievements', async (req, res) => {
         LIMIT 1
       ) current_streak
     `;
-    const dailyStreakResult = await client.query(dailyStreakQuery, [staffId]);
-    const dailyRevenueStreak = parseInt(dailyStreakResult.rows[0]?.current_streak || 0);
     
     // Get service variety (distinct service categories)
     const varietyQuery = `
@@ -785,8 +812,6 @@ router.get('/achievements', async (req, res) => {
       FROM service_entries se
       WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
     `;
-    const varietyResult = await client.query(varietyQuery, [staffId]);
-    const distinctCategories = parseInt(varietyResult.rows[0]?.distinct_categories || 0);
     
     // Get top service category
     const topCategoryQuery = `
@@ -800,7 +825,6 @@ router.get('/achievements', async (req, res) => {
       ORDER BY services_count DESC
       LIMIT 1
     `;
-    const topCategory = await client.query(topCategoryQuery, [staffId]);
     
     // Get rating achievements
     const ratingAchievementsQuery = `
@@ -814,18 +838,6 @@ router.get('/achievements', async (req, res) => {
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY month DESC
     `;
-    const ratingAchievements = await client.query(ratingAchievementsQuery, [staffId]);
-    const totalFiveStar = ratingAchievements.rows.reduce((sum, row) => sum + parseInt(row.five_star_count || 0), 0);
-    const perfectMonths = ratingAchievements.rows.filter(row => {
-      const totalReviewsQuery = `
-        SELECT COUNT(*) as total
-        FROM service_reviews
-        WHERE staff_id = $1 AND is_submitted = true 
-          AND DATE_TRUNC('month', created_at) = $2::timestamp
-      `;
-      // Simplified - we'll calculate later
-      return false;
-    });
     
     // Get collection rate achievements
     const collectionRateQuery = `
@@ -839,7 +851,36 @@ router.get('/achievements', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 AND se.status IN ('completed', 'pending')
     `;
-    const collectionRateResult = await client.query(collectionRateQuery, [staffId]);
+
+    // 🔥 FIXED: 9 independent queries fired together instead of one at a time.
+    const [
+      lifetime,
+      bestDay,
+      topCustomer,
+      weeklyStreakResult,
+      dailyStreakResult,
+      varietyResult,
+      topCategory,
+      ratingAchievements,
+      collectionRateResult
+    ] = await Promise.all([
+      client.query(lifetimeQuery, [staffId]),
+      client.query(bestDayQuery, [staffId]),
+      client.query(topCustomerQuery, [staffId]),
+      client.query(weeklyStreakQuery, [staffId]),
+      client.query(dailyStreakQuery, [staffId]),
+      client.query(varietyQuery, [staffId]),
+      client.query(topCategoryQuery, [staffId]),
+      client.query(ratingAchievementsQuery, [staffId]),
+      client.query(collectionRateQuery, [staffId])
+    ]);
+
+    const weeklyStreak = parseInt(weeklyStreakResult.rows[0]?.current_streak || 0);
+    const dailyRevenueStreak = parseInt(dailyStreakResult.rows[0]?.current_streak || 0);
+    const distinctCategories = parseInt(varietyResult.rows[0]?.distinct_categories || 0);
+    
+    const totalFiveStar = ratingAchievements.rows.reduce((sum, row) => sum + parseInt(row.five_star_count || 0), 0);
+    
     const lifetimeCollectionRate = parseFloat(collectionRateResult.rows[0]?.lifetime_collection_rate || 0);
     
     // Calculate achievements
@@ -1278,7 +1319,6 @@ router.get('/daily-log', async (req, res) => {
       WHERE se.staff_id = $1 AND DATE(se.created_at) = $2
       ORDER BY se.created_at DESC
     `;
-    const services = await client.query(servicesQuery, [staffId, targetDate]);
     
     // Get attendance for the day
     const attendanceQuery = `
@@ -1294,7 +1334,12 @@ router.get('/daily-log', async (req, res) => {
       FROM attendance
       WHERE staff_id = $1 AND date = $2
     `;
-    const attendance = await client.query(attendanceQuery, [staffId, targetDate]);
+
+    // 🔥 FIXED: services and attendance are independent — run together.
+    const [services, attendance] = await Promise.all([
+      client.query(servicesQuery, [staffId, targetDate]),
+      client.query(attendanceQuery, [staffId, targetDate])
+    ]);
     
     // Calculate daily totals
     const dailyTotal = services.rows.reduce((sum, row) => sum + parseFloat(row.received_amount || 0), 0);
