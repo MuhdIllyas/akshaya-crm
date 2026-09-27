@@ -313,6 +313,10 @@ const StaffPerformance = () => {
   const [showDailyLog, setShowDailyLog] = useState(false);
   const [dailyLog, setDailyLog] = useState(null);
   const [staffInfo, setStaffInfo] = useState(null);
+  // 🔥 NEW: separate loading flags so the Achievements/Services tabs can show
+  // their own small spinner instead of blocking the whole page behind `loading`
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
   
   // Fetch staff info from JWT
   useEffect(() => {
@@ -332,6 +336,15 @@ const StaffPerformance = () => {
     }
   }, []);
   
+  // 🔥 FIXED: was 4 sequential `await fetch()` calls chained one after another,
+  // with a single `loading` flag blocking the ENTIRE page (including tabs the
+  // user isn't even on) until all 4 finished — total wait was the SUM of every
+  // route's latency, dominated by achievements' 9 queries.
+  // Now: only dashboard + compare (needed for the overview tab, which is what's
+  // visible on load) are fetched, and fetched in parallel instead of in series.
+  // achievements and service-breakdown are fetched lazily, on demand, only when
+  // their own tab is opened (see the useEffect below) — each with its own small
+  // loading flag so the rest of the page stays interactive while they load.
   const fetchPerformance = async () => {
     setLoading(true);
     try {
@@ -348,60 +361,87 @@ const StaffPerformance = () => {
         params.append('period', period);
       }
       
-      // Fetch dashboard data
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      const [dashboardResponse, comparisonResponse] = await Promise.all([
+        fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        ),
+        fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffperformance/compare?period=${period}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+      ]);
       
-      if (!response.ok) throw new Error('Failed to fetch performance data');
+      if (!dashboardResponse.ok) throw new Error('Failed to fetch performance data');
       
-      const result = await response.json();
+      const result = await dashboardResponse.json();
       setData(result.data);
       
-      // Fetch achievements
-      const achievementsResponse = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/achievements`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      if (achievementsResponse.ok) {
-        const achievementsResult = await achievementsResponse.json();
-        setAchievements(achievementsResult.data);
-      }
-      
-      // Fetch comparison data
-      const comparisonResponse = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/compare?period=${period}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
       if (comparisonResponse.ok) {
         const comparisonResult = await comparisonResponse.json();
         setComparison(comparisonResult.data);
       }
       
-      // Fetch service breakdown
-      const breakdownResponse = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/service-breakdown?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      if (breakdownResponse.ok) {
-        const breakdownResult = await breakdownResponse.json();
-        setServiceBreakdown(breakdownResult.data);
-      }
+      // The date range just changed, so any previously-loaded service
+      // breakdown is for the wrong period now — clear it so the Services
+      // tab's effect below knows to refetch it next time it's opened.
+      setServiceBreakdown(null);
       
     } catch (error) {
       console.error('Error fetching performance:', error);
       toast.error('Failed to load performance data');
     } finally {
       setLoading(false);
+    }
+  };
+  
+  // Lifetime stats — independent of the period filter, so fetch once and cache.
+  const fetchAchievements = async () => {
+    if (achievements || achievementsLoading) return;
+    setAchievementsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/achievements`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const result = await res.json();
+        setAchievements(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching achievements:', error);
+      toast.error('Failed to load achievements');
+    } finally {
+      setAchievementsLoading(false);
+    }
+  };
+  
+  // Depends on the same period/date range as the dashboard — fetchPerformance
+  // clears this on period change so it's re-fetched next time this tab opens.
+  const fetchServiceBreakdown = async () => {
+    if (breakdownLoading) return;
+    setBreakdownLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      let params = new URLSearchParams();
+      if (period === 'custom' && customDateRange.from && customDateRange.to) {
+        params.append('from', customDateRange.from);
+        params.append('to', customDateRange.to);
+      }
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/staffperformance/service-breakdown?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) {
+        const result = await res.json();
+        setServiceBreakdown(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching service breakdown:', error);
+      toast.error('Failed to load service breakdown');
+    } finally {
+      setBreakdownLoading(false);
     }
   };
   
@@ -431,6 +471,18 @@ const StaffPerformance = () => {
       fetchPerformance();
     }
   }, [period, customDateRange, staffInfo]);
+  
+  // 🔥 NEW: load each tab's data only when the user actually opens that tab,
+  // instead of always fetching all 4 endpoints up front on page load.
+  useEffect(() => {
+    if (activeTab === 'achievements' && !achievements) {
+      fetchAchievements();
+    }
+    if (activeTab === 'services' && !serviceBreakdown) {
+      fetchServiceBreakdown();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
   
   // Chart data for daily performance
   const dailyChartData = useMemo(() => {
@@ -987,6 +1039,12 @@ const StaffPerformance = () => {
             {/* Services Tab */}
             {activeTab === 'services' && (
               <>
+                {breakdownLoading && !serviceBreakdown && (
+                  <div className="flex items-center justify-center py-16 text-gray-500">
+                    <FiLoader className="h-5 w-5 mr-2 animate-spin" />
+                    Loading service breakdown…
+                  </div>
+                )}
                 {/* Category Breakdown - FIXED Responsive Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -1108,6 +1166,12 @@ const StaffPerformance = () => {
             )}
             
             {/* Achievements Tab */}
+            {activeTab === 'achievements' && !achievements && (
+              <div className="flex items-center justify-center py-16 text-gray-500">
+                <FiLoader className="h-5 w-5 mr-2 animate-spin" />
+                Loading achievements…
+              </div>
+            )}
             {activeTab === 'achievements' && achievements && (
               <>
                 {/* Lifetime Stats */}
