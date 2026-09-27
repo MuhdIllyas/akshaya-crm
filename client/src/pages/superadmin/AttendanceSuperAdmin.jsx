@@ -2063,7 +2063,7 @@ const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
                   <tbody className="divide-y divide-gray-100">
                     {[...runRecords]
                       .sort((a, b) => (a.staff_name || "").localeCompare(b.staff_name || ""))
-                      .map((r) => {
+                      .map((r, index) => {
                       
                       const basicSalary = Number(r.snapshot_basic_salary || r.basic_pay || 0);
                       const calendarDays = Number(selectedRun.calendar_days || 30);
@@ -2085,9 +2085,10 @@ const DailyAttendanceRow = ({ dateGroup, onEdit }) => {
                           : `${offdaysCount} Offdays × ₹${basicPayPerDay.toFixed(2)}/day × ${workPct.toFixed(1)}%`;
                       
                       return (
-                        <tr key={r.id} className="hover:bg-gray-50 transition-colors bg-white group">
+                        <tr key={r.id} className={`group transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-slate-100/50 hover:bg-slate-100'}`}>
                           
-                          <td className="py-2 px-3 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#e5e7eb] z-10 border-r border-gray-100">
+                          {/* ENHANCED STAFF NAME COLUMN (Dynamic Sticky Background) */}
+                          <td className={`py-2 px-3 sticky left-0 z-10 border-r border-gray-100 shadow-[1px_0_0_0_#e5e7eb] ${index % 2 === 0 ? 'bg-white group-hover:bg-gray-50' : 'bg-[#f8fafc] group-hover:bg-slate-100'}`}>
                             <div className="font-bold text-gray-900 truncate max-w-[150px]" title={r.staff_name}>{r.staff_name}</div>
                             <div className="text-[10px] text-indigo-600 font-bold mt-0.5 uppercase tracking-wider">
                               Shift: {Number(r.snapshot_daily_hours || 9).toFixed(1)}h/d
