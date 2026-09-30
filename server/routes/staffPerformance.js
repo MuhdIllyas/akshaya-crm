@@ -1443,7 +1443,8 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       onlineProcessingRes,
       deliveriesRes,
       expiriesRes,
-      todayAttendanceRes
+      todayAttendanceRes,
+      targetRes
     ] = await Promise.all([
       // 1. Performance Summary
       client.query(`
@@ -1582,8 +1583,31 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE staff_id = $1 AND date = CURRENT_DATE
         ORDER BY id DESC
         LIMIT 1
-      `, [staffId])
+      `, [staffId]),
 
+      // 11. NEW: Monthly Target Calculation
+      client.query(`
+        WITH PastThreeMonths AS (
+          SELECT COALESCE(SUM(service_charges), 0) / 3 as avg_service_charge
+          FROM service_entries
+          WHERE staff_id = $1 
+            AND status = 'completed'
+            AND created_at >= date_trunc('month', CURRENT_DATE - INTERVAL '3 months')
+            AND created_at < date_trunc('month', CURRENT_DATE)
+        ),
+        CurrentMonth AS (
+          SELECT COALESCE(SUM(service_charges), 0) as current_service_charge
+          FROM service_entries
+          WHERE staff_id = $1
+            AND status = 'completed'
+            AND created_at >= date_trunc('month', CURRENT_DATE)
+        )
+        SELECT 
+          p.avg_service_charge,
+          (p.avg_service_charge * 1.10) as monthly_target,
+          c.current_service_charge
+        FROM PastThreeMonths p, CurrentMonth c;
+      `, [staffId])
     ]);
 
     // --- FORMAT DYNAMIC EVENTS ---
@@ -1647,6 +1671,17 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       (avgRating * 4) // 5 * 4 = 20
     ));
 
+    // Target Calculations
+    const targetRow = targetRes.rows[0] || { avg_service_charge: 0, monthly_target: 0, current_service_charge: 0 };
+    const monthlyTarget = parseFloat(targetRow.monthly_target) || 0;
+    const currentAchieved = parseFloat(targetRow.current_service_charge) || 0;
+    
+    // Calculate daily target based on days in the current month
+    const today = new Date();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const dailyTarget = monthlyTarget > 0 ? Math.round(monthlyTarget / daysInMonth) : 0;
+    const progressPercentage = monthlyTarget > 0 ? (currentAchieved / monthlyTarget) * 100 : 0;
+
     res.json({
       success: true,
       data: {
@@ -1658,6 +1693,12 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
             collection_rate: collectionRate,
             avg_transaction_value: avgTransactionValue,
             incentive_score: incentiveScore
+          },
+          target: { // <-- NEW TARGET PAYLOAD
+            monthly_target: monthlyTarget,
+            current_achieved: currentAchieved,
+            daily_target: dailyTarget,
+            progress_percentage: progressPercentage
           },
           ratings: {
             avg_rating: avgRating.toFixed(1),

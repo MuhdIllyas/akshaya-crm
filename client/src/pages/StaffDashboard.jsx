@@ -90,6 +90,10 @@ const StaffDashboard = () => {
     incentiveScore: 0,
     avgRating: 0,
     totalReviews: 0,
+    monthlyTarget: 0,
+    currentAchieved: 0,
+    dailyTarget: 0,
+    targetProgress: 0,
   });
 
   // Cancel modal state
@@ -253,6 +257,11 @@ const StaffDashboard = () => {
         incentiveScore: perfData.summary.incentive_score || 0,
         avgRating: perfData.ratings?.avg_rating || 0,
         totalReviews: perfData.ratings?.total_reviews || 0,
+
+        monthlyTarget: perfData.target?.monthly_target || 0,
+        currentAchieved: perfData.target?.current_achieved || 0,
+        dailyTarget: perfData.target?.daily_target || 0,
+        targetProgress: perfData.target?.progress_percentage || 0,
       });
 
       // 2. Set Tasks & Events with STRICT isolation
@@ -1325,6 +1334,55 @@ const StaffDashboard = () => {
 
             {/* Right Column – Performance, Tasks & Events */}
             <div className="space-y-6">
+
+              {/* ===== MONTHLY TARGET METER ===== */}
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
+                  <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
+                  Monthly Target (+10% Growth)
+                </h3>
+                {performanceLoading ? (
+                  <div className="h-16 bg-gray-200 animate-pulse rounded"></div>
+                ) : (
+                  <div>
+                    <div className="flex justify-between items-end mb-2">
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">Achieved</p>
+                        <p className="text-xl font-black text-gray-900">
+                          {formatCurrency(performance.currentAchieved)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500 font-medium">Target</p>
+                        <p className="text-lg font-bold text-gray-900">
+                          {formatCurrency(performance.monthlyTarget)}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Color-Coded Target Meter */}
+                    <div className="w-full bg-gray-100 rounded-full h-3.5 mb-3 overflow-hidden shadow-inner">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                          performance.targetProgress >= 100 ? 'bg-emerald-500' :
+                          performance.targetProgress >= 50 ? 'bg-amber-400' : 
+                          'bg-rose-500'
+                        }`}
+                        style={{ width: `${Math.min(performance.targetProgress, 100)}%` }}
+                      ></div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-gray-700">
+                        {performance.targetProgress.toFixed(1)}% Completed
+                      </span>
+                      <span className="text-indigo-700 font-bold bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-md">
+                        Daily Target: {formatCurrency(performance.dailyTarget)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
               
               {/* ===== NEW: MY TASKS ===== */}
               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
