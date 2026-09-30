@@ -1585,7 +1585,7 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         LIMIT 1
       `, [staffId]),
 
-      // 11. NEW: Monthly Target Calculation
+      // 11. Monthly & Daily Target Calculation
       client.query(`
         WITH PastThreeMonths AS (
           SELECT COALESCE(SUM(service_charges), 0) / 3 as avg_service_charge
@@ -1601,12 +1601,20 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
           WHERE staff_id = $1
             AND status = 'completed'
             AND created_at >= date_trunc('month', CURRENT_DATE)
+        ),
+        Today AS (
+          SELECT COALESCE(SUM(service_charges), 0) as today_service_charge
+          FROM service_entries
+          WHERE staff_id = $1
+            AND status = 'completed'
+            AND created_at::date = CURRENT_DATE
         )
         SELECT 
           p.avg_service_charge,
           (p.avg_service_charge * 1.10) as monthly_target,
-          c.current_service_charge
-        FROM PastThreeMonths p, CurrentMonth c;
+          c.current_service_charge,
+          t.today_service_charge
+        FROM PastThreeMonths p, CurrentMonth c, Today t;
       `, [staffId])
     ]);
 
@@ -1672,9 +1680,10 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
     ));
 
     // Target Calculations
-    const targetRow = targetRes.rows[0] || { avg_service_charge: 0, monthly_target: 0, current_service_charge: 0 };
+    const targetRow = targetRes.rows[0] || { avg_service_charge: 0, monthly_target: 0, current_service_charge: 0, today_service_charge: 0 };
     const monthlyTarget = parseFloat(targetRow.monthly_target) || 0;
     const currentAchieved = parseFloat(targetRow.current_service_charge) || 0;
+    const todayAchieved = parseFloat(targetRow.today_service_charge) || 0;
     
     // Calculate daily target based on days in the current month
     const today = new Date();
@@ -1694,10 +1703,11 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
             avg_transaction_value: avgTransactionValue,
             incentive_score: incentiveScore
           },
-          target: { // <-- NEW TARGET PAYLOAD
+          target: { 
             monthly_target: monthlyTarget,
             current_achieved: currentAchieved,
             daily_target: dailyTarget,
+            today_achieved: todayAchieved,
             progress_percentage: progressPercentage
           },
           ratings: {
