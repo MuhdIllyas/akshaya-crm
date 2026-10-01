@@ -74,8 +74,11 @@ import ContinueApplication from './components/ContinueApplication';
 import ApplicationDocuments from './components/ApplicationDocuments';
 import ConfirmationPage from './components/ConfirmationPage';
 import ViewServiceDetails from './components/ViewServiceDetails';
+
+//Public Pages
 import PublicReview from './components/PublicReview';
 import PublicTrackingPage from './pages/PublicTrackingPage';
+import AadhaarDocu from './pages/AadhaarDocu';
 
 // ---------------------------------------------------------------------
 // Protected Route Component (FIXED - No toasts, no retry logic)
@@ -259,6 +262,7 @@ const App = () => {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/aadhaar-docufinder" element={<AadhaarDocu />} />
         <Route path="/login" element={<Login />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
         <Route path="/review/:token" element={<PublicReview />} />
