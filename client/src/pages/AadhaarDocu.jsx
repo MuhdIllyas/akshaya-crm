@@ -6,11 +6,14 @@ import { toast } from 'react-toastify';
 import {
   FiShield, FiFileText, FiSearch, FiCheckCircle, FiAlertTriangle, FiXCircle,
   FiCopy, FiPrinter, FiArrowRight, FiInfo, FiUser, FiCalendar, FiMapPin,
-  FiRefreshCw, FiHome, FiBookOpen, FiExternalLink, FiUsers, FiFilter
+  FiRefreshCw, FiHome, FiBookOpen, FiExternalLink, FiUsers, FiFilter, FiLayers
 } from 'react-icons/fi';
 
+import { AADHAAR_DOCUMENTS } from '../utils/aadhaarDocuments';
+import { UPDATE_SCENARIOS } from '../utils/aadhaarScenarios';
+
 // =====================================================================
-// 1. DATA & CONSTANTS (Merged from utils)
+// 1. DATA & CONSTANTS
 // =====================================================================
 
 const CHANGE_TYPES = ['Name Change', 'DOB Change'];
@@ -52,53 +55,6 @@ const SCENARIOS = {
   '(o)': { code: '(o)', category: 'Major Name Change', description: 'Complete change of name / change of identity', appliesTo: 'Not specified in the source sheet', examples: 'Ram Gupta to Shyam Gupta; Amisha Patel to Ameesha Kumar Singh', documents: 'PoI (only Gazette Notification for name change)', exceptions: 'Complete change in name / change of identity is liable to be rejected if not accompanied by a Gazette Notification.', status: 'Proceed', adultAnnexure: 'None listed in the source sheet', minorAnnexure: 'None listed in the source sheet', source: 'SoP for Name Update dt 18Sep2026.pdf' },
   'unknown': { code: 'unknown', category: 'Manual Review Required', description: 'This specific change combination does not match a standard automated rule.', appliesTo: 'N/A', examples: 'N/A', documents: 'Standard PoI/PoR based on the update type.', exceptions: 'Check with UIDAI RO / standard SoP circulars.', status: 'Review Required', adultAnnexure: 'Check current SoP', minorAnnexure: 'Check current SoP', source: 'N/A', blocked: true }
 };
-
-const AADHAAR_DOCUMENTS = [
-  { id: "1", name: "Valid Indian Passport", poi: true, poa: true, por: true, pdb: true, notes: "Valid Indian passport. DOB conditions (#) apply." },
-  { id: "2", name: "Ration / PDS Photograph Card / e-Ration Card", poi: true, poa: true, por: true, pdb: false, notes: "" },
-  { id: "3", name: "Voter Identity Card / e-Voter Identity Card", poi: true, poa: true, por: false, pdb: false, notes: "Details must be displayed online on the website of the Election Commission of India or the Chief Electoral Officer concerned." },
-  { id: "4", name: "Driving licence", poi: true, poa: false, por: false, pdb: false, notes: "" },
-  { id: "5", name: "Service Photo Identity Card issued by Central / State Government / PSU / regulatory body", poi: true, poa: true, por: false, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "6", name: "Pensioner Photo Identity Card / Freedom Fighter Photo Identity Card / Pension Payment Order", poi: true, poa: true, por: true, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "7", name: "Kisan Photo Passbook", poi: true, poa: true, por: false, pdb: false, notes: "" },
-  { id: "8", name: "CGHS / ECHS / ESIC / Medi-Claim Card issued by Central / State Government / PSU", poi: true, poa: false, por: false, pdb: false, notes: "" },
-  { id: "9", name: "Certificate in UIDAI prescribed format, jointly signed and stamped by Head of Shelter Home and District Social Welfare Officer", poi: true, poa: true, por: false, pdb: false, notes: "For destitute persons with disability only." },
-  { id: "10", name: "MGNREGA / NREGS Job Card and Domicile Certificate issued by State Government", poi: true, poa: true, por: true, pdb: false, notes: "Job Card together with the Domicile Certificate." },
-  { id: "11", name: "Marriage Certificate with or without photograph", poi: true, poa: true, por: true, pdb: false, notes: "If no photograph, a PoI document bearing old name with photograph is also required." },
-  { id: "12", name: "Divorce Decree issued by family court", poi: true, poa: false, por: false, pdb: false, notes: "If no photograph, a PoI document bearing old name with photograph is also required." },
-  { id: "13", name: "ST / SC / OBC Certificate issued by Central / State Government", poi: true, poa: true, por: true, pdb: false, notes: "" },
-  { id: "14", name: "Marksheet / Certificate issued by a recognised Board of Education or University", poi: true, poa: false, por: true, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "15", name: "Passbook issued by a scheduled commercial bank, State cooperative bank, or Post Office", poi: false, poa: true, por: false, pdb: false, notes: "Must be cross-stamped with bank seal and signed by an official." },
-  { id: "16", name: "Bank / Credit Card / Post Office Savings Account Statement", poi: false, poa: true, por: false, pdb: false, notes: "Must carry stamp and signature of the issuing official. Not older than 3 months." },
-  { id: "17", name: "Third gender / Transgender Identity Card or Certificate", poi: true, poa: true, por: true, pdb: true, notes: "Also acceptable for gender and full-name change. DOB conditions (#) apply." },
-  { id: "18", name: "Gazette notification", poi: true, poa: false, por: false, pdb: false, notes: "Accepted for a change in first name or in full name." },
-  { id: "19 i", name: "UIDAI Standard Format: MP / MLA / MLC / Municipal Councillor", poi: false, poa: true, por: false, pdb: false, notes: "Valid 3 months from date of issue." },
-  { id: "19 ii", name: "UIDAI Standard Format: Gazetted Officer Group 'A' / EPFO Officer", poi: false, poa: true, por: false, pdb: false, notes: "Valid 3 months from date of issue." },
-  { id: "19 iii", name: "UIDAI Standard Format: Tehsildar / Gazetted Officer Group 'B'", poi: false, poa: true, por: false, pdb: false, notes: "Valid 3 months from date of issue." },
-  { id: "19 iv", name: "UIDAI Standard Format: Gazetted Officer at NACO / State Health Dept", poi: true, poa: true, por: false, pdb: false, notes: "Valid 3 months from date of issue. Also counts as PoI." },
-  { id: "19 v", name: "UIDAI Standard Format: District Child Protection Officer (DCPO) + placement order", poi: true, poa: true, por: false, pdb: false, notes: "For children in Child Care Institutions only. Also counts as PoI." },
-  { id: "19 vi", name: "UIDAI Standard Format: Recognised educational institution (signed by Head of Institute)", poi: false, poa: true, por: false, pdb: false, notes: "Only for the institute's own students. Valid 3 months from date of issue." },
-  { id: "19 vii", name: "UIDAI Standard Format: Village Panchayat Head / Mukhiya / Village Revenue Officer", poi: false, poa: true, por: false, pdb: false, notes: "For rural areas only. Valid 3 months from date of issue." },
-  { id: "20", name: "Electricity bill (pre-paid / post-paid)", poi: false, poa: true, por: false, pdb: false, notes: "Not older than 3 months." },
-  { id: "21", name: "Water bill", poi: false, poa: true, por: false, pdb: false, notes: "Not older than 3 months." },
-  { id: "22", name: "Telephone landline bill / post-paid mobile bill / broadband bill", poi: false, poa: true, por: false, pdb: false, notes: "Not older than 3 months." },
-  { id: "23", name: "Property Tax Receipt", poi: false, poa: true, por: false, pdb: false, notes: "Not older than 1 year." },
-  { id: "24", name: "Valid sale agreement / gift deed / registered or unregistered rent agreement", poi: false, poa: true, por: false, pdb: false, notes: "" },
-  { id: "25", name: "Gas bill", poi: false, poa: true, por: false, pdb: false, notes: "Not older than 3 months." },
-  { id: "26", name: "Allotment letter of accommodation issued by Central / State Government / PSU", poi: false, poa: true, por: false, pdb: false, notes: "Not older than 1 year." },
-  { id: "27", name: "Life or medical insurance policy", poi: false, poa: true, por: false, pdb: false, notes: "Valid up to 1 year from the date of issue." },
-  { id: "28", name: "Birth certificate issued under the Registration of Births and Deaths Act, 1969", poi: false, poa: false, por: true, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "29", name: "Prisoner Induction Document (PID) issued by Prison Officer", poi: true, poa: true, por: false, pdb: false, notes: "For prisoners only." },
-  { id: "30", name: "Self-declaration from an immediate family member certifying relationship", poi: false, poa: false, por: true, pdb: false, notes: "Valid only for borrowing address. HoF form is valid 3 months." },
-  { id: "31", name: "Document proving legal guardianship issued by Central / State Govt or court of law", poi: false, poa: false, por: true, pdb: false, notes: "Counts as Proof of Relationship (PoR) only." },
-  { id: "32", name: "OCI cardholders - valid foreign passport (along with OCI card)", poi: true, poa: false, por: false, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "33 a", name: "Nepal / Bhutan nationals - Passport of Nepal / Bhutan", poi: true, poa: false, por: false, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "33 b", name: "Nepal / Bhutan nationals - Citizenship Certificate / Voter ID / Identity Certificate", poi: true, poa: false, por: false, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "34", name: "Long Term Visa (LTV) holders - valid LTV", poi: true, poa: true, por: false, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "35", name: "Other foreign nationals - valid foreign passport (along with valid visa)", poi: true, poa: false, por: false, pdb: true, notes: "DOB conditions (#) apply." },
-  { id: "36", name: "Valid Registration Certificate or Residential permit issued by FRRO / FRO", poi: true, poa: true, por: false, pdb: true, notes: "DOB conditions (#) apply." },
-];
-
 
 // =====================================================================
 // 2. LOGIC FUNCTIONS
@@ -291,39 +247,6 @@ const Section = ({ label, children, tone = 'plain' }) => {
   );
 };
 
-const DocCard = ({ doc, route }) => (
-  <motion.div
-    layout
-    initial={{ opacity: 0, scale: 0.95 }}
-    animate={{ opacity: 1, scale: 1 }}
-    exit={{ opacity: 0, scale: 0.95 }}
-    className={`rounded-2xl border p-5 flex flex-col hover:shadow-lg transition-all ${
-      route === 'hof' ? 'bg-navy-50 border-navy-100' : 'bg-white border-gray-200'
-    }`}
-  >
-    <div className="flex items-start gap-3 mb-3">
-      <span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-navy-100 text-navy-700 text-xs font-bold">
-        Sl. {doc.id}
-      </span>
-      <p className="font-bold text-gray-900 text-sm leading-snug">{doc.name}</p>
-    </div>
-    
-    <div className="flex flex-wrap gap-2 mt-auto mb-3">
-      {doc.poi && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">PoI</span>}
-      {doc.poa && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-100">PoA</span>}
-      {doc.por && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">PoR</span>}
-      {doc.pdb && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">PDB</span>}
-    </div>
-
-    {doc.notes && (
-      <div className="flex items-start pt-3 border-t border-gray-100">
-        <FiInfo className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-        <p className="ml-2 text-xs text-gray-600 font-medium leading-relaxed">{doc.notes}</p>
-      </div>
-    )}
-  </motion.div>
-);
-
 // =====================================================================
 // 4. TAB VIEWS
 // =====================================================================
@@ -351,10 +274,10 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(`Procedure details for ${mode}... (Summary copied)`);
+      await navigator.clipboard.writeText(`Procedure details for ${mode}...`);
       toast.success('Procedure copied');
     } catch {
-      toast.error('Could not copy. Please select the text manually.');
+      toast.error('Could not copy.');
     }
   };
 
@@ -380,7 +303,7 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
                 <Field label="Required name (new)">
                   <input className={inputCls} value={nameForm.newName} onChange={(e) => setN('newName')(e.target.value)} placeholder="e.g. RVN Srinivas" />
                 </Field>
-                <Field label="Reason for change" hint="First name correction (phonetic) vs First name change (different name).">
+                <Field label="Reason for change">
                   <Select value={nameForm.reasonId} onChange={setN('reasonId')} options={NAME_REASONS.map((r) => ({ value: r.id, label: r.label }))} />
                 </Field>
                 <Field label="Applicant age group">
@@ -490,25 +413,30 @@ const DocumentsWizard = ({ preset, presetKey }) => {
   const std = res.standard.filter(match);
   const hof = res.hof.filter(match);
 
+  const DocCardRow = ({ doc, route }) => (
+    <div className={`rounded-xl border p-4 flex flex-col hover:shadow-md transition-all ${route === 'hof' ? 'bg-navy-50 border-navy-100' : 'bg-white border-gray-200'}`}>
+      <div className="flex items-start gap-3 mb-2">
+        <span className="flex-shrink-0 px-2 py-1 rounded bg-navy-100 text-navy-700 text-xs font-bold">Sl. {doc.id}</span>
+        <p className="font-bold text-gray-900 text-sm">{doc.name}</p>
+      </div>
+      {doc.notes && (
+        <div className="flex items-start mt-auto pt-2 border-t border-gray-100">
+          <FiInfo className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+          <p className="ml-2 text-xs text-gray-600 font-medium">{doc.notes}</p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
       <div className="lg:col-span-2">
         <Card title="Select the details" icon={FiUsers} className="lg:sticky lg:top-24">
           <div className="space-y-4">
-            <Field label="What do you want to update?">
-              <Segmented value={f.updateType} onChange={set('updateType')} options={DOC_UPDATE_TYPES} />
-            </Field>
-            <Field label="Resident type">
-              <Select value={f.residentType} onChange={set('residentType')} options={DOC_RESIDENT_TYPES} />
-            </Field>
-            <Field label="Applicant category">
-              <Select value={f.category} onChange={set('category')} options={DOC_CATEGORIES} />
-            </Field>
-            {f.updateType === 'Date of Birth' && (
-              <Field label="DOB status in Aadhaar">
-                <Select value={f.dobStatus} onChange={set('dobStatus')} options={DOB_STATUSES} />
-              </Field>
-            )}
+            <Field label="What do you want to update?"><Segmented value={f.updateType} onChange={set('updateType')} options={DOC_UPDATE_TYPES} /></Field>
+            <Field label="Resident type"><Select value={f.residentType} onChange={set('residentType')} options={DOC_RESIDENT_TYPES} /></Field>
+            <Field label="Applicant category"><Select value={f.category} onChange={set('category')} options={DOC_CATEGORIES} /></Field>
+            {f.updateType === 'Date of Birth' && <Field label="DOB status in Aadhaar"><Select value={f.dobStatus} onChange={set('dobStatus')} options={DOB_STATUSES} /></Field>}
           </div>
           <div className="mt-6 flex justify-end">
             <button type="button" onClick={() => { setF({ updateType: '', residentType: '', category: '', dobStatus: '' }); setQuery(''); }} className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-800">
@@ -541,12 +469,8 @@ const DocumentsWizard = ({ preset, presetKey }) => {
 
               <div>
                 <h3 className="font-bold text-gray-900 mb-3">Standard route <span className="text-gray-500 font-medium text-sm">({std.length})</span></h3>
-                {std.length === 0 ? (
-                  <p className="text-sm text-gray-500">No matching documents for this combination.</p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {std.map((d) => <DocCard key={d.id} doc={d} route="std" />)}
-                  </div>
+                {std.length === 0 ? <p className="text-sm text-gray-500">No matching documents.</p> : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{std.map((d) => <DocCardRow key={d.id} doc={d} route="std" />)}</div>
                 )}
               </div>
 
@@ -554,9 +478,7 @@ const DocumentsWizard = ({ preset, presetKey }) => {
                 <div className="mt-8">
                   <h3 className="font-bold text-gray-900 mb-1">HoF-based route <span className="text-gray-500 font-medium text-sm">({hof.length})</span></h3>
                   <p className="text-xs text-gray-500 mb-3">Relationship proof via the Head of Family.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {hof.map((d) => <DocCard key={`h-${d.id}`} doc={d} route="hof" />)}
-                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{hof.map((d) => <DocCardRow key={`h-${d.id}`} doc={d} route="hof" />)}</div>
                 </div>
               )}
             </div>
@@ -577,7 +499,6 @@ const DocumentGallery = () => {
       if (activeTab === 'poa' && !doc.poa) return false;
       if (activeTab === 'por' && !doc.por) return false;
       if (activeTab === 'pdb' && !doc.pdb) return false;
-      
       const q = searchQuery.toLowerCase();
       if (q) return doc.name.toLowerCase().includes(q) || doc.notes.toLowerCase().includes(q);
       return true;
@@ -598,41 +519,133 @@ const DocumentGallery = () => {
         <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
           <div className="relative w-full lg:w-96">
             <FiSearch className="absolute left-4 top-3.5 text-gray-400 h-5 w-5" />
-            <input
-              type="text"
-              placeholder="Search all 43 UIDAI documents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-navy-500 focus:outline-none transition-all"
-            />
+            <input type="text" placeholder="Search all 43 UIDAI documents..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-navy-500 focus:outline-none transition-all" />
           </div>
           <div className="flex overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 gap-2 scrollbar-hide">
             {GAL_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                  activeTab === tab.id ? 'bg-navy-700 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {tab.id === 'all' && <FiFilter className="inline mr-2 mb-0.5" />}
-                {tab.label}
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-navy-700 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {tab.id === 'all' && <FiFilter className="inline mr-2 mb-0.5" />} {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {filteredDocs.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-2xl border border-gray-200 border-dashed"><FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" /><h3 className="text-lg font-bold text-gray-900">No documents found</h3></div>
+      ) : (
+        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <AnimatePresence>
+            {filteredDocs.map((doc) => (
+              <motion.div layout key={doc.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="rounded-2xl border bg-white border-gray-200 p-5 flex flex-col hover:shadow-lg transition-all">
+                <div className="flex items-start gap-3 mb-3"><span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-navy-100 text-navy-700 text-xs font-bold">Sl. {doc.id}</span><p className="font-bold text-gray-900 text-sm leading-snug">{doc.name}</p></div>
+                <div className="flex flex-wrap gap-2 mt-auto mb-3">
+                  {doc.poi && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">PoI</span>}
+                  {doc.poa && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-100">PoA</span>}
+                  {doc.por && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">PoR</span>}
+                  {doc.pdb && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">PDB</span>}
+                </div>
+                {doc.notes && (
+                  <div className="flex items-start pt-3 border-t border-gray-100"><FiInfo className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" /><p className="ml-2 text-xs text-gray-600 font-medium leading-relaxed">{doc.notes}</p></div>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+const ScenariosGallery = () => {
+  const [activeTab, setActiveTab] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const SCENARIO_TABS = [
+    { id: 'All', label: 'All Scenarios' },
+    { id: 'Minor Name Change', label: 'Minor Name' },
+    { id: 'Major Name Change', label: 'Major Name' },
+    { id: 'Special Cases', label: 'Special Cases' },
+    { id: 'Date of Birth', label: 'Date of Birth (DOB)' },
+    { id: 'Operator Error', label: 'Operator Error' }
+  ];
+
+  const filteredScenarios = useMemo(() => {
+    return UPDATE_SCENARIOS.filter((scenario) => {
+      // Tab matching (Group DOB categories together)
+      const isDob = scenario.category.includes('Date of Birth');
+      if (activeTab === 'Date of Birth' && !isDob) return false;
+      if (activeTab !== 'All' && activeTab !== 'Date of Birth' && scenario.category !== activeTab) return false;
+
+      // Search matching
+      const q = searchQuery.toLowerCase();
+      if (q) {
+        return (
+          scenario.code.toLowerCase().includes(q) ||
+          scenario.description.toLowerCase().includes(q) ||
+          scenario.exceptions.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [activeTab, searchQuery]);
+
+  return (
+    <div className="space-y-6">
+      {/* Controls */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 sticky top-20 z-30">
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
+          <div className="relative w-full lg:w-96">
+            <FiSearch className="absolute left-4 top-3.5 text-gray-400 h-5 w-5" />
+            <input type="text" placeholder="Search scenarios, rules, exceptions..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-navy-500 focus:outline-none transition-all" />
+          </div>
+          <div className="flex overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 gap-2 scrollbar-hide">
+            {SCENARIO_TABS.map((tab) => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-navy-700 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {tab.id === 'All' && <FiFilter className="inline mr-2 mb-0.5" />} {tab.label}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {filteredDocs.length === 0 ? (
+      {/* Grid */}
+      {filteredScenarios.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl border border-gray-200 border-dashed">
-          <FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-          <h3 className="text-lg font-bold text-gray-900">No documents found</h3>
+          <FiLayers className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+          <h3 className="text-lg font-bold text-gray-900">No scenarios found</h3>
         </div>
       ) : (
-        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <AnimatePresence>
-            {filteredDocs.map((doc) => (
-              <DocCard key={doc.id} doc={doc} route="gallery" />
+            {filteredScenarios.map((s) => (
+              <motion.div layout key={s.code} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 flex flex-col overflow-hidden">
+                <div className="p-5 flex-1 flex flex-col">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="px-3 py-1 rounded-full bg-navy-100 text-navy-700 text-xs font-bold">Scenario {s.code}</span>
+                    <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">{s.category}</span>
+                  </div>
+                  
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 leading-snug">{s.description}</h3>
+                  <p className="text-sm text-gray-600 mb-4"><span className="font-semibold text-gray-900">Target Group:</span> {s.target}</p>
+                  
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500 mb-1">Required Docs</p>
+                    <p className="text-sm text-blue-900 font-medium leading-relaxed">{s.docs}</p>
+                  </div>
+
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 mt-auto">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Illustrations / Examples</p>
+                    <p className="text-xs text-gray-700 italic">{s.illustrations !== "Not in source" ? s.illustrations : "No examples provided in source."}</p>
+                  </div>
+                </div>
+
+                {s.exceptions && s.exceptions !== "Not in source" && (
+                  <div className="bg-amber-50 border-t border-amber-100 p-4 flex items-start">
+                    <FiAlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="ml-2 text-xs text-amber-900 font-medium leading-relaxed">{s.exceptions}</p>
+                  </div>
+                )}
+              </motion.div>
             ))}
           </AnimatePresence>
         </motion.div>
@@ -648,7 +661,8 @@ const DocumentGallery = () => {
 const TABS = [
   { id: 'procedure', label: 'Procedure Finder', icon: FiCalendar, blurb: 'Name or DOB exact procedures' },
   { id: 'wizard', label: 'Requirements Wizard', icon: FiMapPin, blurb: 'Contextual docs for your update' },
-  { id: 'gallery', label: 'Full Document Gallery', icon: FiBookOpen, blurb: 'Browse all 43 valid UIDAI documents' },
+  { id: 'scenarios', label: 'Scenarios Gallery', icon: FiLayers, blurb: 'Browse all 25 edge-case scenarios' },
+  { id: 'gallery', label: 'Document Gallery', icon: FiBookOpen, blurb: 'Browse all 43 valid UIDAI docs' },
 ];
 
 const AadhaarDocu = () => {
@@ -699,18 +713,18 @@ const AadhaarDocu = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <span className="inline-block px-3 py-1 rounded-full bg-white/15 text-xs font-semibold mb-3">
-              UIDAI List of Acceptable Documents (List IV)
+              UIDAI Support & Resolution Suite
             </span>
             <h1 className="text-3xl md:text-4xl font-bold mb-2">Aadhaar Document Suite</h1>
             <p className="text-navy-100 max-w-2xl">
-              Find exact procedures for demographic changes, run contextual requirement wizards, or browse the complete gallery of acceptable government documents.
+              Find exact procedures for demographic changes, run contextual requirement wizards, or browse the complete gallery of acceptable scenarios and government documents.
             </p>
           </motion.div>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8 print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-8 print:hidden">
           {TABS.map((t) => {
             const active = tab === t.id;
             return (
@@ -736,6 +750,7 @@ const AadhaarDocu = () => {
 
         {tab === 'procedure' && <ProcedureFinder onOpenDocuments={openDocuments} />}
         {tab === 'wizard' && <DocumentsWizard preset={preset} presetKey={presetKey} />}
+        {tab === 'scenarios' && <ScenariosGallery />}
         {tab === 'gallery' && <DocumentGallery />}
 
         <div className="mt-8 flex items-start p-4 rounded-xl bg-white border border-gray-200 text-xs text-gray-600 print:hidden">
