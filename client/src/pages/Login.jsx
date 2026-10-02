@@ -228,62 +228,62 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
         <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
-          {/* Background pattern */}
-          <div className="absolute inset-0 opacity-10">
-            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
-              <circle cx="20" cy="80" r="15" fill="#fff" />
-              <circle cx="80" cy="20" r="10" fill="#fff" />
-            </svg>
+        {/* Background pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
+            <circle cx="20" cy="80" r="15" fill="#fff" />
+            <circle cx="80" cy="20" r="10" fill="#fff" />
+          </svg>
+        </div>
+        
+        <div className="z-10">
+          <div className="flex flex-col items-center mb-12">
+            <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 hover:shadow-[0_10px_40px_-10px_rgba(26,172,147,0.4)] transition-all duration-300">
+              <img 
+                src="/logo-light.png" 
+                alt="Akshaya Sahayi Logo" 
+                className="h-20 w-20 object-contain drop-shadow-sm" 
+              />
+            </div>
+            <div className="text-center">
+              <h1 className="text-3xl font-bold text-white mb-2">Akshaya Sahayi</h1>
+              <p className="text-navy-100 mb-2">Your Trusted Digital Service Companion</p>
+            </div>
           </div>
           
-          <div className="z-10">
-            <div className="flex flex-col items-center mb-12">
-              <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 hover:shadow-[0_10px_40px_-10px_rgba(26,172,147,0.4)] transition-all duration-300">
-                <img 
-                  src="/logo-light.png" 
-                  alt="Akshaya Sahayi Logo" 
-                  className="h-20 w-20 object-contain drop-shadow-sm" 
-                />
-              </div>
-              <div className="text-center">
-                <h1 className="text-3xl font-bold text-navy-600 mb-2">Akshaya Sahayi</h1>
-                <p className="text-navy-600 mb-2">Your Trusted Digital Service Companion</p>
-              </div>
-            </div>
-            
-            <div className="mt-16 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-              <h2 className="text-xl font-bold text-navy-600 mb-2">
-                {isCustomerLogin ? "Customer Portal" : "Empowering Digital Kerala"}
-              </h2>
-              <p className="text-navy-600 mb-2">
-                {isCustomerLogin 
-                  ? "Access your account with WhatsApp OTP or register for new services"
-                  : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
-              </p>
+          <div className="mt-16 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+            <h2 className="text-xl font-bold text-white mb-2">
+              {isCustomerLogin ? "Customer Portal" : "Empowering Digital Kerala"}
+            </h2>
+            <p className="text-navy-100 mb-2">
+              {isCustomerLogin 
+                ? "Access your account with WhatsApp OTP or register for new services"
+                : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
+            </p>
 
-              {/* Animated Services List */}
-              {!isCustomerLogin && (
-                <div className="mt-4 pt-4 border-t border-white/20 h-12 overflow-hidden flex items-center">
-                  <p 
-                    key={serviceIndex} 
-                    className="text-navy-700 font-semibold text-sm animate-fade-slide flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4 text-navy-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    {servicesList[serviceIndex]}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <div className="z-10 mt-8">
-            <p className="text-navy-800 mb-2 text-sm text-center">© 2026 Muhammed Illyas. All rights reserved.</p>
-            <p className="text-navy-800 mb-2 text-sm text-center mt-1">Made with ❤️</p>
+            {/* Animated Services List */}
+            {!isCustomerLogin && (
+              <div className="mt-4 pt-4 border-t border-white/20 h-12 overflow-hidden flex items-center">
+                <p 
+                  key={serviceIndex} 
+                  className="text-white font-semibold text-sm animate-fade-slide flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-navy-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {servicesList[serviceIndex]}
+                </p>
+              </div>
+            )}
           </div>
         </div>
+        
+        <div className="z-10 mt-8">
+          <p className="text-navy-200 mb-2 text-sm text-center">© 2026 Muhammed Illyas. All rights reserved.</p>
+          <p className="text-navy-200 mb-2 text-sm text-center mt-1">Made with ❤️</p>
+        </div>
+      </div>
 
         <div className="w-full md:w-3/5 p-8 md:p-10">
           <div className="max-w-md mx-auto">
@@ -507,14 +507,7 @@ const Login = () => {
       </div>
       
       <style>{`
-        .bg-navy-900 { background-color: #0a192f; }
-        .bg-navy-800 { background-color: #172a45; }
-        .bg-navy-700 { background-color: #1e3a5f; }
-        .bg-navy-600 { background-color: #2c5282; }
-        .text-navy-600 { color: #2c5282; }
-        .text-navy-800 { color: #172a45; }
         .focus\\:ring-navy-500:focus { --tw-ring-color: #1e3a5f; }
-        .border-navy-500 { border-color: #1e3a5f; }
         
         /* New Animation Keyframes */
         @keyframes fadeSlide {
