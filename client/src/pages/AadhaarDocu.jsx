@@ -7,13 +7,15 @@ import { toast } from 'react-toastify';
 import {
   FiShield, FiFileText, FiSearch, FiCheckCircle, FiAlertTriangle, FiXCircle,
   FiCopy, FiPrinter, FiArrowRight, FiInfo, FiUser, FiCalendar, FiMapPin,
-  FiRefreshCw, FiHome, FiBookOpen, FiExternalLink, FiUsers,
+  FiRefreshCw, FiHome, FiBookOpen, FiExternalLink, FiUsers, FiFilter, FiLayers
 } from 'react-icons/fi';
 import {
   CHANGE_TYPES, AGE_GROUPS, NAME_REASONS, DOB_STATUSES, DOB_RESIDENT_TYPES,
   DOC_UPDATE_TYPES, DOC_RESIDENT_TYPES, DOC_CATEGORIES,
   findProcedure, findDocuments, detectNameScenario, getScenario,
 } from '../utils/aadhaar/Aadhaarlogic.js';
+import { SCENARIOS } from '../utils/aadhaar/Aadhaarscenarios.js';
+import { DOCUMENTS } from '../utils/aadhaar/Aadhaardocuments.js';
 
 // ---------------------------------------------------------------------
 // Small UI pieces
@@ -115,7 +117,7 @@ const Section = ({ label, children, tone = 'plain' }) => {
 };
 
 // ---------------------------------------------------------------------
-// Procedure finder (name / DOB)
+// 1. Procedure finder (name / DOB)
 // ---------------------------------------------------------------------
 const emptyName = { oldName: '', newName: '', reasonId: '', ageGroup: '', overrideCode: '' };
 const emptyDob = {
@@ -196,7 +198,6 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-      {/* Inputs */}
       <div className="lg:col-span-2">
         <Card title="What do you want to change?" icon={FiUser}>
           <Segmented value={mode} onChange={setMode} options={CHANGE_TYPES} />
@@ -210,10 +211,7 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
                 <Field label="Required name (new)">
                   <input className={inputCls} value={nameForm.newName} onChange={(e) => setN('newName')(e.target.value)} placeholder="e.g. RVN Srinivas" />
                 </Field>
-                <Field
-                  label="Reason for change"
-                  hint="First name: pick 'First name correction' for a spelling / phonetic fix, or 'First name change' for a different name. Use 'Spelling / format correction' for anything else."
-                >
+                <Field label="Reason for change" hint="First name: pick 'First name correction' for a spelling / phonetic fix, or 'First name change' for a different name. Use 'Spelling / format correction' for anything else.">
                   <Select value={nameForm.reasonId} onChange={setN('reasonId')} options={NAME_REASONS.map((r) => ({ value: r.id, label: r.label }))} />
                 </Field>
                 <Field label="Applicant age group">
@@ -259,18 +257,13 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
             <button type="button" onClick={loadExample} className="text-sm font-medium text-navy-600 hover:text-navy-800">
               Try an example
             </button>
-            <button
-              type="button"
-              onClick={() => (isName ? setNameForm(emptyName) : setDobForm(emptyDob))}
-              className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-800"
-            >
+            <button type="button" onClick={() => (isName ? setNameForm(emptyName) : setDobForm(emptyDob))} className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-800">
               <FiRefreshCw className="h-4 w-4 mr-1.5" /> Clear
             </button>
           </div>
         </Card>
       </div>
 
-      {/* Result */}
       <div className="lg:col-span-3">
         <Card title="Procedure" icon={FiFileText} className="lg:sticky lg:top-24">
           {!touched ? (
@@ -281,25 +274,14 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
             </div>
           ) : (
             <AnimatePresence mode="wait">
-              <motion.div
-                key={`${mode}-${result.code}-${result.check}`}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-3"
-              >
+              <motion.div key={`${mode}-${result.code}-${result.check}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-3">
                 <StatusBanner check={result.check} blocked={result.scenario?.blocked} />
 
                 {result.scenario && (
                   <>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-3 py-1 rounded-full bg-navy-100 text-navy-700 text-sm font-bold">
-                        Scenario {result.code}
-                      </span>
-                      <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">
-                        {result.scenario.category}
-                      </span>
+                      <span className="px-3 py-1 rounded-full bg-navy-100 text-navy-700 text-sm font-bold">Scenario {result.code}</span>
+                      <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">{result.scenario.category}</span>
                     </div>
                     <Section label="Scenario">{result.scenario.description}</Section>
                     <Section label="Applies to">{result.scenario.appliesTo}</Section>
@@ -309,17 +291,12 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
                     <Section label="Exceptions and conditions">{result.scenario.exceptions}</Section>
                     <Section label="Examples from the source">{result.scenario.examples}</Section>
                     <p className="text-xs text-gray-500 flex items-start">
-                      <FiBookOpen className="h-4 w-4 mr-1.5 mt-0.5 flex-shrink-0" />
-                      Source: {result.scenario.source}
+                      <FiBookOpen className="h-4 w-4 mr-1.5 mt-0.5 flex-shrink-0" /> Source: {result.scenario.source}
                     </p>
 
                     <div className="flex flex-wrap gap-3 pt-2 print:hidden">
                       {!result.scenario.blocked && (
-                        <button
-                          type="button"
-                          onClick={openDocs}
-                          className="inline-flex items-center px-4 py-2.5 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-xl hover:shadow-lg transition-all font-medium text-sm"
-                        >
+                        <button type="button" onClick={openDocs} className="inline-flex items-center px-4 py-2.5 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-xl hover:shadow-lg transition-all font-medium text-sm">
                           See acceptable documents <FiArrowRight className="ml-2 h-4 w-4" />
                         </button>
                       )}
@@ -342,14 +319,12 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
 };
 
 // ---------------------------------------------------------------------
-// Documents finder
+// 2. Documents finder (Requirements Wizard)
 // ---------------------------------------------------------------------
 const DocRow = ({ doc, route }) => (
   <div className={`rounded-xl border p-4 ${route === 'hof' ? 'bg-navy-50 border-navy-100' : 'bg-white border-gray-200'}`}>
     <div className="flex items-start gap-3">
-      <span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-navy-100 text-navy-700 text-xs font-bold">
-        Sl. {doc.sl}
-      </span>
+      <span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-navy-100 text-navy-700 text-xs font-bold">Sl. {doc.sl}</span>
       <div className="flex-1 min-w-0">
         <p className="font-medium text-gray-900 text-sm leading-snug">{doc.name}</p>
         {doc.displayNote && <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">{doc.displayNote}</p>}
@@ -363,7 +338,6 @@ const DocumentsFinder = ({ preset, presetKey }) => {
   const [query, setQuery] = useState('');
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
-  // pre-fill when the user comes from the Procedure tab
   useEffect(() => {
     if (preset) setF({ updateType: '', residentType: '', category: '', dobStatus: '', ...preset });
   }, [presetKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -396,11 +370,7 @@ const DocumentsFinder = ({ preset, presetKey }) => {
             )}
           </div>
           <div className="mt-6 flex justify-end">
-            <button
-              type="button"
-              onClick={() => { setF({ updateType: '', residentType: '', category: '', dobStatus: '' }); setQuery(''); }}
-              className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-800"
-            >
+            <button type="button" onClick={() => { setF({ updateType: '', residentType: '', category: '', dobStatus: '' }); setQuery(''); }} className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-800">
               <FiRefreshCw className="h-4 w-4 mr-1.5" /> Clear
             </button>
           </div>
@@ -426,45 +396,24 @@ const DocumentsFinder = ({ preset, presetKey }) => {
                   {res.hof.length > 0 && `, ${res.hof.length} on the HoF route`}.
                 </p>
               </div>
-
               <div className="space-y-3">
-                {res.notes.map((n) => (
-                  <Section key={n.label} label={n.label}>{n.text}</Section>
-                ))}
+                {res.notes.map((n) => <Section key={n.label} label={n.label}>{n.text}</Section>)}
               </div>
-
               <div className="relative">
                 <FiSearch className="absolute left-3.5 top-3.5 h-4 w-4 text-gray-400" />
-                <input
-                  className={`${inputCls} pl-10`}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search within these documents (e.g. bill, passport)"
-                />
+                <input className={`${inputCls} pl-10`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search within these documents (e.g. bill, passport)" />
               </div>
-
               <div>
-                <h3 className="font-bold text-gray-900 mb-3">
-                  Standard route <span className="text-gray-500 font-medium text-sm">({std.length})</span>
-                </h3>
-                {std.length === 0 ? (
-                  <p className="text-sm text-gray-500">No matching documents in the source list for this combination.</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {std.map((d) => <DocRow key={d.sl} doc={d} route="std" />)}
-                  </div>
+                <h3 className="font-bold text-gray-900 mb-3">Standard route <span className="text-gray-500 font-medium text-sm">({std.length})</span></h3>
+                {std.length === 0 ? <p className="text-sm text-gray-500">No matching documents in the source list for this combination.</p> : (
+                  <div className="space-y-2.5">{std.map((d) => <DocRow key={d.sl} doc={d} route="std" />)}</div>
                 )}
               </div>
-
               {res.hof.length > 0 && (
                 <div>
-                  <h3 className="font-bold text-gray-900 mb-1">
-                    HoF-based route <span className="text-gray-500 font-medium text-sm">({hof.length})</span>
-                  </h3>
+                  <h3 className="font-bold text-gray-900 mb-1">HoF-based route <span className="text-gray-500 font-medium text-sm">({hof.length})</span></h3>
                   <p className="text-xs text-gray-500 mb-3">Relationship proof via the Head of Family.</p>
-                  <div className="space-y-2.5">
-                    {hof.map((d) => <DocRow key={`h-${d.sl}`} doc={d} route="hof" />)}
-                  </div>
+                  <div className="space-y-2.5">{hof.map((d) => <DocRow key={`h-${d.sl}`} doc={d} route="hof" />)}</div>
                 </div>
               )}
             </div>
@@ -476,11 +425,180 @@ const DocumentsFinder = ({ preset, presetKey }) => {
 };
 
 // ---------------------------------------------------------------------
-// Page
+// 3. Document Gallery
+// ---------------------------------------------------------------------
+const DocumentGallery = () => {
+  const [activeTab, setActiveTab] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredDocs = useMemo(() => {
+    return DOCUMENTS.filter((doc) => {
+      if (activeTab === 'poi' && !doc.poi) return false;
+      if (activeTab === 'poa' && !doc.poa) return false;
+      if (activeTab === 'por' && !doc.por) return false;
+      if (activeTab === 'pdb' && !doc.pdb) return false;
+      const q = searchQuery.toLowerCase();
+      if (q) return doc.name.toLowerCase().includes(q) || doc.conditions.toLowerCase().includes(q);
+      return true;
+    });
+  }, [activeTab, searchQuery]);
+
+  const GAL_TABS = [
+    { id: 'all', label: 'All Documents' },
+    { id: 'poi', label: 'Identity (PoI)' },
+    { id: 'poa', label: 'Address (PoA)' },
+    { id: 'por', label: 'Relationship (PoR)' },
+    { id: 'pdb', label: 'Date of Birth (PDB)' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 sticky top-20 z-30">
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
+          <div className="relative w-full lg:w-96">
+            <FiSearch className="absolute left-4 top-3.5 text-gray-400 h-5 w-5" />
+            <input type="text" placeholder="Search all 43 UIDAI documents..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-navy-500 focus:outline-none transition-all" />
+          </div>
+          <div className="flex overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 gap-2 hide-scrollbar">
+            {GAL_TABS.map((tab) => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-navy-700 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {tab.id === 'all' && <FiFilter className="inline mr-2 mb-0.5" />} {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {filteredDocs.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-2xl border border-gray-200 border-dashed"><FiFileText className="h-12 w-12 mx-auto text-gray-300 mb-4" /><h3 className="text-lg font-bold text-gray-900">No documents found</h3></div>
+      ) : (
+        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <AnimatePresence>
+            {filteredDocs.map((doc) => (
+              <motion.div layout key={doc.sl} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="rounded-2xl border bg-white border-gray-200 p-5 flex flex-col hover:shadow-lg transition-all">
+                <div className="flex items-start gap-3 mb-3"><span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-navy-100 text-navy-700 text-xs font-bold">Sl. {doc.sl}</span><p className="font-bold text-gray-900 text-sm leading-snug">{doc.name}</p></div>
+                <div className="flex flex-wrap gap-2 mt-auto mb-3">
+                  {doc.poi && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">PoI</span>}
+                  {doc.poa && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-100">PoA</span>}
+                  {doc.por && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">PoR</span>}
+                  {doc.pdb && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">PDB</span>}
+                </div>
+                {doc.conditions && (
+                  <div className="flex items-start pt-3 border-t border-gray-100"><FiInfo className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" /><p className="ml-2 text-xs text-gray-600 font-medium leading-relaxed">{doc.conditions}</p></div>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// 4. Scenarios Gallery
+// ---------------------------------------------------------------------
+const ScenariosGallery = () => {
+  const [activeTab, setActiveTab] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const SCENARIO_TABS = [
+    { id: 'All', label: 'All Scenarios' },
+    { id: 'Minor Name Change', label: 'Minor Name' },
+    { id: 'Major Name Change', label: 'Major Name' },
+    { id: 'Special Cases', label: 'Special Cases' },
+    { id: 'Date of Birth Update First Time', label: 'First-time DOB' },
+    { id: 'Subsequent DoB Update', label: 'Subsequent DOB' },
+    { id: 'Operator Error', label: 'Operator Error' }
+  ];
+
+  const filteredScenarios = useMemo(() => {
+    return SCENARIOS.filter((scenario) => {
+      if (activeTab !== 'All' && scenario.category !== activeTab) return false;
+      const q = searchQuery.toLowerCase();
+      if (q) {
+        return (
+          scenario.code.toLowerCase().includes(q) ||
+          (scenario.description || '').toLowerCase().includes(q) ||
+          (scenario.exceptions || '').toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [activeTab, searchQuery]);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 sticky top-20 z-30">
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
+          <div className="relative w-full lg:w-96">
+            <FiSearch className="absolute left-4 top-3.5 text-gray-400 h-5 w-5" />
+            <input type="text" placeholder="Search scenarios, rules, exceptions..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-navy-500 focus:outline-none transition-all" />
+          </div>
+          <div className="flex overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 gap-2 hide-scrollbar">
+            {SCENARIO_TABS.map((tab) => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-navy-700 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {tab.id === 'All' && <FiFilter className="inline mr-2 mb-0.5" />} {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {filteredScenarios.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-2xl border border-gray-200 border-dashed">
+          <FiLayers className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+          <h3 className="text-lg font-bold text-gray-900">No scenarios found</h3>
+        </div>
+      ) : (
+        <motion.div layout className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <AnimatePresence>
+            {filteredScenarios.map((s) => (
+              <motion.div layout key={s.code} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 flex flex-col overflow-hidden">
+                <div className="p-5 flex-1 flex flex-col">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="px-3 py-1 rounded-full bg-navy-100 text-navy-700 text-xs font-bold">Scenario {s.code}</span>
+                    <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">{s.category}</span>
+                  </div>
+                  
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 leading-snug">{s.description}</h3>
+                  {s.appliesTo && <p className="text-sm text-gray-600 mb-4"><span className="font-semibold text-gray-900">Target Group:</span> {s.appliesTo}</p>}
+                  
+                  {s.documents && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500 mb-1">Required Docs</p>
+                      <p className="text-sm text-blue-900 font-medium leading-relaxed">{s.documents}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 mt-auto">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Illustrations / Examples</p>
+                    <p className="text-xs text-gray-700 italic">{s.examples ? s.examples : "No examples provided in source."}</p>
+                  </div>
+                </div>
+
+                {s.exceptions && (
+                  <div className="bg-amber-50 border-t border-amber-100 p-4 flex items-start">
+                    <FiAlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="ml-2 text-xs text-amber-900 font-medium leading-relaxed">{s.exceptions}</p>
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// 5. Main Page Component
 // ---------------------------------------------------------------------
 const TABS = [
-  { id: 'procedure', label: 'Procedure Finder', icon: FiCalendar, blurb: 'Name or DOB change - exact procedure' },
-  { id: 'documents', label: 'Documents Finder', icon: FiMapPin, blurb: 'Which documents are acceptable' },
+  { id: 'procedure', label: 'Procedure Finder', icon: FiCalendar, blurb: 'Name or DOB exact procedures' },
+  { id: 'documents', label: 'Requirements Wizard', icon: FiMapPin, blurb: 'Contextual docs for your update' },
+  { id: 'scenarios', label: 'Scenarios Gallery', icon: FiLayers, blurb: 'Browse all 25 edge-case scenarios' },
+  { id: 'gallery', label: 'Document Gallery', icon: FiBookOpen, blurb: 'Browse all 43 valid UIDAI docs' },
 ];
 
 const AadhaarDocuFinder = () => {
@@ -533,20 +651,19 @@ const AadhaarDocuFinder = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <span className="inline-block px-3 py-1 rounded-full bg-white/15 text-xs font-semibold mb-3">
-              Based on UIDAI SoPs and the List of Acceptable Documents
+              UIDAI Support & Resolution Suite
             </span>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">Aadhaar Docu Finder</h1>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">Aadhaar Document Suite</h1>
             <p className="text-navy-100 max-w-2xl">
-              Find the exact procedure for a name or date of birth change, and the documents UIDAI accepts for a
-              name, address or date of birth update.
+              Find exact procedures for demographic changes, run contextual requirement wizards, or browse the complete gallery of acceptable scenarios and government documents.
             </p>
           </motion.div>
         </div>
       </header>
 
-      {/* Tabs + content */}
+      {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-8 print:hidden">
           {TABS.map((t) => {
             const active = tab === t.id;
             return (
@@ -555,54 +672,33 @@ const AadhaarDocuFinder = () => {
                 type="button"
                 onClick={() => setTab(t.id)}
                 className={`flex items-center text-left p-4 rounded-2xl border transition-all ${
-                  active
-                    ? 'bg-white border-navy-500 shadow-lg ring-2 ring-navy-100'
-                    : 'bg-white border-gray-200 hover:border-navy-200 hover:shadow'
+                  active ? 'bg-white border-navy-500 shadow-lg ring-2 ring-navy-100' : 'bg-white border-gray-200 hover:border-navy-200 hover:shadow'
                 }`}
               >
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mr-4 ${
-                  active ? 'bg-gradient-to-br from-navy-600 to-navy-800' : 'bg-gray-100'
-                }`}>
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 ${active ? 'bg-gradient-to-br from-navy-600 to-navy-800' : 'bg-gray-100'}`}>
                   <t.icon className={`h-5 w-5 ${active ? 'text-white' : 'text-gray-500'}`} />
                 </div>
                 <div>
                   <p className={`font-bold ${active ? 'text-navy-800' : 'text-gray-800'}`}>{t.label}</p>
-                  <p className="text-xs text-gray-500">{t.blurb}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-snug">{t.blurb}</p>
                 </div>
               </button>
             );
           })}
         </div>
 
-        {tab === 'procedure' ? (
-          <ProcedureFinder onOpenDocuments={openDocuments} />
-        ) : (
-          <DocumentsFinder preset={preset} presetKey={presetKey} />
-        )}
+        {tab === 'procedure' && <ProcedureFinder onOpenDocuments={openDocuments} />}
+        {tab === 'documents' && <DocumentsFinder preset={preset} presetKey={presetKey} />}
+        {tab === 'scenarios' && <ScenariosGallery />}
+        {tab === 'gallery' && <DocumentGallery />}
 
         <div className="mt-8 flex items-start p-4 rounded-xl bg-white border border-gray-200 text-xs text-gray-600 print:hidden">
           <FiInfo className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0 text-navy-600" />
           <p>
-            This tool summarises the UIDAI documents it was built from and may not reflect later circulars.
-            Where a field says "Not specified in the source sheet", the source gave no detail. Please confirm with the
-            latest UIDAI SoP before submitting a request.{' '}
-            <a
-              href="https://uidai.gov.in/images/SOP_for_DOB_update.pdf"
-              target="_blank"
-              rel="noreferrer"
-              className="text-navy-600 font-medium inline-flex items-center hover:underline"
-            >
-              DOB SoP <FiExternalLink className="h-3 w-3 ml-1" />
-            </a>
+            This tool summarises the UIDAI documents it was built from and may not reflect later circulars. Always confirm with the latest UIDAI SoP before submitting a request.
+            <a href="https://uidai.gov.in/images/SOP_for_DOB_update.pdf" target="_blank" rel="noreferrer" className="text-navy-600 font-medium inline-flex items-center hover:underline ml-1">DOB SoP <FiExternalLink className="h-3 w-3 ml-1" /></a>
             <span className="mx-1">|</span>
-            <a
-              href="https://uidai.gov.in/images/SOP_28.10.2021-Name_And_Gender_UpdateRequest_under_Exception_Handling_Process.pdf"
-              target="_blank"
-              rel="noreferrer"
-              className="text-navy-600 font-medium inline-flex items-center hover:underline"
-            >
-              Name &amp; Gender SoP <FiExternalLink className="h-3 w-3 ml-1" />
-            </a>
+            <a href="https://uidai.gov.in/images/SOP_28.10.2021-Name_And_Gender_UpdateRequest_under_Exception_Handling_Process.pdf" target="_blank" rel="noreferrer" className="text-navy-600 font-medium inline-flex items-center hover:underline">Name &amp; Gender SoP <FiExternalLink className="h-3 w-3 ml-1" /></a>
           </p>
         </div>
       </main>
@@ -613,6 +709,15 @@ const AadhaarDocuFinder = () => {
           <Link to="/" className="hover:text-white transition-colors">Back to home</Link>
         </div>
       </footer>
+      
+      <style>{`
+        .bg-navy-50 { background-color: #f0f4f8; }
+        .text-navy-600 { color: #2c5282; }
+        .text-navy-700 { color: #1e3a5f; }
+        .bg-navy-700 { background-color: #1e3a5f; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 };
