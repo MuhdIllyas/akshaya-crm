@@ -451,11 +451,14 @@ const DocumentGallery = () => {
 };
 
 // ---------------------------------------------------------------------
-// 4. Scenarios Gallery (Redesigned CMS Matrix Layout)
+// 4. Scenarios Gallery (Redesigned CMS Matrix Layout with Inspect Modal)
 // ---------------------------------------------------------------------
 const ScenariosGallery = () => {
   const [activeCategory, setActiveCategory] = useState('All Categories');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // NEW: State to hold the currently inspected scenario
+  const [selectedScenario, setSelectedScenario] = useState(null);
 
   // Extract unique categories and their counts dynamically
   const { uniqueCategories, categoryCounts } = useMemo(() => {
@@ -476,10 +479,7 @@ const ScenariosGallery = () => {
   // Filter Logic
   const filteredScenarios = useMemo(() => {
     return SCENARIOS.filter((s) => {
-      // Category Match
       if (activeCategory !== 'All Categories' && s.category !== activeCategory) return false;
-      
-      // Search Match
       const q = searchQuery.toLowerCase();
       if (q) {
         return (
@@ -499,14 +499,13 @@ const ScenariosGallery = () => {
     const catCount = uniqueCategories.length;
     const nameCount = SCENARIOS.filter(s => s.category.includes('Name') || s.category === 'Special Cases' || s.category === 'Data Entry Error' || s.category === 'Error in Regional Language').length;
     const dobCount = SCENARIOS.filter(s => s.category.includes('Date of Birth') || s.category.includes('DoB') || s.category === 'Operator Error').length;
-    
     return { total, catCount, nameCount, dobCount };
   }, [uniqueCategories]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       
-      {/* Header and Controls (Mimicking the CMS Layout) */}
+      {/* Header and Controls */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-100 pb-6">
           <div>
@@ -657,7 +656,7 @@ const ScenariosGallery = () => {
                         <FiFileText className="text-slate-500 mr-1.5 h-4 w-4" />
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Documents Required</p>
                       </div>
-                      <p className="text-sm text-slate-800 leading-relaxed">{s.documents}</p>
+                      <p className="text-sm text-slate-800 leading-relaxed line-clamp-3">{s.documents}</p>
                     </div>
                   )}
 
@@ -667,24 +666,29 @@ const ScenariosGallery = () => {
                       <FiStar className="text-amber-500 mr-1.5 h-4 w-4" />
                       <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Illustrations / Examples</p>
                     </div>
-                    <p className="text-sm text-amber-900 italic leading-relaxed">
+                    <p className="text-sm text-amber-900 italic leading-relaxed line-clamp-2">
                       {s.examples ? s.examples : "No examples provided in source."}
                     </p>
                   </div>
                   
-                  {/* Exceptions Warning (If Any) */}
-                  {s.exceptions && (
+                  {/* Exceptions Warning */}
+                  {s.exceptions && s.exceptions !== "Not in source" && (
                     <div className="flex items-start text-xs text-red-600 mb-4 bg-red-50 p-3 rounded-lg border border-red-100">
                       <FiAlertTriangle className="mr-1.5 mt-0.5 flex-shrink-0" />
-                      <span className="leading-relaxed">{s.exceptions}</span>
+                      <span className="leading-relaxed line-clamp-2">{s.exceptions}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Card Footer */}
+                {/* Card Footer (INSPECT TRIGGER) */}
                 <div className="bg-white border-t border-gray-100 p-4 flex justify-between items-center text-xs text-gray-500">
-                  <span>Source 1</span>
-                  <button className="text-navy-600 font-medium hover:text-navy-800 transition-colors flex items-center">
+                  <span className="truncate max-w-[150px]" title={s.source || "Source 1"}>
+                    {s.source ? s.source.replace('.pdf', '') : "UIDAI Source"}
+                  </span>
+                  <button 
+                    onClick={() => setSelectedScenario(s)} 
+                    className="text-navy-600 font-medium hover:text-navy-800 transition-colors flex items-center px-2 py-1 rounded hover:bg-navy-50"
+                  >
                     Inspect <FiArrowRight className="ml-1 h-3 w-3" />
                   </button>
                 </div>
@@ -693,6 +697,97 @@ const ScenariosGallery = () => {
           </AnimatePresence>
         </motion.div>
       )}
+
+      {/* NEW: Inspect Modal Overlay */}
+      <AnimatePresence>
+        {selectedScenario && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-navy-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1 rounded-full bg-navy-100 text-navy-700 text-xs font-bold">Scenario {selectedScenario.code}</span>
+                  <span className="text-sm font-semibold text-gray-600">{selectedScenario.category}</span>
+                </div>
+                <button 
+                  onClick={() => setSelectedScenario(null)} 
+                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                >
+                  <FiXCircle className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto hide-scrollbar">
+                <h3 className="text-xl font-bold text-gray-900 mb-6 leading-snug">{selectedScenario.description}</h3>
+                
+                <div className="space-y-6">
+                  {selectedScenario.appliesTo && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Target Group</p>
+                      <p className="text-gray-900 font-medium">{selectedScenario.appliesTo}</p>
+                    </div>
+                  )}
+                  
+                  {/* Annexure Side-by-Side */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Adult Annexure</p>
+                      <p className="text-navy-700 font-semibold">{selectedScenario.annexureAdult || 'None required'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Minor Annexure</p>
+                      <p className="text-navy-700 font-semibold">{selectedScenario.annexureMinor || 'None required'}</p>
+                    </div>
+                  </div>
+
+                  {selectedScenario.documents && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
+                      <p className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-2">Required Documents</p>
+                      <p className="text-sm text-blue-900 leading-relaxed font-medium">{selectedScenario.documents}</p>
+                    </div>
+                  )}
+
+                  {selectedScenario.examples && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-600 mb-2">Illustrations / Examples</p>
+                      <p className="text-sm text-amber-900 italic leading-relaxed">{selectedScenario.examples}</p>
+                    </div>
+                  )}
+
+                  {selectedScenario.exceptions && selectedScenario.exceptions !== "Not in source" && (
+                    <div className="bg-red-50 border border-red-100 rounded-xl p-5">
+                      <p className="text-xs font-bold uppercase tracking-wider text-red-600 mb-2">Exceptions & Conditions</p>
+                      <p className="text-sm text-red-900 leading-relaxed">{selectedScenario.exceptions}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
+                <p className="text-xs text-gray-500 flex items-center">
+                  <FiBookOpen className="mr-2 text-gray-400" /> 
+                  {selectedScenario.source || 'UIDAI Standard Operating Procedure'}
+                </p>
+                <button 
+                  onClick={() => setSelectedScenario(null)} 
+                  className="px-5 py-2.5 bg-navy-700 text-white rounded-lg text-sm font-semibold hover:bg-navy-800 transition-colors shadow-sm"
+                >
+                  Close Inspection
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };
