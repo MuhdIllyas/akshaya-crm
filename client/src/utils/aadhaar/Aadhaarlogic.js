@@ -1,8 +1,8 @@
 // Logic for the Aadhaar Docu Finder page.
 // This is a direct port of the formulas in Aadhaar_Update_Procedure_Finder.xlsx
 // (Lookup, Calc, DocList and DocCalc tabs). Keep the two in step if a rule changes.
-import { SCENARIOS } from './aadhaarScenarios.js';
-import { DOCUMENTS, DOC_NOTES } from './aadhaarDocuments.js';
+import { SCENARIOS } from '../aadhaar/Aadhaarscenarios.js';
+import { DOCUMENTS, DOC_NOTES } from '../aadhaar/Aadhaardocuments.js';
 
 // ---------------------------------------------------------------------
 // Option lists (same values as the Lists tab)

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   findProcedure, findDocuments, DOC_CATEGORIES as C, DOB_STATUSES as S,
-} from './aadhaarLogic.js';
+} from './Aadhaarlogic.js';
 
 let pass = 0;
 const ok = (name, fn) => { fn(); pass += 1; console.log('PASS', name); };
