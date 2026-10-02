@@ -710,14 +710,6 @@ const AadhaarDocuFinder = () => {
         </div>
       </footer>
       
-      <style>{`
-        .bg-navy-50 { background-color: #f0f4f8; }
-        .text-navy-600 { color: #2c5282; }
-        .text-navy-700 { color: #1e3a5f; }
-        .bg-navy-700 { background-color: #1e3a5f; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
     </div>
   );
 };
