@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
-  FiLayers, FiSettings, FiActivity, FiMap, FiCreditCard
+  FiLayers, FiSettings, FiActivity, FiMap, FiCreditCard, FiBookOpen
 } from 'react-icons/fi';
 
 // ---------------------------------------------------------------------
