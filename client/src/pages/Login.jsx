@@ -227,89 +227,96 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-        <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
-        {/* Background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
-            <circle cx="20" cy="80" r="15" fill="#fff" />
-            <circle cx="80" cy="20" r="10" fill="#fff" />
-          </svg>
-        </div>
         
-        <div className="z-10">
-          <div className="flex flex-col items-center mb-12">
-            <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(23,42,69,0.4)] mb-6 border border-gray-100 hover:shadow-[0_10px_40px_-10px_rgba(26,172,147,0.4)] transition-all duration-300">
-              <img 
-                src="/logo-light.png" 
-                alt="Akshaya Sahayi Logo" 
-                className="h-20 w-20 object-contain drop-shadow-sm" 
-              />
+        {/* Left Panel - Navy & Teal Branding */}
+        <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
+          <div className="absolute inset-0 opacity-10 pointer-events-none">
+            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
+              <circle cx="20" cy="80" r="15" fill="#fff" />
+              <circle cx="80" cy="20" r="10" fill="#fff" />
+            </svg>
+          </div>
+          
+          <div className="z-10">
+            <div className="flex flex-col items-center mb-12">
+              <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(20,184,166,0.3)] mb-6 border border-teal-50 hover:shadow-[0_10px_40px_-10px_rgba(20,184,166,0.5)] transition-all duration-300">
+                <img 
+                  src="/logo-light.png" 
+                  alt="Akshaya Sahayi Logo" 
+                  className="h-20 w-20 object-contain drop-shadow-sm" 
+                />
+              </div>
+              <div className="text-center">
+                <h1 className="text-3xl font-bold text-white mb-2">
+                  Akshaya <span className="text-teal-400">Sahayi</span>
+                </h1>
+                <p className="text-navy-100 mb-2">Your Trusted Digital Service Companion</p>
+              </div>
             </div>
-            <div className="text-center">
-              <h1 className="text-3xl font-bold text-white mb-2">Akshaya Sahayi</h1>
-              <p className="text-navy-100 mb-2">Your Trusted Digital Service Companion</p>
+            
+            <div className="mt-16 bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 shadow-lg">
+              <h2 className="text-xl font-bold text-white mb-2">
+                {isCustomerLogin ? "Customer Portal" : "Empowering Digital Kerala"}
+              </h2>
+              <p className="text-navy-100 mb-2 text-sm leading-relaxed">
+                {isCustomerLogin 
+                  ? "Access your account seamlessly with WhatsApp OTP or register to access new e-governance services."
+                  : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
+              </p>
+
+              {/* Animated Services List */}
+              {!isCustomerLogin && (
+                <div className="mt-4 pt-4 border-t border-white/10 h-12 overflow-hidden flex items-center">
+                  <p 
+                    key={serviceIndex} 
+                    className="text-white font-semibold text-sm animate-fade-slide flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4 text-teal-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                    </svg>
+                    {servicesList[serviceIndex]}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           
-          <div className="mt-16 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <h2 className="text-xl font-bold text-white mb-2">
-              {isCustomerLogin ? "Customer Portal" : "Empowering Digital Kerala"}
-            </h2>
-            <p className="text-navy-100 mb-2">
-              {isCustomerLogin 
-                ? "Access your account with WhatsApp OTP or register for new services"
-                : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
+          <div className="z-10 mt-8">
+            <p className="text-navy-300 mb-2 text-xs text-center">© {new Date().getFullYear()} Muhammed Illyas. All rights reserved.</p>
+            <p className="text-navy-300 mb-2 text-xs text-center mt-1 flex justify-center items-center gap-1">
+              Made with <span className="text-teal-400">❤️</span>
             </p>
-
-            {/* Animated Services List */}
-            {!isCustomerLogin && (
-              <div className="mt-4 pt-4 border-t border-white/20 h-12 overflow-hidden flex items-center">
-                <p 
-                  key={serviceIndex} 
-                  className="text-white font-semibold text-sm animate-fade-slide flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4 text-navy-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                  {servicesList[serviceIndex]}
-                </p>
-              </div>
-            )}
           </div>
         </div>
-        
-        <div className="z-10 mt-8">
-          <p className="text-navy-200 mb-2 text-sm text-center">© 2026 Muhammed Illyas. All rights reserved.</p>
-          <p className="text-navy-200 mb-2 text-sm text-center mt-1">Made with ❤️</p>
-        </div>
-      </div>
 
+        {/* Right Panel - Login Forms */}
         <div className="w-full md:w-3/5 p-8 md:p-10">
           <div className="max-w-md mx-auto">
+            
             {/* Toggle Switch */}
-            <div className="flex mb-6 border-b border-gray-200">
+            <div className="flex mb-8 border-b border-gray-200">
               <button
-                className={`flex-1 py-3 text-center font-medium ${!isCustomerLogin ? 'text-navy-700 border-b-2 border-navy-700' : 'text-gray-500'}`}
+                className={`flex-1 py-3 text-center font-semibold text-sm transition-colors ${!isCustomerLogin ? 'text-teal-700 border-b-2 border-teal-500' : 'text-gray-500 hover:text-teal-600'}`}
                 onClick={() => setIsCustomerLogin(false)}
               >
                 Admin/Staff Login
               </button>
               <button
-                className={`flex-1 py-3 text-center font-medium ${isCustomerLogin ? 'text-navy-700 border-b-2 border-navy-700' : 'text-gray-500'}`}
+                className={`flex-1 py-3 text-center font-semibold text-sm transition-colors ${isCustomerLogin ? 'text-teal-700 border-b-2 border-teal-500' : 'text-gray-500 hover:text-teal-600'}`}
                 onClick={() => setIsCustomerLogin(true)}
               >
                 Public Login
               </button>
             </div>
 
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">
               {isCustomerLogin ? "Customer Login" : "Sign In"}
             </h2>
-            <p className="text-gray-600 mb-8">
+            <p className="text-gray-500 mb-8 text-sm">
               {isCustomerLogin 
-                ? "Enter your phone number to receive OTP on WhatsApp"
-                : "Enter your credentials to access your account"}
+                ? "Enter your phone number to receive a secure OTP via WhatsApp."
+                : "Enter your credentials to securely access your dashboard."}
             </p>
 
             <div className="space-y-5">
@@ -317,12 +324,12 @@ const Login = () => {
                 // Customer Login Form
                 <>
                   <div>
-                    <label htmlFor="customerPhone" className="block text-gray-700 text-sm font-medium mb-2">
+                    <label htmlFor="customerPhone" className="block text-gray-700 text-sm font-semibold mb-2">
                       Phone Number (WhatsApp)
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                           <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                         </svg>
                       </div>
@@ -332,20 +339,20 @@ const Login = () => {
                         placeholder="Enter your WhatsApp number"
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent text-gray-700 placeholder-gray-400"
+                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
                         disabled={loading || otpSent}
                       />
                     </div>
                   </div>
 
                   {otpSent && (
-                    <div>
-                      <label htmlFor="customerOtp" className="block text-gray-700 text-sm font-medium mb-2">
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                      <label htmlFor="customerOtp" className="block text-gray-700 text-sm font-semibold mb-2 mt-2">
                         Enter OTP
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                           </svg>
                         </div>
@@ -355,23 +362,23 @@ const Login = () => {
                           placeholder="Enter 6-digit OTP"
                           value={customerOtp}
                           onChange={(e) => setCustomerOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent text-gray-700 placeholder-gray-400"
+                          className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
                           disabled={loading}
                         />
                       </div>
                       {otpTimer > 0 && (
-                        <p className="text-sm text-gray-500 mt-1">
-                          OTP expires in {otpTimer} seconds
+                        <p className="text-xs text-gray-500 mt-2 font-medium">
+                          OTP expires in <span className="text-teal-600">{otpTimer} seconds</span>
                         </p>
                       )}
-                    </div>
+                    </motion.div>
                   )}
 
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center pt-2">
                     <button
                       onClick={otpSent ? sendCustomerOTP : undefined}
                       disabled={otpTimer > 0}
-                      className="text-sm text-navy-600 hover:text-navy-800 transition-colors disabled:opacity-50"
+                      className="text-sm font-semibold text-teal-600 hover:text-teal-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {otpTimer > 0 ? `Resend OTP (${otpTimer}s)` : 'Resend OTP'}
                     </button>
@@ -381,12 +388,12 @@ const Login = () => {
                 // Admin/Staff Login Form
                 <>
                   <div>
-                    <label htmlFor="username" className="block text-gray-700 text-sm font-medium mb-2">
+                    <label htmlFor="username" className="block text-gray-700 text-sm font-semibold mb-2">
                       Username
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                           <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" />
                         </svg>
                       </div>
@@ -396,19 +403,19 @@ const Login = () => {
                         placeholder="Enter your username"
                         value={user.username}
                         onChange={(e) => setUser({ ...user, username: e.target.value })}
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent text-gray-700 placeholder-gray-400"
+                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
                         disabled={loading}
                       />
                     </div>
                   </div>
                   
                   <div>
-                    <label htmlFor="password" className="block text-gray-700 text-sm font-medium mb-2">
+                    <label htmlFor="password" className="block text-gray-700 text-sm font-semibold mb-2">
                       Password
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                         </svg>
                       </div>
@@ -418,21 +425,22 @@ const Login = () => {
                         placeholder="Enter your password"
                         value={user.password}
                         onChange={(e) => setUser({ ...user, password: e.target.value })}
-                        className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-transparent text-gray-700 placeholder-gray-400"
+                        className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
                         disabled={loading}
                       />
                       <button 
                         onClick={togglePasswordVisibility}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center"
                         disabled={loading}
+                        type="button"
                       >
                         {showPassword ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 hover:text-teal-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         ) : (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 hover:text-teal-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                           </svg>
                         )}
@@ -440,25 +448,25 @@ const Login = () => {
                     </div>
                   </div>
                   
-                  <div className="flex justify-between items-center">
-                    <label className="flex items-center text-sm text-gray-700">
+                  <div className="flex justify-between items-center pt-1">
+                    <label className="flex items-center text-sm text-gray-700 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        className="form-checkbox rounded bg-gray-200 border-gray-300 text-navy-600 focus:ring-navy-500"
+                        className="form-checkbox h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 transition-all cursor-pointer"
                         disabled={loading}
                       />
-                      <span className="ml-2">Remember me</span>
+                      <span className="ml-2 select-none font-medium">Remember me</span>
                     </label>
-                    <a href="#" className="text-sm text-navy-600 hover:text-navy-800 transition-colors">Forgot password?</a>
+                    <a href="#" className="text-sm font-semibold text-teal-600 hover:text-teal-800 transition-colors">Forgot password?</a>
                   </div>
                 </>
               )}
               
               <button
                 onClick={handleLogin}
-                className="w-full bg-navy-700 hover:bg-navy-800 text-white font-medium py-3 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(20,184,166,0.39)] hover:shadow-[0_6px_20px_rgba(20,184,166,0.23)] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed mt-4"
                 disabled={
                   loading || 
                   (isCustomerLogin 
@@ -483,12 +491,12 @@ const Login = () => {
               </button>
               
               {isCustomerLogin && (
-                <div className="text-center mt-4">
-                  <p className="text-gray-600 text-sm">
+                <div className="text-center mt-6">
+                  <p className="text-gray-600 text-sm font-medium">
                     New User?{" "}
                     <Link 
                       to="/customer/register" 
-                      className="text-navy-600 hover:text-navy-800 font-medium"
+                      className="text-teal-600 hover:text-teal-800 font-bold ml-1 transition-colors"
                     >
                       Register here
                     </Link>
@@ -496,9 +504,9 @@ const Login = () => {
                 </div>
               )}
               
-              <div className="text-center mt-4">
-                <p className="text-gray-600 text-sm">
-                  Need help? <a href="#" className="text-navy-600 hover:text-navy-800 font-medium">Contact Support</a>
+              <div className="text-center mt-6">
+                <p className="text-gray-500 text-sm">
+                  Need help? <a href="#" className="text-teal-600 hover:text-teal-800 font-semibold ml-1 transition-colors">Contact Support</a>
                 </p>
               </div>
             </div>
@@ -507,9 +515,7 @@ const Login = () => {
       </div>
       
       <style>{`
-        .focus\\:ring-navy-500:focus { --tw-ring-color: #1e3a5f; }
-        
-        /* New Animation Keyframes */
+        /* Minimal Keyframes for Services Text Animation */
         @keyframes fadeSlide {
           0% { opacity: 0; transform: translateY(10px); }
           15% { opacity: 1; transform: translateY(0); }
