@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
-  FiLayers, FiActivity, FiCreditCard, FiBookOpen
+  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget
 } from 'react-icons/fi';
 
 // ---------------------------------------------------------------------
@@ -41,7 +41,6 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center group">
-            {/* FIX: Removed the invert/brightness filters. The logo container stays consistently white. */}
             <div className="bg-white p-1.5 rounded-xl shadow-sm border border-gray-100 group-hover:shadow-md transition-all duration-300">
               <img src="/logo-light.png" alt="Akshaya Sahayi" className="h-8 w-8 object-contain" />
             </div>
@@ -114,11 +113,10 @@ const Home = () => {
                 </a>
               </motion.div>
 
-              <motion.div variants={fadeUp} className="mt-10 flex items-center gap-6 text-sm text-navy-300 font-medium">
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Customers</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Services</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> WhatsApp</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Finance</span>
+              <motion.div variants={fadeUp} className="mt-10 flex flex-wrap items-center gap-6 text-sm text-navy-300 font-medium">
+                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Customers & Reviews</span>
+                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Mobile App & Tokens</span>
+                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> WhatsApp & Finance</span>
               </motion.div>
             </motion.div>
 
@@ -161,8 +159,8 @@ const Home = () => {
                       <p className="text-white font-bold">12 Active</p>
                     </div>
                     <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Tasks</p>
-                      <p className="text-white font-bold">18 Pending</p>
+                      <p className="text-navy-300 text-xs mb-1">Tokens</p>
+                      <p className="text-white font-bold">42 Queue</p>
                     </div>
                   </div>
 
@@ -210,7 +208,7 @@ const Home = () => {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={fadeUp} className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Everything Works Together.</h2>
-            <p className="text-lg text-gray-600">Customer comes in → service is created → staff handles it → payment is collected → WhatsApp keeps the customer updated → wallet/accounting records the money → management sees the performance.</p>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">Customer comes in → service is created → staff handles it → payment is collected → WhatsApp keeps the customer updated → wallet/accounting records the money → management sees the performance.</p>
           </motion.div>
 
           {/* Connected Workflow Visual */}
@@ -232,7 +230,6 @@ const Home = () => {
               </motion.div>
 
               <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                {/* Horizontal branch line */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
               </div>
 
@@ -267,7 +264,6 @@ const Home = () => {
               </div>
 
               <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                {/* Horizontal collector line */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
               </div>
 
@@ -288,56 +284,87 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 2. CORE FEATURES (Everything Your Centre Needs) */}
+      {/* 2. CORE FEATURES (Expanded 8-Card Grid) */}
       <section id="features" className="py-24 bg-gray-50 border-t border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">One Platform. Your Entire Centre.</h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">Stop jumping between spreadsheets, ledgers, and chat apps. Sahayi connects your operations.</p>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">Stop jumping between spreadsheets, ledgers, and chat apps. Sahayi connects your entire operations suite.</p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
-              <div className="w-14 h-14 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-teal-500 group-hover:text-white transition-colors">
-                <FiMessageCircle className="h-7 w-7" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Feature 1: WhatsApp */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-teal-500 group-hover:text-white transition-colors">
+                <FiMessageCircle className="h-6 w-6" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">WhatsApp Business</h3>
-              <p className="text-gray-600 mb-6 text-sm leading-relaxed">Connect your centre's WhatsApp communication directly with your customer workflow.</p>
-              <ul className="space-y-2 text-sm text-gray-700 font-medium">
-                <li className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Automated Service Updates</li>
-                <li className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Staff & Customer Chat</li>
-                <li className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Message Templates</li>
-              </ul>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">WhatsApp Business</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">Meta-linked WhatsApp for customer conversations, automated service updates, and payment reminders via templates.</p>
             </motion.div>
 
-            {/* Feature 2 */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
-              <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                <FiUsers className="h-7 w-7" />
+            {/* Feature 2: Customer 360 */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <FiUsers className="h-6 w-6" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Customer Management</h3>
-              <p className="text-gray-600 mb-6 text-sm leading-relaxed">Keep customer information, service history, reviews, and communication together.</p>
-              <ul className="space-y-2 text-sm text-gray-700 font-medium">
-                <li className="flex items-center"><FiCheckCircle className="text-blue-500 mr-2" /> Central Database</li>
-                <li className="flex items-center"><FiCheckCircle className="text-blue-500 mr-2" /> Pending Payments</li>
-                <li className="flex items-center"><FiCheckCircle className="text-blue-500 mr-2" /> Customer Portal</li>
-              </ul>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Customer 360°</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">A central database maintaining service history, payments, associated documents, and consolidated WhatsApp chats.</p>
             </motion.div>
 
-            {/* Feature 3 */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
-              <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                <FiLayers className="h-7 w-7" />
+            {/* Feature 3: Service Operations */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                <FiLayers className="h-6 w-6" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Service Operations</h3>
-              <p className="text-gray-600 mb-6 text-sm leading-relaxed">Manage every application precisely from registration to final completion.</p>
-              <ul className="space-y-2 text-sm text-gray-700 font-medium">
-                <li className="flex items-center"><FiCheckCircle className="text-purple-500 mr-2" /> Status Tracking</li>
-                <li className="flex items-center"><FiCheckCircle className="text-purple-500 mr-2" /> Document Handling</li>
-                <li className="flex items-center"><FiCheckCircle className="text-purple-500 mr-2" /> Assignment to Staff</li>
-              </ul>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Service Operations</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">Manage service catalogues, entries, staff assignments, and track the exact status of pending and completed services.</p>
             </motion.div>
+
+            {/* Feature 4: Companion App */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                <FiSmartphone className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Companion App</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">Staff mobile app for GPS attendance punch in-out, push notifications, customer lookups, quick calling, and daily tasks.</p>
+            </motion.div>
+
+            {/* Feature 5: Token Management */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                <FiHash className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Token & Queue</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">Generate daily and campaign tokens. Manage queue status, assign staff dynamically, and trigger customer queue notifications.</p>
+            </motion.div>
+
+            {/* Feature 6: Campaign Management */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.5 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                <FiTarget className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Campaigns</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">Create targeted campaigns, issue campaign-specific tokens, track performance, and broadcast WhatsApp updates.</p>
+            </motion.div>
+
+            {/* Feature 7: Reviews & Feedback */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.6 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                <FiStar className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Reviews & Feedback</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">Automate feedback collection to generate granular service ratings, staff performance ratings, and review analytics.</p>
+            </motion.div>
+
+            {/* Feature 8: Calendar & Tasks */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.7 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                <FiCalendar className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Calendar & Tasks</h3>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">Schedule appointments, track centre events, set reminders, and monitor daily team activities and tasks seamlessly.</p>
+            </motion.div>
+
           </div>
         </div>
       </section>
@@ -348,7 +375,7 @@ const Home = () => {
           <div className="flex flex-col lg:flex-row gap-16 items-center">
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={staggerContainer} className="lg:w-1/3">
               <motion.h2 variants={fadeUp} className="text-3xl md:text-4xl font-bold mb-4">Know Where Your Money Is.</motion.h2>
-              <motion.p variants={fadeUp} className="text-navy-200 text-lg mb-8">Manage your centre's finances with real-time wallets, transactions, expenses and accounting controls.</motion.p>
+              <motion.p variants={fadeUp} className="text-navy-200 text-lg mb-8">Manage your centre's finances with real-time wallets, transactions, expenses, ledgers, and strict accounting controls.</motion.p>
               <motion.button variants={fadeUp} className="text-teal-400 font-bold flex items-center hover:text-teal-300 transition-colors">
                 Explore Finance Features <FiArrowRight className="ml-2" />
               </motion.button>
@@ -358,22 +385,22 @@ const Home = () => {
               <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-navy-800 border border-navy-700 p-6 rounded-2xl">
                 <FiDollarSign className="text-green-400 h-8 w-8 mb-4" />
                 <h3 className="font-bold text-lg mb-2">Wallet Management</h3>
-                <p className="text-navy-300 text-sm">Track Cash, Bank, and Digital wallets. Handle transfers, daily closing, and wallet reconciliation automatically.</p>
+                <p className="text-navy-300 text-sm">Track Cash, Bank, and Digital wallets. Handle secure transactions, wallet transfers, and automated wallet reconciliation.</p>
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-navy-800 border border-navy-700 p-6 rounded-2xl">
                 <FiBookOpen className="text-blue-400 h-8 w-8 mb-4" />
                 <h3 className="font-bold text-lg mb-2">Accounts & Ledger</h3>
-                <p className="text-navy-300 text-sm">Comprehensive ledger for income, expenses, corrections, and automated daily/monthly financial reports.</p>
+                <p className="text-navy-300 text-sm">Maintain a comprehensive ledger for tracking all income, expenses, account corrections, and executing seamless daily closing.</p>
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="bg-navy-800 border border-navy-700 p-6 rounded-2xl">
                 <FiCreditCard className="text-amber-400 h-8 w-8 mb-4" />
                 <h3 className="font-bold text-lg mb-2">Expense Management</h3>
-                <p className="text-navy-300 text-sm">Record expenses with approval workflows. Link expenses directly to specific wallets or operational teams.</p>
+                <p className="text-navy-300 text-sm">Record precise expenses with approval workflows. Link expenses directly to specific wallets or operational teams.</p>
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }} className="bg-navy-800 border border-navy-700 p-6 rounded-2xl">
                 <FiPieChart className="text-teal-400 h-8 w-8 mb-4" />
-                <h3 className="font-bold text-lg mb-2">Financial Analytics</h3>
-                <p className="text-navy-300 text-sm">Instantly visualize Gross Revenue vs Service Charges vs Expenses to calculate true Net Profit.</p>
+                <h3 className="font-bold text-lg mb-2">Profit Analytics</h3>
+                <p className="text-navy-300 text-sm">Instantly visualize Gross Revenue vs Service Charges vs Expenses to calculate true Net Profit and perform deep financial analytics.</p>
               </motion.div>
             </div>
           </div>
@@ -410,11 +437,11 @@ const Home = () => {
                     <span className="font-bold text-gray-900">₹1,72,000</span>
                   </div>
                   <div className="flex justify-between items-center border-b border-gray-50 pb-3">
-                    <span className="text-gray-500 text-sm">Expenses</span>
+                    <span className="text-gray-500 text-sm">Team Expenses</span>
                     <span className="font-bold text-red-500">- ₹42,000</span>
                   </div>
                   <div className="flex justify-between items-center pt-2 bg-teal-50 p-3 rounded-xl border border-teal-100">
-                    <span className="text-teal-800 font-bold">Net Profit</span>
+                    <span className="text-teal-800 font-bold">Team Net Profit</span>
                     <span className="font-black text-teal-700 text-lg">₹1,30,000</span>
                   </div>
                 </div>
@@ -432,8 +459,8 @@ const Home = () => {
                     <FiUsers className="h-6 w-6" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900">Staff Management</h4>
-                    <p className="text-sm text-gray-600 mt-1">Attendance tracking (Punch-in/out), leave management, salary structures, and payroll.</p>
+                    <h4 className="font-bold text-gray-900">Staff & HR Management</h4>
+                    <p className="text-sm text-gray-600 mt-1">Manage GPS-verified attendance (punch in/out), leave tracking, salary structures, payroll, and staff performance metrics.</p>
                   </div>
                 </motion.div>
                 
@@ -442,18 +469,18 @@ const Home = () => {
                     <FiTrendingUp className="h-6 w-6" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900">Team Profitability</h4>
-                    <p className="text-sm text-gray-600 mt-1">Assign staff to teams, measure their exact revenue contribution, and track team-specific expenses.</p>
+                    <h4 className="font-bold text-gray-900">Team Profitability & Performance</h4>
+                    <p className="text-sm text-gray-600 mt-1">Create multiple teams, assign staff, measure exact team revenue, track team expenses, and analyze overall team profit.</p>
                   </div>
                 </motion.div>
                 
                 <motion.div variants={fadeUp} className="flex gap-4">
                   <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
-                    <FiCalendar className="h-6 w-6" />
+                    <FiTarget className="h-6 w-6" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900">Task & Calendar</h4>
-                    <p className="text-sm text-gray-600 mt-1">Assign service deadlines and internal tasks. Never miss the work that matters.</p>
+                    <h4 className="font-bold text-gray-900">Staff Targets & Incentives</h4>
+                    <p className="text-sm text-gray-600 mt-1">Set clear staff targets, monitor completion rates, and calculate performance-based incentives automatically.</p>
                   </div>
                 </motion.div>
               </div>
@@ -468,13 +495,16 @@ const Home = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">One Business. Multiple Centres. One Control Panel.</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto mb-16">Akshaya Sahayi is built for scale. Manage a single shop or an entire network of centres seamlessly with granular permissions.</p>
+            <p className="text-gray-600 max-w-2xl mx-auto mb-16">Akshaya Sahayi is built for scale. Manage a single shop or an entire network of centres with consolidated business analytics.</p>
           </motion.div>
 
           <div className="flex justify-center mb-12">
             <div className="flex flex-col items-center w-full max-w-4xl">
               {/* Super Admin */}
-              <div className="bg-navy-900 text-white font-bold px-8 py-3 rounded-xl shadow-lg z-10">SUPERADMIN</div>
+              <div className="bg-navy-900 text-white font-bold px-8 py-3 rounded-xl shadow-lg z-10 flex flex-col items-center">
+                <span>SUPERADMIN</span>
+                <span className="text-[10px] font-normal text-navy-300 mt-0.5 uppercase tracking-wide">Network Control</span>
+              </div>
               
               {/* Branching Lines */}
               <div className="w-full flex justify-center mt-[-2px]">
@@ -489,27 +519,36 @@ const Home = () => {
               {/* Centres */}
               <div className="w-full flex justify-center gap-4 sm:gap-16">
                 <div className="flex flex-col items-center">
-                  <div className="bg-teal-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm">Centre A</div>
+                  <div className="bg-teal-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
+                    <span>Centre A</span>
+                    <span className="text-[10px] font-medium text-teal-100">Management</span>
+                  </div>
                   <div className="w-px h-6 bg-gray-300"></div>
-                  <div className="bg-white border border-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded text-xs mb-2">Admin</div>
+                  <div className="bg-white border border-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded text-xs mb-2">Centre Admin</div>
                   <div className="w-px h-4 bg-gray-300"></div>
-                  <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Staff</div>
+                  <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Centre Staff</div>
                 </div>
                 
                 <div className="flex flex-col items-center">
-                  <div className="bg-blue-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm">Centre B</div>
+                  <div className="bg-blue-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
+                    <span>Centre B</span>
+                    <span className="text-[10px] font-medium text-blue-100">Management</span>
+                  </div>
                   <div className="w-px h-6 bg-gray-300"></div>
-                  <div className="bg-white border border-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded text-xs mb-2">Admin</div>
+                  <div className="bg-white border border-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded text-xs mb-2">Centre Admin</div>
                   <div className="w-px h-4 bg-gray-300"></div>
-                  <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Staff</div>
+                  <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Centre Staff</div>
                 </div>
 
                 <div className="hidden sm:flex flex-col items-center">
-                  <div className="bg-purple-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm">Centre C</div>
+                  <div className="bg-purple-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
+                    <span>Centre C</span>
+                    <span className="text-[10px] font-medium text-purple-100">Management</span>
+                  </div>
                   <div className="w-px h-6 bg-gray-300"></div>
-                  <div className="bg-white border border-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded text-xs mb-2">Admin</div>
+                  <div className="bg-white border border-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded text-xs mb-2">Centre Admin</div>
                   <div className="w-px h-4 bg-gray-300"></div>
-                  <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Staff</div>
+                  <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Centre Staff</div>
                 </div>
               </div>
             </div>
@@ -577,7 +616,7 @@ const Home = () => {
                 <h1 className="text-2xl font-bold text-white">Akshaya <span className="text-teal-500">Sahayi</span></h1>
               </div>
               <p className="text-sm text-navy-300 max-w-sm leading-relaxed">
-                The complete management platform for modern Akshaya centres. Unifying services, accounting, and communication.
+                The complete management platform for modern Akshaya centres. Unifying services, accounting, staff, and communication.
               </p>
             </div>
             
